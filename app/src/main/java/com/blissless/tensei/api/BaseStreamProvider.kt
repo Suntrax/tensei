@@ -1,1 +1,171 @@
-package com.blissless.tensei.apiimport com.blissless.tensei.data.models.QualityOptionimport kotlinx.coroutines.Dispatchersimport kotlinx.coroutines.delayimport kotlinx.coroutines.withContextimport okhttp3.OkHttpClientimport okhttp3.Requestimport java.util.concurrent.TimeUnitdata class StreamProviderResult(    val url: String,    val isDirectStream: Boolean = true,    val headers: Map<String, String>?,    val subtitleUrl: String? = null,    val serverName: String = "",    val category: String = "sub",    val qualities: List<QualityOption> = emptyList(),    val introStart: Int? = null,    val introEnd: Int? = null,    val outroStart: Int? = null,    val outroEnd: Int? = null)data class ServerInfo2(    val name: String,    val url: String = "",    val type: String = "sub",    val qualities: List<QualityOption> = emptyList())data class EpisodeStreams2(    val subServers: List<ServerInfo2>,    val dubServers: List<ServerInfo2>,    val animeId: String,    val episodeId: String)abstract class BaseStreamProvider(    protected val providerName: String,    protected val baseUrl: String) {    protected val client = OkHttpClient.Builder()        .connectTimeout(30, TimeUnit.SECONDS)        .readTimeout(30, TimeUnit.SECONDS)        .writeTimeout(30, TimeUnit.SECONDS)        .build()    protected val defaultHeaders = mapOf(        "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",        "Accept" to "*/*",        "Accept-Language" to "en-US,en;q=0.9"    )    protected val ajaxHeaders = defaultHeaders + mapOf(        "X-Requested-With" to "XMLHttpRequest"    )    protected suspend fun <T> retry(retries: Int = 3, block: suspend () -> T?): T? {        var attempt = 0        while (attempt < retries) {            try {                return block()            } catch (e: Exception) {                attempt++                if (attempt >= retries) return null                delay(500L * attempt)            }        }        return null    }    protected suspend fun getAllQualityStreams(masterUrl: String, headers: Map<String, String>): List<QualityOption> = withContext(Dispatchers.IO) {        try {            val requestBuilder = Request.Builder().url(masterUrl)            headers.forEach { (k, v) -> requestBuilder.header(k, v) }            val response = client.newCall(requestBuilder.build()).execute()            if (!response.isSuccessful) return@withContext emptyList()            val body = response.body.string()            val lines = body.split("\n")            val baseUrl = masterUrl.substringBeforeLast("/") + "/"            val qualities = mutableListOf<QualityOption>()            for (i in lines.indices) {                val line = lines[i]                if (line.contains("RESOLUTION=")) {                    val resolutionMatch = Regex("""RESOLUTION=(\d+)x(\d+)""").find(line)                    if (resolutionMatch != null && i + 1 < lines.size) {                        val width = resolutionMatch.groupValues[1].toIntOrNull() ?: 0                        val height = resolutionMatch.groupValues[2].toIntOrNull() ?: 0                        val qualityName = "${height}p"                        val streamUrl = if (lines[i + 1].trim().startsWith("http")) {                            lines[i + 1].trim()                        } else {                            baseUrl + lines[i + 1].trim()                        }                        qualities.add(QualityOption(quality = qualityName, url = streamUrl, width = width))                    }                }            }            qualities.sortByDescending { it.width }            qualities        } catch (e: Exception) {            emptyList()        }    }    protected fun parseM3U8Qualities(masterUrl: String, masterContent: String): List<QualityOption> {        val baseUrl = masterUrl.substringBeforeLast("/") + "/"        val lines = masterContent.split("\n")        val qualities = mutableListOf<QualityOption>()        for (i in lines.indices) {            val line = lines[i].trim()            if (line.contains("RESOLUTION=")) {                val resolutionMatch = Regex("""RESOLUTION=(\d+)x(\d+)""").find(line)                if (resolutionMatch != null && i + 1 < lines.size) {                    val width = resolutionMatch.groupValues[1].toIntOrNull() ?: 0                    val height = resolutionMatch.groupValues[2].toIntOrNull() ?: 0                    val qualityName = "${height}p"                    val streamUrl = if (lines[i + 1].trim().startsWith("http")) {                        lines[i + 1].trim()                    } else {                        baseUrl + lines[i + 1].trim()                    }                    qualities.add(QualityOption(                        quality = qualityName,                        url = streamUrl,                        width = width                    ))                }            }        }        qualities.sortByDescending { it.width }        return qualities    }    abstract suspend fun searchAnime(keyword: String): List<Pair<String, String>>?    abstract suspend fun getEpisodeInfo(animeName: String, episodeNumber: Int): EpisodeStreams2?    abstract suspend fun getStreamWithFallback(        animeName: String,        episodeNumber: Int,        preferredCategory: String = "sub"    ): StreamProviderResult?    abstract suspend fun getStreamForServer(        animeName: String,        episodeNumber: Int,        serverName: String,        category: String    ): StreamProviderResult?    suspend fun getStreamForCategory(        animeName: String,        episodeNumber: Int,        category: String    ): StreamProviderResult? {        return getStreamWithFallback(animeName, episodeNumber, category)    }}
+package com.blissless.tensei.api
+
+import com.blissless.tensei.data.models.QualityOption
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.util.concurrent.TimeUnit
+
+data class StreamProviderResult(
+    val url: String,
+    val isDirectStream: Boolean = true,
+    val headers: Map<String, String>?,
+    val subtitleUrl: String? = null,
+    val serverName: String = "",
+    val category: String = "sub",
+    val qualities: List<QualityOption> = emptyList(),
+    val introStart: Int? = null,
+    val introEnd: Int? = null,
+    val outroStart: Int? = null,
+    val outroEnd: Int? = null
+)
+
+data class ServerInfo2(
+    val name: String,
+    val url: String = "",
+    val type: String = "sub",
+    val qualities: List<QualityOption> = emptyList()
+)
+
+data class EpisodeStreams2(
+    val subServers: List<ServerInfo2>,
+    val dubServers: List<ServerInfo2>,
+    val animeId: String,
+    val episodeId: String
+)
+
+abstract class BaseStreamProvider(
+    protected val providerName: String,
+    protected val baseUrl: String
+) {
+    protected val client = OkHttpClient.Builder()
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
+        .build()
+
+    protected val defaultHeaders = mapOf(
+        "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        "Accept" to "*/*",
+        "Accept-Language" to "en-US,en;q=0.9"
+    )
+
+    protected val ajaxHeaders = defaultHeaders + mapOf(
+        "X-Requested-With" to "XMLHttpRequest"
+    )
+
+    protected suspend fun <T> retry(retries: Int = 3, block: suspend () -> T?): T? {
+        var attempt = 0
+        while (attempt < retries) {
+            try {
+                return block()
+            } catch (e: Exception) {
+                attempt++
+                if (attempt >= retries) return null
+                delay(500L * attempt)
+            }
+        }
+        return null
+    }
+
+    protected suspend fun getAllQualityStreams(masterUrl: String, headers: Map<String, String>): List<QualityOption> = withContext(Dispatchers.IO) {
+        try {
+            val requestBuilder = Request.Builder().url(masterUrl)
+            headers.forEach { (k, v) -> requestBuilder.header(k, v) }
+
+            val response = client.newCall(requestBuilder.build()).execute()
+            if (!response.isSuccessful) return@withContext emptyList()
+
+            val body = response.body.string()
+            val lines = body.split("\n")
+            val baseUrl = masterUrl.substringBeforeLast("/") + "/"
+
+            val qualities = mutableListOf<QualityOption>()
+
+            for (i in lines.indices) {
+                val line = lines[i]
+                if (line.contains("RESOLUTION=")) {
+                    val resolutionMatch = Regex("""RESOLUTION=(\d+)x(\d+)""").find(line)
+                    if (resolutionMatch != null && i + 1 < lines.size) {
+                        val width = resolutionMatch.groupValues[1].toIntOrNull() ?: 0
+                        val height = resolutionMatch.groupValues[2].toIntOrNull() ?: 0
+                        val qualityName = "${height}p"
+                        val streamUrl = if (lines[i + 1].trim().startsWith("http")) {
+                            lines[i + 1].trim()
+                        } else {
+                            baseUrl + lines[i + 1].trim()
+                        }
+
+                        qualities.add(QualityOption(quality = qualityName, url = streamUrl, width = width))
+                    }
+                }
+            }
+
+            qualities.sortByDescending { it.width }
+            qualities
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    protected fun parseM3U8Qualities(masterUrl: String, masterContent: String): List<QualityOption> {
+        val baseUrl = masterUrl.substringBeforeLast("/") + "/"
+        val lines = masterContent.split("\n")
+        val qualities = mutableListOf<QualityOption>()
+
+        for (i in lines.indices) {
+            val line = lines[i].trim()
+            if (line.contains("RESOLUTION=")) {
+                val resolutionMatch = Regex("""RESOLUTION=(\d+)x(\d+)""").find(line)
+                if (resolutionMatch != null && i + 1 < lines.size) {
+                    val width = resolutionMatch.groupValues[1].toIntOrNull() ?: 0
+                    val height = resolutionMatch.groupValues[2].toIntOrNull() ?: 0
+                    val qualityName = "${height}p"
+                    val streamUrl = if (lines[i + 1].trim().startsWith("http")) {
+                        lines[i + 1].trim()
+                    } else {
+                        baseUrl + lines[i + 1].trim()
+                    }
+
+                    qualities.add(QualityOption(
+                        quality = qualityName,
+                        url = streamUrl,
+                        width = width
+                    ))
+                }
+            }
+        }
+
+        qualities.sortByDescending { it.width }
+        return qualities
+    }
+
+    abstract suspend fun searchAnime(keyword: String): List<Pair<String, String>>?
+
+    abstract suspend fun getEpisodeInfo(animeName: String, episodeNumber: Int): EpisodeStreams2?
+
+    abstract suspend fun getStreamWithFallback(
+        animeName: String,
+        episodeNumber: Int,
+        preferredCategory: String = "sub"
+    ): StreamProviderResult?
+
+    abstract suspend fun getStreamForServer(
+        animeName: String,
+        episodeNumber: Int,
+        serverName: String,
+        category: String
+    ): StreamProviderResult?
+
+    suspend fun getStreamForCategory(
+        animeName: String,
+        episodeNumber: Int,
+        category: String
+    ): StreamProviderResult? {
+        return getStreamWithFallback(animeName, episodeNumber, category)
+    }
+}
+
+

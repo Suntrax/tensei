@@ -1,1 +1,338 @@
-package com.blissless.tensei.ui.screens.castimport androidx.compose.foundation.backgroundimport androidx.compose.foundation.clickableimport androidx.compose.foundation.layout.Arrangementimport androidx.compose.foundation.layout.Boximport androidx.compose.foundation.layout.Columnimport androidx.compose.foundation.layout.PaddingValuesimport androidx.compose.foundation.layout.Spacerimport androidx.compose.foundation.layout.WindowInsetsimport androidx.compose.foundation.layout.asPaddingValuesimport androidx.compose.foundation.layout.aspectRatioimport androidx.compose.foundation.layout.fillMaxSizeimport androidx.compose.foundation.layout.fillMaxWidthimport androidx.compose.foundation.layout.heightimport androidx.compose.foundation.layout.navigationBarsimport androidx.compose.foundation.layout.paddingimport androidx.compose.foundation.layout.sizeimport androidx.compose.foundation.layout.statusBarsimport androidx.compose.foundation.lazy.grid.GridCellsimport androidx.compose.foundation.lazy.grid.LazyVerticalGridimport androidx.compose.foundation.lazy.grid.itemsimport androidx.compose.foundation.shape.CircleShapeimport androidx.compose.foundation.shape.RoundedCornerShapeimport androidx.compose.material.icons.Iconsimport androidx.compose.material.icons.automirrored.filled.ArrowBackimport androidx.compose.material3.Cardimport androidx.compose.material3.CardDefaultsimport androidx.compose.material3.CircularProgressIndicatorimport androidx.compose.material3.Iconimport androidx.compose.material3.IconButtonimport androidx.compose.material3.MaterialThemeimport androidx.compose.material3.Textimport androidx.compose.runtime.Composableimport androidx.compose.runtime.LaunchedEffectimport androidx.compose.runtime.getValueimport androidx.compose.runtime.mutableIntStateOfimport androidx.compose.runtime.mutableStateOfimport androidx.compose.runtime.rememberimport androidx.compose.runtime.setValueimport androidx.compose.ui.Alignmentimport androidx.compose.ui.Modifierimport androidx.compose.ui.draw.clipimport androidx.compose.ui.layout.ContentScaleimport androidx.compose.ui.text.font.FontWeightimport androidx.compose.ui.text.style.TextOverflowimport androidx.compose.ui.unit.dpimport androidx.compose.ui.window.Dialogimport androidx.compose.ui.window.DialogPropertiesimport coil.compose.AsyncImageimport com.blissless.tensei.MainViewModelimport com.blissless.tensei.data.models.CharacterDataimport com.blissless.tensei.data.models.StaffData@Composablefun AllCastScreen(    animeId: Int,    animeTitle: String,    viewModel: MainViewModel,    isOled: Boolean = false,    onDismiss: () -> Unit,    onCharacterClick: (Int) -> Unit,    onAnimeClick: (Int) -> Unit) {    var characters by remember { mutableStateOf<List<CharacterData>>(emptyList()) }    var isLoading by remember { mutableStateOf(true) }    val statusBarsPadding = WindowInsets.statusBars.asPaddingValues()    val navigationBarsPadding = WindowInsets.navigationBars.asPaddingValues()    LaunchedEffect(animeId) {        isLoading = true        try {            characters = viewModel.fetchAllCharacters(animeId) ?: emptyList()        } catch (e: Exception) {            characters = emptyList()        }        isLoading = false    }    Dialog(        onDismissRequest = onDismiss,        properties = DialogProperties(            usePlatformDefaultWidth = false,            dismissOnBackPress = true,            dismissOnClickOutside = false,            decorFitsSystemWindows = false        )    ) {        Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {            Column(modifier = Modifier.fillMaxSize()) {                Box(                    modifier = Modifier                        .fillMaxWidth()                        .background(MaterialTheme.colorScheme.background)                        .padding(top = statusBarsPadding.calculateTopPadding() + 8.dp, bottom = 12.dp)                ) {                    IconButton(                        onClick = onDismiss,                        modifier = Modifier                            .padding(start = 8.dp)                            .size(40.dp)                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), CircleShape)                    ) {                        Icon(                            Icons.AutoMirrored.Filled.ArrowBack,                            contentDescription = "Back",                            tint = MaterialTheme.colorScheme.onSurface                        )                    }                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.align(Alignment.Center)) {                        Text(                            text = "Cast",                            style = MaterialTheme.typography.titleLarge,                            fontWeight = FontWeight.Bold,                            color = MaterialTheme.colorScheme.onBackground,                        )                        Text(                            text = animeTitle,                            style = MaterialTheme.typography.bodySmall,                            color = MaterialTheme.colorScheme.onSurfaceVariant,                            maxLines = 1,                            overflow = TextOverflow.Ellipsis,                            modifier = Modifier.padding(horizontal = 60.dp)                        )                    }                }                if (isLoading) {                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)                    }                } else if (characters.isEmpty()) {                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {                        Text(                            text = "No characters found",                            style = MaterialTheme.typography.bodyLarge,                            color = MaterialTheme.colorScheme.onSurfaceVariant                        )                    }                } else {                    LazyVerticalGrid(                        columns = GridCells.Fixed(3),                        contentPadding = PaddingValues(                            start = 16.dp, end = 16.dp, top = 8.dp,                            bottom = 16.dp + navigationBarsPadding.calculateBottomPadding()                        ),                        horizontalArrangement = Arrangement.spacedBy(12.dp),                        verticalArrangement = Arrangement.spacedBy(16.dp),                        modifier = Modifier.fillMaxSize()                    ) {                        items(characters) { character ->                            Column(                                modifier = Modifier                                    .fillMaxWidth()                                    .clip(RoundedCornerShape(12.dp))                                    .clickable { onCharacterClick(character.id) },                                horizontalAlignment = Alignment.CenterHorizontally                            ) {                                Card(                                    shape = RoundedCornerShape(12.dp),                                    modifier = Modifier.fillMaxWidth().aspectRatio(0.75f),                                    colors = CardDefaults.cardColors(                                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)                                    )                                ) {                                    AsyncImage(                                        model = character.image?.large,                                        contentDescription = character.name?.full,                                        contentScale = ContentScale.Crop,                                        modifier = Modifier.fillMaxSize()                                    )                                }                                Spacer(modifier = Modifier.height(6.dp))                                Text(                                    text = character.name?.full ?: "Unknown",                                    style = MaterialTheme.typography.labelMedium,                                    fontWeight = FontWeight.Medium,                                    maxLines = 2,                                    overflow = TextOverflow.Ellipsis,                                    color = MaterialTheme.colorScheme.onBackground,                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center                                )                            }                        }                    }                }            }        }    }}@Composablefun AllStaffScreen(    animeId: Int,    animeTitle: String,    viewModel: MainViewModel,    isOled: Boolean = false,    onDismiss: () -> Unit,    onStaffClick: (Int) -> Unit,    onAnimeClick: (Int) -> Unit) {    var staff by remember { mutableStateOf<List<StaffData>>(emptyList()) }    var isLoading by remember { mutableStateOf(true) }    val statusBarsPadding = WindowInsets.statusBars.asPaddingValues()    val navigationBarsPadding = WindowInsets.navigationBars.asPaddingValues()    LaunchedEffect(animeId) {        isLoading = true        try {            staff = viewModel.fetchAllStaff(animeId) ?: emptyList()        } catch (e: Exception) {            staff = emptyList()        }        isLoading = false    }    Dialog(        onDismissRequest = onDismiss,        properties = DialogProperties(            usePlatformDefaultWidth = false,            dismissOnBackPress = true,            dismissOnClickOutside = false,            decorFitsSystemWindows = false        )    ) {        Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {            Column(modifier = Modifier.fillMaxSize()) {                Box(                    modifier = Modifier                        .fillMaxWidth()                        .background(MaterialTheme.colorScheme.background)                        .padding(top = statusBarsPadding.calculateTopPadding() + 8.dp, bottom = 12.dp)                ) {                    IconButton(                        onClick = onDismiss,                        modifier = Modifier                            .padding(start = 8.dp)                            .size(40.dp)                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), CircleShape)                    ) {                        Icon(                            Icons.AutoMirrored.Filled.ArrowBack,                            contentDescription = "Back",                            tint = MaterialTheme.colorScheme.onSurface                        )                    }                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.align(Alignment.Center)) {                        Text(                            text = "Staff",                            style = MaterialTheme.typography.titleLarge,                            fontWeight = FontWeight.Bold,                            color = MaterialTheme.colorScheme.onBackground,                        )                        Text(                            text = animeTitle,                            style = MaterialTheme.typography.bodySmall,                            color = MaterialTheme.colorScheme.onSurfaceVariant,                            maxLines = 1,                            overflow = TextOverflow.Ellipsis,                            modifier = Modifier.padding(horizontal = 60.dp)                        )                    }                }                if (isLoading) {                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)                    }                } else if (staff.isEmpty()) {                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {                        Text(                            text = "No staff found",                            style = MaterialTheme.typography.bodyLarge,                            color = MaterialTheme.colorScheme.onSurfaceVariant                        )                    }                } else {                    LazyVerticalGrid(                        columns = GridCells.Fixed(3),                        contentPadding = PaddingValues(                            start = 16.dp, end = 16.dp, top = 8.dp,                            bottom = 16.dp + navigationBarsPadding.calculateBottomPadding()                        ),                        horizontalArrangement = Arrangement.spacedBy(12.dp),                        verticalArrangement = Arrangement.spacedBy(16.dp),                        modifier = Modifier.fillMaxSize()                    ) {                        items(staff) { staffMember ->                            Column(                                modifier = Modifier                                    .fillMaxWidth()                                    .clip(RoundedCornerShape(12.dp))                                    .clickable { onStaffClick(staffMember.id) },                                horizontalAlignment = Alignment.CenterHorizontally                            ) {                                Card(                                    shape = RoundedCornerShape(12.dp),                                    modifier = Modifier.fillMaxWidth().aspectRatio(0.75f),                                    colors = CardDefaults.cardColors(                                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)                                    )                                ) {                                    AsyncImage(                                        model = staffMember.image?.large,                                        contentDescription = staffMember.name?.full,                                        contentScale = ContentScale.Crop,                                        modifier = Modifier.fillMaxSize()                                    )                                }                                Spacer(modifier = Modifier.height(4.dp))                                Text(                                    text = staffMember.name?.full ?: "Unknown",                                    style = MaterialTheme.typography.labelMedium,                                    fontWeight = FontWeight.Medium,                                    maxLines = 1,                                    overflow = TextOverflow.Ellipsis,                                    color = MaterialTheme.colorScheme.onBackground                                )                                staffMember.primaryOccupations?.firstOrNull()?.let { role ->                                    Text(                                        text = role,                                        style = MaterialTheme.typography.bodySmall,                                        maxLines = 1,                                        overflow = TextOverflow.Ellipsis,                                        color = MaterialTheme.colorScheme.onSurfaceVariant                                    )                                }                            }                        }                    }                }            }        }    }}
+package com.blissless.tensei.ui.screens.cast
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import coil.compose.AsyncImage
+import com.blissless.tensei.MainViewModel
+import com.blissless.tensei.data.models.CharacterData
+import com.blissless.tensei.data.models.StaffData
+
+@Composable
+fun AllCastScreen(
+    animeId: Int,
+    animeTitle: String,
+    viewModel: MainViewModel,
+    isOled: Boolean = false,
+    onDismiss: () -> Unit,
+    onCharacterClick: (Int) -> Unit,
+    onAnimeClick: (Int) -> Unit
+) {
+    var characters by remember { mutableStateOf<List<CharacterData>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+
+    val statusBarsPadding = WindowInsets.statusBars.asPaddingValues()
+    val navigationBarsPadding = WindowInsets.navigationBars.asPaddingValues()
+
+    LaunchedEffect(animeId) {
+        isLoading = true
+        try {
+            characters = viewModel.fetchAllCharacters(animeId) ?: emptyList()
+        } catch (e: Exception) {
+            characters = emptyList()
+        }
+        isLoading = false
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = true,
+            dismissOnClickOutside = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
+        Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.background)
+                        .padding(top = statusBarsPadding.calculateTopPadding() + 8.dp, bottom = 12.dp)
+                ) {
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .padding(start = 8.dp)
+                            .size(40.dp)
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), CircleShape)
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.align(Alignment.Center)) {
+                        Text(
+                            text = "Cast",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground,
+                        )
+                        Text(
+                            text = animeTitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(horizontal = 60.dp)
+                        )
+                    }
+                }
+
+                if (isLoading) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                    }
+                } else if (characters.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(
+                            text = "No characters found",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                } else {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(3),
+                        contentPadding = PaddingValues(
+                            start = 16.dp, end = 16.dp, top = 8.dp,
+                            bottom = 16.dp + navigationBarsPadding.calculateBottomPadding()
+                        ),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(characters) { character ->
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable { onCharacterClick(character.id) },
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Card(
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.fillMaxWidth().aspectRatio(0.75f),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                    )
+                                ) {
+                                    AsyncImage(
+                                        model = character.image?.large,
+                                        contentDescription = character.name?.full,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = character.name?.full ?: "Unknown",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    color = MaterialTheme.colorScheme.onBackground,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AllStaffScreen(
+    animeId: Int,
+    animeTitle: String,
+    viewModel: MainViewModel,
+    isOled: Boolean = false,
+    onDismiss: () -> Unit,
+    onStaffClick: (Int) -> Unit,
+    onAnimeClick: (Int) -> Unit
+) {
+    var staff by remember { mutableStateOf<List<StaffData>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+
+    val statusBarsPadding = WindowInsets.statusBars.asPaddingValues()
+    val navigationBarsPadding = WindowInsets.navigationBars.asPaddingValues()
+
+    LaunchedEffect(animeId) {
+        isLoading = true
+        try {
+            staff = viewModel.fetchAllStaff(animeId) ?: emptyList()
+        } catch (e: Exception) {
+            staff = emptyList()
+        }
+        isLoading = false
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = true,
+            dismissOnClickOutside = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
+        Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.background)
+                        .padding(top = statusBarsPadding.calculateTopPadding() + 8.dp, bottom = 12.dp)
+                ) {
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .padding(start = 8.dp)
+                            .size(40.dp)
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), CircleShape)
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.align(Alignment.Center)) {
+                        Text(
+                            text = "Staff",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground,
+                        )
+                        Text(
+                            text = animeTitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(horizontal = 60.dp)
+                        )
+                    }
+                }
+
+                if (isLoading) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                    }
+                } else if (staff.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(
+                            text = "No staff found",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                } else {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(3),
+                        contentPadding = PaddingValues(
+                            start = 16.dp, end = 16.dp, top = 8.dp,
+                            bottom = 16.dp + navigationBarsPadding.calculateBottomPadding()
+                        ),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(staff) { staffMember ->
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable { onStaffClick(staffMember.id) },
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Card(
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.fillMaxWidth().aspectRatio(0.75f),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                    )
+                                ) {
+                                    AsyncImage(
+                                        model = staffMember.image?.large,
+                                        contentDescription = staffMember.name?.full,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = staffMember.name?.full ?: "Unknown",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    color = MaterialTheme.colorScheme.onBackground
+                                )
+                                staffMember.primaryOccupations?.firstOrNull()?.let { role ->
+                                    Text(
+                                        text = role,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+

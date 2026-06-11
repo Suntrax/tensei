@@ -1,1 +1,600 @@
-package com.blissless.tensei.widgetimport android.content.Contextimport android.content.Intentimport android.graphics.Bitmapimport android.graphics.BitmapFactoryimport android.graphics.Paintimport android.graphics.PorterDuffimport android.graphics.PorterDuffXfermodeimport android.graphics.RectFimport androidx.compose.runtime.Composableimport androidx.compose.ui.graphics.Colorimport androidx.compose.ui.unit.dpimport androidx.compose.ui.unit.spimport androidx.glance.GlanceIdimport androidx.glance.GlanceModifierimport androidx.glance.Imageimport androidx.glance.ImageProviderimport androidx.glance.action.actionimport androidx.glance.action.actionStartActivityimport androidx.glance.action.clickableimport androidx.glance.appwidget.GlanceAppWidgetimport androidx.glance.appwidget.GlanceAppWidgetReceiverimport androidx.glance.appwidget.components.CircleIconButtonimport androidx.glance.appwidget.lazy.LazyColumnimport androidx.glance.appwidget.lazy.itemsimport androidx.glance.appwidget.provideContentimport androidx.glance.appwidget.GlanceAppWidgetManagerimport androidx.glance.appwidget.updateAllimport androidx.glance.backgroundimport androidx.glance.layout.Alignmentimport androidx.glance.layout.Boximport androidx.glance.layout.Columnimport androidx.glance.layout.Rowimport androidx.glance.layout.Spacerimport androidx.glance.layout.fillMaxSizeimport androidx.glance.layout.fillMaxWidthimport androidx.glance.layout.heightimport androidx.glance.layout.paddingimport androidx.glance.layout.sizeimport androidx.glance.layout.widthimport androidx.glance.text.FontWeightimport androidx.glance.text.Textimport androidx.glance.text.TextStyleimport androidx.glance.unit.ColorProviderimport androidx.work.CoroutineWorkerimport androidx.work.ExistingPeriodicWorkPolicyimport androidx.work.ExistingWorkPolicyimport androidx.work.OneTimeWorkRequestBuilderimport androidx.work.PeriodicWorkRequestBuilderimport androidx.work.WorkManagerimport androidx.work.WorkerParametersimport com.blissless.tensei.MainActivityimport com.blissless.tensei.Rimport com.blissless.tensei.data.models.isAdultContentimport kotlinx.coroutines.Dispatchersimport kotlinx.coroutines.withContextimport kotlinx.serialization.Serializableimport kotlinx.serialization.encodeToStringimport kotlinx.serialization.json.Jsonimport org.json.JSONObjectimport java.io.Fileimport java.io.FileOutputStreamimport java.net.HttpURLConnectionimport java.net.URLimport java.text.SimpleDateFormatimport java.util.Calendarimport java.util.Dateimport java.util.Localeimport java.util.concurrent.TimeUnitprivate const val PREFS_NAME = "airing_schedule_widget"private const val ANILIST_PREFS = "anilist_prefs"private const val KEY_DATA = "schedule_data"private const val KEY_UPD = "last_update"private const val KEY_REFRESH_TIME = "last_refresh_time"private const val KEY_WAS_AUTH = "was_authed"private const val WORK_PERIODIC = "airing_schedule_widget_periodic"private const val WORK_NOW = "airing_schedule_widget_now"private const val COOLDOWN_MS = 30_000L@Serializabledata class WidgetAiringEntry(    val id: Int,    val title: String,    val airingEpisode: Int,    val airingAt: Long,    val timeUntilAiring: Long? = null,    val cover: String = "",    val averageScore: Int? = null,    val dayOfWeek: Int = 0,    val userStatus: String? = null,    val isAdult: Boolean = false,    val titleEnglish: String? = null,    val titleRomaji: String? = null,    val genres: List<String> = emptyList())@Serializabledata class WidgetScheduleData(    val entries: List<WidgetAiringEntry>,    val lastUpdateTime: Long = 0)private val statusColors = mapOf(    "CURRENT" to Color(0xFF2196F3),    "PLANNING" to Color(0xFF9C27B0),    "COMPLETED" to Color(0xFF4CAF50),    "PAUSED" to Color(0xFFFFC107),    "DROPPED" to Color(0xFFF44336),    "REPEATING" to Color(0xFF00BCD4))object AiringScheduleWidget : GlanceAppWidget() {    private val json = Json { ignoreUnknownKeys = true; coerceInputValues = true }    override suspend fun provideGlance(context: Context, id: GlanceId) {        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)        var data = loadData(prefs)        val token = context.getSharedPreferences(ANILIST_PREFS, Context.MODE_PRIVATE)            .getString("auth_token", null)        val wasAuthed = prefs.getBoolean(KEY_WAS_AUTH, false)        val isAuthed = token != null        if (data.entries.isEmpty() || isAuthed != wasAuthed) {            try {                val fresh = withContext(Dispatchers.IO) {                    WidgetScheduleFetcher.quickFetch(context, token)                }                if (fresh.entries.isNotEmpty()) {                    saveWidgetData(context, fresh, isAuthed)                    withContext(Dispatchers.IO) { cacheCovers(context, fresh.entries) }                    data = fresh                }            } catch (e: Exception) {            }        }        val coverCache = withContext(Dispatchers.IO) {            val cache = mutableMapOf<Int, Bitmap?>()            data.entries.forEach { entry ->                val file = File(context.cacheDir, "widget_cover_${entry.id}.jpg")                if (file.exists() && file.length() > 100) {                    try {                        val opts = BitmapFactory.Options().apply { inSampleSize = 2 }                        val bm = BitmapFactory.decodeFile(file.absolutePath, opts)                        if (bm != null) cache[entry.id] = bm                    } catch (_: Exception) { }                }            }            cache        }        val userPrefs = context.getSharedPreferences(ANILIST_PREFS, Context.MODE_PRIVATE)        val hideAdult = userPrefs.getBoolean("hide_adult_content", true)        val preferEnglish = userPrefs.getBoolean("prefer_english_titles", true)        if (data.entries.isEmpty() || isStale(data.lastUpdateTime))            triggerNow(context, bypassCooldown = true)        schedulePeriodic(context)        provideContent { WidgetContent(context, data, coverCache, hideAdult, preferEnglish) }    }    private fun loadData(prefs: android.content.SharedPreferences): WidgetScheduleData {        val s = prefs.getString(KEY_DATA, null) ?: return WidgetScheduleData(emptyList())        return try {            json.decodeFromString<WidgetScheduleData>(s)        } catch (e: Exception) {            WidgetScheduleData(emptyList())        }    }    private fun isStale(lastUpdate: Long) = lastUpdate == 0L || System.currentTimeMillis() - lastUpdate > 300_000    fun triggerNow(context: Context, bypassCooldown: Boolean = false) {        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)        val now = System.currentTimeMillis()        val last = prefs.getLong(KEY_REFRESH_TIME, 0)        if (!bypassCooldown && last != 0L && now - last < COOLDOWN_MS) {            return        }        prefs.edit().putLong(KEY_REFRESH_TIME, now).apply()        WorkManager.getInstance(context).enqueueUniqueWork(            WORK_NOW, ExistingWorkPolicy.REPLACE,            OneTimeWorkRequestBuilder<AiringScheduleWorker>().build()        )    }    private fun schedulePeriodic(context: Context) {        WorkManager.getInstance(context).enqueueUniquePeriodicWork(            WORK_PERIODIC, ExistingPeriodicWorkPolicy.KEEP,            PeriodicWorkRequestBuilder<AiringScheduleWorker>(30, TimeUnit.MINUTES).build()        )    }    @Composable    fun WidgetContent(context: Context, data: WidgetScheduleData, coverCache: Map<Int, Bitmap?>, hideAdult: Boolean = false, preferEnglish: Boolean = true) {        val cal = Calendar.getInstance()        val dow = cal.get(Calendar.DAY_OF_WEEK) - 1        val dayNames = listOf("Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday")        cal.set(Calendar.HOUR_OF_DAY, 0)        cal.set(Calendar.MINUTE, 0)        cal.set(Calendar.SECOND, 0)        cal.set(Calendar.MILLISECOND, 0)        val todayStart = cal.timeInMillis / 1000        val todayEnd = todayStart + 86400        val nowTs = System.currentTimeMillis() / 1000        val items = data.entries            .filter { if (hideAdult) !isAdultContent(it.isAdult, it.genres) else true }            .filter { it.dayOfWeek == dow && it.airingAt >= todayStart && it.airingAt < todayEnd }            .sortedBy { it.airingAt }        val ago = if (data.lastUpdateTime > 0) {            val d = System.currentTimeMillis() - data.lastUpdateTime            when { d < 60_000 -> "just now"; d < 3_600_000 -> "${d / 60_000}m ago"; else -> "${d / 3_600_000}h ago" }        } else "never"        Column(            modifier = GlanceModifier.fillMaxSize()                .background(ColorProvider(Color(0xFF0D0D0D)))                .padding(start = 14.dp, top = 14.dp, end = 14.dp, bottom = 12.dp)        ) {            Row(                modifier = GlanceModifier.fillMaxWidth(),                verticalAlignment = Alignment.CenterVertically            ) {                Column(modifier = GlanceModifier.defaultWeight()) {                    Text(dayNames[dow], style = TextStyle(                        color = ColorProvider(Color.White), fontSize = 16.sp, fontWeight = FontWeight.Bold                    ))                    Text("${items.size} airing today", style = TextStyle(                        color = ColorProvider(Color(0xFF9E9E9E)), fontSize = 12.sp                    ))                }                CircleIconButton(                    imageProvider = ImageProvider(R.drawable.ic_refresh),                    contentDescription = "Refresh",                    onClick = action("refresh") {                        triggerNow(context)                    },                    modifier = GlanceModifier.size(32.dp)                )            }            Spacer(GlanceModifier.height(10.dp))            LazyColumn(                modifier = GlanceModifier.defaultWeight().fillMaxWidth()            ) {                if (items.isEmpty()) {                    item {                        Box(                            modifier = GlanceModifier.fillMaxWidth().padding(vertical = 20.dp),                            contentAlignment = Alignment.Center,                            content = @Composable { Text("No anime airing today", style = TextStyle(                                color = ColorProvider(Color(0xFF616161)), fontSize = 14.sp                            ))}                        )                    }                } else {                    items(items) { e ->                        Column {                            Box(                                modifier = GlanceModifier.fillMaxWidth()                                    .padding(horizontal = 2.dp)                                    .background(ImageProvider(R.drawable.widget_item_bg)),                                content = @Composable {                                    AiringItem(e, coverCache[e.id], nowTs, context, preferEnglish)                                }                            )                            Spacer(GlanceModifier.height(4.dp))                        }                    }                }            }            Spacer(GlanceModifier.height(6.dp))            Row(                modifier = GlanceModifier.fillMaxWidth(),                verticalAlignment = Alignment.CenterVertically            ) {                Text("Updated $ago", style = TextStyle(                    color = ColorProvider(Color(0xFF616161)), fontSize = 10.sp                ))                Spacer(GlanceModifier.defaultWeight())                Text("Tensei", style = TextStyle(                    color = ColorProvider(Color(0xFF424242)), fontSize = 10.sp, fontWeight = FontWeight.Bold                ))            }            Spacer(GlanceModifier.height(4.dp))        }    }    @Composable    private fun AiringItem(e: WidgetAiringEntry, coverBitmap: Bitmap?, nowTs: Long, context: Context, preferEnglish: Boolean = true) {        fun String?.valid(): String? = this?.takeIf { it.isNotBlank() && it != "null" }        val displayTitle = if (preferEnglish) e.titleEnglish.valid() ?: e.titleRomaji.valid() ?: e.title                           else e.titleRomaji.valid() ?: e.titleEnglish.valid() ?: e.title        val isPast = e.airingAt <= nowTs        val displayTime = if (isPast) {            val ago = nowTs - e.airingAt            val h = (ago / 3600).toInt()            val m = ((ago % 3600) / 60).toInt()            when {                h > 0 && m > 0 -> "${h}h ${m}m ago"                h > 0 -> "${h}h ago"                m > 0 -> "${m}m ago"                else -> "just now"            }        } else {            val diff = e.timeUntilAiring ?: (e.airingAt - nowTs)            val h = (diff / 3600).toInt()            val m = ((diff % 3600) / 60).toInt()            when {                h > 0 && m > 0 -> "in ${h}h ${m}m"                h > 0 -> "in ${h}h"                m > 0 -> "in ${m}m"                else -> "< 1m"            }        }        val score = e.averageScore?.let { " \u00b7 \u2605${it / 10}.${it % 10}" } ?: ""        val titleColor = if (isPast) Color(0xFF757575) else Color.White        val infoColor = if (isPast) Color(0xFF555555) else Color(0xFF9E9E9E)        val statusColor = e.userStatus?.let { statusColors[it] }        Row(            modifier = GlanceModifier.fillMaxWidth()                .padding(end = 14.dp)                .clickable(action("open_${e.id}") {                    val intent = Intent(context, MainActivity::class.java).apply {                        putExtra("widget_anime_id", e.id)                        putExtra("widget_anime_title", e.title)                        putExtra("widget_anime_cover", e.cover)                        putExtra("widget_anime_score", e.averageScore ?: 0)                        putExtra("widget_anime_episode", e.airingEpisode)                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP                    }                    context.startActivity(intent)                }),            verticalAlignment = Alignment.CenterVertically        ) {            if (statusColor != null) {                Box(modifier = GlanceModifier.width(3.dp).height(80.dp).background(ColorProvider(statusColor)), content = {})                Spacer(GlanceModifier.width(4.dp))            }            Box(                modifier = GlanceModifier.size(56.dp, 80.dp)                    .background(ColorProvider(Color(0xFF242424))),                contentAlignment = Alignment.Center,                content = @Composable {                    if (coverBitmap != null) {                        Image(                            provider = ImageProvider(coverBitmap),                            contentDescription = "Cover",                            modifier = GlanceModifier.fillMaxSize()                        )                    } else {                        Text(displayTitle.take(1), style = TextStyle(                            color = ColorProvider(Color(0xFF616161)), fontSize = 18.sp                        ))                    }                }            )            Spacer(GlanceModifier.width(10.dp))            Column(modifier = GlanceModifier.defaultWeight()) {                Text(displayTitle, style = TextStyle(                    color = ColorProvider(titleColor), fontSize = 13.sp,                    fontWeight = FontWeight.Medium                ))            Row(verticalAlignment = Alignment.CenterVertically) {                if (statusColor != null) {                    Text("\u25CF", style = TextStyle(                        color = ColorProvider(statusColor), fontSize = 8.sp                    ))                    Spacer(GlanceModifier.width(4.dp))                }                Text("Ep ${e.airingEpisode}", style = TextStyle(                    color = ColorProvider(infoColor), fontSize = 11.sp                ))                if (score.isNotEmpty()) {                    Text(score, style = TextStyle(                        color = ColorProvider(infoColor), fontSize = 11.sp                    ))                }            }            }            Spacer(GlanceModifier.width(6.dp))            Text(displayTime, style = TextStyle(                color = ColorProvider(if (isPast) Color(0xFFF44336) else Color(0xFF4CAF50)),                fontSize = 11.sp, fontWeight = FontWeight.Medium            ))            Spacer(GlanceModifier.width(4.dp))        }    }}class AiringScheduleWidgetReceiver : GlanceAppWidgetReceiver() {    override val glanceAppWidget = AiringScheduleWidget}private fun saveWidgetData(context: Context, data: WidgetScheduleData, isAuthed: Boolean = false) {    val j = Json { ignoreUnknownKeys = true; coerceInputValues = true }    val saved = j.encodeToString(data)    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()        .putString(KEY_DATA, saved)        .putLong(KEY_UPD, System.currentTimeMillis())        .putBoolean(KEY_WAS_AUTH, isAuthed)        .commit()}private fun roundCorners(bitmap: Bitmap, radiusPx: Float): Bitmap {    val out = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)    val canvas = android.graphics.Canvas(out)    canvas.drawColor(0xFF242424.toInt())    val paint = Paint(Paint.ANTI_ALIAS_FLAG)    canvas.drawRoundRect(RectF(0f, 0f, bitmap.width.toFloat(), bitmap.height.toFloat()), radiusPx, radiusPx, paint)    paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN)    canvas.drawBitmap(bitmap, 0f, 0f, paint)    if (bitmap != out) bitmap.recycle()    return out}private suspend fun updateWidget(context: Context) {    try {        val glanceManager = GlanceAppWidgetManager(context)        val glanceIds = glanceManager.getGlanceIds(AiringScheduleWidget::class.java)        if (glanceIds.isNotEmpty()) {            glanceIds.forEach { id -> AiringScheduleWidget.update(context, id) }            return        }    } catch (e: Exception) {    }    try { AiringScheduleWidget.updateAll(context) } catch (e: Exception) {    }}private fun cacheCovers(context: Context, entries: List<WidgetAiringEntry>) {    entries.forEach { entry ->        if (entry.cover.isEmpty()) return@forEach        val file = File(context.cacheDir, "widget_cover_${entry.id}.jpg")        if (file.exists() && file.length() > 500) return@forEach        try {            val conn = URL(entry.cover).openConnection() as HttpURLConnection            conn.connectTimeout = 5000            conn.readTimeout = 5000            val bitmap = BitmapFactory.decodeStream(conn.inputStream)            conn.disconnect()            if (bitmap != null) {                val w = bitmap.width                val h = bitmap.height                val scale = minOf(168f / w, 240f / h)                val sw = (w * scale).toInt()                val sh = (h * scale).toInt()                val scaled = Bitmap.createScaledBitmap(bitmap, sw, sh, true)                if (scaled != bitmap) bitmap.recycle()                val rounded = roundCorners(scaled, 8f)                FileOutputStream(file).use { rounded.compress(Bitmap.CompressFormat.JPEG, 80, it) }                rounded.recycle()            }        } catch (e: Exception) {        }    }}class AiringScheduleWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {    override suspend fun doWork(): Result {        return try {            val token = applicationContext.getSharedPreferences(ANILIST_PREFS, Context.MODE_PRIVATE)                .getString("auth_token", null)            val data = WidgetScheduleFetcher.fetch(applicationContext, token)            cacheCovers(applicationContext, data.entries)            saveWidgetData(applicationContext, data, token != null)            updateWidget(applicationContext)            Result.success()        } catch (e: Exception) {            if (runAttemptCount < 3) Result.retry() else Result.failure()        }    }}object WidgetScheduleFetcher {    private val json = Json { ignoreUnknownKeys = true; coerceInputValues = true }    fun quickFetch(context: Context, authToken: String? = null): WidgetScheduleData {        val ct = System.currentTimeMillis() / 1000        val body = JSONObject().apply {            put("query", "query(\$p:Int,\$s:Int,\$e:Int){Page(page:\$p,perPage:50){airingSchedules(airingAt_greater:\$s,airingAt_lesser:\$e,sort:TIME){id airingAt episode timeUntilAiring mediaId media{id idMal title{romaji english}coverImage{extraLarge}episodes status averageScore genres seasonYear isAdult mediaListEntry{id status}}}}}")            put("variables", JSONObject(mapOf("p" to 1, "s" to (ct - 86400).toInt(), "e" to (ct + 86400).toInt())))        }        val resp = execute(body.toString(), authToken, shortTimeout = true)        val parsed = parse(resp)        return WidgetScheduleData(parsed, System.currentTimeMillis())    }    fun fetch(context: Context, authToken: String? = null): WidgetScheduleData {        val ct = System.currentTimeMillis() / 1000        val query = "query(\$p:Int,\$s:Int,\$e:Int){Page(page:\$p,perPage:50){airingSchedules(airingAt_greater:\$s,airingAt_lesser:\$e,sort:TIME){id airingAt episode timeUntilAiring mediaId media{id idMal title{romaji english}coverImage{extraLarge}episodes status averageScore genres seasonYear isAdult mediaListEntry{id status}}}}}"        val entries = mutableListOf<WidgetAiringEntry>()        var page = 1        while (page <= 5) {            try {                val body = JSONObject().apply {                    put("query", query)                    put("variables", JSONObject(mapOf("p" to page, "s" to (ct - 86400).toInt(), "e" to (ct + 7*86400).toInt())))                }                val resp = execute(body.toString(), authToken)                val parsed = parse(resp)                if (parsed.isEmpty()) { break }                entries.addAll(parsed)                if (parsed.size < 50) break                page++            } catch (e: Exception) {                break            }        }        val cached = loadCached(context)        if (cached != null) {            val newIds = entries.map { it.id }.toSet()            val cachedPast = cached.entries.filter { cachedE ->                cachedE.airingAt > (ct - 172800) &&                cachedE.airingAt <= (ct + 86400) &&                cachedE.dayOfWeek == Calendar.getInstance().apply { timeInMillis = ct * 1000L }.get(Calendar.DAY_OF_WEEK) - 1 &&                cachedE.id !in newIds            }            if (cachedPast.isNotEmpty()) {                entries.addAll(cachedPast)            }            entries.sortBy { it.airingAt }        }        if (entries.isEmpty()) {            loadCached(context)?.let { return it }        }        return WidgetScheduleData(entries, System.currentTimeMillis())    }    private fun loadCached(context: Context): WidgetScheduleData? {        val s = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(KEY_DATA, null) ?: return null        return try { json.decodeFromString<WidgetScheduleData>(s) }        catch (_: Exception) { null }    }    private fun execute(body: String, authToken: String?, shortTimeout: Boolean = false): String {        val conn = URL("https://graphql.anilist.co").openConnection() as HttpURLConnection        conn.requestMethod = "POST"        conn.setRequestProperty("Content-Type", "application/json")        conn.setRequestProperty("Accept", "application/json")        if (authToken != null) {            conn.setRequestProperty("Authorization", "Bearer $authToken")        }        conn.doOutput = true        if (shortTimeout) {            conn.connectTimeout = 3000            conn.readTimeout = 3000        } else {            conn.connectTimeout = 15000            conn.readTimeout = 15000        }        conn.outputStream.use { it.write(body.toByteArray()) }        if (conn.responseCode != 200) throw Exception("HTTP ${conn.responseCode}")        return conn.inputStream.bufferedReader().readText()    }    private fun parse(json: String): List<WidgetAiringEntry> {        val root = JSONObject(json)        val schedules = root.optJSONObject("data")?.optJSONObject("Page")?.optJSONArray("airingSchedules") ?: return emptyList()        val r = mutableListOf<WidgetAiringEntry>()        for (i in 0 until schedules.length()) {            try {                val s = schedules.getJSONObject(i)                val m = s.optJSONObject("media") ?: continue                val t = m.optJSONObject("title") ?: continue                val titleEn = t.optString("english", "").takeIf { it.isNotBlank() && it != "null" }                val titleRo = t.optString("romaji", "").takeIf { it.isNotBlank() && it != "null" }                val title = titleEn ?: titleRo ?: "Unknown"                val cover = m.optJSONObject("coverImage")?.optString("extraLarge", "") ?: ""                val score = if (m.has("averageScore") && !m.isNull("averageScore")) m.getInt("averageScore") else null                val ta = if (s.has("timeUntilAiring") && !s.isNull("timeUntilAiring")) s.getLong("timeUntilAiring") else null                val status = m.optJSONObject("mediaListEntry")?.optString("status")?.takeIf { it.isNotEmpty() }                val genres = mutableListOf<String>()                m.optJSONArray("genres")?.let { arr ->                    for (j in 0 until arr.length()) { genres.add(arr.optString(j, "")) }                }                val adult = m.optBoolean("isAdult", false)                val cal = Calendar.getInstance().apply { timeInMillis = s.getLong("airingAt") * 1000L }                r.add(WidgetAiringEntry(m.getInt("id"), title, s.getInt("episode"), s.getLong("airingAt"), ta, cover, score, cal.get(Calendar.DAY_OF_WEEK) - 1, status, adult, titleEn, titleRo, genres))            } catch (_: Exception) { }        }        return r    }}
+package com.blissless.tensei.widget
+
+import android.content.Context
+import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Paint
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffXfermode
+import android.graphics.RectF
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.glance.GlanceId
+import androidx.glance.GlanceModifier
+import androidx.glance.Image
+import androidx.glance.ImageProvider
+import androidx.glance.action.action
+import androidx.glance.action.actionStartActivity
+import androidx.glance.action.clickable
+import androidx.glance.appwidget.GlanceAppWidget
+import androidx.glance.appwidget.GlanceAppWidgetReceiver
+import androidx.glance.appwidget.components.CircleIconButton
+import androidx.glance.appwidget.lazy.LazyColumn
+import androidx.glance.appwidget.lazy.items
+import androidx.glance.appwidget.provideContent
+import androidx.glance.appwidget.GlanceAppWidgetManager
+import androidx.glance.appwidget.updateAll
+import androidx.glance.background
+import androidx.glance.layout.Alignment
+import androidx.glance.layout.Box
+import androidx.glance.layout.Column
+import androidx.glance.layout.Row
+import androidx.glance.layout.Spacer
+import androidx.glance.layout.fillMaxSize
+import androidx.glance.layout.fillMaxWidth
+import androidx.glance.layout.height
+import androidx.glance.layout.padding
+import androidx.glance.layout.size
+import androidx.glance.layout.width
+import androidx.glance.text.FontWeight
+import androidx.glance.text.Text
+import androidx.glance.text.TextStyle
+import androidx.glance.unit.ColorProvider
+import androidx.work.CoroutineWorker
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.WorkerParameters
+import com.blissless.tensei.MainActivity
+import com.blissless.tensei.R
+import com.blissless.tensei.data.models.isAdultContent
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import org.json.JSONObject
+import java.io.File
+import java.io.FileOutputStream
+import java.net.HttpURLConnection
+import java.net.URL
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
+import java.util.concurrent.TimeUnit
+
+private const val PREFS_NAME = "airing_schedule_widget"
+private const val ANILIST_PREFS = "anilist_prefs"
+private const val KEY_DATA = "schedule_data"
+private const val KEY_UPD = "last_update"
+private const val KEY_REFRESH_TIME = "last_refresh_time"
+private const val KEY_WAS_AUTH = "was_authed"
+private const val WORK_PERIODIC = "airing_schedule_widget_periodic"
+private const val WORK_NOW = "airing_schedule_widget_now"
+private const val COOLDOWN_MS = 30_000L
+
+@Serializable
+data class WidgetAiringEntry(
+    val id: Int,
+    val title: String,
+    val airingEpisode: Int,
+    val airingAt: Long,
+    val timeUntilAiring: Long? = null,
+    val cover: String = "",
+    val averageScore: Int? = null,
+    val dayOfWeek: Int = 0,
+    val userStatus: String? = null,
+    val isAdult: Boolean = false,
+    val titleEnglish: String? = null,
+    val titleRomaji: String? = null,
+    val genres: List<String> = emptyList()
+)
+
+@Serializable
+data class WidgetScheduleData(
+    val entries: List<WidgetAiringEntry>,
+    val lastUpdateTime: Long = 0
+)
+
+private val statusColors = mapOf(
+    "CURRENT" to Color(0xFF2196F3),
+    "PLANNING" to Color(0xFF9C27B0),
+    "COMPLETED" to Color(0xFF4CAF50),
+    "PAUSED" to Color(0xFFFFC107),
+    "DROPPED" to Color(0xFFF44336),
+    "REPEATING" to Color(0xFF00BCD4)
+)
+object AiringScheduleWidget : GlanceAppWidget() {
+
+    private val json = Json { ignoreUnknownKeys = true; coerceInputValues = true }
+
+    override suspend fun provideGlance(context: Context, id: GlanceId) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        var data = loadData(prefs)
+        val token = context.getSharedPreferences(ANILIST_PREFS, Context.MODE_PRIVATE)
+            .getString("auth_token", null)
+        val wasAuthed = prefs.getBoolean(KEY_WAS_AUTH, false)
+        val isAuthed = token != null
+
+        if (data.entries.isEmpty() || isAuthed != wasAuthed) {
+            try {
+                val fresh = withContext(Dispatchers.IO) {
+                    WidgetScheduleFetcher.quickFetch(context, token)
+                }
+                if (fresh.entries.isNotEmpty()) {
+                    saveWidgetData(context, fresh, isAuthed)
+                    withContext(Dispatchers.IO) { cacheCovers(context, fresh.entries) }
+                    data = fresh
+                }
+            } catch (e: Exception) {
+            }
+        }
+
+        val coverCache = withContext(Dispatchers.IO) {
+            val cache = mutableMapOf<Int, Bitmap?>()
+            data.entries.forEach { entry ->
+                val file = File(context.cacheDir, "widget_cover_${entry.id}.jpg")
+                if (file.exists() && file.length() > 100) {
+                    try {
+                        val opts = BitmapFactory.Options().apply { inSampleSize = 2 }
+                        val bm = BitmapFactory.decodeFile(file.absolutePath, opts)
+                        if (bm != null) cache[entry.id] = bm
+                    } catch (_: Exception) { }
+                }
+            }
+            cache
+        }
+
+        val userPrefs = context.getSharedPreferences(ANILIST_PREFS, Context.MODE_PRIVATE)
+        val hideAdult = userPrefs.getBoolean("hide_adult_content", true)
+        val preferEnglish = userPrefs.getBoolean("prefer_english_titles", true)
+
+        if (data.entries.isEmpty() || isStale(data.lastUpdateTime))
+            triggerNow(context, bypassCooldown = true)
+        schedulePeriodic(context)
+
+        provideContent { WidgetContent(context, data, coverCache, hideAdult, preferEnglish) }
+    }
+
+    private fun loadData(prefs: android.content.SharedPreferences): WidgetScheduleData {
+        val s = prefs.getString(KEY_DATA, null) ?: return WidgetScheduleData(emptyList())
+        return try {
+            json.decodeFromString<WidgetScheduleData>(s)
+        } catch (e: Exception) {
+            WidgetScheduleData(emptyList())
+        }
+    }
+
+    private fun isStale(lastUpdate: Long) = lastUpdate == 0L || System.currentTimeMillis() - lastUpdate > 300_000
+
+    fun triggerNow(context: Context, bypassCooldown: Boolean = false) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        val last = prefs.getLong(KEY_REFRESH_TIME, 0)
+        if (!bypassCooldown && last != 0L && now - last < COOLDOWN_MS) {
+            return
+        }
+        prefs.edit().putLong(KEY_REFRESH_TIME, now).apply()
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            WORK_NOW, ExistingWorkPolicy.REPLACE,
+            OneTimeWorkRequestBuilder<AiringScheduleWorker>().build()
+        )
+    }
+
+    private fun schedulePeriodic(context: Context) {
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+            WORK_PERIODIC, ExistingPeriodicWorkPolicy.KEEP,
+            PeriodicWorkRequestBuilder<AiringScheduleWorker>(30, TimeUnit.MINUTES).build()
+        )
+    }
+
+    @Composable
+    fun WidgetContent(context: Context, data: WidgetScheduleData, coverCache: Map<Int, Bitmap?>, hideAdult: Boolean = false, preferEnglish: Boolean = true) {
+        val cal = Calendar.getInstance()
+        val dow = cal.get(Calendar.DAY_OF_WEEK) - 1
+        val dayNames = listOf("Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday")
+
+        cal.set(Calendar.HOUR_OF_DAY, 0)
+        cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+        val todayStart = cal.timeInMillis / 1000
+        val todayEnd = todayStart + 86400
+
+        val nowTs = System.currentTimeMillis() / 1000
+        val items = data.entries
+            .filter { if (hideAdult) !isAdultContent(it.isAdult, it.genres) else true }
+            .filter { it.dayOfWeek == dow && it.airingAt >= todayStart && it.airingAt < todayEnd }
+            .sortedBy { it.airingAt }
+
+        val ago = if (data.lastUpdateTime > 0) {
+            val d = System.currentTimeMillis() - data.lastUpdateTime
+            when { d < 60_000 -> "just now"; d < 3_600_000 -> "${d / 60_000}m ago"; else -> "${d / 3_600_000}h ago" }
+        } else "never"
+
+        Column(
+            modifier = GlanceModifier.fillMaxSize()
+                .background(ColorProvider(Color(0xFF0D0D0D)))
+                .padding(start = 14.dp, top = 14.dp, end = 14.dp, bottom = 12.dp)
+        ) {
+            Row(
+                modifier = GlanceModifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = GlanceModifier.defaultWeight()) {
+                    Text(dayNames[dow], style = TextStyle(
+                        color = ColorProvider(Color.White), fontSize = 16.sp, fontWeight = FontWeight.Bold
+                    ))
+                    Text("${items.size} airing today", style = TextStyle(
+                        color = ColorProvider(Color(0xFF9E9E9E)), fontSize = 12.sp
+                    ))
+                }
+                CircleIconButton(
+                    imageProvider = ImageProvider(R.drawable.ic_refresh),
+                    contentDescription = "Refresh",
+                    onClick = action("refresh") {
+                        triggerNow(context)
+                    },
+                    modifier = GlanceModifier.size(32.dp)
+                )
+            }
+            Spacer(GlanceModifier.height(10.dp))
+
+            LazyColumn(
+                modifier = GlanceModifier.defaultWeight().fillMaxWidth()
+            ) {
+                if (items.isEmpty()) {
+                    item {
+                        Box(
+                            modifier = GlanceModifier.fillMaxWidth().padding(vertical = 20.dp),
+                            contentAlignment = Alignment.Center,
+                            content = @Composable { Text("No anime airing today", style = TextStyle(
+                                color = ColorProvider(Color(0xFF616161)), fontSize = 14.sp
+                            ))}
+                        )
+                    }
+                } else {
+                    items(items) { e ->
+                        Column {
+                            Box(
+                                modifier = GlanceModifier.fillMaxWidth()
+                                    .padding(horizontal = 2.dp)
+                                    .background(ImageProvider(R.drawable.widget_item_bg)),
+                                content = @Composable {
+                                    AiringItem(e, coverCache[e.id], nowTs, context, preferEnglish)
+                                }
+                            )
+                            Spacer(GlanceModifier.height(4.dp))
+                        }
+                    }
+                }
+            }
+
+            Spacer(GlanceModifier.height(6.dp))
+            Row(
+                modifier = GlanceModifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Updated $ago", style = TextStyle(
+                    color = ColorProvider(Color(0xFF616161)), fontSize = 10.sp
+                ))
+                Spacer(GlanceModifier.defaultWeight())
+                Text("Tensei", style = TextStyle(
+                    color = ColorProvider(Color(0xFF424242)), fontSize = 10.sp, fontWeight = FontWeight.Bold
+                ))
+            }
+            Spacer(GlanceModifier.height(4.dp))
+        }
+    }
+
+    @Composable
+    private fun AiringItem(e: WidgetAiringEntry, coverBitmap: Bitmap?, nowTs: Long, context: Context, preferEnglish: Boolean = true) {
+        fun String?.valid(): String? = this?.takeIf { it.isNotBlank() && it != "null" }
+        val displayTitle = if (preferEnglish) e.titleEnglish.valid() ?: e.titleRomaji.valid() ?: e.title
+                           else e.titleRomaji.valid() ?: e.titleEnglish.valid() ?: e.title
+        val isPast = e.airingAt <= nowTs
+        val displayTime = if (isPast) {
+            val ago = nowTs - e.airingAt
+            val h = (ago / 3600).toInt()
+            val m = ((ago % 3600) / 60).toInt()
+            when {
+                h > 0 && m > 0 -> "${h}h ${m}m ago"
+                h > 0 -> "${h}h ago"
+                m > 0 -> "${m}m ago"
+                else -> "just now"
+            }
+        } else {
+            val diff = e.timeUntilAiring ?: (e.airingAt - nowTs)
+            val h = (diff / 3600).toInt()
+            val m = ((diff % 3600) / 60).toInt()
+            when {
+                h > 0 && m > 0 -> "in ${h}h ${m}m"
+                h > 0 -> "in ${h}h"
+                m > 0 -> "in ${m}m"
+                else -> "< 1m"
+            }
+        }
+
+        val score = e.averageScore?.let { " \u00b7 \u2605${it / 10}.${it % 10}" } ?: ""
+        val titleColor = if (isPast) Color(0xFF757575) else Color.White
+        val infoColor = if (isPast) Color(0xFF555555) else Color(0xFF9E9E9E)
+
+        val statusColor = e.userStatus?.let { statusColors[it] }
+
+        Row(
+            modifier = GlanceModifier.fillMaxWidth()
+                .padding(end = 14.dp)
+                .clickable(action("open_${e.id}") {
+                    val intent = Intent(context, MainActivity::class.java).apply {
+                        putExtra("widget_anime_id", e.id)
+                        putExtra("widget_anime_title", e.title)
+                        putExtra("widget_anime_cover", e.cover)
+                        putExtra("widget_anime_score", e.averageScore ?: 0)
+                        putExtra("widget_anime_episode", e.airingEpisode)
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    }
+                    context.startActivity(intent)
+                }),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (statusColor != null) {
+                Box(modifier = GlanceModifier.width(3.dp).height(80.dp).background(ColorProvider(statusColor)), content = {})
+                Spacer(GlanceModifier.width(4.dp))
+            }
+            Box(
+                modifier = GlanceModifier.size(56.dp, 80.dp)
+                    .background(ColorProvider(Color(0xFF242424))),
+                contentAlignment = Alignment.Center,
+                content = @Composable {
+                    if (coverBitmap != null) {
+                        Image(
+                            provider = ImageProvider(coverBitmap),
+                            contentDescription = "Cover",
+                            modifier = GlanceModifier.fillMaxSize()
+                        )
+                    } else {
+                        Text(displayTitle.take(1), style = TextStyle(
+                            color = ColorProvider(Color(0xFF616161)), fontSize = 18.sp
+                        ))
+                    }
+                }
+            )
+            Spacer(GlanceModifier.width(10.dp))
+            Column(modifier = GlanceModifier.defaultWeight()) {
+                Text(displayTitle, style = TextStyle(
+                    color = ColorProvider(titleColor), fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium
+                ))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (statusColor != null) {
+                    Text("\u25CF", style = TextStyle(
+                        color = ColorProvider(statusColor), fontSize = 8.sp
+                    ))
+                    Spacer(GlanceModifier.width(4.dp))
+                }
+                Text("Ep ${e.airingEpisode}", style = TextStyle(
+                    color = ColorProvider(infoColor), fontSize = 11.sp
+                ))
+                if (score.isNotEmpty()) {
+                    Text(score, style = TextStyle(
+                        color = ColorProvider(infoColor), fontSize = 11.sp
+                    ))
+                }
+            }
+            }
+            Spacer(GlanceModifier.width(6.dp))
+            Text(displayTime, style = TextStyle(
+                color = ColorProvider(if (isPast) Color(0xFFF44336) else Color(0xFF4CAF50)),
+                fontSize = 11.sp, fontWeight = FontWeight.Medium
+            ))
+            Spacer(GlanceModifier.width(4.dp))
+        }
+    }
+}
+
+class AiringScheduleWidgetReceiver : GlanceAppWidgetReceiver() {
+    override val glanceAppWidget = AiringScheduleWidget
+}
+
+private fun saveWidgetData(context: Context, data: WidgetScheduleData, isAuthed: Boolean = false) {
+    val j = Json { ignoreUnknownKeys = true; coerceInputValues = true }
+    val saved = j.encodeToString(data)
+    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+        .putString(KEY_DATA, saved)
+        .putLong(KEY_UPD, System.currentTimeMillis())
+        .putBoolean(KEY_WAS_AUTH, isAuthed)
+        .commit()
+}
+
+private fun roundCorners(bitmap: Bitmap, radiusPx: Float): Bitmap {
+    val out = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
+    val canvas = android.graphics.Canvas(out)
+    canvas.drawColor(0xFF242424.toInt())
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    canvas.drawRoundRect(RectF(0f, 0f, bitmap.width.toFloat(), bitmap.height.toFloat()), radiusPx, radiusPx, paint)
+    paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN)
+    canvas.drawBitmap(bitmap, 0f, 0f, paint)
+    if (bitmap != out) bitmap.recycle()
+    return out
+}
+
+private suspend fun updateWidget(context: Context) {
+    try {
+        val glanceManager = GlanceAppWidgetManager(context)
+        val glanceIds = glanceManager.getGlanceIds(AiringScheduleWidget::class.java)
+        if (glanceIds.isNotEmpty()) {
+            glanceIds.forEach { id -> AiringScheduleWidget.update(context, id) }
+            return
+        }
+    } catch (e: Exception) {
+    }
+    try { AiringScheduleWidget.updateAll(context) } catch (e: Exception) {
+    }
+}
+
+private fun cacheCovers(context: Context, entries: List<WidgetAiringEntry>) {
+    entries.forEach { entry ->
+        if (entry.cover.isEmpty()) return@forEach
+        val file = File(context.cacheDir, "widget_cover_${entry.id}.jpg")
+        if (file.exists() && file.length() > 500) return@forEach
+        try {
+            val conn = URL(entry.cover).openConnection() as HttpURLConnection
+            conn.connectTimeout = 5000
+            conn.readTimeout = 5000
+            val bitmap = BitmapFactory.decodeStream(conn.inputStream)
+            conn.disconnect()
+            if (bitmap != null) {
+                val w = bitmap.width
+                val h = bitmap.height
+                val scale = minOf(168f / w, 240f / h)
+                val sw = (w * scale).toInt()
+                val sh = (h * scale).toInt()
+                val scaled = Bitmap.createScaledBitmap(bitmap, sw, sh, true)
+                if (scaled != bitmap) bitmap.recycle()
+                val rounded = roundCorners(scaled, 8f)
+                FileOutputStream(file).use { rounded.compress(Bitmap.CompressFormat.JPEG, 80, it) }
+                rounded.recycle()
+            }
+        } catch (e: Exception) {
+        }
+    }
+}
+
+class AiringScheduleWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+
+    override suspend fun doWork(): Result {
+        return try {
+            val token = applicationContext.getSharedPreferences(ANILIST_PREFS, Context.MODE_PRIVATE)
+                .getString("auth_token", null)
+            val data = WidgetScheduleFetcher.fetch(applicationContext, token)
+            cacheCovers(applicationContext, data.entries)
+            saveWidgetData(applicationContext, data, token != null)
+            updateWidget(applicationContext)
+            Result.success()
+        } catch (e: Exception) {
+            if (runAttemptCount < 3) Result.retry() else Result.failure()
+        }
+    }
+}
+
+object WidgetScheduleFetcher {
+
+    private val json = Json { ignoreUnknownKeys = true; coerceInputValues = true }
+
+    fun quickFetch(context: Context, authToken: String? = null): WidgetScheduleData {
+        val ct = System.currentTimeMillis() / 1000
+        val body = JSONObject().apply {
+            put("query", "query(\$p:Int,\$s:Int,\$e:Int){Page(page:\$p,perPage:50){airingSchedules(airingAt_greater:\$s,airingAt_lesser:\$e,sort:TIME){id airingAt episode timeUntilAiring mediaId media{id idMal title{romaji english}coverImage{extraLarge}episodes status averageScore genres seasonYear isAdult mediaListEntry{id status}}}}}")
+            put("variables", JSONObject(mapOf("p" to 1, "s" to (ct - 86400).toInt(), "e" to (ct + 86400).toInt())))
+        }
+        val resp = execute(body.toString(), authToken, shortTimeout = true)
+        val parsed = parse(resp)
+        return WidgetScheduleData(parsed, System.currentTimeMillis())
+    }
+
+    fun fetch(context: Context, authToken: String? = null): WidgetScheduleData {
+        val ct = System.currentTimeMillis() / 1000
+        val query = "query(\$p:Int,\$s:Int,\$e:Int){Page(page:\$p,perPage:50){airingSchedules(airingAt_greater:\$s,airingAt_lesser:\$e,sort:TIME){id airingAt episode timeUntilAiring mediaId media{id idMal title{romaji english}coverImage{extraLarge}episodes status averageScore genres seasonYear isAdult mediaListEntry{id status}}}}}"
+        val entries = mutableListOf<WidgetAiringEntry>()
+        var page = 1
+        while (page <= 5) {
+            try {
+                val body = JSONObject().apply {
+                    put("query", query)
+                    put("variables", JSONObject(mapOf("p" to page, "s" to (ct - 86400).toInt(), "e" to (ct + 7*86400).toInt())))
+                }
+                val resp = execute(body.toString(), authToken)
+                val parsed = parse(resp)
+                if (parsed.isEmpty()) { break }
+                entries.addAll(parsed)
+                if (parsed.size < 50) break
+                page++
+            } catch (e: Exception) {
+                break
+            }
+        }
+
+        val cached = loadCached(context)
+        if (cached != null) {
+            val newIds = entries.map { it.id }.toSet()
+            val cachedPast = cached.entries.filter { cachedE ->
+                cachedE.airingAt > (ct - 172800) &&
+                cachedE.airingAt <= (ct + 86400) &&
+                cachedE.dayOfWeek == Calendar.getInstance().apply { timeInMillis = ct * 1000L }.get(Calendar.DAY_OF_WEEK) - 1 &&
+                cachedE.id !in newIds
+            }
+            if (cachedPast.isNotEmpty()) {
+                entries.addAll(cachedPast)
+            }
+            entries.sortBy { it.airingAt }
+        }
+
+        if (entries.isEmpty()) {
+            loadCached(context)?.let { return it }
+        }
+        return WidgetScheduleData(entries, System.currentTimeMillis())
+    }
+
+    private fun loadCached(context: Context): WidgetScheduleData? {
+        val s = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(KEY_DATA, null) ?: return null
+        return try { json.decodeFromString<WidgetScheduleData>(s) }
+        catch (_: Exception) { null }
+    }
+
+    private fun execute(body: String, authToken: String?, shortTimeout: Boolean = false): String {
+        val conn = URL("https://graphql.anilist.co").openConnection() as HttpURLConnection
+        conn.requestMethod = "POST"
+        conn.setRequestProperty("Content-Type", "application/json")
+        conn.setRequestProperty("Accept", "application/json")
+        if (authToken != null) {
+            conn.setRequestProperty("Authorization", "Bearer $authToken")
+        }
+        conn.doOutput = true
+        if (shortTimeout) {
+            conn.connectTimeout = 3000
+            conn.readTimeout = 3000
+        } else {
+            conn.connectTimeout = 15000
+            conn.readTimeout = 15000
+        }
+        conn.outputStream.use { it.write(body.toByteArray()) }
+        if (conn.responseCode != 200) throw Exception("HTTP ${conn.responseCode}")
+        return conn.inputStream.bufferedReader().readText()
+    }
+
+    private fun parse(json: String): List<WidgetAiringEntry> {
+        val root = JSONObject(json)
+        val schedules = root.optJSONObject("data")?.optJSONObject("Page")?.optJSONArray("airingSchedules") ?: return emptyList()
+        val r = mutableListOf<WidgetAiringEntry>()
+        for (i in 0 until schedules.length()) {
+            try {
+                val s = schedules.getJSONObject(i)
+                val m = s.optJSONObject("media") ?: continue
+                val t = m.optJSONObject("title") ?: continue
+                val titleEn = t.optString("english", "").takeIf { it.isNotBlank() && it != "null" }
+                val titleRo = t.optString("romaji", "").takeIf { it.isNotBlank() && it != "null" }
+                val title = titleEn ?: titleRo ?: "Unknown"
+                val cover = m.optJSONObject("coverImage")?.optString("extraLarge", "") ?: ""
+                val score = if (m.has("averageScore") && !m.isNull("averageScore")) m.getInt("averageScore") else null
+                val ta = if (s.has("timeUntilAiring") && !s.isNull("timeUntilAiring")) s.getLong("timeUntilAiring") else null
+                val status = m.optJSONObject("mediaListEntry")?.optString("status")?.takeIf { it.isNotEmpty() }
+                val genres = mutableListOf<String>()
+                m.optJSONArray("genres")?.let { arr ->
+                    for (j in 0 until arr.length()) { genres.add(arr.optString(j, "")) }
+                }
+                val adult = m.optBoolean("isAdult", false)
+                val cal = Calendar.getInstance().apply { timeInMillis = s.getLong("airingAt") * 1000L }
+                r.add(WidgetAiringEntry(m.getInt("id"), title, s.getInt("episode"), s.getLong("airingAt"), ta, cover, score, cal.get(Calendar.DAY_OF_WEEK) - 1, status, adult, titleEn, titleRo, genres))
+            } catch (_: Exception) { }
+        }
+        return r
+    }
+}
+
+
