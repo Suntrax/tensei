@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="250dp"
+    android:height="180dp"
+    android:viewportWidth="250"
+    android:viewportHeight="180">
+    <!-- Background: liquid glass dark -->
+    <path
+        android:fillColor="#FF0D0D0D"
+        android:pathData="M0,0h250v180H0z" />
+
+    <!-- Day name -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12,9h55v3H12z" />
+    <!-- Subtitle count -->
+    <path
+        android:fillColor="#FF9E9E9E"
+        android:pathData="M12,14h35v2H12z" />
+
+    <!-- Refresh circle icon (grey, smaller, padded from top) -->
+    <path
+        android:fillColor="#FF2A2A2A"
+        android:pathData="M226,13m-7,0a7,7 0,1 1,14 0a7,7 0,1 1,-14 0" />
+
+    <!-- ===== ITEM 1 (past/greyed) ===== -->
+    <!-- Item background -->
+    <path
+        android:fillColor="#FF1A1A1A"
+        android:pathData="M12,28h226v58H12z" />
+    <!-- Accent bar (purple, planning) -->
+    <path
+        android:fillColor="#FF9C27B0"
+        android:pathData="M12,28h3v58H12z" />
+    <!-- Cover placeholder (rounded corners) -->
+    <path
+        android:fillColor="#FF242424"
+        android:pathData="M19,38a4,4 0,0 1 4,-4h28a4,4 0,0 1 4,4v34a4,4 0,0 1 -4,4h-28a4,4 0,0 1 -4,-4z" />
+    <!-- Title text (greyed out) -->
+    <path
+        android:fillColor="#FF757575"
+        android:pathData="M62,42h90v3H62z" />
+    <!-- Status dot (purple, planning) -->
+    <path
+        android:fillColor="#FF9C27B0"
+        android:pathData="M62,52m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0" />
+    <!-- Episode text (dim) -->
+    <path
+        android:fillColor="#FF555555"
+        android:pathData="M70,50h25v2H70z" />
+    <!-- Score (dim) -->
+    <path
+        android:fillColor="#FF555555"
+        android:pathData="M100,50h20v2H100z" />
+    <!-- Time (red, past: "30m ago") -->
+    <path
+        android:fillColor="#FFF44336"
+        android:pathData="M185,50h30v2.5H185z" />
+
+    <!-- ===== ITEM 2 (future) ===== -->
+    <!-- Item background -->
+    <path
+        android:fillColor="#FF1A1A1A"
+        android:pathData="M12,90h226v58H12z" />
+    <!-- Accent bar (blue) -->
+    <path
+        android:fillColor="#FF2196F3"
+        android:pathData="M12,90h3v58H12z" />
+    <!-- Cover placeholder (rounded corners) -->
+    <path
+        android:fillColor="#FF242424"
+        android:pathData="M19,100a4,4 0,0 1 4,-4h28a4,4 0,0 1 4,4v34a4,4 0,0 1 -4,4h-28a4,4 0,0 1 -4,-4z" />
+    <!-- Title text (white = current) -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M62,104h90v3H62z" />
+    <!-- Status dot (blue) -->
+    <path
+        android:fillColor="#FF2196F3"
+        android:pathData="M62,114m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0" />
+    <!-- Episode text -->
+    <path
+        android:fillColor="#FF9E9E9E"
+        android:pathData="M70,112h25v2H70z" />
+    <!-- Score -->
+    <path
+        android:fillColor="#FF9E9E9E"
+        android:pathData="M100,112h20v2H100z" />
+    <!-- Time (green, future: "in 2h") -->
+    <path
+        android:fillColor="#FF4CAF50"
+        android:pathData="M185,112h30v2.5H185z" />
+
+    <!-- ===== FOOTER ===== -->
+    <path
+        android:fillColor="#FF616161"
+        android:pathData="M12,162h50v2H12z" />
+    <path
+        android:fillColor="#FF424242"
+        android:pathData="M215,162h25v2H215z" />
+</vector>
