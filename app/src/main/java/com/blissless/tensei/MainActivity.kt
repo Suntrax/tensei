@@ -169,7 +169,7 @@ class MainActivity : ComponentActivity() {
 
                 val scale = when {
                     animatedProgress < 1f -> 0.85f + (0.15f * animatedProgress)
-                    else -> 1f - ((animatedProgress - 1f) * 0.15f)
+                    else -> 1f + ((animatedProgress - 1f) * 0.15f)
                 }
                 val alpha = when {
                     animatedProgress < 1f -> animatedProgress
