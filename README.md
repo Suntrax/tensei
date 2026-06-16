@@ -1,8 +1,6 @@
 # Tensei
 
-> Previously known as **Darling** — rebranded and rebuilt.
-
-A modern anime tracking and streaming app for Android.
+A modern anime list manager and tracker for Android.
 
 ![Platform](https://img.shields.io/badge/Platform-Android-green.svg)
 ![Language](https://img.shields.io/badge/Language-Kotlin-blue.svg)
@@ -17,10 +15,9 @@ A modern anime tracking and streaming app for Android.
 ## Features
 
 - **AniList and MyAnimeList Integration** - Login to sync your anime list
-- **Streaming** - Watch anime with built-in player (ExoPlayer)
-- **Extension Streaming** - Dynamically load extension APKs to stream from multiple sources using the Tachiyomi anime source framework
 - **Progress Tracking** - Automatically sync watch progress
 - **Explore** - Browse trending, seasonal, and top-rated anime
+- **Extension System** - Optional plugin architecture for third-party content sources
 - **Video Player** - Opening and ending skip buttons, quality selection, resize button
 
 ## Requirements
@@ -36,11 +33,10 @@ Download the APK from [Releases](https://github.com/YOUR_USERNAME/tensei/release
 - **Kotlin + Jetpack Compose** - UI framework
 - **Media3 ExoPlayer** - Video playback
 - **AniList GraphQL API** - Anime list syncing, metadata, user data
-- **TMDB API** - Episode metadata (titles, descriptions, thumbnails) for library and streaming views
+- **TMDB API** - Episode metadata (titles, descriptions, thumbnails)
 - **Jikan API (v4)** - MyAnimeList favorites and history sync for MAL users
-- **Aniyomi Anime Source Framework** - Dynamic extension system for multi-source streaming
 - **MVVM Architecture** - ViewModel + StateFlow pattern
-- **OkHttp + kotlinx.serialization** - HTTP client and JSON parsing for third-party APIs
+- **OkHttp + kotlinx.serialization** - HTTP client and JSON parsing
 - **Coil** - Image loading and caching
 
 ## Forking the repository
@@ -53,4 +49,4 @@ MAL_CLIENT_ID
 
 ## Disclaimer
 
-This app is for educational purposes only. I do not host, upload, or distribute any anime content. All streaming links are provided by third-party sources.
+This project is for educational purposes only. It does not host, store, or distribute any copyrighted content. Users are solely responsible for compliance with applicable laws in their jurisdiction. All third-party APIs and services used are independent and not affiliated with this project.
