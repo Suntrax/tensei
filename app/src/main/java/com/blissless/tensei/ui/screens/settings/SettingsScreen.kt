@@ -33,12 +33,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.FastForward
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Palette
@@ -58,6 +64,7 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -87,6 +94,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.blissless.tensei.MainViewModel
 import com.blissless.tensei.R
+import com.blissless.tensei.ui.theme.ThemeMode
 import com.blissless.tensei.api.myanimelist.LoginProvider
 import com.blissless.tensei.extensions.ExtensionsScreen
 import com.blissless.tensei.extensions.ExtensionsViewModel
@@ -96,7 +104,6 @@ import kotlin.math.round
 @Composable
 fun SettingsScreen(
     viewModel: MainViewModel,
-    isOled: Boolean,
     isLoggedIn: Boolean,
     showStatusColors: Boolean = true,
     autoSkipOpening: Boolean = false,
@@ -120,14 +127,14 @@ fun SettingsScreen(
     val groups = remember {
         listOf(
             SettingsGroup("account", "Account", "Login and manage your anime list", Icons.Default.Person, s.primary),
-            SettingsGroup("appearance", "Appearance", "Theme, colors, and display options", Icons.Default.Palette, s.secondary),
-            SettingsGroup("general", "General", "Startup screen and sync settings", Icons.Default.Settings, s.tertiary),
-            SettingsGroup("downloads", "Downloads", "Sub/dub, subtitles, and download preferences", Icons.Default.Download, s.error),
+            SettingsGroup("appearance", "Appearance", "Theme, colors, and display options", Icons.Default.Palette, s.primary),
+            SettingsGroup("general", "General", "Startup screen and sync settings", Icons.Default.Settings, s.primary),
+            SettingsGroup("downloads", "Downloads", "Sub/dub, subtitles, and download preferences", Icons.Default.Download, s.primary),
             SettingsGroup("stream", "Stream Settings", "Audio preferences and buffering", Icons.Default.PlayArrow, s.primary),
-            SettingsGroup("player", "Player Settings", "Playback controls and skipping", Icons.Default.Subscriptions, s.secondary),
-            SettingsGroup("cache", "Cache Management", "Storage and data cleanup", Icons.Default.Memory, s.tertiary),
+            SettingsGroup("player", "Player Settings", "Playback controls and skipping", Icons.Default.Subscriptions, s.primary),
+            SettingsGroup("cache", "Cache Management", "Storage and data cleanup", Icons.Default.Storage, s.primary),
             SettingsGroup("extensions", "Extensions", "Manage source extensions", Icons.Default.Extension, s.primary),
-            SettingsGroup("about", "About", "Version and updates", Icons.Default.Info, s.secondary)
+            SettingsGroup("about", "About", "Version and updates", Icons.Default.Info, s.primary)
         )
     }
 
@@ -442,6 +449,50 @@ private fun SettingsChoiceChip(
 }
 
 @Composable
+private fun SettingsRadioItem(
+    selected: Boolean,
+    onClick: () -> Unit,
+    icon: ImageVector,
+    title: String,
+    description: String
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp, horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(
+                    if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+            Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        RadioButton(
+            selected = selected,
+            onClick = onClick
+        )
+    }
+}
+
+@Composable
 private fun AccountSettingsPage(
     viewModel: MainViewModel,
     onBack: () -> Unit
@@ -564,16 +615,43 @@ private fun AppearanceSettingsPage(
     val preferEnglishTitles by viewModel.preferEnglishTitles.collectAsState(initial = true)
 
     SettingsPageScaffold(title = "Appearance", onBack = onBack) {
-        val isOled by viewModel.isOled.collectAsState()
+        val currentThemeMode by viewModel.themeMode.collectAsState()
 
-        SectionHeader("THEME")
+        SectionHeader("THEME MODE")
         SettingsCard {
-            SettingsToggle(
-                title = "OLED Mode",
-                description = "Pure black background for AMOLED screens",
-                checked = isOled,
-                onCheckedChange = { viewModel.setOledMode(it) }
-            )
+            Column {
+                SettingsRadioItem(
+                    selected = currentThemeMode == ThemeMode.SYSTEM.value,
+                    onClick = { viewModel.setThemeMode(ThemeMode.SYSTEM.value) },
+                    icon = Icons.Default.Settings,
+                    title = "System Theme",
+                    description = "Follow your device theme setting"
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f), thickness = 0.5.dp)
+                SettingsRadioItem(
+                    selected = currentThemeMode == ThemeMode.LIGHT.value,
+                    onClick = { viewModel.setThemeMode(ThemeMode.LIGHT.value) },
+                    icon = Icons.Default.LightMode,
+                    title = "Light",
+                    description = "Bright and clean appearance"
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f), thickness = 0.5.dp)
+                SettingsRadioItem(
+                    selected = currentThemeMode == ThemeMode.DARK.value,
+                    onClick = { viewModel.setThemeMode(ThemeMode.DARK.value) },
+                    icon = Icons.Default.DarkMode,
+                    title = "Dark",
+                    description = "Easy on the eyes at night"
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f), thickness = 0.5.dp)
+                SettingsRadioItem(
+                    selected = currentThemeMode == ThemeMode.OLED.value,
+                    onClick = { viewModel.setThemeMode(ThemeMode.OLED.value) },
+                    icon = Icons.Default.Storage,
+                    title = "OLED",
+                    description = "Pure black for AMOLED screens"
+                )
+            }
         }
         SettingsCard {
             SettingsToggle(
@@ -634,20 +712,38 @@ private fun GeneralSettingsPage(
     SettingsPageScaffold(title = "General", onBack = onBack) {
         SectionHeader("LAUNCH")
         SettingsCard {
-            Text("Startup Screen", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-            Text("Choose the default screen when opening the app", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(modifier = Modifier.height(4.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                listOf(0 to "Schedule", 1 to "Explore", 2 to "Home").forEach { (index, label) ->
-                    SettingsChoiceChip(
-                        label = label,
-                        isSelected = startupScreenState == index,
-                        onClick = { viewModel.setStartupScreen(index) }
-                    )
-                }
+            Column {
+                SettingsRadioItem(
+                    selected = startupScreenState == 0,
+                    onClick = { viewModel.setStartupScreen(0) },
+                    icon = Icons.Default.CalendarMonth,
+                    title = "Schedule",
+                    description = "Airing schedule view"
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f), thickness = 0.5.dp)
+                SettingsRadioItem(
+                    selected = startupScreenState == 1,
+                    onClick = { viewModel.setStartupScreen(1) },
+                    icon = Icons.Default.Explore,
+                    title = "Explore",
+                    description = "Browse and discover anime"
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f), thickness = 0.5.dp)
+                SettingsRadioItem(
+                    selected = startupScreenState == 2,
+                    onClick = { viewModel.setStartupScreen(2) },
+                    icon = Icons.Default.Home,
+                    title = "Home",
+                    description = "Your anime lists"
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f), thickness = 0.5.dp)
+                SettingsRadioItem(
+                    selected = startupScreenState == 3,
+                    onClick = { viewModel.setStartupScreen(3) },
+                    icon = Icons.Default.FileDownload,
+                    title = "Downloads",
+                    description = "Downloaded episodes"
+                )
             }
         }
 
@@ -1289,7 +1385,7 @@ private fun AboutSettingsPage(
 
         SectionHeader("LINKS")
         SettingsCard {
-            val githubUrl = "https://github.com/YOUR_USERNAME/tensei"
+            val githubUrl = "https://github.com/Suntrax/tensei"
             Row(
                 modifier = Modifier
                     .fillMaxWidth()

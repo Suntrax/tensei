@@ -20,7 +20,7 @@ class UserPreferences(private val context: Context) {
         private const val TOKEN_KEY = "auth_token"
 
         // Preference keys
-        private const val KEY_OLED_MODE = "oled_mode"
+        private const val KEY_THEME_MODE = "theme_mode"
         private const val KEY_DISABLE_MATERIAL_COLORS = "disable_material_colors"
         private const val KEY_PREFERRED_CATEGORY = "preferred_category"
         private const val KEY_SHOW_STATUS_COLORS = "show_status_colors"
@@ -68,7 +68,10 @@ class UserPreferences(private val context: Context) {
     val authToken: StateFlow<String?> = _authToken.asStateFlow()
 
     // UI Preferences
-    private val _isOled = MutableStateFlow(true)
+    private val _themeMode = MutableStateFlow("system")
+    val themeMode: StateFlow<String> = _themeMode.asStateFlow()
+
+    private val _isOled = MutableStateFlow(false)
     val isOled: StateFlow<Boolean> = _isOled.asStateFlow()
 
     private val _disableMaterialColors = MutableStateFlow(true)
@@ -221,7 +224,8 @@ class UserPreferences(private val context: Context) {
         }
 
         // Load UI preferences
-        _isOled.value = sharedPreferences.getBoolean(KEY_OLED_MODE, true)
+        _themeMode.value = sharedPreferences.getString(KEY_THEME_MODE, "system") ?: "system"
+        _isOled.value = _themeMode.value == "oled"
         _disableMaterialColors.value = sharedPreferences.getBoolean(KEY_DISABLE_MATERIAL_COLORS, true)
         _preferredCategory.value = sharedPreferences.getString(KEY_PREFERRED_CATEGORY, "sub") ?: "sub"
         _showStatusColors.value = sharedPreferences.getBoolean(KEY_SHOW_STATUS_COLORS, false)
@@ -283,9 +287,10 @@ class UserPreferences(private val context: Context) {
     // UI Preference Setters
     // ============================================
 
-    fun setOledMode(enabled: Boolean) {
-        _isOled.value = enabled
-        sharedPreferences.edit { putBoolean(KEY_OLED_MODE, enabled) }
+    fun setThemeMode(mode: String) {
+        _themeMode.value = mode
+        _isOled.value = mode == "oled"
+        sharedPreferences.edit { putString(KEY_THEME_MODE, mode) }
     }
 
     fun setDisableMaterialColors(enabled: Boolean) {

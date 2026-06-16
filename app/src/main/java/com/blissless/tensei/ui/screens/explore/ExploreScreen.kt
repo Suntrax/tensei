@@ -68,7 +68,6 @@ import com.blissless.tensei.dialogs.HomeAnimeStatusDialog
 import com.blissless.tensei.ui.components.AnimeCardBounds
 import com.blissless.tensei.ui.components.ExploreAnimeHorizontalList
 import com.blissless.tensei.ui.components.LoadingPlaceholder
-import com.blissless.tensei.ui.components.SearchOverlay
 import com.blissless.tensei.ui.screens.episode.EpisodeSelectionDialog
 import com.blissless.tensei.ui.screens.episode.RichEpisodeScreen
 import com.blissless.tensei.ui.components.SectionTitle
@@ -102,16 +101,10 @@ fun ExploreScreen(
     onViewAllCast: (Int, String) -> Unit = { _, _ -> },
     onViewAllStaff: (Int, String) -> Unit = { _, _ -> },
     onViewAllRelations: (Int, String) -> Unit = { _, _ -> },
+    onSearchClick: () -> Unit = {},
     localAnimeStatus: Map<Int, LocalAnimeEntry> = emptyMap()
 ) {
     val context = LocalContext.current
-    var showSearchOverlay by remember { mutableStateOf(false) }
-    
-    BackHandler(enabled = showSearchOverlay) { showSearchOverlay = false }
-    
-    LaunchedEffect(showSearchOverlay) {
-        viewModel.setHideNavbar(showSearchOverlay)
-    }
     val featuredAnime by viewModel.featuredAnime.collectAsState()
     val seasonalAnime by viewModel.seasonalAnime.collectAsState()
     val topSeries by viewModel.topSeries.collectAsState()
@@ -486,7 +479,7 @@ fun ExploreScreen(
                         showEpisodeSelection = true
                     },
                     onInfoClick = onFeaturedAnimeClickStable,
-                    onSearchClick = { showSearchOverlay = true },
+                    onSearchClick = onSearchClick,
                     animeStatusMap = animeStatusMap,
                     preferEnglishTitles = preferEnglishTitles,
                     isOled = isOled,
@@ -826,75 +819,7 @@ fun ExploreScreen(
         }
         }
 
-        AnimatedVisibility(
-            visible = showSearchOverlay,
-            enter = slideInVertically(
-                animationSpec = tween(
-                    durationMillis = 300,
-                    easing = FastOutSlowInEasing
-                ),
-                initialOffsetY = { fullHeight -> -(fullHeight * 0.1f).toInt() }
-            ) + fadeIn(
-                animationSpec = tween(
-                    durationMillis = 300,
-                    delayMillis = 0,
-                    easing = FastOutSlowInEasing
-                )
-            ),
-            exit = slideOutVertically(
-                animationSpec = tween(
-                    durationMillis = 250,
-                    easing = FastOutSlowInEasing
-                ),
-                targetOffsetY = { fullHeight -> -(fullHeight * 0.1f).toInt() }
-            ) + fadeOut(
-                animationSpec = tween(
-                    durationMillis = 250,
-                    easing = FastOutSlowInEasing
-                )
-            )
-        ) {
-            SearchOverlay(
-            viewModel = viewModel,
-            isOled = isOled,
-            isLoggedIn = isLoggedIn,
-            preferEnglishTitles = preferEnglishTitles,
-            hideAdultContent = hideAdultContent,
-            currentlyWatching = currentlyWatching,
-            planningToWatch = planningToWatch,
-            completed = completed,
-            onHold = onHold,
-            dropped = dropped,
-            localAnimeStatus = localAnimeStatus,
-            favoriteIds = favoriteIds,
-            onToggleFavorite = { animeMedia ->
-                val exploreAnime = ExploreAnime(
-                    id = animeMedia.id,
-                    title = animeMedia.title,
-                    titleEnglish = animeMedia.titleEnglish,
-                    cover = animeMedia.cover,
-                    banner = animeMedia.banner,
-                    episodes = animeMedia.totalEpisodes,
-                    latestEpisode = animeMedia.latestEpisode,
-                    averageScore = animeMedia.averageScore,
-                    genres = animeMedia.genres,
-                    year = animeMedia.year,
-                    format = null,
-                    malId = animeMedia.malId
-                )
-                onToggleFavorite(exploreAnime)
-            },
-            onClose = { showSearchOverlay = false },
-            onPlayEpisode = onPlayEpisode,
-            onCharacterClick = onCharacterClick,
-            onStaffClick = onStaffClick,
-            onViewAllCast = onViewAllCast,
-            onViewAllStaff = onViewAllStaff,
-            onViewAllRelations = { animeId, title ->
-                onViewAllRelations(animeId, title)
-            }
-        )
-        }
+
     }
 }
 

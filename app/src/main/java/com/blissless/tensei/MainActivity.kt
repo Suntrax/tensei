@@ -13,8 +13,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -106,11 +110,13 @@ import com.blissless.tensei.ui.screens.episode.ExtensionStreamParams
 import com.blissless.tensei.ui.screens.airing.ScheduleScreen
 import com.blissless.tensei.ui.screens.settings.SettingsScreen
 import com.blissless.tensei.ui.screens.downloads.DownloadsScreen
+import com.blissless.tensei.ui.screens.search.SearchScreen
 import com.blissless.tensei.ui.screens.downloads.EpisodeDownloadDialog
 import com.blissless.tensei.ui.screens.status.StatusListScreen
 import com.blissless.tensei.ui.screens.character.StaffScreen
 import com.blissless.tensei.ui.screens.relations.AllRelationsScreen
 import com.blissless.tensei.ui.theme.AppTheme
+import com.blissless.tensei.ui.theme.ThemeMode
 import com.blissless.tensei.update.UpdateViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -196,6 +202,7 @@ class MainActivity : ComponentActivity() {
                     )
                 }
             } else {
+            val themeModeStr by mainViewModel.themeMode.collectAsState()
             val isOled by mainViewModel.isOled.collectAsState()
             val disableMaterialColors by mainViewModel.disableMaterialColors.collectAsState()
             val showStatusColors by mainViewModel.showStatusColors.collectAsState()
@@ -347,7 +354,8 @@ class MainActivity : ComponentActivity() {
                 )
             }
 
-            AppTheme(useOled = isOled, useMonochrome = disableMaterialColors) {
+            val themeMode = remember(themeModeStr) { ThemeMode.fromValue(themeModeStr) }
+            AppTheme(themeMode = themeMode, useMonochrome = disableMaterialColors) {
                 MainScreen(
                     viewModel = mainViewModel,
                     isOled = isOled,
@@ -627,6 +635,8 @@ fun MainScreen(
     var overlayState by remember { mutableStateOf<OverlayState>(OverlayState.None) }
     
     var scheduleDialogOpen by remember { mutableStateOf(false) }
+    
+    var showSearchScreen by remember { mutableStateOf(false) }
     
     var detailedAnimeFromMal by remember { mutableStateOf<DetailedAnimeData?>(null) }
 
@@ -2020,7 +2030,7 @@ fun MainScreen(
                             },
                             onViewAllRelations = { animeId, animeTitle ->
                                 overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = animeTitle, previousAnime = null)
-                            }
+                            },
                         )
                         1 -> ExploreScreen(
                             viewModel = viewModel,
@@ -2031,7 +2041,7 @@ fun MainScreen(
                             preferEnglishTitles = preferEnglishTitles,
                             hideAdultContent = hideAdultContent,
                             favoriteIds = if (viewModel.loginProvider.value == LoginProvider.MAL) malFavorites.map { it.id }.toSet() else aniListFavoriteIds,
-                            onToggleFavorite = { anime -> 
+                            onToggleFavorite = { anime ->
                                 val animeMedia = AnimeMedia(
                                     id = anime.id,
                                     title = anime.title,
@@ -2041,7 +2051,6 @@ fun MainScreen(
                                     progress = 0,
                                     totalEpisodes = anime.episodes,
                                     latestEpisode = anime.latestEpisode,
-                                    status = "",
                                     averageScore = anime.averageScore,
                                     genres = anime.genres,
                                     listStatus = "",
@@ -2079,6 +2088,7 @@ fun MainScreen(
                             onViewAllRelations = { animeId, animeTitle ->
                                 overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = animeTitle, previousAnime = null)
                             },
+                            onSearchClick = { showSearchScreen = true },
                             localAnimeStatus = localAnimeStatus
                         )
                         2 -> HomeScreen(
@@ -2149,6 +2159,7 @@ fun MainScreen(
                             onViewAllRelations = { animeId, animeTitle ->
                                 overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = animeTitle)
                             },
+                            onNavigateToSearch = { showSearchScreen = true },
                             playbackPositions = playbackPositions,
                             playbackDurations = playbackDurations
                         )
@@ -2160,7 +2171,6 @@ fun MainScreen(
                         )
                         4 -> SettingsScreen(
                             viewModel = viewModel,
-                            isOled = isOled,
                             isLoggedIn = isLoggedIn,
                             showStatusColors = showStatusColors,
                             autoSkipOpening = autoSkipOpening,
@@ -2171,6 +2181,65 @@ fun MainScreen(
                             initialGroup = pendingSettingsGroup
                         )
                     }
+                }
+
+                AnimatedVisibility(
+                    visible = showSearchScreen,
+                    enter = fadeIn(animationSpec = tween(300)),
+                    exit = fadeOut(animationSpec = tween(250))
+                ) {
+                    SearchScreen(
+                        viewModel = viewModel,
+                        isOled = isOled,
+                        isLoggedIn = isLoggedIn,
+                        preferEnglishTitles = preferEnglishTitles,
+                        hideAdultContent = hideAdultContent,
+                        currentlyWatching = currentlyWatching,
+                        planningToWatch = planningToWatch,
+                        completed = completed,
+                        onHold = onHold,
+                        dropped = dropped,
+                        localAnimeStatus = viewModel.localAnimeStatus.value,
+                        favoriteIds = if (viewModel.loginProvider.value == LoginProvider.MAL) malFavorites.map { it.id }.toSet() else aniListFavoriteIds,
+                        onToggleFavorite = { anime ->
+                            if (viewModel.loginProvider.value == LoginProvider.MAL) {
+                                val animeMedia = AnimeMedia(
+                                    id = anime.id, title = anime.title, titleEnglish = anime.titleEnglish,
+                                    cover = anime.cover, banner = anime.banner, progress = 0,
+                                    totalEpisodes = anime.totalEpisodes, latestEpisode = anime.latestEpisode,
+                                    status = "", averageScore = anime.averageScore, genres = anime.genres,
+                                    listStatus = "", listEntryId = 0, year = anime.year, malId = anime.malId
+                                )
+                                viewModel.toggleMalFavorite(animeMedia)
+                            } else {
+                                val animeMedia = AnimeMedia(
+                                    id = anime.id, title = anime.title, titleEnglish = anime.titleEnglish,
+                                    cover = anime.cover, banner = anime.banner, progress = 0,
+                                    totalEpisodes = anime.totalEpisodes, latestEpisode = anime.latestEpisode,
+                                    status = "", averageScore = anime.averageScore, genres = anime.genres,
+                                    listStatus = "", listEntryId = 0, year = anime.year, malId = anime.malId
+                                )
+                                viewModel.toggleAniListFavorite(anime.id, animeMedia)
+                            }
+                        },
+                        onClose = { showSearchScreen = false },
+                        onPlayEpisode = onPlayEpisode,
+                        onCharacterClick = { characterId ->
+                            overlayState = OverlayState.CharacterDialog(characterId = characterId, animeId = 0)
+                        },
+                        onStaffClick = { staffId ->
+                            overlayState = OverlayState.StaffDialog(staffId = staffId, animeId = 0, previousAnime = null)
+                        },
+                        onViewAllCast = { animeId, animeTitle ->
+                            overlayState = OverlayState.AllCastDialog(animeId = animeId, animeTitle = animeTitle, previousAnime = null)
+                        },
+                        onViewAllStaff = { animeId, animeTitle ->
+                            overlayState = OverlayState.AllStaffDialog(animeId = animeId, animeTitle = animeTitle, previousAnime = null)
+                        },
+                        onViewAllRelations = { animeId, animeTitle ->
+                            overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = animeTitle, previousAnime = null)
+                        }
+                    )
                 }
 
                 if (isLoadingStream) {
@@ -2262,7 +2331,7 @@ fun MainScreen(
                         .navigationBarsPadding()
                         .offset(y = (-16).dp)
                 ) {
-                    if (!hideNavbar && !isLoadingStream) {
+                    if (!hideNavbar && !isLoadingStream && !showSearchScreen) {
                         Surface(
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)

@@ -553,6 +553,7 @@ class MainViewModel : ViewModel() {
 
     // Preferences Delegations
     val authToken: StateFlow<String?> get() = userPreferences.authToken
+    val themeMode: StateFlow<String> get() = userPreferences.themeMode
     val isOled: StateFlow<Boolean> get() = userPreferences.isOled
     val disableMaterialColors: StateFlow<Boolean> get() = userPreferences.disableMaterialColors
     val preferredCategory: StateFlow<String> get() = userPreferences.preferredCategory
@@ -1246,7 +1247,8 @@ class MainViewModel : ViewModel() {
             genres = media.genres ?: emptyList(),
             year = media.startDate?.year ?: media.seasonYear,
             malId = media.idMal,
-            isAdult = media.isAdult
+            isAdult = media.isAdult,
+            format = media.format
         )
     }
 
@@ -1560,7 +1562,7 @@ class MainViewModel : ViewModel() {
     }
 
     // Settings
-    fun setOledMode(enabled: Boolean) = userPreferences.setOledMode(enabled)
+    fun setThemeMode(mode: String) = userPreferences.setThemeMode(mode)
     fun setDisableMaterialColors(enabled: Boolean) = userPreferences.setDisableMaterialColors(enabled)
     fun setPreferredCategory(category: String) = userPreferences.setPreferredCategory(category)
     fun setShowStatusColors(enabled: Boolean) = userPreferences.setShowStatusColors(enabled)
@@ -1750,6 +1752,28 @@ class MainViewModel : ViewModel() {
 
     // Search & Activity
     suspend fun searchAnime(query: String) = repository.searchAnime(query).map { mapExploreMedia(it) }
+    suspend fun searchAnimeAdvanced(
+        search: String? = null,
+        genres: List<String>? = null,
+        tags: List<String>? = null,
+        yearStart: Int? = null,
+        yearEnd: Int? = null,
+        format: String? = null,
+        status: String? = null,
+        season: String? = null,
+        seasonYear: Int? = null,
+        sort: String = "POPULARITY_DESC",
+        isAdult: Boolean? = null,
+        page: Int = 1,
+        perPage: Int = 30
+    ) = repository.searchAnimeAdvanced(
+        search = search, genres = genres, tags = tags,
+        yearStart = yearStart, yearEnd = yearEnd,
+        format = format, status = status,
+        season = season, seasonYear = seasonYear,
+        sort = sort, isAdult = isAdult,
+        page = page, perPage = perPage
+    ).map { mapExploreMedia(it) }
     fun searchCompletedAnime(query: String) {
         _completedSearchResults.value = if (query.isEmpty()) _completed.value else _completed.value.filter { it.title.contains(query, ignoreCase = true) }
     }

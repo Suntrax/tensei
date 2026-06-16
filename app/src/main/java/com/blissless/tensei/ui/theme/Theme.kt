@@ -7,10 +7,20 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
-// Define a pure black color for OLED
 val OledBlack = Color(0xFF000000)
 
-// Monochrome color schemes - grayscale Material3 theme
+enum class ThemeMode(val value: String) {
+    SYSTEM("system"),
+    LIGHT("light"),
+    DARK("dark"),
+    OLED("oled");
+
+    companion object {
+        fun fromValue(value: String): ThemeMode =
+            entries.find { it.value == value } ?: SYSTEM
+    }
+}
+
 private val MonochromeLightColorScheme = lightColorScheme(
     primary = Color(0xFF212121),
     onPrimary = Color(0xFFFFFFFF),
@@ -94,39 +104,30 @@ private val MonochromeOledColorScheme = darkColorScheme(
 
 @Composable
 fun AppTheme(
-    useOled: Boolean = false,
+    themeMode: ThemeMode = ThemeMode.SYSTEM,
     useMonochrome: Boolean = false,
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+ (Material You)
     dynamicColor: Boolean = true,
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
 
+    val darkTheme = when (themeMode) {
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK, ThemeMode.OLED -> true
+    }
+
     val colorScheme = when {
-        // Monochrome OLED mode - pure black background with grayscale colors
-        useMonochrome && useOled && darkTheme -> MonochromeOledColorScheme
-
-        // Monochrome dark mode - standard dark with grayscale colors
+        useMonochrome && themeMode == ThemeMode.OLED -> MonochromeOledColorScheme
         useMonochrome && darkTheme -> MonochromeDarkColorScheme
-
-        // Monochrome light mode - standard light with grayscale colors
         useMonochrome -> MonochromeLightColorScheme
-
-        // Standard dynamic colors (Material You) on Android 12+
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
-
-        // Standard dark theme
         darkTheme -> darkColorScheme()
-
-        // Standard light theme
         else -> lightColorScheme()
     }.let { scheme ->
-        // Override surface and background for True OLED if enabled in Dark Mode
-        // This applies to non-monochrome OLED mode
-        if (useOled && darkTheme && !useMonochrome) {
+        if (themeMode == ThemeMode.OLED && !useMonochrome) {
             scheme.copy(
                 surface = OledBlack,
                 background = OledBlack,
@@ -138,7 +139,6 @@ fun AppTheme(
 
     MaterialTheme(
         colorScheme = colorScheme,
-        // You can add custom typography or shapes here later
         content = content
     )
 }

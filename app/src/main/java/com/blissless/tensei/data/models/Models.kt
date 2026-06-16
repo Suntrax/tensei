@@ -478,7 +478,8 @@ data class ExploreMedia(
     val tags: List<TagData>? = null,
     val seasonYear: Int? = null,
     val startDate: FuzzyDate? = null,
-    val isAdult: Boolean = false
+    val isAdult: Boolean = false,
+    val format: String? = null
 )
 
 @Serializable

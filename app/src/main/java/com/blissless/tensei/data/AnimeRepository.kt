@@ -517,12 +517,90 @@ class AnimeRepository(
                         seasonYear
                         isAdult
                         startDate { year }
+                        format
                     }
                 }
             }
         """.trimIndent()
 
         return publicGraphqlRequest(query, mapOf("search" to searchQuery))?.let {
+            try {
+                val data = json.decodeFromString<ExploreResponse>(it)
+                data.data.Page.media
+            } catch (e: Exception) {
+                emptyList()
+            }
+        } ?: emptyList()
+    }
+
+    suspend fun searchAnimeAdvanced(
+        search: String? = null,
+        genres: List<String>? = null,
+        tags: List<String>? = null,
+        yearStart: Int? = null,
+        yearEnd: Int? = null,
+        format: String? = null,
+        status: String? = null,
+        season: String? = null,
+        seasonYear: Int? = null,
+        sort: String = "POPULARITY_DESC",
+        isAdult: Boolean? = null,
+        page: Int = 1,
+        perPage: Int = 30
+    ): List<ExploreMedia> {
+        val query = """
+            query (${'$'}search: String, ${'$'}genre_in: [String], ${'$'}tag_in: [String], ${'$'}yearGreater: Int, ${'$'}yearLesser: Int, ${'$'}season: MediaSeason, ${'$'}seasonYear: Int, ${'$'}format: MediaFormat, ${'$'}status: MediaStatus, ${'$'}sort: [MediaSort], ${'$'}isAdult: Boolean, ${'$'}page: Int, ${'$'}perPage: Int) {
+                Page(page: ${'$'}page, perPage: ${'$'}perPage) {
+                    media(
+                        search: ${'$'}search
+                        type: ANIME
+                        genre_in: ${'$'}genre_in
+                        tag_in: ${'$'}tag_in
+                        yearGreater: ${'$'}yearGreater
+                        yearLesser: ${'$'}yearLesser
+                        season: ${'$'}season
+                        seasonYear: ${'$'}seasonYear
+                        format: ${'$'}format
+                        status: ${'$'}status
+                        sort: ${'$'}sort
+                        isAdult: ${'$'}isAdult
+                    ) {
+                        id
+                        idMal
+                        title { romaji english }
+                        coverImage { extraLarge }
+                        bannerImage
+                        episodes
+                        nextAiringEpisode { episode airingAt }
+                        status
+                        averageScore
+                        genres
+                        seasonYear
+                        isAdult
+                        startDate { year }
+                        format
+                    }
+                }
+            }
+        """.trimIndent()
+
+        val variables = mutableMapOf<String, Any?>(
+            "search" to search,
+            "genre_in" to genres,
+            "tag_in" to tags,
+            "yearGreater" to yearStart,
+            "yearLesser" to yearEnd,
+            "season" to season,
+            "seasonYear" to seasonYear,
+            "format" to format,
+            "status" to status,
+            "sort" to listOf(sort),
+            "isAdult" to isAdult,
+            "page" to page,
+            "perPage" to perPage
+        )
+
+        return publicGraphqlRequest(query, variables)?.let {
             try {
                 val data = json.decodeFromString<ExploreResponse>(it)
                 data.data.Page.media

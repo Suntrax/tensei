@@ -374,6 +374,7 @@ class GraphQLClient(
         is Number -> value.toString()
         is Boolean -> value.toString()
         null -> "null"
+        is List<*> -> value.joinToString(",", "[", "]") { serializeValue(it) }
         else -> "\"$value\""
     }
 

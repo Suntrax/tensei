@@ -7,8 +7,6 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
@@ -66,7 +64,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -89,7 +86,6 @@ import com.blissless.tensei.ui.components.HomeAnimeHorizontalList
 import com.blissless.tensei.ui.components.HomeStatusColors
 import com.blissless.tensei.ui.components.LoadingSkeleton
 import com.blissless.tensei.ui.screens.episode.RichEpisodeScreen
-import com.blissless.tensei.ui.components.SearchOverlay
 import com.blissless.tensei.ui.components.SectionHeader
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -125,6 +121,7 @@ fun HomeScreen(
     onViewAllRelations: (Int, String) -> Unit = { _, _ -> },
     onOverlayOpenChange: (Boolean) -> Unit = {},
     onNavigateToSettings: (() -> Unit)? = null,
+    onNavigateToSearch: () -> Unit = {},
     onStartDownload: (AnimeMedia) -> Unit = {},
     currentScreenIndex: Int = 0,
     playbackPositions: Map<String, Long> = emptyMap(),
@@ -154,7 +151,6 @@ fun HomeScreen(
     var showEpisodeSheet by remember { mutableStateOf(false) }
     var showDownloadDialog by remember { mutableStateOf(false) }
     var showStatusDialog by remember { mutableStateOf(false) }
-    var showSearchOverlay by remember { mutableStateOf(false) }
     var showOfflineFavoritesDialog by remember { mutableStateOf(false) }
     var showUserProfileDialog by remember { mutableStateOf(false) }
     var showDetailedAnimeScreen by remember { mutableStateOf(false) }
@@ -211,20 +207,14 @@ fun HomeScreen(
 
     LaunchedEffect(currentScreenIndex) {
         if (currentScreenIndex != previousScreenIndex) {
-            showSearchOverlay = false
             previousScreenIndex = currentScreenIndex
         }
-    }
-
-    LaunchedEffect(showSearchOverlay) {
-        viewModel.setHideNavbar(showSearchOverlay)
     }
 
     LaunchedEffect(showStatusListScreen) {
         viewModel.setHideNavbar(showStatusListScreen)
     }
 
-    BackHandler(enabled = showSearchOverlay) { showSearchOverlay = false }
     BackHandler(enabled = showStatusListScreen) { showStatusListScreen = false }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -316,7 +306,7 @@ fun HomeScreen(
                                 colors = CardDefaults.cardColors(
                                     containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                                 ),
-                                onClick = { showSearchOverlay = true }
+                                onClick = onNavigateToSearch
                             ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
@@ -370,7 +360,7 @@ fun HomeScreen(
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                             ),
-                            onClick = { showSearchOverlay = true }
+                            onClick = onNavigateToSearch
                         ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
@@ -717,59 +707,6 @@ fun HomeScreen(
             )
         }
 
-        // Search overlay - smooth expanding animation from search button position
-        AnimatedVisibility(
-            visible = showSearchOverlay,
-            enter = scaleIn(
-                animationSpec = tween(
-                    durationMillis = 300,
-                    easing = FastOutSlowInEasing
-                ),
-                initialScale = 0.92f,
-                transformOrigin = TransformOrigin(0.5f, 0f)
-            ) + fadeIn(
-                animationSpec = tween(
-                    durationMillis = 200,
-                    easing = FastOutSlowInEasing
-                )
-            ),
-            exit = scaleOut(
-                animationSpec = tween(
-                    durationMillis = 250,
-                    easing = FastOutSlowInEasing
-                ),
-                targetScale = 0.92f,
-                transformOrigin = TransformOrigin(0.5f, 0f)
-            ) + fadeOut(
-                animationSpec = tween(
-                    durationMillis = 200,
-                    easing = FastOutSlowInEasing
-                )
-            )
-        ) {
-            SearchOverlay(
-                viewModel = viewModel,
-                isOled = isOled,
-                isLoggedIn = isLoggedIn,
-                preferEnglishTitles = preferEnglishTitles,
-                hideAdultContent = hideAdultContent,
-                currentlyWatching = currentlyWatching,
-                planningToWatch = planningToWatch,
-                completed = completed,
-                onHold = onHold,
-                dropped = dropped,
-                localAnimeStatus = viewModel.localAnimeStatus.value,
-                favoriteIds = favoriteIds,
-                onToggleFavorite = onToggleFavorite,
-                onClose = { showSearchOverlay = false },
-                onPlayEpisode = onPlayEpisode,
-                onCharacterClick = onCharacterClick,
-                onStaffClick = onStaffClick,
-                onViewAllCast = onViewAllCast,
-                onViewAllStaff = onViewAllStaff,
-                onViewAllRelations = onViewAllRelations
-            )
-        }
     }
 
     // Dialogs
