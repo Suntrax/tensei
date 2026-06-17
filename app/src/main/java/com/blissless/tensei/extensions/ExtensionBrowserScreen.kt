@@ -4,21 +4,29 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -97,7 +105,7 @@ fun ExtensionBrowserScreen(
                     }
                 },
                 actions = {
-                    val ctx = androidx.compose.ui.platform.LocalContext.current
+                    val ctx = LocalContext.current
                     IconButton(
                         onClick = {
                             val clipboard = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -108,7 +116,7 @@ fun ExtensionBrowserScreen(
                         Icon(Icons.Default.ContentCopy, contentDescription = "Copy URL")
                     }
                     IconButton(onClick = { showRemoveDialog = true }) {
-                        Icon(Icons.Default.Close, contentDescription = "Remove repo")
+                        Icon(Icons.Default.Delete, contentDescription = "Remove repo")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -127,7 +135,7 @@ fun ExtensionBrowserScreen(
                 placeholder = { Text("Filter extensions...") },
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                 singleLine = true,
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f),
                     focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
@@ -181,6 +189,7 @@ fun ExtensionBrowserScreen(
                         val ext = filteredExtensions[index]
                         ExtensionBrowserItem(
                             repoExtension = ext,
+                            repoUrl = repoState.url,
                             isInstalled = ext.packageName in installedPackages,
                             onInstall = { onInstall(ext) }
                         )
@@ -197,9 +206,18 @@ fun ExtensionBrowserScreen(
 @Composable
 private fun ExtensionBrowserItem(
     repoExtension: RepoExtension,
+    repoUrl: String,
     isInstalled: Boolean,
     onInstall: () -> Unit
 ) {
+    val iconUrl = remember(repoUrl, repoExtension) {
+        if (repoExtension.icon.isNotBlank()) {
+            resolveIconUrl(repoUrl, repoExtension.icon)
+        } else {
+            resolveIconUrl(repoUrl, "${repoExtension.packageName}.png")
+        }
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -207,6 +225,28 @@ private fun ExtensionBrowserItem(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        Box(
+            modifier = Modifier.size(44.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = repoExtension.name.take(1).uppercase(),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (iconUrl.isNotBlank()) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(iconUrl)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = repoExtension.name,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit
+                )
+            }
+        }
+
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = repoExtension.name,
@@ -273,5 +313,3 @@ private fun ExtensionBrowserItem(
         }
     }
 }
-
-

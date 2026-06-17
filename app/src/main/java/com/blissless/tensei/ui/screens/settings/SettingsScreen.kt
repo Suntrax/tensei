@@ -536,7 +536,6 @@ private fun AccountSettingsPage(
                     }
                 }
             }
-
             Button(
                 onClick = { showLogoutConfirmation = true },
                 modifier = Modifier.fillMaxWidth(),
@@ -779,6 +778,13 @@ private fun StreamSettingsPage(
     val bufferAheadSeconds by viewModel.bufferAheadSeconds.collectAsState(initial = 30)
     val bufferSizeMb by viewModel.bufferSizeMb.collectAsState(initial = 100)
     val showBufferIndicator by viewModel.showBufferIndicator.collectAsState(initial = true)
+    val defaultExtPackage by viewModel.defaultExtensionPackage.collectAsState()
+    val defaultSubtitleLang by viewModel.defaultSubtitleLang.collectAsState()
+    val extViewModel: ExtensionsViewModel = viewModel()
+    val extUiState by extViewModel.uiState.collectAsState()
+    var showExtPicker by remember { mutableStateOf(false) }
+    var showSubtitleLangPicker by remember { mutableStateOf(false) }
+    val subtitleLanguages = listOf("English", "Arabic", "French", "German", "Italian", "Portuguese", "Russian", "Spanish", "Japanese", "Chinese", "Korean")
 
     SettingsPageScaffold(title = "Stream Settings", onBack = onBack) {
         SectionHeader("AUDIO")
@@ -792,6 +798,50 @@ private fun StreamSettingsPage(
             ) {
                 SettingsChoiceChip(label = "SUB", isSelected = preferredCategory == "sub", onClick = { viewModel.setPreferredCategory("sub") })
                 SettingsChoiceChip(label = "DUB", isSelected = preferredCategory == "dub", onClick = { viewModel.setPreferredCategory("dub") })
+            }
+        }
+
+        SectionHeader("EXTENSIONS")
+        SettingsCard {
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable { showExtPicker = true },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Box(
+                    modifier = Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.Extension, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Default Extension", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                    Text(
+                        if (defaultExtPackage.isNotEmpty()) extUiState.extensions.find { it.packageName == defaultExtPackage }?.name ?: defaultExtPackage else "None",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
+            }
+        }
+        SettingsCard {
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable { showSubtitleLangPicker = true },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Box(
+                    modifier = Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.Subscriptions, contentDescription = null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(20.dp))
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Default Subtitle Language", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                    Text(defaultSubtitleLang, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
             }
         }
 
@@ -830,6 +880,44 @@ private fun StreamSettingsPage(
                 onCheckedChange = { viewModel.setShowBufferIndicator(it) }
             )
         }
+    }
+
+    if (showExtPicker) {
+        AlertDialog(
+            onDismissRequest = { showExtPicker = false },
+            title = { Text("Default Extension") },
+            text = {
+                Column {
+                    extUiState.extensions.forEach { ext ->
+                        TextButton(onClick = { viewModel.setDefaultExtensionPackage(ext.packageName); showExtPicker = false }, modifier = Modifier.fillMaxWidth()) {
+                            Text(ext.name, modifier = Modifier.fillMaxWidth())
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showExtPicker = false }) { Text("Cancel") } }
+        )
+    }
+
+    if (showSubtitleLangPicker) {
+        AlertDialog(
+            onDismissRequest = { showSubtitleLangPicker = false },
+            title = { Text("Default Subtitle Language") },
+            text = {
+                Column {
+                    subtitleLanguages.forEach { lang ->
+                        TextButton(onClick = { viewModel.setDefaultSubtitleLang(lang); showSubtitleLangPicker = false }, modifier = Modifier.fillMaxWidth()) {
+                            Text(
+                                lang,
+                                color = if (lang == defaultSubtitleLang) MaterialTheme.colorScheme.primary else Color.Unspecified,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showSubtitleLangPicker = false }) { Text("Cancel") } }
+        )
     }
 }
 
@@ -1187,102 +1275,10 @@ private fun ExtensionsSettingsPage(
     viewModel: MainViewModel,
     onBack: () -> Unit
 ) {
-    val defaultExtPackage by viewModel.defaultExtensionPackage.collectAsState()
-    val defaultSubtitleLang by viewModel.defaultSubtitleLang.collectAsState()
     val extViewModel: ExtensionsViewModel = viewModel()
-    val extUiState by extViewModel.uiState.collectAsState()
-    var showExtPicker by remember { mutableStateOf(false) }
-    var showSubtitleLangPicker by remember { mutableStateOf(false) }
-    var browsingRepo by remember { mutableStateOf(false) }
-    val subtitleLanguages = listOf("English", "Arabic", "French", "German", "Italian", "Portuguese", "Russian", "Spanish", "Japanese", "Chinese", "Korean")
 
     SettingsPageScaffold(title = "Extensions", onBack = onBack, scrollable = false) {
-        if (!browsingRepo) {
-            SectionHeader("PREFERENCES")
-            SettingsCard {
-                Row(
-                    modifier = Modifier.fillMaxWidth().clickable { showExtPicker = true },
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Box(
-                        modifier = Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Default.Extension, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Default Extension", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-                        Text(
-                            if (defaultExtPackage.isNotEmpty()) extUiState.extensions.find { it.packageName == defaultExtPackage }?.name ?: defaultExtPackage else "None",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f), modifier = Modifier.size(20.dp))
-                }
-            }
-
-            SettingsCard {
-                Row(
-                    modifier = Modifier.fillMaxWidth().clickable { showSubtitleLangPicker = true },
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Box(
-                        modifier = Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Default.Subscriptions, contentDescription = null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(20.dp))
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Default Subtitle Language", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-                        Text(defaultSubtitleLang, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f), modifier = Modifier.size(20.dp))
-                }
-            }
-        }
-
-        ExtensionsScreen(viewModel = extViewModel, onBrowseChanged = { browsingRepo = it })
-
-        if (showExtPicker) {
-            AlertDialog(
-                onDismissRequest = { showExtPicker = false },
-                title = { Text("Default Extension") },
-                text = {
-                    Column {
-                        extUiState.extensions.forEach { ext ->
-                            TextButton(onClick = { viewModel.setDefaultExtensionPackage(ext.packageName); showExtPicker = false }, modifier = Modifier.fillMaxWidth()) {
-                                Text(ext.name, modifier = Modifier.fillMaxWidth())
-                            }
-                        }
-                    }
-                },
-                confirmButton = { TextButton(onClick = { showExtPicker = false }) { Text("Cancel") } }
-            )
-        }
-
-        if (showSubtitleLangPicker) {
-            AlertDialog(
-                onDismissRequest = { showSubtitleLangPicker = false },
-                title = { Text("Default Subtitle Language") },
-                text = {
-                    Column {
-                        subtitleLanguages.forEach { lang ->
-                            TextButton(onClick = { viewModel.setDefaultSubtitleLang(lang); showSubtitleLangPicker = false }, modifier = Modifier.fillMaxWidth()) {
-                                Text(
-                                    lang,
-                                    color = if (lang == defaultSubtitleLang) MaterialTheme.colorScheme.primary else Color.Unspecified,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
-                        }
-                    }
-                },
-                confirmButton = { TextButton(onClick = { showSubtitleLangPicker = false }) { Text("Cancel") } }
-            )
-        }
+        ExtensionsScreen(viewModel = extViewModel)
     }
 }
 

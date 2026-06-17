@@ -930,7 +930,7 @@ fun OfflinePlayerScreen(
                                                 horizontalArrangement = Arrangement.SpaceBetween,
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
-                                                Text("Swipe for Volume", color = Color.White)
+                                                Text("Swipe for Volume (${if (swipeSwap) "Right" else "Left"})", color = Color.White)
                                                 Switch(
                                                     checked = swipeVolume,
                                                     onCheckedChange = { onSwipeVolumeChange?.invoke(it) },
@@ -947,7 +947,7 @@ fun OfflinePlayerScreen(
                                                 horizontalArrangement = Arrangement.SpaceBetween,
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
-                                                Text("Swipe for Brightness", color = Color.White)
+                                                Text("Swipe for Brightness (${if (swipeSwap) "Left" else "Right"})", color = Color.White)
                                                 Switch(
                                                     checked = swipeBrightness,
                                                     onCheckedChange = { onSwipeBrightnessChange?.invoke(it) },
