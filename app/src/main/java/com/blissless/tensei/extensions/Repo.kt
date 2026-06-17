@@ -29,6 +29,7 @@ data class RepoExtension(
     val name: String,
     val packageName: String,
     val apk: String,
+    val icon: String = "",
     val lang: String,
     val version: String,
     val code: Long,
@@ -41,6 +42,7 @@ data class RepoExtension(
                 name = json["name"]?.jsonPrimitive?.content ?: "",
                 packageName = (json["pkg"] ?: json["packageName"])?.jsonPrimitive?.content ?: "",
                 apk = json["apk"]?.jsonPrimitive?.content ?: "",
+                icon = (json["icon"] ?: json["icons"])?.jsonPrimitive?.content ?: "",
                 lang = json["lang"]?.jsonPrimitive?.content ?: "en",
                 version = json["version"]?.jsonPrimitive?.content ?: "",
                 code = (json["code"] as? JsonPrimitive)?.content?.toLongOrNull() ?: 0L,
@@ -71,6 +73,16 @@ fun resolveApkUrl(repoUrl: String, apkPath: String): String {
     }
     val base = URL(repoUrl)
     val path = if ("/" in apkPath) apkPath else "apk/$apkPath"
+    return URL(base, path).toString()
+}
+
+fun resolveIconUrl(repoUrl: String, iconPath: String): String {
+    if (iconPath.isBlank()) return ""
+    if (iconPath.startsWith("http://") || iconPath.startsWith("https://")) {
+        return iconPath
+    }
+    val base = URL(repoUrl)
+    val path = if ("/" in iconPath) iconPath else "icon/$iconPath"
     return URL(base, path).toString()
 }
 

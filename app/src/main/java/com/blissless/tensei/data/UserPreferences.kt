@@ -258,6 +258,7 @@ class UserPreferences(private val context: Context) {
         _checkUpdatesOnStart.value = sharedPreferences.getBoolean(KEY_CHECK_UPDATES_ON_START, false)
         _swipeVolume.value = sharedPreferences.getBoolean(KEY_SWIPE_VOLUME, false)
         _swipeBrightness.value = sharedPreferences.getBoolean(KEY_SWIPE_BRIGHTNESS, false)
+        _swipeSwap.value = sharedPreferences.getBoolean(KEY_SWIPE_SWAP, false)
 
         // Load local favorites
         loadLocalFavorites()
@@ -652,6 +653,8 @@ class UserPreferences(private val context: Context) {
 
     private val _swipeBrightness = MutableStateFlow(false)
     val swipeBrightness: StateFlow<Boolean> = _swipeBrightness.asStateFlow()
+    private val _swipeSwap = MutableStateFlow(false)
+    val swipeSwap: StateFlow<Boolean> = _swipeSwap.asStateFlow()
 
     fun setCheckUpdatesOnStart(enabled: Boolean) {
         _checkUpdatesOnStart.value = enabled
@@ -666,6 +669,11 @@ class UserPreferences(private val context: Context) {
     fun setSwipeBrightness(enabled: Boolean) {
         _swipeBrightness.value = enabled
         sharedPreferences.edit { putBoolean(KEY_SWIPE_BRIGHTNESS, enabled) }
+    }
+
+    fun setSwipeSwap(enabled: Boolean) {
+        _swipeSwap.value = enabled
+        sharedPreferences.edit { putBoolean(KEY_SWIPE_SWAP, enabled) }
     }
 
     // MAL Favorites

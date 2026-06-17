@@ -565,6 +565,7 @@ fun MainScreen(
     val bufferAheadSeconds by viewModel.bufferAheadSeconds.collectAsState(initial = 30)
     val swipeVolume by viewModel.swipeVolume.collectAsState(initial = false)
     val swipeBrightness by viewModel.swipeBrightness.collectAsState(initial = false)
+    val swipeSwap by viewModel.swipeSwap.collectAsState(initial = false)
 
     LaunchedEffect(currentlyWatching) {
         if (currentlyWatching.isNotEmpty()) {
@@ -1943,6 +1944,10 @@ fun MainScreen(
                 onAutoPlayNextEpisodeChanged = { viewModel.setAutoPlayNextEpisode(it) },
                 swipeVolume = swipeVolume,
                 swipeBrightness = swipeBrightness,
+                swipeSwap = swipeSwap,
+                onSwipeVolumeChange = { viewModel.setSwipeVolume(it) },
+                onSwipeBrightnessChange = { viewModel.setSwipeBrightness(it) },
+                onSwipeSwapChange = { viewModel.setSwipeSwap(it) },
                 disableMaterialColors = disableMaterialColors,
                 showBufferIndicator = showBufferIndicator,
                 bufferAheadSeconds = bufferAheadSeconds,

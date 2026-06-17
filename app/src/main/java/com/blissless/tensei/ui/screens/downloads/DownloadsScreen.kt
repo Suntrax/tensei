@@ -156,6 +156,7 @@ fun DownloadsScreen(
     val tmdbEpisodeCache by viewModel.tmdbEpisodeCache.collectAsState()
     val swipeVolume by viewModel.swipeVolume.collectAsState()
     val swipeBrightness by viewModel.swipeBrightness.collectAsState()
+    val swipeSwap by viewModel.swipeSwap.collectAsState()
     val autoSkipOpening by viewModel.autoSkipOpening.collectAsState()
     val autoSkipEnding by viewModel.autoSkipEnding.collectAsState()
     val autoPlayNextEpisode by viewModel.autoPlayNextEpisode.collectAsState()
@@ -646,6 +647,10 @@ fun DownloadsScreen(
                 defaultSubtitleLang = defaultSubtitleLang,
                 swipeVolume = swipeVolume,
                 swipeBrightness = swipeBrightness,
+                swipeSwap = swipeSwap,
+                onSwipeVolumeChange = { viewModel.setSwipeVolume(it) },
+                onSwipeBrightnessChange = { viewModel.setSwipeBrightness(it) },
+                onSwipeSwapChange = { viewModel.setSwipeSwap(it) },
                 autoSkipOpening = autoSkipOpening,
                 autoSkipEnding = autoSkipEnding,
                 autoPlayNextEpisode = autoPlayNextEpisode,

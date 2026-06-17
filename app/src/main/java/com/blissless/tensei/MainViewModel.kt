@@ -605,6 +605,7 @@ class MainViewModel : ViewModel() {
     }
     val swipeVolume: StateFlow<Boolean> get() = userPreferences.swipeVolume
     val swipeBrightness: StateFlow<Boolean> get() = userPreferences.swipeBrightness
+    val swipeSwap: StateFlow<Boolean> get() = userPreferences.swipeSwap
 
     // Pending update from startup check
     private val _pendingUpdateRelease = MutableStateFlow<GitHubRelease?>(null)
@@ -1607,6 +1608,7 @@ class MainViewModel : ViewModel() {
     fun setCheckUpdatesOnStart(enabled: Boolean) = userPreferences.setCheckUpdatesOnStart(enabled)
     fun setSwipeVolume(enabled: Boolean) = userPreferences.setSwipeVolume(enabled)
     fun setSwipeBrightness(enabled: Boolean) = userPreferences.setSwipeBrightness(enabled)
+    fun setSwipeSwap(enabled: Boolean) = userPreferences.setSwipeSwap(enabled)
 
     // Favorites
     fun toggleLocalFavorite(mediaId: Int) {

@@ -55,6 +55,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -131,6 +132,10 @@ fun OfflinePlayerScreen(
     defaultSubtitleLang: String = "English",
     swipeVolume: Boolean = false,
     swipeBrightness: Boolean = false,
+    swipeSwap: Boolean = false,
+    onSwipeVolumeChange: ((Boolean) -> Unit)? = null,
+    onSwipeBrightnessChange: ((Boolean) -> Unit)? = null,
+    onSwipeSwapChange: ((Boolean) -> Unit)? = null,
     autoSkipOpening: Boolean = false,
     autoSkipEnding: Boolean = false,
     autoPlayNextEpisode: Boolean = false,
@@ -582,17 +587,33 @@ fun OfflinePlayerScreen(
                 .fillMaxWidth(0.3f)
                 .padding(start = 40.dp)
                 .align(Alignment.CenterStart)
-                .pointerInput(swipeVolume) {
-                    if (swipeVolume) {
+                .pointerInput(swipeVolume, swipeBrightness, swipeSwap) {
+                    val leftEnabled = if (swipeSwap) swipeBrightness else swipeVolume
+                    if (leftEnabled) {
                         detectVerticalDragGestures(
                             onVerticalDrag = { _, dragAmount ->
-                                val volumeChange = -(dragAmount / 500f)
-                                playerVolume = (playerVolume + volumeChange).coerceIn(0f, 1f)
-                                exoPlayer?.volume = playerVolume
-                                showVolumeOverlay = true
-                                scope.launch {
-                                    delay(1500)
-                                    showVolumeOverlay = false
+                                if (swipeSwap) {
+                                    val brightnessChange = -(dragAmount / 1000f)
+                                    currentBrightness = (currentBrightness + brightnessChange).coerceIn(0.01f, 1f)
+                                    activity?.let { act ->
+                                        val lp = act.window.attributes
+                                        lp.screenBrightness = currentBrightness
+                                        act.window.attributes = lp
+                                    }
+                                    showBrightnessOverlay = true
+                                    scope.launch {
+                                        delay(1500)
+                                        showBrightnessOverlay = false
+                                    }
+                                } else {
+                                    val volumeChange = -(dragAmount / 500f)
+                                    playerVolume = (playerVolume + volumeChange).coerceIn(0f, 1f)
+                                    exoPlayer?.volume = playerVolume
+                                    showVolumeOverlay = true
+                                    scope.launch {
+                                        delay(1500)
+                                        showVolumeOverlay = false
+                                    }
                                 }
                             }
                         )
@@ -628,21 +649,33 @@ fun OfflinePlayerScreen(
                 .fillMaxWidth(0.3f)
                 .padding(end = 40.dp)
                 .align(Alignment.CenterEnd)
-                .pointerInput(swipeBrightness) {
-                    if (swipeBrightness) {
+                .pointerInput(swipeVolume, swipeBrightness, swipeSwap) {
+                    val rightEnabled = if (swipeSwap) swipeVolume else swipeBrightness
+                    if (rightEnabled) {
                         detectVerticalDragGestures(
                             onVerticalDrag = { _, dragAmount ->
-                                val brightnessChange = -(dragAmount / 1000f)
-                                currentBrightness = (currentBrightness + brightnessChange).coerceIn(0.01f, 1f)
-                                activity?.let { act ->
-                                    val lp = act.window.attributes
-                                    lp.screenBrightness = currentBrightness
-                                    act.window.attributes = lp
-                                }
-                                showBrightnessOverlay = true
-                                scope.launch {
-                                    delay(1500)
-                                    showBrightnessOverlay = false
+                                if (swipeSwap) {
+                                    val volumeChange = -(dragAmount / 500f)
+                                    playerVolume = (playerVolume + volumeChange).coerceIn(0f, 1f)
+                                    exoPlayer?.volume = playerVolume
+                                    showVolumeOverlay = true
+                                    scope.launch {
+                                        delay(1500)
+                                        showVolumeOverlay = false
+                                    }
+                                } else {
+                                    val brightnessChange = -(dragAmount / 1000f)
+                                    currentBrightness = (currentBrightness + brightnessChange).coerceIn(0.01f, 1f)
+                                    activity?.let { act ->
+                                        val lp = act.window.attributes
+                                        lp.screenBrightness = currentBrightness
+                                        act.window.attributes = lp
+                                    }
+                                    showBrightnessOverlay = true
+                                    scope.launch {
+                                        delay(1500)
+                                        showBrightnessOverlay = false
+                                    }
                                 }
                             }
                         )
@@ -860,6 +893,86 @@ fun OfflinePlayerScreen(
                                         "Change aspect ratio",
                                         tint = Color.White,
                                         modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+
+                            // Player settings button
+                            var showPlayerSettings by remember { mutableStateOf(false) }
+                            Box {
+                                Surface(
+                                    shape = RoundedCornerShape(14.dp),
+                                    color = Color.Black.copy(alpha = 0.5f),
+                                    onClick = { showPlayerSettings = true }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.Center
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Settings,
+                                            "Player Settings",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                                DropdownMenu(
+                                    expanded = showPlayerSettings,
+                                    onDismissRequest = { showPlayerSettings = false },
+                                    modifier = Modifier.background(Color(0xFF1A1A1A)).width(220.dp)
+                                ) {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text("Swipe for Volume", color = Color.White)
+                                                Switch(
+                                                    checked = swipeVolume,
+                                                    onCheckedChange = { onSwipeVolumeChange?.invoke(it) },
+                                                    colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary)
+                                                )
+                                            }
+                                        },
+                                        onClick = { onSwipeVolumeChange?.invoke(!swipeVolume) }
+                                    )
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text("Swipe for Brightness", color = Color.White)
+                                                Switch(
+                                                    checked = swipeBrightness,
+                                                    onCheckedChange = { onSwipeBrightnessChange?.invoke(it) },
+                                                    colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary)
+                                                )
+                                            }
+                                        },
+                                        onClick = { onSwipeBrightnessChange?.invoke(!swipeBrightness) }
+                                    )
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text("Swap Sides", color = Color.White)
+                                                Switch(
+                                                    checked = swipeSwap,
+                                                    onCheckedChange = { onSwipeSwapChange?.invoke(it) },
+                                                    colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary)
+                                                )
+                                            }
+                                        },
+                                        onClick = { onSwipeSwapChange?.invoke(!swipeSwap) }
                                     )
                                 }
                             }

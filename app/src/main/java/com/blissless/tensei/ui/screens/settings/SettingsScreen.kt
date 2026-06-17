@@ -988,6 +988,7 @@ private fun PlayerSettingsPage(
     val backwardSkipSeconds by viewModel.backwardSkipSeconds.collectAsState(initial = 10)
     val swipeVolume by viewModel.swipeVolume.collectAsState(initial = false)
     val swipeBrightness by viewModel.swipeBrightness.collectAsState(initial = false)
+    val swipeSwap by viewModel.swipeSwap.collectAsState(initial = false)
 
     SettingsPageScaffold(title = "Player Settings", onBack = onBack) {
         SectionHeader("TRACKING")
@@ -1071,6 +1072,12 @@ private fun PlayerSettingsPage(
                 description = "Swipe up/down on the right side of the player to adjust brightness",
                 checked = swipeBrightness,
                 onCheckedChange = { viewModel.setSwipeBrightness(it) }
+            )
+            SettingsToggle(
+                title = "Swap Sides",
+                description = "Swap the volume and brightness gesture sides",
+                checked = swipeSwap,
+                onCheckedChange = { viewModel.setSwipeSwap(it) }
             )
         }
     }
