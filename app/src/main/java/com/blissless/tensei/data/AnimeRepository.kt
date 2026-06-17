@@ -1,5 +1,6 @@
 package com.blissless.tensei.data
 
+import android.util.Log
 import com.blissless.tensei.BuildConfig
 import com.blissless.tensei.data.models.AiringScheduleEntry
 import com.blissless.tensei.data.models.AiringScheduleResponse
@@ -16,6 +17,8 @@ import com.blissless.tensei.data.models.DetailedAnimeResponse
 import com.blissless.tensei.data.models.ExploreMedia
 import com.blissless.tensei.data.models.ExploreResponse
 import com.blissless.tensei.data.models.MediaListResponse
+import com.blissless.tensei.data.models.MediaTag
+import com.blissless.tensei.data.models.MediaTagCollectionResponse
 import com.blissless.tensei.data.models.SimpleActivityResponse
 import com.blissless.tensei.data.models.StaffData
 import com.blissless.tensei.data.models.StaffResponse
@@ -129,6 +132,11 @@ class AnimeRepository(
             parser = { it }
         )
 
+        if (result.data == null) {
+            Log.e("GraphQLDebug", "Error: ${result.error?.message}")
+        } else {
+            Log.d("GraphQLDebug", "Success: ${result.data.take(200)}")
+        }
         return result.data
     }
 
@@ -537,8 +545,6 @@ class AnimeRepository(
         search: String? = null,
         genres: List<String>? = null,
         tags: List<String>? = null,
-        yearStart: Int? = null,
-        yearEnd: Int? = null,
         format: String? = null,
         status: String? = null,
         season: String? = null,
@@ -548,23 +554,39 @@ class AnimeRepository(
         page: Int = 1,
         perPage: Int = 30
     ): List<ExploreMedia> {
+        val varDeclarations = mutableListOf("\$sort: [MediaSort]", "\$page: Int", "\$perPage: Int")
+        val varValues = mutableMapOf<String, Any?>(
+            "sort" to listOf(sort),
+            "page" to page,
+            "perPage" to perPage
+        )
+        val mediaArgs = mutableListOf("type: ANIME", "sort: \$sort")
+        if (search != null) {
+            varDeclarations.add(0, "\$search: String")
+            mediaArgs.add(0, "search: \$search")
+            varValues["search"] = search
+        }
+
+        fun addFilter(varName: String, varType: String, argName: String, value: Any?) {
+            if (value != null) {
+                varDeclarations.add("\$$varName: $varType")
+                mediaArgs.add("$argName: \$$varName")
+                varValues[varName] = value
+            }
+        }
+
+        addFilter("genre_in", "[String]", "genre_in", genres)
+        addFilter("tag_in", "[String]", "tag_in", tags)
+        addFilter("season", "MediaSeason", "season", season)
+        addFilter("seasonYear", "Int", "seasonYear", seasonYear)
+        addFilter("format", "MediaFormat", "format", format)
+        addFilter("status", "MediaStatus", "status", status)
+        addFilter("isAdult", "Boolean", "isAdult", isAdult)
+
         val query = """
-            query (${'$'}search: String, ${'$'}genre_in: [String], ${'$'}tag_in: [String], ${'$'}yearGreater: Int, ${'$'}yearLesser: Int, ${'$'}season: MediaSeason, ${'$'}seasonYear: Int, ${'$'}format: MediaFormat, ${'$'}status: MediaStatus, ${'$'}sort: [MediaSort], ${'$'}isAdult: Boolean, ${'$'}page: Int, ${'$'}perPage: Int) {
+            query (${varDeclarations.joinToString(", ")}) {
                 Page(page: ${'$'}page, perPage: ${'$'}perPage) {
-                    media(
-                        search: ${'$'}search
-                        type: ANIME
-                        genre_in: ${'$'}genre_in
-                        tag_in: ${'$'}tag_in
-                        yearGreater: ${'$'}yearGreater
-                        yearLesser: ${'$'}yearLesser
-                        season: ${'$'}season
-                        seasonYear: ${'$'}seasonYear
-                        format: ${'$'}format
-                        status: ${'$'}status
-                        sort: ${'$'}sort
-                        isAdult: ${'$'}isAdult
-                    ) {
+                    media(${mediaArgs.joinToString("\n                        ")}) {
                         id
                         idMal
                         title { romaji english }
@@ -584,27 +606,30 @@ class AnimeRepository(
             }
         """.trimIndent()
 
-        val variables = mutableMapOf<String, Any?>(
-            "search" to search,
-            "genre_in" to genres,
-            "tag_in" to tags,
-            "yearGreater" to yearStart,
-            "yearLesser" to yearEnd,
-            "season" to season,
-            "seasonYear" to seasonYear,
-            "format" to format,
-            "status" to status,
-            "sort" to listOf(sort),
-            "isAdult" to isAdult,
-            "page" to page,
-            "perPage" to perPage
-        )
-
-        return publicGraphqlRequest(query, variables)?.let {
+        Log.d("SearchDebug", "Query: $query")
+        Log.d("SearchDebug", "Variables: $varValues")
+        val response = publicGraphqlRequest(query, varValues)
+        Log.d("SearchDebug", "Response: ${response?.take(500)}")
+        return response?.let {
             try {
                 val data = json.decodeFromString<ExploreResponse>(it)
+                Log.d("SearchDebug", "Parsed ${data.data.Page.media.size} results")
                 data.data.Page.media
             } catch (e: Exception) {
+                Log.e("SearchDebug", "Parse error: ${e.message}")
+                Log.e("SearchDebug", "Response: ${it.take(1000)}")
+                emptyList()
+            }
+        } ?: emptyList<ExploreMedia>().also { Log.e("SearchDebug", "Response was null") }
+    }
+
+    suspend fun fetchAllTags(): List<MediaTag> {
+        val response = publicGraphqlRequest(GraphqlQueries.GET_ALL_TAGS, emptyMap())
+        return response?.let {
+            try {
+                json.decodeFromString<MediaTagCollectionResponse>(it).data.MediaTagCollection
+            } catch (e: Exception) {
+                Log.e("TagDebug", "Parse error: ${e.message}")
                 emptyList()
             }
         } ?: emptyList()

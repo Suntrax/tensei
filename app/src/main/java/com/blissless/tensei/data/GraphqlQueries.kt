@@ -141,6 +141,19 @@ object GraphqlQueries {
             }
         }
     """.trimIndent()
+
+    val GET_ALL_TAGS = """
+        query {
+            MediaTagCollection {
+                id
+                name
+                description
+                category
+                rank
+                isAdult
+            }
+        }
+    """.trimIndent()
 }
 
 

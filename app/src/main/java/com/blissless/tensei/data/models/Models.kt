@@ -1006,4 +1006,18 @@ data class AllStaffMedia(val staff: AllStaffConnection?)
 @Serializable
 data class AllStaffConnection(val nodes: List<StaffData> = emptyList())
 
+@Serializable
+data class MediaTagCollectionResponse(val data: MediaTagCollectionData)
+@Serializable
+data class MediaTagCollectionData(val MediaTagCollection: List<MediaTag>)
+@Serializable
+data class MediaTag(
+    val id: Int,
+    val name: String,
+    val description: String? = null,
+    val category: String? = null,
+    val rank: Int? = null,
+    val isAdult: Boolean = false
+)
+
 

@@ -13,6 +13,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,18 +34,24 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
@@ -53,6 +60,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -68,6 +76,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
@@ -83,6 +92,17 @@ import com.blissless.tensei.ui.components.HomeStatusColors
 import com.blissless.tensei.ui.components.rememberCinematicAnimation
 import kotlin.math.absoluteValue
 import kotlin.math.roundToInt
+
+enum class SortOption(val label: String, val icon: ImageVector) {
+    ALPHABETICAL_A_Z("A-Z", Icons.AutoMirrored.Filled.Sort),
+    ALPHABETICAL_Z_A("Z-A", Icons.AutoMirrored.Filled.Sort),
+    YEAR_NEWEST("Year \u2193", Icons.Default.DateRange),
+    YEAR_OLDEST("Year \u2191", Icons.Default.DateRange),
+    EPISODES_MOST("Eps \u2193", Icons.Default.PlayArrow),
+    EPISODES_LEAST("Eps \u2191", Icons.Default.PlayArrow),
+    SCORE_HIGH("Score \u2193", Icons.Default.Star),
+    SCORE_LOW("Score \u2191", Icons.Default.Star)
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -105,6 +125,7 @@ fun StatusListScreen(
 ) {
     val iconTint = HomeStatusColors.getColor(listType)
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
 
     BackHandler(onBack = onBackClick)
 
@@ -115,6 +136,36 @@ fun StatusListScreen(
         animationSpec = spring(dampingRatio = 0.8f, stiffness = 400f),
         label = "offsetY"
     )
+
+    var selectedSort by remember { mutableStateOf(SortOption.ALPHABETICAL_A_Z) }
+    var showSortMenu by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+
+    val displayList = remember(animeList, searchQuery, selectedSort) {
+        val filtered = if (searchQuery.isBlank()) animeList
+        else animeList.filter {
+            val displayTitle = if (preferEnglishTitles && !it.titleEnglish.isNullOrEmpty()) it.titleEnglish else it.title
+            displayTitle.contains(searchQuery, ignoreCase = true)
+        }
+        when (selectedSort) {
+            SortOption.ALPHABETICAL_A_Z -> filtered.sortedBy {
+                (if (preferEnglishTitles && !it.titleEnglish.isNullOrEmpty()) it.titleEnglish else it.title).lowercase()
+            }
+            SortOption.ALPHABETICAL_Z_A -> filtered.sortedByDescending {
+                (if (preferEnglishTitles && !it.titleEnglish.isNullOrEmpty()) it.titleEnglish else it.title).lowercase()
+            }
+            SortOption.YEAR_NEWEST -> filtered.sortedByDescending { it.year ?: Int.MIN_VALUE }
+            SortOption.YEAR_OLDEST -> filtered.sortedBy { it.year ?: Int.MAX_VALUE }
+            SortOption.EPISODES_MOST -> filtered.sortedByDescending {
+                if (it.totalEpisodes > 0) it.totalEpisodes else it.latestEpisode ?: 0
+            }
+            SortOption.EPISODES_LEAST -> filtered.sortedBy {
+                if (it.totalEpisodes > 0) it.totalEpisodes else it.latestEpisode ?: 0
+            }
+            SortOption.SCORE_HIGH -> filtered.sortedByDescending { it.averageScore ?: Int.MIN_VALUE }
+            SortOption.SCORE_LOW -> filtered.sortedBy { it.averageScore ?: Int.MAX_VALUE }
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -135,6 +186,9 @@ fun StatusListScreen(
                         offsetY = (offsetY + dragAmount).coerceAtLeast(0f)
                     }
                 )
+            }
+            .pointerInput(Unit) {
+                detectTapGestures { focusManager.clearFocus() }
             }
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -172,10 +226,66 @@ fun StatusListScreen(
                         )
                     }
                 },
+                actions = {
+                    Box {
+                        IconButton(onClick = { focusManager.clearFocus(); showSortMenu = true }) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Sort,
+                                contentDescription = "Sort",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = showSortMenu,
+                            onDismissRequest = { showSortMenu = false }
+                        ) {
+                            SortOption.entries.forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text(option.label) },
+                                    onClick = { focusManager.clearFocus(); selectedSort = option; showSortMenu = false },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = option.icon,
+                                            contentDescription = null,
+                                            tint = if (selectedSort == option) iconTint else MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                )
+                            }
+                        }
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface
                 )
             )
+
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                placeholder = { Text("Search in this list...") },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Clear search"
+                            )
+                        }
+                    }
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp)
+            )
+
+            val gridState = rememberLazyGridState()
+
+            LaunchedEffect(selectedSort) {
+                gridState.animateScrollToItem(0)
+            }
 
             if (animeList.isEmpty()) {
                 Box(
@@ -209,8 +319,6 @@ fun StatusListScreen(
             } else {
                 val statusColor = HomeStatusColors.getColor(listType)
                 val progressColor = if (disableMaterialColors) Color.White else MaterialTheme.colorScheme.primary
-
-                val gridState = rememberLazyGridState()
                 val density = LocalDensity.current
                 val translationYOffset = with(density) { (-30).dp.toPx() }
 
@@ -227,7 +335,7 @@ fun StatusListScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    itemsIndexed(items = animeList, key = { _, anime -> "${listType}_${anime.id}" }) { index, anime ->
+                    itemsIndexed(items = displayList, key = { _, anime -> "${listType}_${anime.id}" }) { index, anime ->
                         val staggerDelay = minOf(index, 20) * 30f
                         val staggerMs = staggerDelay / 1000f
                         val rawProgress = ((cinematicProgress - staggerMs) / (1f - staggerMs))
@@ -275,6 +383,7 @@ fun StatusListScreen(
 
                         Box(
                             modifier = Modifier
+                                .animateItem()
                                 .graphicsLayer {
                                     scaleX = finalScale
                                     scaleY = finalScale

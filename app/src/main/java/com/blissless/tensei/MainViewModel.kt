@@ -29,6 +29,7 @@ import com.blissless.tensei.data.models.ExploreMedia
 import com.blissless.tensei.data.models.HomeCacheData
 import com.blissless.tensei.data.models.LocalAnimeEntry
 import com.blissless.tensei.data.models.MediaCoverImage
+import com.blissless.tensei.data.models.MediaTag
 import com.blissless.tensei.data.models.MediaTitle
 import com.blissless.tensei.data.models.StoredFavorite
 import com.blissless.tensei.data.models.StudioData
@@ -1756,8 +1757,6 @@ class MainViewModel : ViewModel() {
         search: String? = null,
         genres: List<String>? = null,
         tags: List<String>? = null,
-        yearStart: Int? = null,
-        yearEnd: Int? = null,
         format: String? = null,
         status: String? = null,
         season: String? = null,
@@ -1768,12 +1767,17 @@ class MainViewModel : ViewModel() {
         perPage: Int = 30
     ) = repository.searchAnimeAdvanced(
         search = search, genres = genres, tags = tags,
-        yearStart = yearStart, yearEnd = yearEnd,
         format = format, status = status,
         season = season, seasonYear = seasonYear,
         sort = sort, isAdult = isAdult,
         page = page, perPage = perPage
     ).map { mapExploreMedia(it) }
+
+    private var cachedTags: List<MediaTag>? = null
+    suspend fun getAllTags(): List<MediaTag> {
+        if (cachedTags == null) cachedTags = repository.fetchAllTags()
+        return cachedTags!!
+    }
     fun searchCompletedAnime(query: String) {
         _completedSearchResults.value = if (query.isEmpty()) _completed.value else _completed.value.filter { it.title.contains(query, ignoreCase = true) }
     }
