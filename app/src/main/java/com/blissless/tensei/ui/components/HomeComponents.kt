@@ -64,6 +64,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.blissless.tensei.MainViewModel
 import com.blissless.tensei.data.models.AnimeMedia
+import com.blissless.tensei.data.models.TmdbEpisode
 import kotlin.math.absoluteValue
 
 data class HomeAnimeCardBounds(
@@ -232,6 +233,7 @@ fun HomeAnimeHorizontalList(
     playbackPositions: Map<String, Long> = emptyMap(),
     playbackDurations: Map<String, Long> = emptyMap(),
     disableMaterialColors: Boolean = false,
+    showProgressBar: Boolean = true,
     onAnimeClick: (AnimeMedia, HomeAnimeCardBounds?) -> Unit,
     onPlayClick: (AnimeMedia) -> Unit,
     onStatusClick: (AnimeMedia) -> Unit,
@@ -336,6 +338,7 @@ fun HomeAnimeHorizontalList(
                         playbackPositions = playbackPositions,
                         playbackDurations = playbackDurations,
                         disableMaterialColors = disableMaterialColors,
+                        showProgressBar = showProgressBar,
                         onClick = { bounds ->
                             viewModel?.setHomeAnimeCardBounds(anime.id, anime.cover, bounds?.bounds)
                             onAnimeClick(anime, bounds)
@@ -364,6 +367,7 @@ fun HomeAnimeCard(
     playbackPositions: Map<String, Long> = emptyMap(),
     playbackDurations: Map<String, Long> = emptyMap(),
     disableMaterialColors: Boolean = false,
+    showProgressBar: Boolean = true,
     onClick: (HomeAnimeCardBounds?) -> Unit,
     onPlayClick: () -> Unit,
     onStatusClick: () -> Unit,
@@ -488,7 +492,7 @@ fun HomeAnimeCard(
                 }
 
                 // Progress bar at bottom (continue watching indicator)
-                if (progressPercent > 0f) {
+                if (showProgressBar && progressPercent > 0f) {
                     Box(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
@@ -563,6 +567,175 @@ fun HomeAnimeCard(
             Text(text = displayTitle, modifier = Modifier.padding(top = 6.dp), maxLines = 2, style = MaterialTheme.typography.labelMedium, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurface)
         }
     }
+}
+
+@Composable
+fun ContinueWatchingRow(
+    animeList: List<AnimeMedia>,
+    playbackPositions: Map<String, Long>,
+    playbackDurations: Map<String, Long>,
+    tmdbEpisodeCache: Map<Int, List<TmdbEpisode>> = emptyMap(),
+    preferEnglishTitles: Boolean = true,
+    disableMaterialColors: Boolean = false,
+    playbackKeySuffix: String = "",
+    onPlayClick: (AnimeMedia, Int) -> Unit
+) {
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp)
+    ) {
+        itemsIndexed(items = animeList, key = { _, anime -> "continue_${anime.id}" }) { _, anime ->
+            ContinueWatchingCard(
+                anime = anime,
+                playbackPositions = playbackPositions,
+                playbackDurations = playbackDurations,
+                tmdbEpisodeCache = tmdbEpisodeCache,
+                preferEnglishTitles = preferEnglishTitles,
+                disableMaterialColors = disableMaterialColors,
+                playbackKeySuffix = playbackKeySuffix,
+                onPlayClick = {
+                    val nextEp = anime.progress + 1
+                    onPlayClick(anime, nextEp)
+                }
+            )
+        }
+    }
+}
+
+@Composable
+fun ContinueWatchingCard(
+    anime: AnimeMedia,
+    playbackPositions: Map<String, Long>,
+    playbackDurations: Map<String, Long>,
+    tmdbEpisodeCache: Map<Int, List<TmdbEpisode>> = emptyMap(),
+    preferEnglishTitles: Boolean = true,
+    disableMaterialColors: Boolean = false,
+    playbackKeySuffix: String = "",
+    onPlayClick: () -> Unit
+) {
+    val context = LocalContext.current
+
+    val nextEpisode = anime.progress + 1
+    val playbackKey = "${anime.id}_${nextEpisode}$playbackKeySuffix"
+    val savedPosition = playbackPositions[playbackKey] ?: 0L
+    val savedDuration = playbackDurations[playbackKey] ?: 0L
+    val effectiveDuration = if (savedDuration > 0L) savedDuration else 24 * 60 * 1000L
+    val progressPercent = (savedPosition.toFloat() / effectiveDuration.toFloat()).coerceIn(0f, 1f)
+    val remainingMs = effectiveDuration - savedPosition
+
+    val tmdbStillUrl = tmdbEpisodeCache[anime.id]?.find { it.episode == nextEpisode }?.image
+    val backgroundImageModel: Any = when {
+        tmdbStillUrl != null -> tmdbStillUrl
+        anime.banner != null -> anime.banner
+        else -> anime.cover
+    }
+
+    val progressColor = if (disableMaterialColors) Color.White else MaterialTheme.colorScheme.primary
+
+    val displayTitle = when {
+        preferEnglishTitles && !anime.titleEnglish.isNullOrEmpty() -> anime.titleEnglish
+        !anime.title.isNullOrEmpty() -> anime.title
+        !anime.titleEnglish.isNullOrEmpty() -> anime.titleEnglish
+        else -> "Unknown"
+    }
+
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier
+            .width(220.dp)
+            .height(130.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .clickable { onPlayClick() }
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            AsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(backgroundImageModel)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = displayTitle,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Black.copy(alpha = 0.3f),
+                                Color.Black.copy(alpha = 0.85f)
+                            )
+                        )
+                    )
+            )
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color.Black.copy(alpha = 0.7f)
+                ) {
+                    Text(
+                        text = "Ep. $nextEpisode",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+
+                Column {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(6.dp)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(Color.White.copy(alpha = 0.2f))
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .fillMaxWidth(progressPercent)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(progressColor)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    if (remainingMs > 0 && savedDuration > 0L) {
+                        Text(
+                            text = formatTimeRemaining(remainingMs),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.7f)
+                        )
+                    }
+
+                    Text(
+                        text = displayTitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun formatTimeRemaining(ms: Long): String {
+    val totalSec = (ms / 1000).coerceAtLeast(0)
+    val min = totalSec / 60
+    val sec = totalSec % 60
+    return "${min}:${sec.toString().padStart(2, '0')} remaining"
 }
 
 @Composable

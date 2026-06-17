@@ -332,6 +332,41 @@ data class CachedServer(
 )
 
 @Serializable
+data class CachedTrack(
+    val url: String,
+    val lang: String,
+)
+
+@Serializable
+data class CachedVideo(
+    val videoUrl: String,
+    val videoTitle: String,
+    val resolution: Int?,
+    val headers: Map<String, String>?,
+    val subtitleTracks: List<CachedTrack>,
+    val audioTracks: List<CachedTrack>,
+)
+
+@Serializable
+data class CachedHoster(
+    val hosterUrl: String,
+    val hosterName: String,
+)
+
+@Serializable
+data class CachedExtensionStream(
+    val url: String,
+    val referer: String,
+    val subtitleUrl: String?,
+    val subtitleTracks: List<CachedTrack>,
+    val videoTitle: String,
+    val videos: List<CachedVideo>,
+    val hosters: List<CachedHoster>?,
+    val videoHeaders: Map<String, String>,
+    val cachedAt: Long,
+)
+
+@Serializable
 data class AiringCacheData(
     val scheduleByDay: Map<Int, List<AiringScheduleAnime>>,
     val airingAnimeList: List<AiringScheduleAnime>

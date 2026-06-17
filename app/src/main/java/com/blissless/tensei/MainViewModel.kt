@@ -22,6 +22,10 @@ import com.blissless.tensei.data.models.AiringScheduleAnime
 import com.blissless.tensei.data.models.AnimeMedia
 import com.blissless.tensei.data.models.AnimeRelation
 import com.blissless.tensei.data.models.AniwatchStreamResult
+import com.blissless.tensei.data.models.CachedExtensionStream
+import com.blissless.tensei.data.models.CachedHoster
+import com.blissless.tensei.data.models.CachedTrack
+import com.blissless.tensei.data.models.CachedVideo
 import com.blissless.tensei.data.models.DetailedAnimeData
 import com.blissless.tensei.data.models.EpisodeStreams
 import com.blissless.tensei.data.models.ExploreAnime
@@ -62,6 +66,7 @@ import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Hoster
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.model.Track
+import okhttp3.Headers
 import okhttp3.OkHttpClient
 
 class MainViewModel : ViewModel() {
@@ -749,6 +754,7 @@ class MainViewModel : ViewModel() {
 
         userPreferences.loadPreferences(hasToken)
         cacheManager.loadStreamCache()
+        cacheManager.loadExtensionStreamCache()
         cacheManager.loadPlaybackPositions()
         cacheManager.loadTmdbEpisodeCache()
         loadAiringScheduleCache()
@@ -1655,6 +1661,18 @@ class MainViewModel : ViewModel() {
         cacheManager.invalidateStreamCache(animeId, episode, category)
     }
 
+    fun getCachedExtensionStream(animeId: Int, episode: Int): CachedExtensionStream? {
+        return cacheManager.getCachedExtensionStream("${animeId}_$episode")
+    }
+
+    fun cacheExtensionStream(animeId: Int, episode: Int, data: CachedExtensionStream) {
+        cacheManager.cacheExtensionStream("${animeId}_$episode", data)
+    }
+
+    fun invalidateExtensionStreamCache(animeId: Int, episode: Int) {
+        cacheManager.invalidateExtensionStreamCache("${animeId}_$episode")
+    }
+
     // Cache management
     fun getVideoCacheSize(context: Context): Long = cacheManager.getVideoCacheSize(context)
     fun clearVideoCache(context: Context): Long = cacheManager.clearVideoCache(context)
@@ -2206,6 +2224,37 @@ class MainViewModel : ViewModel() {
         defaultPackage: String,
     ): ExtensionStreamResult? {
         val epTag = "AnimeDownload"
+        val cached = getCachedExtensionStream(anime.id, episodeNumber)
+        if (cached != null) {
+            Log.i(epTag, "playEpisodeWithExtension: cache hit for ep $episodeNumber")
+            return ExtensionStreamResult(
+                url = cached.url,
+                referer = cached.referer,
+                subtitleUrl = cached.subtitleUrl,
+                subtitleTrackList = cached.subtitleTracks.map { Track(it.url, it.lang) },
+                videoTitle = cached.videoTitle,
+                videos = cached.videos.map { v ->
+                    val headers = v.headers?.let { map ->
+                        Headers.Builder().apply {
+                            map.forEach { (k, v) -> add(k, v) }
+                        }.build()
+                    }
+                    Video(
+                        videoUrl = v.videoUrl,
+                        videoTitle = v.videoTitle,
+                        resolution = v.resolution,
+                        headers = headers,
+                        subtitleTracks = v.subtitleTracks.map { Track(it.url, it.lang) },
+                        audioTracks = v.audioTracks.map { Track(it.url, it.lang) },
+                    )
+                },
+                hosters = cached.hosters?.map { Hoster(hosterUrl = it.hosterUrl, hosterName = it.hosterName) },
+                extensionClient = null,
+                videoHeaders = cached.videoHeaders,
+                source = null,
+                episode = null,
+            )
+        }
         Log.i(epTag, "playEpisodeWithExtension: anime=${anime.id} ep=$episodeNumber pkg=$defaultPackage")
         return withContext(Dispatchers.IO) {
             val overallStart = System.currentTimeMillis()
@@ -2433,6 +2482,29 @@ class MainViewModel : ViewModel() {
                     }
                 }
 
+                cacheExtensionStream(anime.id, episodeNumber, CachedExtensionStream(
+                    url = bestVideo.videoUrl,
+                    referer = referer,
+                    subtitleUrl = sortedSubs.firstOrNull()?.url,
+                    subtitleTracks = sortedSubs.map { CachedTrack(it.url, it.lang) },
+                    videoTitle = bestVideo.videoTitle,
+                    videos = videos.map { v ->
+                        val headersMap = v.headers?.let { h ->
+                            (0 until h.size).associate { h.name(it) to h.value(it) }
+                        }
+                        CachedVideo(
+                            videoUrl = v.videoUrl,
+                            videoTitle = v.videoTitle,
+                            resolution = v.resolution,
+                            headers = headersMap,
+                            subtitleTracks = v.subtitleTracks.map { CachedTrack(it.url, it.lang) },
+                            audioTracks = v.audioTracks.map { CachedTrack(it.url, it.lang) },
+                        )
+                    },
+                    hosters = derivedHosters?.map { CachedHoster(hosterUrl = it.hosterUrl, hosterName = it.hosterName) },
+                    videoHeaders = videoHeaders,
+                    cachedAt = System.currentTimeMillis(),
+                ))
                 ExtensionStreamResult(
                     url = bestVideo.videoUrl,
                     referer = referer,

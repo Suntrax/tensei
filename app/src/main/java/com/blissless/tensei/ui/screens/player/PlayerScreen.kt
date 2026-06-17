@@ -870,7 +870,7 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
             .background(Color.Black)
     ) {
         // PlayerView - recreate when server changes
-        key(serverChangeTrigger) {
+            key(serverChangeTrigger) {
             AndroidView(
                 factory = { ctx ->
                     PlayerView(ctx).apply {

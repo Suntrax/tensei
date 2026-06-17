@@ -58,6 +58,7 @@ class UserPreferences(private val context: Context) {
         private const val KEY_CHECK_UPDATES_ON_START = "check_updates_on_start"
         private const val KEY_SWIPE_VOLUME = "swipe_volume"
         private const val KEY_SWIPE_BRIGHTNESS = "swipe_brightness"
+        private const val KEY_SWIPE_SWAP = "swipe_swap"
     }
 
     private val sharedPreferences: SharedPreferences =

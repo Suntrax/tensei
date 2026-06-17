@@ -14,6 +14,7 @@ import com.blissless.tensei.data.models.AiringCacheData
 import com.blissless.tensei.data.models.AiringScheduleAnime
 import com.blissless.tensei.data.models.AniwatchStreamResult
 import com.blissless.tensei.data.models.CachedEpisodeInfo
+import com.blissless.tensei.data.models.CachedExtensionStream
 import com.blissless.tensei.data.models.CachedQuality
 import com.blissless.tensei.data.models.CachedServer
 import com.blissless.tensei.data.models.CachedStream
@@ -49,6 +50,7 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
         private const val CACHE_AIRING_TIME = "cache_airing_time"
         private const val CACHE_AIRING_DATA = "cache_airing_data"
         private const val CACHE_PLAYBACK_POSITIONS = "cache_playback_positions"
+        private const val CACHE_EXTENSION_STREAMS = "cache_extension_streams"
         
         // Video cache settings
         private const val VIDEO_CACHE_SIZE_BYTES = 1024L * 1024 * 1024 // 1 GB default - more space for offline content
@@ -565,6 +567,46 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
             _prefetchedStreams.value = newMap
             saveStreamCache()
         }
+    }
+
+    private val _extensionStreamCache = mutableMapOf<String, CachedExtensionStream>()
+
+    fun getCachedExtensionStream(key: String): CachedExtensionStream? {
+        val cached = _extensionStreamCache[key] ?: return null
+        val now = System.currentTimeMillis()
+        if (now - cached.cachedAt > STREAM_CACHE_DURATION_MS) {
+            _extensionStreamCache.remove(key)
+            saveExtensionStreamCache()
+            return null
+        }
+        return cached
+    }
+
+    fun cacheExtensionStream(key: String, data: CachedExtensionStream) {
+        _extensionStreamCache[key] = data
+        saveExtensionStreamCache()
+    }
+
+    fun invalidateExtensionStreamCache(key: String) {
+        _extensionStreamCache.remove(key)
+        saveExtensionStreamCache()
+    }
+
+    fun loadExtensionStreamCache() {
+        try {
+            val raw = sharedPreferences.getString(CACHE_EXTENSION_STREAMS, null) ?: return
+            val parsed = json.decodeFromString<Map<String, CachedExtensionStream>>(raw)
+            val now = System.currentTimeMillis()
+            _extensionStreamCache.clear()
+            _extensionStreamCache.putAll(parsed.filter { (now - it.value.cachedAt) < STREAM_CACHE_DURATION_MS })
+        } catch (_: Exception) {}
+    }
+
+    private fun saveExtensionStreamCache() {
+        try {
+            val raw = json.encodeToString(_extensionStreamCache)
+            sharedPreferences.edit { putString(CACHE_EXTENSION_STREAMS, raw) }
+        } catch (_: Exception) {}
     }
 
     // Time-based expiration for detailed anime cache

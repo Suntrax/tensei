@@ -1157,6 +1157,7 @@ fun MainScreen(
     fun invalidateCurrentStreamCache() {
         currentAnime?.let { anime ->
             viewModel.invalidateStreamCache(anime.id, currentEpisode, currentCategory)
+            viewModel.invalidateExtensionStreamCache(anime.id, currentEpisode)
         }
     }
 

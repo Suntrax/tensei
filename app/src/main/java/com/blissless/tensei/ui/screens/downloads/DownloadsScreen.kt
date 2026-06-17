@@ -78,8 +78,11 @@ import androidx.media3.exoplayer.offline.Download
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.blissless.tensei.MainViewModel
+import com.blissless.tensei.data.models.AnimeMedia
 import com.blissless.tensei.data.models.TmdbEpisode
 import com.blissless.tensei.download.EpisodeDownloadManager
+import com.blissless.tensei.ui.components.ContinueWatchingRow
+import com.blissless.tensei.ui.components.SectionHeader
 import com.blissless.tensei.ui.screens.player.OfflinePlayerScreen
 
 @android.annotation.SuppressLint("UnstableApiUsage")
@@ -158,6 +161,27 @@ fun DownloadsScreen(
     val autoPlayNextEpisode by viewModel.autoPlayNextEpisode.collectAsState()
     val playbackPositions by viewModel.playbackPositions.collectAsState()
     val playbackDurations by viewModel.playbackDurations.collectAsState()
+
+    val continueWatchingAnime = remember(groupedDownloads, playbackPositions) {
+        groupedDownloads.mapNotNull { group ->
+            val animeId = group.episodes.firstOrNull()?.animeId ?: return@mapNotNull null
+            val watchedEpisodes = group.episodes.filter { ep ->
+                val key = "${animeId}_${ep.episode}_offline"
+                (playbackPositions[key] ?: 0L) > 0L
+            }
+            if (watchedEpisodes.isEmpty()) return@mapNotNull null
+            val maxWatchedEp = watchedEpisodes.maxOf { it.episode }
+            AnimeMedia(
+                id = animeId,
+                title = group.animeName,
+                cover = "",
+                progress = maxOf(0, maxWatchedEp - 1),
+                totalEpisodes = group.episodes.maxOf { it.episode },
+                latestEpisode = group.episodes.maxOf { it.episode },
+                listStatus = "CURRENT"
+            )
+        }.sortedBy { it.title }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.notificationAnimeTaps.collect { animeName ->
@@ -332,6 +356,38 @@ fun DownloadsScreen(
                                 }
                             }
                         }
+                    }
+                }
+
+                // Continue Watching section
+                if (continueWatchingAnime.isNotEmpty()) {
+                    item(key = "continue_watching_header") {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        SectionHeader(
+                            title = "Continue Watching",
+                            icon = Icons.Default.PlayArrow,
+                            count = continueWatchingAnime.size,
+                            isOled = isOled,
+                        )
+                    }
+                    item(key = "continue_watching_row") {
+                        ContinueWatchingRow(
+                            animeList = continueWatchingAnime,
+                            playbackPositions = playbackPositions,
+                            playbackDurations = playbackDurations,
+                            tmdbEpisodeCache = tmdbEpisodeCache,
+                            preferEnglishTitles = true,
+                            disableMaterialColors = useMonochrome,
+                            playbackKeySuffix = "_offline",
+                            onPlayClick = { anime, episode ->
+                                val group = groupedDownloads.find { it.animeName == anime.title }
+                                val download = group?.episodes?.find { it.episode == episode }
+                                if (download != null) {
+                                    playerEpisodes = group?.episodes ?: emptyList()
+                                    playingDownload = download
+                                }
+                            }
+                        )
                     }
                 }
 

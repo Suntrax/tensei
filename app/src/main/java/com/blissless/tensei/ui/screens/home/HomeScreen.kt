@@ -87,6 +87,7 @@ import com.blissless.tensei.ui.components.HomeStatusColors
 import com.blissless.tensei.ui.components.LoadingSkeleton
 import com.blissless.tensei.ui.screens.episode.RichEpisodeScreen
 import com.blissless.tensei.ui.components.SectionHeader
+import com.blissless.tensei.ui.components.ContinueWatchingRow
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.blissless.tensei.ui.screens.details.DetailedAnimeScreen
@@ -179,6 +180,15 @@ fun HomeScreen(
 
     val allListsEmpty = effectiveCurrentlyWatching.isEmpty() && effectivePlanningToWatch.isEmpty() && effectiveCompleted.isEmpty() && effectiveOnHold.isEmpty() && effectiveDropped.isEmpty()
 
+    val continueWatchingAnime = remember(effectiveCurrentlyWatching, playbackPositions) {
+        effectiveCurrentlyWatching.filter { anime ->
+            val nextEpisode = anime.progress + 1
+            val playbackKey = "${anime.id}_$nextEpisode"
+            val pos = playbackPositions[playbackKey] ?: 0L
+            pos > 0L
+        }
+    }
+
     val hasOfflineContent = !isLoggedIn && (localFavorites.isNotEmpty() || viewModel.localAnimeStatus.value.isNotEmpty())
     val showWelcomeCard = !isLoggedIn && allListsEmpty && !hasOfflineContent
 
@@ -198,6 +208,8 @@ fun HomeScreen(
     val homeScrollState = rememberScrollState()
 
     val disableMaterialColors by viewModel.disableMaterialColors.collectAsState(initial = false)
+
+    val tmdbEpisodeCache by viewModel.tmdbEpisodeCache.collectAsState()
 
     val authToken by viewModel.authToken.collectAsState()
     val actuallyLoggedIn = authToken != null
@@ -442,6 +454,39 @@ fun HomeScreen(
                             .verticalScroll(homeScrollState),
                         verticalArrangement = Arrangement.spacedBy(24.dp)
                     ) {
+                        if (continueWatchingAnime.isNotEmpty()) {
+                            SectionHeader(
+                                title = "Continue Watching",
+                                icon = Icons.Default.PlayArrow,
+                                count = continueWatchingAnime.size,
+                                isOled = isOled,
+                                iconTint = HomeStatusColors.getColor("CURRENT"),
+                                onClick = {
+                                    statusListTitle = "Continue Watching"
+                                    statusListIcon = Icons.Default.PlayArrow
+                                    statusListType = "CURRENT"
+                                    statusListAnime = continueWatchingAnime
+                                    showStatusListScreen = true
+                                }
+                            )
+                            ContinueWatchingRow(
+                                animeList = continueWatchingAnime,
+                                playbackPositions = playbackPositions,
+                                playbackDurations = playbackDurations,
+                                tmdbEpisodeCache = tmdbEpisodeCache,
+                                preferEnglishTitles = preferEnglishTitles,
+                                disableMaterialColors = disableMaterialColors,
+                                onPlayClick = { anime, episode ->
+                                    val released = anime.latestEpisode?.let { it - 1 } ?: anime.totalEpisodes
+                                    if (anime.latestEpisode != null && episode > released) {
+                                        Toast.makeText(context, "Episode not aired yet", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        onPlayEpisode(anime, episode, null)
+                                    }
+                                }
+                            )
+                        }
+
                         if (effectiveCurrentlyWatching.isNotEmpty()) {
                             SectionHeader(
                                 title = "Currently Watching",
@@ -467,6 +512,7 @@ fun HomeScreen(
                                 playbackPositions = playbackPositions,
                                 playbackDurations = playbackDurations,
                                 disableMaterialColors = disableMaterialColors,
+                                showProgressBar = false,
                                 onAnimeClick = onAnimeClick,
                                 onPlayClick = { anime -> onPlayClick(anime, "CURRENT") },
                                 onStatusClick = onStatusClick,
