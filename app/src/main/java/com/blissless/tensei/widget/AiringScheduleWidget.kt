@@ -21,12 +21,12 @@ import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
-import androidx.glance.appwidget.components.CircleIconButton
 import androidx.glance.appwidget.lazy.LazyColumn
 import androidx.glance.appwidget.lazy.items
 import androidx.glance.appwidget.provideContent
 import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.updateAll
+import androidx.glance.appwidget.components.CircleIconButton
 import androidx.glance.background
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
@@ -154,12 +154,23 @@ object AiringScheduleWidget : GlanceAppWidget() {
         val userPrefs = context.getSharedPreferences(ANILIST_PREFS, Context.MODE_PRIVATE)
         val hideAdult = userPrefs.getBoolean("hide_adult_content", true)
         val preferEnglish = userPrefs.getBoolean("prefer_english_titles", true)
+        val themeMode = userPrefs.getString("theme_mode", "system") ?: "system"
+        val isDark = when (themeMode) {
+            "light" -> false
+            "oled", "dark" -> true
+            else -> {
+                val nightMode = context.resources.configuration.uiMode and
+                        android.content.res.Configuration.UI_MODE_NIGHT_MASK
+                nightMode == android.content.res.Configuration.UI_MODE_NIGHT_YES
+            }
+        }
+        val isOled = themeMode == "oled"
 
         if (data.entries.isEmpty() || isStale(data.lastUpdateTime))
             triggerNow(context, bypassCooldown = true)
         schedulePeriodic(context)
 
-        provideContent { WidgetContent(context, data, coverCache, hideAdult, preferEnglish) }
+        provideContent { WidgetContent(context, data, coverCache, hideAdult, preferEnglish, isDark, isOled) }
     }
 
     private fun loadData(prefs: android.content.SharedPreferences): WidgetScheduleData {
@@ -195,7 +206,7 @@ object AiringScheduleWidget : GlanceAppWidget() {
     }
 
     @Composable
-    fun WidgetContent(context: Context, data: WidgetScheduleData, coverCache: Map<Int, Bitmap?>, hideAdult: Boolean = false, preferEnglish: Boolean = true) {
+    fun WidgetContent(context: Context, data: WidgetScheduleData, coverCache: Map<Int, Bitmap?>, hideAdult: Boolean = false, preferEnglish: Boolean = true, isDark: Boolean = true, isOled: Boolean = false) {
         val cal = Calendar.getInstance()
         val dow = cal.get(Calendar.DAY_OF_WEEK) - 1
         val dayNames = listOf("Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday")
@@ -218,9 +229,24 @@ object AiringScheduleWidget : GlanceAppWidget() {
             when { d < 60_000 -> "just now"; d < 3_600_000 -> "${d / 60_000}m ago"; else -> "${d / 3_600_000}h ago" }
         } else "never"
 
+        val bgColor = when {
+            isOled -> Color(0xFF000000)
+            isDark -> Color(0xFF0D0D0D)
+            else -> Color(0xFFF5F5F5)
+        }
+        val itemBgColor = when {
+            isOled -> Color(0xFF0A0A0A)
+            isDark -> Color(0xFF1A1A1A)
+            else -> Color(0xFFFFFFFF)
+        }
+        val titleColor = if (isDark) Color.White else Color(0xFF1A1A1A)
+        val mutedColor = if (isDark) Color(0xFF9E9E9E) else Color(0xFF757575)
+        val dimColor = if (isDark) Color(0xFF616161) else Color(0xFF9E9E9E)
+        val faintColor = if (isDark) Color(0xFF424242) else Color(0xFFBDBDBD)
+
         Column(
             modifier = GlanceModifier.fillMaxSize()
-                .background(ColorProvider(Color(0xFF0D0D0D)))
+                .background(ColorProvider(bgColor))
                 .padding(start = 14.dp, top = 14.dp, end = 14.dp, bottom = 12.dp)
         ) {
             Row(
@@ -229,19 +255,21 @@ object AiringScheduleWidget : GlanceAppWidget() {
             ) {
                 Column(modifier = GlanceModifier.defaultWeight()) {
                     Text(dayNames[dow], style = TextStyle(
-                        color = ColorProvider(Color.White), fontSize = 16.sp, fontWeight = FontWeight.Bold
+                        color = ColorProvider(titleColor), fontSize = 16.sp, fontWeight = FontWeight.Bold
                     ))
                     Text("${items.size} airing today", style = TextStyle(
-                        color = ColorProvider(Color(0xFF9E9E9E)), fontSize = 12.sp
+                        color = ColorProvider(mutedColor), fontSize = 12.sp
                     ))
                 }
+                val refreshBg = ColorProvider(if (isDark) Color(0x33FFFFFF) else Color(0x33000000))
+                val refreshIconTint = ColorProvider(if (isDark) Color.White else Color(0xFF616161))
                 CircleIconButton(
                     imageProvider = ImageProvider(R.drawable.ic_refresh),
                     contentDescription = "Refresh",
-                    onClick = action("refresh") {
-                        triggerNow(context)
-                    },
-                    modifier = GlanceModifier.size(32.dp)
+                    onClick = action("refresh") { triggerNow(context) },
+                    modifier = GlanceModifier.size(32.dp),
+                    backgroundColor = refreshBg,
+                    contentColor = refreshIconTint
                 )
             }
             Spacer(GlanceModifier.height(10.dp))
@@ -255,7 +283,7 @@ object AiringScheduleWidget : GlanceAppWidget() {
                             modifier = GlanceModifier.fillMaxWidth().padding(vertical = 20.dp),
                             contentAlignment = Alignment.Center,
                             content = @Composable { Text("No anime airing today", style = TextStyle(
-                                color = ColorProvider(Color(0xFF616161)), fontSize = 14.sp
+                                color = ColorProvider(dimColor), fontSize = 14.sp
                             ))}
                         )
                     }
@@ -265,9 +293,9 @@ object AiringScheduleWidget : GlanceAppWidget() {
                             Box(
                                 modifier = GlanceModifier.fillMaxWidth()
                                     .padding(horizontal = 2.dp)
-                                    .background(ImageProvider(R.drawable.widget_item_bg)),
+                                    .background(ColorProvider(itemBgColor)),
                                 content = @Composable {
-                                    AiringItem(e, coverCache[e.id], nowTs, context, preferEnglish)
+                                    AiringItem(e, coverCache[e.id], nowTs, context, preferEnglish, isDark)
                                 }
                             )
                             Spacer(GlanceModifier.height(4.dp))
@@ -282,11 +310,11 @@ object AiringScheduleWidget : GlanceAppWidget() {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("Updated $ago", style = TextStyle(
-                    color = ColorProvider(Color(0xFF616161)), fontSize = 10.sp
+                    color = ColorProvider(dimColor), fontSize = 10.sp
                 ))
                 Spacer(GlanceModifier.defaultWeight())
                 Text("Tensei", style = TextStyle(
-                    color = ColorProvider(Color(0xFF424242)), fontSize = 10.sp, fontWeight = FontWeight.Bold
+                    color = ColorProvider(faintColor), fontSize = 10.sp, fontWeight = FontWeight.Bold
                 ))
             }
             Spacer(GlanceModifier.height(4.dp))
@@ -294,7 +322,7 @@ object AiringScheduleWidget : GlanceAppWidget() {
     }
 
     @Composable
-    private fun AiringItem(e: WidgetAiringEntry, coverBitmap: Bitmap?, nowTs: Long, context: Context, preferEnglish: Boolean = true) {
+    private fun AiringItem(e: WidgetAiringEntry, coverBitmap: Bitmap?, nowTs: Long, context: Context, preferEnglish: Boolean = true, isDark: Boolean = true) {
         fun String?.valid(): String? = this?.takeIf { it.isNotBlank() && it != "null" }
         val displayTitle = if (preferEnglish) e.titleEnglish.valid() ?: e.titleRomaji.valid() ?: e.title
                            else e.titleRomaji.valid() ?: e.titleEnglish.valid() ?: e.title
@@ -322,8 +350,12 @@ object AiringScheduleWidget : GlanceAppWidget() {
         }
 
         val score = e.averageScore?.let { " \u00b7 \u2605${it / 10}.${it % 10}" } ?: ""
-        val titleColor = if (isPast) Color(0xFF757575) else Color.White
-        val infoColor = if (isPast) Color(0xFF555555) else Color(0xFF9E9E9E)
+        val pastTitleColor = if (isDark) Color(0xFF757575) else Color(0xFFBDBDBD)
+        val currentTitleColor = if (isDark) Color.White else Color(0xFF1A1A1A)
+        val titleColor = if (isPast) pastTitleColor else currentTitleColor
+        val pastInfoColor = if (isDark) Color(0xFF555555) else Color(0xFF9E9E9E)
+        val currentInfoColor = if (isDark) Color(0xFF9E9E9E) else Color(0xFF757575)
+        val infoColor = if (isPast) pastInfoColor else currentInfoColor
 
         val statusColor = e.userStatus?.let { statusColors[it] }
 
@@ -347,9 +379,11 @@ object AiringScheduleWidget : GlanceAppWidget() {
                 Box(modifier = GlanceModifier.width(3.dp).height(80.dp).background(ColorProvider(statusColor)), content = {})
                 Spacer(GlanceModifier.width(4.dp))
             }
+            val coverBg = if (isDark) Color(0xFF242424) else Color(0xFFE0E0E0)
+            val coverPlaceholderText = if (isDark) Color(0xFF616161) else Color(0xFF9E9E9E)
             Box(
                 modifier = GlanceModifier.size(56.dp, 80.dp)
-                    .background(ColorProvider(Color(0xFF242424))),
+                    .background(ColorProvider(coverBg)),
                 contentAlignment = Alignment.Center,
                 content = @Composable {
                     if (coverBitmap != null) {
@@ -360,7 +394,7 @@ object AiringScheduleWidget : GlanceAppWidget() {
                         )
                     } else {
                         Text(displayTitle.take(1), style = TextStyle(
-                            color = ColorProvider(Color(0xFF616161)), fontSize = 18.sp
+                            color = ColorProvider(coverPlaceholderText), fontSize = 18.sp
                         ))
                     }
                 }

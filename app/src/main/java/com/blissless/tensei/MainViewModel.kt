@@ -7,6 +7,7 @@ import android.util.Log
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import androidx.core.net.toUri
+import androidx.glance.appwidget.updateAll
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.blissless.tensei.data.AnimeRepository
@@ -39,6 +40,7 @@ import com.blissless.tensei.data.models.UserAnimeStats
 import com.blissless.tensei.data.models.UserFavoriteAnime
 import com.blissless.tensei.download.EpisodeDownloadManager
 import com.blissless.tensei.update.GitHubRelease
+import com.blissless.tensei.widget.AiringScheduleWidget
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -1563,7 +1565,12 @@ class MainViewModel : ViewModel() {
     }
 
     // Settings
-    fun setThemeMode(mode: String) = userPreferences.setThemeMode(mode)
+    fun setThemeMode(mode: String) {
+        userPreferences.setThemeMode(mode)
+        viewModelScope.launch { AiringScheduleWidget.updateAll(context) }
+    }
+
+
     fun setDisableMaterialColors(enabled: Boolean) = userPreferences.setDisableMaterialColors(enabled)
     fun setPreferredCategory(category: String) = userPreferences.setPreferredCategory(category)
     fun setShowStatusColors(enabled: Boolean) = userPreferences.setShowStatusColors(enabled)

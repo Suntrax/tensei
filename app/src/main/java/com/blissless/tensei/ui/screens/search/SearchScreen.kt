@@ -130,8 +130,6 @@ data class SearchFilters(
     val query: String = "",
     val genres: Set<String> = emptySet(),
     val tags: List<String> = emptyList(),
-    val yearStart: String = "",
-    val yearEnd: String = "",
     val format: String? = null,
     val status: String? = null,
     val season: String? = null,
@@ -166,7 +164,7 @@ fun SearchScreen(
     var results by remember { mutableStateOf<List<ExploreAnime>>(emptyList()) }
     var isSearching by remember { mutableStateOf(false) }
     var hasSearched by remember { mutableStateOf(false) }
-    var showFilters by remember { mutableStateOf(false) }
+    var showFilters by remember { mutableStateOf(true) }
     var showFormatDropdown by remember { mutableStateOf(false) }
     var showStatusDropdown by remember { mutableStateOf(false) }
     var showSeasonDropdown by remember { mutableStateOf(false) }
@@ -195,7 +193,6 @@ fun SearchScreen(
     val keyboardController = LocalSoftwareKeyboardController.current
     val scope = rememberCoroutineScope()
     val gridState = rememberLazyGridState()
-    val currentYear = remember { java.util.Calendar.getInstance().get(java.util.Calendar.YEAR) }
 
     val savedAnimeMap = remember(currentlyWatching, planningToWatch, completed, onHold, dropped, localAnimeStatus) {
         val map = mutableMapOf<Int, String>()
@@ -263,7 +260,7 @@ fun SearchScreen(
 
     var autoSearchSkippedInitial by remember { mutableStateOf(false) }
     LaunchedEffect(
-        filters.genres, filters.tags, filters.yearStart, filters.yearEnd,
+        filters.genres, filters.tags,
         filters.format, filters.status, filters.season, filters.seasonYear,
         filters.sort
     ) {
@@ -284,8 +281,6 @@ fun SearchScreen(
     val activeFilterCount = listOfNotNull(
         filters.genres.takeIf { it.isNotEmpty() }?.let { 1 },
         filters.tags.takeIf { it.isNotEmpty() }?.let { 1 },
-        filters.yearStart.takeIf { it.isNotBlank() }?.let { 1 },
-        filters.yearEnd.takeIf { it.isNotBlank() }?.let { 1 },
         filters.format,
         filters.status,
         filters.season,
@@ -352,10 +347,11 @@ fun SearchScreen(
                             }
                         }
                     )
-                    if (filters.query.isNotEmpty()) {
-                        IconButton(onClick = { filters = filters.copy(query = ""); results = emptyList(); hasSearched = false }, modifier = Modifier.size(36.dp)) {
-                            Icon(Icons.Default.Close, contentDescription = "Clear", tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(18.dp))
-                        }
+                    IconButton(
+                        onClick = { filters = filters.copy(query = ""); results = emptyList(); hasSearched = false },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = "Clear", tint = Color.White.copy(alpha = if (filters.query.isNotEmpty()) 0.5f else 0f), modifier = Modifier.size(18.dp))
                     }
                 }
             }
@@ -405,18 +401,13 @@ fun SearchScreen(
                 }
             }
 
-            AnimatedVisibility(
-                visible = showFilters,
-                enter = expandVertically(animationSpec = tween(300)) + fadeIn(tween(200)),
-                exit = shrinkVertically(animationSpec = tween(250)) + fadeOut(tween(200))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp)
+                    .height(320.dp)
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 16.dp)
-                        .height(320.dp)
-                ) {
                     Spacer(modifier = Modifier.height(4.dp))
 
                     FilterRow(
@@ -432,45 +423,6 @@ fun SearchScreen(
                         count = filters.tags.size,
                         onClick = { showTagSheet = true }
                     )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Year From", color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.labelSmall)
-                            BasicTextField(
-                                value = filters.yearStart,
-                                onValueChange = { if (it.all { c -> c.isDigit() } && it.length <= 4) filters = filters.copy(yearStart = it) },
-                                modifier = Modifier.fillMaxWidth().height(34.dp).background(Color(0xFF2A2A2A), RoundedCornerShape(8.dp)).padding(horizontal = 10.dp),
-                                singleLine = true,
-                                textStyle = TextStyle(color = Color.White, fontSize = 14.sp),
-                                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                                decorationBox = { innerTextField ->
-                                    Box(contentAlignment = Alignment.CenterStart) {
-                                        if (filters.yearStart.isEmpty()) Text("e.g. 2000", color = Color.White.copy(alpha = 0.3f), fontSize = 13.sp)
-                                        innerTextField()
-                                    }
-                                }
-                            )
-                        }
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Year To", color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.labelSmall)
-                            BasicTextField(
-                                value = filters.yearEnd,
-                                onValueChange = { if (it.all { c -> c.isDigit() } && it.length <= 4) filters = filters.copy(yearEnd = it) },
-                                modifier = Modifier.fillMaxWidth().height(34.dp).background(Color(0xFF2A2A2A), RoundedCornerShape(8.dp)).padding(horizontal = 10.dp),
-                                singleLine = true,
-                                textStyle = TextStyle(color = Color.White, fontSize = 14.sp),
-                                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                                decorationBox = { innerTextField ->
-                                    Box(contentAlignment = Alignment.CenterStart) {
-                                        if (filters.yearEnd.isEmpty()) Text("e.g. $currentYear", color = Color.White.copy(alpha = 0.3f), fontSize = 13.sp)
-                                        innerTextField()
-                                    }
-                                }
-                            )
-                        }
-                    }
 
                     Spacer(modifier = Modifier.height(12.dp))
 
@@ -514,7 +466,6 @@ fun SearchScreen(
 
                     Spacer(modifier = Modifier.height(8.dp))
                 }
-            }
 
             if (isSearching) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
