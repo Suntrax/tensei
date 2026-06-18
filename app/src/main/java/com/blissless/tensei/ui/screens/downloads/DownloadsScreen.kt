@@ -679,7 +679,7 @@ fun DownloadsScreen(
             info != null && (info.state == Download.STATE_QUEUED || info.state == Download.STATE_DOWNLOADING)
         }
         Dialog(
-            onDismissRequest = { if (!anyActive) showDownloadDialogFor = null },
+            onDismissRequest = { showDownloadDialogFor = null },
             properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
         ) {
             Surface(
@@ -807,14 +807,19 @@ fun DownloadsScreen(
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
+                            val allDone = !anyActive
                             OutlinedButton(
                                 onClick = {
-                                    downloadManager.cancelBatch(animeName)
-                                    showDownloadDialogFor = null
+                                    if (allDone) {
+                                        showDownloadDialogFor = null
+                                    } else {
+                                        downloadManager.cancelBatch(animeName)
+                                        showDownloadDialogFor = null
+                                    }
                                 },
                                 modifier = Modifier.weight(1f),
                                 shape = RoundedCornerShape(12.dp)
-                            ) { Text("Cancel") }
+                            ) { Text(if (allDone) "Close" else "Cancel") }
                             val doneCount = sortedBatchEps.count { ep ->
                                 val d = downloadsInfo.values.find { it.animeName == animeName && it.episode == ep }
                                 d != null && d.state == Download.STATE_COMPLETED
