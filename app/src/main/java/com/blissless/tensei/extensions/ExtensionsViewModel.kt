@@ -27,7 +27,8 @@ data class ExtensionsUiState(
     val isLoading: Boolean = true,
     val extensions: List<Extension> = emptyList(),
     val error: String? = null,
-    val repos: List<RepoState> = emptyList()
+    val repos: List<RepoState> = emptyList(),
+    val refreshMessage: String? = null
 )
 
 data class RepoState(
@@ -54,19 +55,35 @@ class ExtensionsViewModel(application: Application) : AndroidViewModel(applicati
     private val _uiState = MutableStateFlow(ExtensionsUiState())
     val uiState: StateFlow<ExtensionsUiState> = _uiState.asStateFlow()
 
+    private var lastExtensionCount = 0
+
     init {
         loadExtensions()
         loadSavedRepos()
     }
 
-    fun loadExtensions() {
+    fun loadExtensions(isManualRefresh: Boolean = false) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             try {
+                val previousCount = lastExtensionCount
                 val extensions = detector.detectInstalledExtensions()
+                lastExtensionCount = extensions.size
+                val diff = extensions.size - previousCount
+                val message = when {
+                    previousCount == 0 -> null
+                    isManualRefresh -> when {
+                        diff > 0 -> "Found $diff new extension(s)"
+                        diff < 0 -> "${-diff} extension(s) removed"
+                        else -> "No new extensions found"
+                    }
+                    diff > 0 -> "Found $diff new extension(s)"
+                    else -> null
+                }
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    extensions = extensions
+                    extensions = extensions,
+                    refreshMessage = message
                 )
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
@@ -115,6 +132,10 @@ class ExtensionsViewModel(application: Application) : AndroidViewModel(applicati
             repos = _uiState.value.repos.filter { it.url != url }
         )
         persistRepos()
+    }
+
+    fun clearRefreshMessage() {
+        _uiState.value = _uiState.value.copy(refreshMessage = null)
     }
 
     fun installExtension(repoExtension: RepoExtension) {

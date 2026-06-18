@@ -52,7 +52,6 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.FileDownload
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -87,6 +86,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.view.WindowCompat
 import com.blissless.tensei.api.myanimelist.LoginProvider
 import com.blissless.tensei.data.models.AnimeMedia
@@ -112,6 +113,7 @@ import com.blissless.tensei.ui.screens.settings.SettingsScreen
 import com.blissless.tensei.ui.screens.downloads.DownloadsScreen
 import com.blissless.tensei.ui.screens.search.SearchScreen
 import com.blissless.tensei.ui.screens.downloads.EpisodeDownloadDialog
+import com.blissless.tensei.extensions.ExtensionsViewModel
 import com.blissless.tensei.ui.screens.status.StatusListScreen
 import com.blissless.tensei.ui.screens.character.StaffScreen
 import com.blissless.tensei.ui.screens.relations.AllRelationsScreen
@@ -502,6 +504,8 @@ fun MainScreen(
     val hideNavbar by viewModel.hideNavbar.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
+    val extViewModel: ExtensionsViewModel = viewModel()
+    val extUiState by extViewModel.uiState.collectAsState()
 
     val startupScreen by viewModel.startupScreen.collectAsState()
     val currentPageState = remember { mutableIntStateOf(startupScreen) }
@@ -596,7 +600,6 @@ fun MainScreen(
                 1 -> { }
                 2 -> { viewModel.refreshHome() }
                 3 -> { }
-                4 -> { }
             }
         }
     }
@@ -643,6 +646,7 @@ fun MainScreen(
 
     // Extension flow state
     var showNoExtDialog by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
     var pendingSettingsGroup by remember { mutableStateOf<String?>(null) }
     var extensionVideos by remember { mutableStateOf<List<Video>?>(null) }
     var extensionHosters by remember { mutableStateOf<List<eu.kanade.tachiyomi.animesource.model.Hoster>?>(null) }
@@ -1410,8 +1414,8 @@ fun MainScreen(
             preferEnglishTitles = preferEnglishTitles,
             onNavigateToSettings = {
                 overlayState = OverlayState.None
-                currentPage = 4
-                pendingSettingsGroup = "extensions"
+                showSettings = true
+                pendingSettingsGroup = if (extUiState.extensions.isEmpty()) "extensions" else "stream"
             },
             onStartDownload = { media ->
                 overlayState = OverlayState.EpisodeDownloadDialog(anime = media)
@@ -1546,8 +1550,8 @@ fun MainScreen(
             preferEnglishTitles = preferEnglishTitles,
             onNavigateToSettings = {
                 overlayState = OverlayState.None
-                currentPage = 4
-                pendingSettingsGroup = "extensions"
+                showSettings = true
+                pendingSettingsGroup = if (extUiState.extensions.isEmpty()) "extensions" else "stream"
             },
             onStartDownload = { media ->
                 overlayState = OverlayState.EpisodeDownloadDialog(anime = media)
@@ -1805,8 +1809,8 @@ fun MainScreen(
             onDismiss = { overlayState = OverlayState.None },
             onNavigateToSettings = {
                 overlayState = OverlayState.None
-                currentPage = 4
-                pendingSettingsGroup = "extensions"
+                showSettings = true
+                pendingSettingsGroup = if (extUiState.extensions.isEmpty()) "extensions" else "stream"
             }
         )
     }
@@ -1862,15 +1866,15 @@ fun MainScreen(
             onDismissRequest = { showNoExtDialog = false },
             title = { Text("No Default Extension") },
             text = {
-                Text("Set a default extension in Settings > Extensions to enable streaming.")
+                Text("Set a default extension in Settings to enable streaming.")
             },
             confirmButton = {
                 TextButton(onClick = {
                     showNoExtDialog = false
-                    currentPage = 4
-                    pendingSettingsGroup = "extensions"
+                    showSettings = true
+                    pendingSettingsGroup = if (extUiState.extensions.isEmpty()) "extensions" else "stream"
                 }) {
-                    Text("Go to Extensions")
+                    Text(if (extUiState.extensions.isEmpty()) "Go to Extensions" else "Go to Stream Settings")
                 }
             },
             dismissButton = {
@@ -2107,9 +2111,7 @@ fun MainScreen(
                             hideAdultContent = hideAdultContent,
                             onOverlayOpenChange = { overlayOpen = it },
                             onNavigateToSettings = {
-                                overlayState = OverlayState.None
-                                currentPage = 4
-                                pendingSettingsGroup = "extensions"
+                                showSettings = true
                             },
                             onStartDownload = { media ->
                                 overlayState = OverlayState.EpisodeDownloadDialog(anime = media)
@@ -2175,17 +2177,30 @@ fun MainScreen(
                             isOled = isOled,
                             onNavbarHidden = viewModel::setHideNavbar,
                         )
-                        4 -> SettingsScreen(
-                            viewModel = viewModel,
-                            isLoggedIn = isLoggedIn,
-                            showStatusColors = showStatusColors,
-                            autoSkipOpening = autoSkipOpening,
-                            autoSkipEnding = autoSkipEnding,
-                            autoPlayNextEpisode = autoPlayNextEpisode,
-                            disableMaterialColors = disableMaterialColors,
-                            preferredCategory = preferredCategory,
-                            initialGroup = pendingSettingsGroup
-                        )
+                    }
+                }
+
+                if (showSettings) {
+                    Dialog(
+                        onDismissRequest = { showSettings = false; pendingSettingsGroup = null },
+                        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+                    ) {
+                        Surface(
+                            modifier = Modifier.fillMaxSize(),
+                            color = MaterialTheme.colorScheme.background
+                        ) {
+                            SettingsScreen(
+                                viewModel = viewModel,
+                                isLoggedIn = isLoggedIn,
+                                showStatusColors = showStatusColors,
+                                autoSkipOpening = autoSkipOpening,
+                                autoSkipEnding = autoSkipEnding,
+                                autoPlayNextEpisode = autoPlayNextEpisode,
+                                disableMaterialColors = disableMaterialColors,
+                                preferredCategory = preferredCategory,
+                                initialGroup = pendingSettingsGroup
+                            )
+                        }
                     }
                 }
 
@@ -2358,8 +2373,8 @@ fun MainScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                val items = listOf("Schedule", "Explore", "Home", "Downloads", "Settings")
-                                val icons = listOf(Icons.Default.CalendarMonth, Icons.Default.Explore, Icons.Default.Home, Icons.Default.FileDownload, Icons.Default.Settings)
+                                val items = listOf("Schedule", "Explore", "Home", "Downloads")
+                                val icons = listOf(Icons.Default.CalendarMonth, Icons.Default.Explore, Icons.Default.Home, Icons.Default.FileDownload)
 
                             items.forEachIndexed { index, item ->
                                 val isSelected = index == selectedIndex

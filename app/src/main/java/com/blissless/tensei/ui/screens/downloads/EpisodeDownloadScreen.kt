@@ -55,6 +55,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -71,6 +72,7 @@ import androidx.media3.exoplayer.offline.Download
 import com.blissless.tensei.MainViewModel
 import com.blissless.tensei.data.models.AnimeMedia
 import com.blissless.tensei.download.EpisodeDownloadManager
+import com.blissless.tensei.extensions.ExtensionsViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -100,6 +102,8 @@ fun EpisodeDownloadDialog(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val extViewModel: ExtensionsViewModel = viewModel()
+    val extUiState by extViewModel.uiState.collectAsState()
     val total = anime.totalEpisodes.coerceAtLeast(1)
     val released = anime.latestEpisode?.let { it - 1 } ?: total
     val displayTitle = if (preferEnglishTitles && !anime.titleEnglish.isNullOrEmpty()) anime.titleEnglish else anime.title
@@ -633,12 +637,14 @@ fun EpisodeDownloadDialog(
             onDismissRequest = { showNoExtDialog = false },
             containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surface,
             title = { Text("No Default Extension", color = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface) },
-            text = { Text("Set a default extension in Settings > Extensions to enable downloads.", color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant) },
+            text = { Text("Set a default extension in Settings to enable downloads.", color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant) },
             confirmButton = {
                 TextButton(onClick = {
                     showNoExtDialog = false
                     onNavigateToSettings?.invoke()
-                }) { Text("Go to Extensions") }
+                }) {
+                    Text(if (extUiState.extensions.isEmpty()) "Go to Extensions" else "Go to Stream Settings")
+                }
             },
             dismissButton = {
                 TextButton(onClick = { showNoExtDialog = false }) { Text("Cancel") }

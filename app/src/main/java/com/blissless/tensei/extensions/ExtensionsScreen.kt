@@ -18,7 +18,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandLess
@@ -53,7 +52,16 @@ fun ExtensionsScreen(
     var repoUrl by remember { mutableStateOf("") }
     var selectedRepoUrl by remember { mutableStateOf<String?>(null) }
     var reposExpanded by remember { mutableStateOf(false) }
+    var extensionsExpanded by remember { mutableStateOf(false) }
     val installedPackages = uiState.extensions.map { it.packageName }.toSet()
+
+    val context = LocalContext.current
+    LaunchedEffect(uiState.refreshMessage) {
+        uiState.refreshMessage?.let {
+            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+            viewModel.clearRefreshMessage()
+        }
+    }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -90,27 +98,12 @@ fun ExtensionsScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 20.dp, end = 4.dp, top = 12.dp, bottom = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text("Extensions", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            IconButton(onClick = { viewModel.loadExtensions() }) {
-                Icon(Icons.Default.Refresh, contentDescription = "Refresh")
-            }
-        }
-
         OutlinedTextField(
             value = repoUrl,
             onValueChange = { repoUrl = it },
             label = { Text("Repo URL") },
             placeholder = { Text("https://example.com/index.json") },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
+            modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
             colors = OutlinedTextFieldDefaults.colors(
@@ -135,7 +128,6 @@ fun ExtensionsScreen(
 
         LazyColumn(
             modifier = Modifier.weight(1f),
-            contentPadding = PaddingValues(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             if (uiState.repos.isNotEmpty()) {
@@ -176,52 +168,80 @@ fun ExtensionsScreen(
                 }
             }
 
-            when {
-                uiState.isLoading -> {
-                    item {
-                        Box(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator()
-                        }
+            if (uiState.isLoading) {
+                item {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
                     }
                 }
-                uiState.error != null -> {
-                    item {
-                        Column(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text = uiState.error!!,
-                                color = MaterialTheme.colorScheme.error
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Button(onClick = { viewModel.loadExtensions() }) {
-                                Text("Retry")
-                            }
-                        }
-                    }
-                }
-                uiState.extensions.isEmpty() && uiState.repos.isEmpty() -> {
-                    item {
+            }
+
+            if (uiState.error != null) {
+                item {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
                         Text(
-                            text = "No extensions found",
+                            text = uiState.error!!,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(onClick = { viewModel.loadExtensions() }) {
+                            Text("Retry")
+                        }
+                    }
+                }
+            }
+
+            if (uiState.extensions.isNotEmpty()) {
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { extensionsExpanded = !extensionsExpanded }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "Installed Extensions (${uiState.extensions.size})",
                             style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(vertical = 48.dp).fillMaxWidth()
+                            fontWeight = FontWeight.Bold
+                        )
+                        Icon(
+                            if (extensionsExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = if (extensionsExpanded) "Collapse" else "Expand",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
-                else -> {
-                    items(uiState.extensions, key = { it.packageName }) { ext ->
-                        val ctx = LocalContext.current
+
+                items(uiState.extensions, key = { it.packageName }) { ext ->
+                    AnimatedVisibility(
+                        visible = extensionsExpanded,
+                        enter = expandVertically(),
+                        exit = shrinkVertically()
+                    ) {
                         InstalledExtensionCard(
                             extension = ext,
-                            onSettings = { openAppSettings(ctx, ext.packageName) },
+                            onSettings = { openAppSettings(context, ext.packageName) },
                         )
                     }
+                }
+            }
+
+            if (uiState.extensions.isEmpty() && uiState.repos.isEmpty() && uiState.error == null && !uiState.isLoading) {
+                item {
+                    Text(
+                        text = "No extensions found",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 48.dp).fillMaxWidth()
+                    )
                 }
             }
 
