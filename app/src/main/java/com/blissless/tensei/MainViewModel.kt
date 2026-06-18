@@ -807,7 +807,7 @@ class MainViewModel : ViewModel() {
     fun checkForUpdatesSilently() {
         viewModelScope.launch {
             try {
-                val url = "https://api.github.com/repos/YOUR_USERNAME/tensei/releases/latest"
+                val url = "https://api.github.com/repos/Suntrax/tensei/releases/latest"
                 val request = okhttp3.Request.Builder().url(url)
                     .header("Accept", "application/vnd.github.v3+json")
                     .build()

@@ -1,8 +1,14 @@
 package com.blissless.tensei.update
 
 import android.app.Application
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.widget.Toast
+import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationCompat
 import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -15,12 +21,12 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import android.os.Build
 import java.io.File
 
 data class UpdateUiState(
     val isChecking: Boolean = false,
     val isDownloading: Boolean = false,
+    val downloadProgress: Float = 0f,
     val release: GitHubRelease? = null,
     val error: String? = null,
     val downloadedFile: File? = null
@@ -39,7 +45,49 @@ class UpdateViewModel(application: Application) : AndroidViewModel(application) 
     val uiState: StateFlow<UpdateUiState> = _uiState.asStateFlow()
 
     private val owner = "Suntrax"
-    private val repo = "Tensei"
+    private val repo = "tensei"
+
+    private val notificationManager = getApplication<Application>().getSystemService(NotificationManager::class.java)
+    private val notificationId = 1001
+
+    init {
+        createNotificationChannel()
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                val channel = NotificationChannel(
+                    "update_downloads",
+                    "Update Downloads",
+                    NotificationManager.IMPORTANCE_LOW
+                ).apply {
+                    description = "Update download progress"
+                }
+                notificationManager.createNotificationChannel(channel)
+            } catch (_: Exception) {}
+        }
+    }
+
+    private fun showDownloadNotification(progress: Int, max: Int) {
+        val ctx = getApplication<Application>()
+        if (ActivityCompat.checkSelfPermission(ctx, android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            return
+        }
+        val notification = NotificationCompat.Builder(ctx, "update_downloads")
+            .setSmallIcon(android.R.drawable.stat_sys_download)
+            .setContentTitle("Downloading update")
+            .setContentText("$progress%")
+            .setProgress(max, progress, false)
+            .setOngoing(true)
+            .setSilent(true)
+            .build()
+        notificationManager.notify(notificationId, notification)
+    }
+
+    private fun dismissDownloadNotification() {
+        notificationManager.cancel(notificationId)
+    }
 
     fun checkForUpdates(showToast: Boolean = true) {
         viewModelScope.launch {
@@ -84,13 +132,16 @@ class UpdateViewModel(application: Application) : AndroidViewModel(application) 
             }
 
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isDownloading = true, error = null)
+            _uiState.value = _uiState.value.copy(isDownloading = true, downloadProgress = 0f, error = null)
+            showDownloadNotification(0, 100)
             try {
                 val file = downloadApk(asset.downloadUrl, "tensei-update")
-                _uiState.value = _uiState.value.copy(isDownloading = false, downloadedFile = file)
+                dismissDownloadNotification()
+                _uiState.value = _uiState.value.copy(isDownloading = false, downloadProgress = 1f, downloadedFile = file)
                 installApk(file)
             } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(isDownloading = false, error = e.message ?: "Download failed")
+                dismissDownloadNotification()
+                _uiState.value = _uiState.value.copy(isDownloading = false, downloadProgress = 0f, error = e.message ?: "Download failed")
             }
         }
     }
@@ -120,8 +171,22 @@ class UpdateViewModel(application: Application) : AndroidViewModel(application) 
         if (!response.isSuccessful) {
             throw Exception("Server returned ${response.code}")
         }
+        val contentLength = response.body.contentLength()
+        val buffer = ByteArray(8192)
+        var bytesRead: Long = 0
         apkFile.outputStream().use { output ->
-            response.body.byteStream().use { input -> input.copyTo(output) }
+            response.body.byteStream().use { input ->
+                var read: Int
+                while (input.read(buffer).also { read = it } != -1) {
+                    output.write(buffer, 0, read)
+                    bytesRead += read
+                    if (contentLength > 0) {
+                        val progress = (bytesRead.toFloat() / contentLength).coerceIn(0f, 1f)
+                        _uiState.value = _uiState.value.copy(downloadProgress = progress)
+                        showDownloadNotification((progress * 100).toInt(), 100)
+                    }
+                }
+            }
         }
         apkFile
     }

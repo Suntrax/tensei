@@ -62,6 +62,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
@@ -1582,7 +1583,7 @@ private fun AboutSettingsPage(
             val error = updateState.error
             val statusText = when {
                 isChecking -> "Checking..."
-                isDownloading -> "Downloading..."
+                isDownloading -> "Downloading ${(updateState.downloadProgress * 100).toInt()}%"
                 error != null -> error
                 release != null -> {
                     val tag = release.tagName.removePrefix("v")
@@ -1619,12 +1620,27 @@ private fun AboutSettingsPage(
                     Text("Check for Updates", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
                     Text(statusText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
                 }
-                if (isChecking || isDownloading) {
+                if (isChecking) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(24.dp),
                         strokeWidth = 2.dp,
                         color = MaterialTheme.colorScheme.primary
                     )
+                } else if (isDownloading) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        LinearProgressIndicator(
+                            progress = { updateState.downloadProgress },
+                            modifier = Modifier.width(80.dp).height(4.dp),
+                            color = MaterialTheme.colorScheme.primary,
+                            trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            "${(updateState.downloadProgress * 100).toInt()}%",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 } else {
                     Button(
                         onClick = {
