@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -46,6 +47,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -164,7 +166,7 @@ fun SearchScreen(
     var results by remember { mutableStateOf<List<ExploreAnime>>(emptyList()) }
     var isSearching by remember { mutableStateOf(false) }
     var hasSearched by remember { mutableStateOf(false) }
-    var showFilters by remember { mutableStateOf(true) }
+    var showFilters by remember { mutableStateOf(false) }
     var showFormatDropdown by remember { mutableStateOf(false) }
     var showStatusDropdown by remember { mutableStateOf(false) }
     var showSeasonDropdown by remember { mutableStateOf(false) }
@@ -311,7 +313,7 @@ fun SearchScreen(
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 16.dp, top = 22.dp),
+                modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 16.dp, top = 36.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = { keyboardController?.hide(); onClose() }) {
@@ -321,7 +323,7 @@ fun SearchScreen(
             }
 
             Card(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                 shape = RoundedCornerShape(14.dp),
                 colors = CardDefaults.cardColors(containerColor = if (isOled) Color(0xFF1A1A1A) else Color(0xFF2A2A2A))
             ) {
@@ -362,7 +364,9 @@ fun SearchScreen(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(
-                    modifier = Modifier.clickable { showFilters = !showFilters },
+                    modifier = Modifier
+                        .clickable { showFilters = !showFilters }
+                        .padding(vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(Icons.Default.FilterList, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
@@ -376,7 +380,7 @@ fun SearchScreen(
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Icon(
-                        if (showFilters) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        if (showFilters) Icons.Default.ExpandMore else Icons.Default.ChevronRight,
                         contentDescription = "Toggle filters",
                         tint = Color.White.copy(alpha = 0.5f),
                         modifier = Modifier.size(20.dp)
@@ -401,13 +405,14 @@ fun SearchScreen(
                 }
             }
 
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
+            AnimatedVisibility(visible = showFilters) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                    .heightIn(max = 320.dp)
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp)
-                    .height(320.dp)
-            ) {
+                        .padding(horizontal = 16.dp)
+                ) {
                     Spacer(modifier = Modifier.height(4.dp))
 
                     FilterRow(
@@ -466,6 +471,7 @@ fun SearchScreen(
 
                     Spacer(modifier = Modifier.height(8.dp))
                 }
+            }
 
             if (isSearching) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
