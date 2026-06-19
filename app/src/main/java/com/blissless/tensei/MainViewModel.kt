@@ -98,20 +98,53 @@ class MainViewModel : ViewModel() {
     fun getPreFetchedExtensionData(animeId: Int): PreFetchedExtensionData? =
         _preFetchedExtensionData[animeId]
 
-    fun preFetchExtensionEpisodes(anime: AnimeMedia) {
+    private val _preFetchedEpisodeNumbers = MutableStateFlow<Map<Int, Set<Int>>>(emptyMap())
+    val preFetchedEpisodeNumbers: StateFlow<Map<Int, Set<Int>>> = _preFetchedEpisodeNumbers.asStateFlow()
+
+    private val _availableExtensions = MutableStateFlow<List<Pair<String, String>>>(emptyList())
+    val availableExtensions: StateFlow<List<Pair<String, String>>> = _availableExtensions.asStateFlow()
+
+    fun loadAvailableExtensions() {
         viewModelScope.launch(Dispatchers.IO) {
-            _preFetchedExtensionData.remove(anime.id)
-
-            val defaultPkg = defaultExtensionPackage.value
-            if (defaultPkg.isEmpty()) return@launch
-
             val sm = sourceManager ?: return@launch
-
             if (sm.getSources().isEmpty()) {
                 sm.loadSources()
             }
+            _availableExtensions.value = sm.getSources().map {
+                it.extension.name.removePrefix("Aniyomi: ") to it.extension.packageName
+            }.distinctBy { it.second }
+        }
+    }
+
+    fun preFetchExtensionEpisodes(anime: AnimeMedia, packageName: String? = null) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _preFetchedExtensionData.remove(anime.id)
+            _preFetchedEpisodeNumbers.value = _preFetchedEpisodeNumbers.value - anime.id
+
+            val pkg = packageName ?: defaultExtensionPackage.value
+            if (pkg.isEmpty()) {
+                _preFetchedEpisodeNumbers.value = _preFetchedEpisodeNumbers.value + (anime.id to emptySet())
+                return@launch
+            }
+
+            val sm = sourceManager
+            if (sm == null) {
+                _preFetchedEpisodeNumbers.value = _preFetchedEpisodeNumbers.value + (anime.id to emptySet())
+                return@launch
+            }
+
+            if (sm.getSources().isEmpty()) {
+                try { sm.loadSources() } catch (_: Exception) {
+                    _preFetchedEpisodeNumbers.value = _preFetchedEpisodeNumbers.value + (anime.id to emptySet())
+                    return@launch
+                }
+            }
             val allSources = sm.getSources()
-            val sw = allSources.find { it.extension.packageName == defaultPkg } ?: return@launch
+            val sw = allSources.find { it.extension.packageName == pkg }
+            if (sw == null) {
+                _preFetchedEpisodeNumbers.value = _preFetchedEpisodeNumbers.value + (anime.id to emptySet())
+                return@launch
+            }
             val source = sw.source
 
             val searchTerms = listOfNotNull(anime.titleEnglish, anime.title).distinct()
@@ -127,7 +160,11 @@ class MainViewModel : ViewModel() {
                 } catch (_: Exception) { }
             }
 
-            val sAnime = matchedSAnime ?: return@launch
+            val sAnime = matchedSAnime
+            if (sAnime == null) {
+                _preFetchedEpisodeNumbers.value = _preFetchedEpisodeNumbers.value + (anime.id to emptySet())
+                return@launch
+            }
 
             val sEpisodes = try {
                 source.getEpisodeList(sAnime)
@@ -137,9 +174,9 @@ class MainViewModel : ViewModel() {
                     source.getEpisodeList(details)
                 } catch (_: Exception) { emptyList() }
             }
-            if (sEpisodes.isEmpty()) return@launch
 
             _preFetchedExtensionData[anime.id] = PreFetchedExtensionData(source, sAnime, sEpisodes)
+            _preFetchedEpisodeNumbers.value = _preFetchedEpisodeNumbers.value + (anime.id to sEpisodes.map { it.episode_number.toInt() }.toSet())
         }
     }
 

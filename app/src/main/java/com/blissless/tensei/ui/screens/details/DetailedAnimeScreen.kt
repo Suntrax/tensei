@@ -167,6 +167,7 @@ fun DetailedAnimeScreen(
     isLocalFavorite: Boolean = false,
     simplifyEpisodeMenu: Boolean = false,
     onDismiss: () -> Unit,
+    onNavigateBack: () -> Unit = onDismiss,
     onSwipeToClose: () -> Unit = {},
     onPlayEpisode: (Int, String?) -> Unit = { _, _ -> },
     onUpdateStatus: (String?) -> Unit = {},
@@ -441,7 +442,7 @@ fun DetailedAnimeScreen(
     }
 
     Dialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = onNavigateBack,
         properties = DialogProperties(
             usePlatformDefaultWidth = false,
             decorFitsSystemWindows = false,

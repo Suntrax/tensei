@@ -259,6 +259,21 @@ fun RichEpisodeScreen(
     val scope = rememberCoroutineScope()
     val downloadsInfo by viewModel.episodeDownloadManager.downloadsInfo.collectAsState()
 
+    // Extension matching state
+    val availableExtensions by viewModel.availableExtensions.collectAsState()
+    val defaultPkg by viewModel.defaultExtensionPackage.collectAsState()
+    var selectedExtensionPkg by remember { mutableStateOf(if (defaultPkg.isNotEmpty()) defaultPkg else null) }
+    var extensionEpisodesNumbers by remember { mutableStateOf<Set<Int>>(emptySet()) }
+    var hasExtensionData by remember { mutableStateOf(false) }
+    var isLoadingExtensionEpisodes by remember { mutableStateOf(false) }
+
+    // Sync selectedExtensionPkg with default when it becomes available
+    LaunchedEffect(defaultPkg) {
+        if (defaultPkg.isNotEmpty() && selectedExtensionPkg == null) {
+            selectedExtensionPkg = defaultPkg
+        }
+    }
+
     // Animation states for entry
     var isVisible by remember { mutableStateOf(false) }
     val slideOffset = remember { Animatable(1000f) }
@@ -292,9 +307,22 @@ fun RichEpisodeScreen(
         isVisible = true
     }
 
-    // Filter episodes to match the AniList progress count
-    val displayEpisodes = remember(tmdbEpisodes, episodeCount) {
-        tmdbEpisodes.filter { it.episode <= episodeCount }
+    // Filter episodes to match the AniList progress count and extension availability
+    val displayEpisodes = remember(tmdbEpisodes, episodeCount, extensionEpisodesNumbers, hasExtensionData) {
+        val base = tmdbEpisodes.filter { it.episode <= episodeCount }
+        if (hasExtensionData) {
+            base.filter { it.episode in extensionEpisodesNumbers }
+        } else {
+            base
+        }
+    }
+
+    val availableEpisodeNumbers = remember(episodeCount, extensionEpisodesNumbers, hasExtensionData) {
+        if (hasExtensionData) {
+            (1..episodeCount).filter { it in extensionEpisodesNumbers }
+        } else {
+            (1..episodeCount).toList()
+        }
     }
 
     val windowInfo = LocalWindowInfo.current
@@ -387,20 +415,42 @@ fun RichEpisodeScreen(
         }
     }
 
-    // Pre-fetch extension episodes via default extension for faster playback
+    // Load available extensions and pre-fetch extension episodes for faster playback
     LaunchedEffect(anime.id) {
-        viewModel.preFetchExtensionEpisodes(anime)
+        viewModel.loadAvailableExtensions()
     }
 
     // Scroll to current episode (next to watch or last watched) with smooth animation
     LaunchedEffect(currentProgress, episodeCount, isLoadingEpisodes) {
         if (!isLoadingEpisodes) {
-            // Wait a bit for layout to settle
             delay(300)
             val scrollIndex = if (currentProgress < episodeCount) currentProgress else currentProgress - 1
             if (scrollIndex >= 0) {
                 listState.animateScrollToItem(scrollIndex)
             }
+        }
+    }
+
+    // Watch for extension episode numbers
+    val preFetchedNumbers by viewModel.preFetchedEpisodeNumbers.collectAsState()
+    LaunchedEffect(preFetchedNumbers, anime.id) {
+        val numbers = preFetchedNumbers[anime.id]
+        if (numbers != null) {
+            extensionEpisodesNumbers = numbers
+            hasExtensionData = true
+            isLoadingExtensionEpisodes = false
+        }
+    }
+
+    // Re-fetch when user selects a specific extension (null = show nothing)
+    LaunchedEffect(selectedExtensionPkg) {
+        if (selectedExtensionPkg != null) {
+            isLoadingExtensionEpisodes = true
+            viewModel.preFetchExtensionEpisodes(anime, selectedExtensionPkg)
+        } else {
+            extensionEpisodesNumbers = emptySet()
+            hasExtensionData = true
+            isLoadingExtensionEpisodes = false
         }
     }
 
@@ -519,6 +569,34 @@ fun RichEpisodeScreen(
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                         HorizontalDivider(color = if (isOled) Color.White.copy(alpha = 0.1f) else MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
+                        if (availableExtensions.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 16.dp)) {
+                                Text("Source:", style = MaterialTheme.typography.labelSmall, color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    items(availableExtensions.size) { i ->
+                                        val (extName, extPkg) = availableExtensions[i]
+                                        val isSelected = extPkg == selectedExtensionPkg
+                                        FilterChip(
+                                            selected = isSelected,
+                                            onClick = {
+                                                if (!isSelected) {
+                                                    selectedExtensionPkg = extPkg
+                                                }
+                                            },
+                                            label = { Text(extName, maxLines = 1, style = MaterialTheme.typography.labelSmall) },
+                                            colors = FilterChipDefaults.filterChipColors(
+                                                selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                                selectedLabelColor = if (isOled || disableMaterialColors) Color.Black else Color.White,
+                                                containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surface
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                        }
                     }
                 }
                 LazyColumn(modifier = Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(top = 8.dp, bottom = 80.dp)) {
@@ -540,8 +618,8 @@ fun RichEpisodeScreen(
                             })
                         }
                     } else if (!isLoadingEpisodes) {
-                        items(episodeCount) { index ->
-                            val episodeNum = index + 1
+                        items(availableEpisodeNumbers.size) { index ->
+                            val episodeNum = availableEpisodeNumbers[index]
                             val isWatched = episodeNum <= currentProgress
                             val isCurrent = episodeNum == currentProgress + 1
                             val hasAired = episodeNum <= released

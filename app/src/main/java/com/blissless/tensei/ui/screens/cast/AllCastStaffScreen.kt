@@ -23,7 +23,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -41,12 +41,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
 import com.blissless.tensei.MainViewModel
 import com.blissless.tensei.data.models.CharacterData
@@ -59,6 +61,7 @@ fun AllCastScreen(
     viewModel: MainViewModel,
     isOled: Boolean = false,
     onDismiss: () -> Unit,
+    onNavigateBack: () -> Unit = onDismiss,
     onCharacterClick: (Int) -> Unit,
     onAnimeClick: (Int) -> Unit
 ) {
@@ -79,7 +82,7 @@ fun AllCastScreen(
     }
 
     Dialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = onNavigateBack,
         properties = DialogProperties(
             usePlatformDefaultWidth = false,
             dismissOnBackPress = true,
@@ -98,14 +101,16 @@ fun AllCastScreen(
                     IconButton(
                         onClick = onDismiss,
                         modifier = Modifier
-                            .padding(start = 8.dp)
+                            .padding(start = 16.dp)
                             .size(40.dp)
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), CircleShape)
+                            .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                            .zIndex(10f)
                     ) {
                         Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = MaterialTheme.colorScheme.onSurface
+                            Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp)
                         )
                     }
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.align(Alignment.Center)) {
@@ -197,6 +202,7 @@ fun AllStaffScreen(
     viewModel: MainViewModel,
     isOled: Boolean = false,
     onDismiss: () -> Unit,
+    onNavigateBack: () -> Unit = onDismiss,
     onStaffClick: (Int) -> Unit,
     onAnimeClick: (Int) -> Unit
 ) {
@@ -217,7 +223,7 @@ fun AllStaffScreen(
     }
 
     Dialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = onNavigateBack,
         properties = DialogProperties(
             usePlatformDefaultWidth = false,
             dismissOnBackPress = true,
@@ -236,14 +242,16 @@ fun AllStaffScreen(
                     IconButton(
                         onClick = onDismiss,
                         modifier = Modifier
-                            .padding(start = 8.dp)
+                            .padding(start = 16.dp)
                             .size(40.dp)
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), CircleShape)
+                            .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                            .zIndex(10f)
                     ) {
                         Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = MaterialTheme.colorScheme.onSurface
+                            Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp)
                         )
                     }
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.align(Alignment.Center)) {

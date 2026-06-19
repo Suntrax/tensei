@@ -28,9 +28,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Work
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -62,6 +62,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
 import com.blissless.tensei.MainViewModel
 import com.blissless.tensei.data.models.CharacterData
@@ -194,6 +195,7 @@ fun CharacterScreen(
     viewModel: MainViewModel,
     isOled: Boolean = false,
     onDismiss: () -> Unit,
+    onNavigateBack: () -> Unit = onDismiss,
     onAnimeClick: (Int) -> Unit,
     onCharacterClick: ((Int) -> Unit)? = null,
     onStaffClick: ((Int) -> Unit)? = null
@@ -212,7 +214,7 @@ fun CharacterScreen(
     }
 
     Dialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = onNavigateBack,
         properties = DialogProperties(
             usePlatformDefaultWidth = false,
             dismissOnBackPress = true,
@@ -253,15 +255,42 @@ fun CharacterScreen(
                             IconButton(
                                 onClick = onDismiss,
                                 modifier = Modifier
-                                    .padding(top = statusBarsPadding.calculateTopPadding() + 8.dp, start = 8.dp)
+                                    .padding(top = statusBarsPadding.calculateTopPadding() + 8.dp, start = 16.dp)
+                                    .align(Alignment.TopStart)
                                     .size(40.dp)
-                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), CircleShape)
+                                    .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                                    .zIndex(10f)
                             ) {
                                 Icon(
-                                    Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = "Back",
-                                    tint = MaterialTheme.colorScheme.onSurface
+                                    Icons.Default.Close,
+                                    contentDescription = "Close",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(24.dp)
                                 )
+                            }
+                            IconButton(
+                                onClick = {
+                                    val shareText = buildString {
+                                        char.name?.full?.let { append(it) }
+                                        append("\n\n")
+                                        append("https://anilist.co/character/${char.id}")
+                                    }
+                                    val sendIntent = Intent().apply {
+                                        action = Intent.ACTION_SEND
+                                        putExtra(Intent.EXTRA_TEXT, shareText)
+                                        type = "text/plain"
+                                    }
+                                    val shareIntent = Intent.createChooser(sendIntent, null)
+                                    context.startActivity(shareIntent)
+                                },
+                                modifier = Modifier
+                                    .padding(top = statusBarsPadding.calculateTopPadding() + 8.dp, end = 16.dp)
+                                    .align(Alignment.TopEnd)
+                                    .size(40.dp)
+                                    .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                                    .zIndex(10f)
+                            ) {
+                                Icon(Icons.Default.Share, contentDescription = "Share", tint = Color.White, modifier = Modifier.size(24.dp))
                             }
                         }
                     }
@@ -439,6 +468,7 @@ fun StaffScreen(
     viewModel: MainViewModel,
     isOled: Boolean = false,
     onDismiss: () -> Unit,
+    onNavigateBack: () -> Unit = onDismiss,
     onAnimeClick: (Int) -> Unit,
     onCharacterClick: ((Int) -> Unit)? = null,
     onStaffClick: ((Int) -> Unit)? = null
@@ -462,7 +492,7 @@ fun StaffScreen(
     }
 
     Dialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = onNavigateBack,
         properties = DialogProperties(
             usePlatformDefaultWidth = false,
             dismissOnBackPress = true,
@@ -509,15 +539,42 @@ fun StaffScreen(
                             IconButton(
                                 onClick = onDismiss,
                                 modifier = Modifier
-                                    .padding(top = statusBarsPadding.calculateTopPadding() + 8.dp, start = 8.dp)
+                                    .padding(top = statusBarsPadding.calculateTopPadding() + 8.dp, start = 16.dp)
+                                    .align(Alignment.TopStart)
                                     .size(40.dp)
-                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), CircleShape)
+                                    .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                                    .zIndex(10f)
                             ) {
                                 Icon(
-                                    Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = "Back",
-                                    tint = MaterialTheme.colorScheme.onSurface
+                                    Icons.Default.Close,
+                                    contentDescription = "Close",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(24.dp)
                                 )
+                            }
+                            IconButton(
+                                onClick = {
+                                    val shareText = buildString {
+                                        staffData.name?.full?.let { append(it) }
+                                        append("\n\n")
+                                        append("https://anilist.co/staff/${staffData.id}")
+                                    }
+                                    val sendIntent = Intent().apply {
+                                        action = Intent.ACTION_SEND
+                                        putExtra(Intent.EXTRA_TEXT, shareText)
+                                        type = "text/plain"
+                                    }
+                                    val shareIntent = Intent.createChooser(sendIntent, null)
+                                    context.startActivity(shareIntent)
+                                },
+                                modifier = Modifier
+                                    .padding(top = statusBarsPadding.calculateTopPadding() + 8.dp, end = 16.dp)
+                                    .align(Alignment.TopEnd)
+                                    .size(40.dp)
+                                    .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                                    .zIndex(10f)
+                            ) {
+                                Icon(Icons.Default.Share, contentDescription = "Share", tint = Color.White, modifier = Modifier.size(24.dp))
                             }
                         }
                     }

@@ -749,10 +749,11 @@ fun MainScreen(
         val currentDialog = overlayState as? OverlayState.ExploreAnimeDialog
         val firstAnime = currentDialog?.firstAnime ?: previousAnime ?: anime
         val isFirstOpen = currentDialog == null
+        val prevStates = if (currentDialog != null) currentDialog.previousStates + currentDialog else emptyList()
         // Clear the card bounds when opening the detailed screen to hide the source card
         viewModel.clearExploreAnimeCardBounds()
         viewModel.clearHomeAnimeCardBounds()
-        overlayState = OverlayState.ExploreAnimeDialog(anime = anime, firstAnime = firstAnime, isFirstOpen = isFirstOpen)
+        overlayState = OverlayState.ExploreAnimeDialog(anime = anime, firstAnime = firstAnime, isFirstOpen = isFirstOpen, previousStates = prevStates)
     }
     
     // Wrapper for callbacks that expect single parameter
@@ -760,16 +761,10 @@ fun MainScreen(
         onShowAnimeDialog(anime, null) 
     }
 
-    // Callback to clear the first anime (when closing from ExploreScreen inline dialog)
+    // Callback to pop the navigation stack (when closing from ExploreScreen inline dialog or system back)
     val onClearAnimeStack: () -> Unit = {
-        val current = overlayState as? OverlayState.ExploreAnimeDialog
-        if (current != null) {
-            if (!current.isFirstOpen && current.firstAnime != null && current.anime.id != current.firstAnime.id) {
-                overlayState = OverlayState.ExploreAnimeDialog(anime = current.firstAnime, firstAnime = current.firstAnime, isFirstOpen = false)
-            } else {
-                overlayState = OverlayState.None
-            }
-        }
+        val prev = overlayState.previousStates
+        overlayState = if (prev.isNotEmpty()) prev.last() else OverlayState.None
     }
 
     // Helper to get English title for scraping (Animekai works better with English titles)
@@ -1229,17 +1224,9 @@ fun MainScreen(
             isFavorite = isAnimeFavorite,
             initialCardBounds = viewModel.exploreAnimeCardBounds.value,
             onDismiss = {
-                val firstAnime = exploreDialog.firstAnime
-                if (firstAnime != null && exploreDialog.anime.id != firstAnime.id) {
-                    overlayState = OverlayState.ExploreAnimeDialog(
-                        anime = firstAnime,
-                        firstAnime = firstAnime,
-                        isFirstOpen = false
-                    )
-                } else {
-                    overlayState = OverlayState.None
-                }
+                overlayState = OverlayState.None
             },
+            onNavigateBack = onClearAnimeStack,
             onSwipeToClose = { overlayState = OverlayState.None },
             onPlayEpisode = { episode, _ ->
                 val animeMedia = AnimeMedia(
@@ -1359,8 +1346,12 @@ fun MainScreen(
                                     year = detailedData.year,
                                     format = detailedData.format
                                 )
-                                val firstAnime = exploreDialog.firstAnime ?: exploreDialog.anime
-                                overlayState = OverlayState.ExploreAnimeDialog(anime = newAnime, firstAnime = firstAnime, isFirstOpen = false)
+                                overlayState = OverlayState.ExploreAnimeDialog(
+                                    anime = newAnime,
+                                    firstAnime = exploreDialog.firstAnime ?: exploreDialog.anime,
+                                    isFirstOpen = false,
+                                    previousStates = exploreDialog.previousStates + exploreDialog
+                                )
                             } else {
                                 Toast.makeText(context, "Anime not found - ID: ${relation.id}", Toast.LENGTH_SHORT).show()
                             }
@@ -1374,47 +1365,37 @@ fun MainScreen(
             },
             onCharacterClick = { characterId ->
                 overlayState = OverlayState.CharacterDialog(
-                    characterId = characterId, 
-                    animeId = exploreDialog.anime.id, 
-                    previousAnime = exploreDialog.anime,
-                    previousFirstAnime = exploreDialog.firstAnime,
-                    previousIsFirstOpen = exploreDialog.isFirstOpen
+                    characterId = characterId,
+                    animeId = exploreDialog.anime.id,
+                    previousStates = exploreDialog.previousStates + exploreDialog
                 )
             },
             onStaffClick = { staffId ->
                 overlayState = OverlayState.StaffDialog(
-                    staffId = staffId, 
+                    staffId = staffId,
                     animeId = exploreDialog.anime.id,
-                    previousAnime = exploreDialog.anime,
-                    previousFirstAnime = exploreDialog.firstAnime,
-                    previousIsFirstOpen = exploreDialog.isFirstOpen
+                    previousStates = exploreDialog.previousStates + exploreDialog
                 )
             },
             onViewAllCast = {
                 overlayState = OverlayState.AllCastDialog(
-                    animeId = exploreDialog.anime.id, 
+                    animeId = exploreDialog.anime.id,
                     animeTitle = exploreDialog.anime.title,
-                    previousAnime = exploreDialog.anime,
-                    previousFirstAnime = exploreDialog.firstAnime,
-                    previousIsFirstOpen = exploreDialog.isFirstOpen
+                    previousStates = exploreDialog.previousStates + exploreDialog
                 )
             },
             onViewAllStaff = {
                 overlayState = OverlayState.AllStaffDialog(
-                    animeId = exploreDialog.anime.id, 
+                    animeId = exploreDialog.anime.id,
                     animeTitle = exploreDialog.anime.title,
-                    previousAnime = exploreDialog.anime,
-                    previousFirstAnime = exploreDialog.firstAnime,
-                    previousIsFirstOpen = exploreDialog.isFirstOpen
+                    previousStates = exploreDialog.previousStates + exploreDialog
                 )
             },
             onViewAllRelations = { animeId, title ->
                 overlayState = OverlayState.AllRelationsDialog(
-                    animeId = animeId, 
+                    animeId = animeId,
                     animeTitle = title,
-                    previousAnime = exploreDialog.anime,
-                    previousFirstAnime = exploreDialog.firstAnime,
-                    previousIsFirstOpen = exploreDialog.isFirstOpen
+                    previousStates = exploreDialog.previousStates + exploreDialog
                 )
             },
             preferEnglishTitles = preferEnglishTitles,
@@ -1443,6 +1424,7 @@ fun MainScreen(
             isFavorite = isAnimeFavorite,
             initialCardBounds = currentCardBounds,
             onDismiss = { showDetailedAnimeScreen = false },
+            onNavigateBack = { showDetailedAnimeScreen = false },
             onSwipeToClose = { showDetailedAnimeScreen = false },
             onPlayEpisode = { episode, _ ->
                 onPlayEpisode(selectedAnimeState!!, episode, null)
@@ -1514,25 +1496,19 @@ fun MainScreen(
             },
             onCharacterClick = { characterId ->
                 overlayState = OverlayState.CharacterDialog(
-                    characterId = characterId, 
-                    animeId = selectedAnimeState!!.id, 
-                    previousAnime = null,
-                    previousFirstAnime = null,
-                    previousIsFirstOpen = false
+                    characterId = characterId,
+                    animeId = selectedAnimeState!!.id
                 )
             },
             onStaffClick = { staffId ->
                 overlayState = OverlayState.StaffDialog(
-                    staffId = staffId, 
-                    animeId = selectedAnimeState!!.id,
-                    previousAnime = null,
-                    previousFirstAnime = null,
-                    previousIsFirstOpen = false
+                    staffId = staffId,
+                    animeId = selectedAnimeState!!.id
                 )
             },
-            onViewAllCast = { overlayState = OverlayState.AllCastDialog(animeId = selectedAnimeState!!.id, animeTitle = selectedAnimeState!!.title, previousAnime = null, previousFirstAnime = null, previousIsFirstOpen = false) },
-            onViewAllStaff = { overlayState = OverlayState.AllStaffDialog(animeId = selectedAnimeState!!.id, animeTitle = selectedAnimeState!!.title, previousAnime = null, previousFirstAnime = null, previousIsFirstOpen = false) },
-            onViewAllRelations = { animeId, title -> overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = title, previousAnime = null, previousFirstAnime = null, previousIsFirstOpen = false) },
+            onViewAllCast = { overlayState = OverlayState.AllCastDialog(animeId = selectedAnimeState!!.id, animeTitle = selectedAnimeState!!.title) },
+            onViewAllStaff = { overlayState = OverlayState.AllStaffDialog(animeId = selectedAnimeState!!.id, animeTitle = selectedAnimeState!!.title) },
+            onViewAllRelations = { animeId, title -> overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = title) },
             isLoggedIn = isLoggedIn,
             isLocalFavorite = localFavoriteIds.contains(selectedAnimeState!!.id),
             onToggleLocalFavorite = { id -> viewModel.toggleLocalFavorite(id, selectedAnimeState!!.title, selectedAnimeState!!.cover, selectedAnimeState!!.banner, selectedAnimeState!!.year, selectedAnimeState!!.averageScore) },
@@ -1572,18 +1548,10 @@ fun MainScreen(
             characterId = characterDialog.characterId,
             viewModel = viewModel,
             isOled = isOled,
-            onDismiss = { 
-                val previousAnime = characterDialog.previousAnime
-                if (previousAnime != null) {
-                    overlayState = OverlayState.ExploreAnimeDialog(
-                        anime = previousAnime,
-                        firstAnime = characterDialog.previousFirstAnime,
-                        isFirstOpen = characterDialog.previousIsFirstOpen
-                    )
-                } else {
-                    overlayState = OverlayState.None
-                }
+            onDismiss = {
+                overlayState = OverlayState.None
             },
+            onNavigateBack = onClearAnimeStack,
             onAnimeClick = { animeId ->
                 scope.launch {
                     val detailedData = viewModel.fetchDetailedAnimeData(animeId)
@@ -1611,18 +1579,14 @@ fun MainScreen(
                 overlayState = OverlayState.CharacterDialog(
                     characterId = id,
                     animeId = 0,
-                    previousAnime = characterDialog.previousAnime,
-                    previousFirstAnime = characterDialog.previousFirstAnime,
-                    previousIsFirstOpen = characterDialog.previousIsFirstOpen
+                    previousStates = characterDialog.previousStates + characterDialog
                 )
             },
             onStaffClick = { id ->
                 overlayState = OverlayState.StaffDialog(
                     staffId = id,
                     animeId = 0,
-                    previousAnime = characterDialog.previousAnime,
-                    previousFirstAnime = characterDialog.previousFirstAnime,
-                    previousIsFirstOpen = characterDialog.previousIsFirstOpen
+                    previousStates = characterDialog.previousStates + characterDialog
                 )
             }
         )
@@ -1635,18 +1599,10 @@ fun MainScreen(
             staffId = staffDialog.staffId,
             viewModel = viewModel,
             isOled = isOled,
-            onDismiss = { 
-                val previousAnime = staffDialog.previousAnime
-                if (previousAnime != null) {
-                    overlayState = OverlayState.ExploreAnimeDialog(
-                        anime = previousAnime,
-                        firstAnime = staffDialog.previousFirstAnime,
-                        isFirstOpen = staffDialog.previousIsFirstOpen
-                    )
-                } else {
-                    overlayState = OverlayState.None
-                }
+            onDismiss = {
+                overlayState = OverlayState.None
             },
+            onNavigateBack = onClearAnimeStack,
             onAnimeClick = { animeId ->
                 scope.launch {
                     val detailedData = viewModel.fetchDetailedAnimeData(animeId)
@@ -1674,18 +1630,14 @@ fun MainScreen(
                 overlayState = OverlayState.CharacterDialog(
                     characterId = id,
                     animeId = 0,
-                    previousAnime = staffDialog.previousAnime,
-                    previousFirstAnime = staffDialog.previousFirstAnime,
-                    previousIsFirstOpen = staffDialog.previousIsFirstOpen
+                    previousStates = staffDialog.previousStates + staffDialog
                 )
             },
             onStaffClick = { id ->
                 overlayState = OverlayState.StaffDialog(
                     staffId = id,
                     animeId = 0,
-                    previousAnime = staffDialog.previousAnime,
-                    previousFirstAnime = staffDialog.previousFirstAnime,
-                    previousIsFirstOpen = staffDialog.previousIsFirstOpen
+                    previousStates = staffDialog.previousStates + staffDialog
                 )
             }
         )
@@ -1699,26 +1651,15 @@ fun MainScreen(
             animeTitle = allCastDialog.animeTitle,
             viewModel = viewModel,
             isOled = isOled,
-            onDismiss = { 
-                val previousAnime = allCastDialog.previousAnime
-                if (previousAnime != null) {
-                    overlayState = OverlayState.ExploreAnimeDialog(
-                        anime = previousAnime,
-                        firstAnime = allCastDialog.previousFirstAnime,
-                        isFirstOpen = allCastDialog.previousIsFirstOpen
-                    )
-                } else {
-                    overlayState = OverlayState.None
-                }
+            onDismiss = {
+                overlayState = OverlayState.None
             },
+            onNavigateBack = onClearAnimeStack,
             onCharacterClick = { characterId ->
-                val previousAnime = allCastDialog.previousAnime
                 overlayState = OverlayState.CharacterDialog(
-                    characterId = characterId, 
-                    animeId = allCastDialog.animeId, 
-                    previousAnime = previousAnime,
-                    previousFirstAnime = allCastDialog.previousFirstAnime,
-                    previousIsFirstOpen = allCastDialog.previousIsFirstOpen
+                    characterId = characterId,
+                    animeId = allCastDialog.animeId,
+                    previousStates = allCastDialog.previousStates + allCastDialog
                 )
             },
             onAnimeClick = { animeId ->
@@ -1755,26 +1696,15 @@ fun MainScreen(
             animeTitle = allStaffDialog.animeTitle,
             viewModel = viewModel,
             isOled = isOled,
-            onDismiss = { 
-                val previousAnime = allStaffDialog.previousAnime
-                if (previousAnime != null) {
-                    overlayState = OverlayState.ExploreAnimeDialog(
-                        anime = previousAnime,
-                        firstAnime = allStaffDialog.previousFirstAnime,
-                        isFirstOpen = allStaffDialog.previousIsFirstOpen
-                    )
-                } else {
-                    overlayState = OverlayState.None
-                }
+            onDismiss = {
+                overlayState = OverlayState.None
             },
+            onNavigateBack = onClearAnimeStack,
             onStaffClick = { staffId ->
-                val previousAnime = allStaffDialog.previousAnime
                 overlayState = OverlayState.StaffDialog(
-                    staffId = staffId, 
+                    staffId = staffId,
                     animeId = allStaffDialog.animeId,
-                    previousAnime = previousAnime,
-                    previousFirstAnime = allStaffDialog.previousFirstAnime,
-                    previousIsFirstOpen = allStaffDialog.previousIsFirstOpen
+                    previousStates = allStaffDialog.previousStates + allStaffDialog
                 )
             },
             onAnimeClick = { animeId ->
@@ -1829,18 +1759,10 @@ fun MainScreen(
             animeTitle = allRelationsDialog.animeTitle,
             viewModel = viewModel,
             isOled = isOled,
-            onDismiss = { 
-                val previousAnime = allRelationsDialog.previousAnime
-                if (previousAnime != null) {
-                    overlayState = OverlayState.ExploreAnimeDialog(
-                        anime = previousAnime,
-                        firstAnime = allRelationsDialog.previousFirstAnime,
-                        isFirstOpen = allRelationsDialog.previousIsFirstOpen
-                    )
-                } else {
-                    overlayState = OverlayState.None
-                }
+            onDismiss = {
+                overlayState = OverlayState.None
             },
+            onNavigateBack = onClearAnimeStack,
             onAnimeClick = { animeId ->
                 scope.launch {
                     val detailedData = viewModel.fetchDetailedAnimeData(animeId)
@@ -2037,19 +1959,19 @@ fun MainScreen(
                             onClearAnimeStack = onClearAnimeStack,
                             onAnimeDialogOpen = { isOpen -> scheduleDialogOpen = isOpen },
                             onCharacterClick = { characterId ->
-                                overlayState = OverlayState.CharacterDialog(characterId = characterId, animeId = 0, previousAnime = null)
+                                overlayState = OverlayState.CharacterDialog(characterId = characterId, animeId = 0)
                             },
                             onStaffClick = { staffId ->
-                                overlayState = OverlayState.StaffDialog(staffId = staffId, animeId = 0, previousAnime = null)
+                                overlayState = OverlayState.StaffDialog(staffId = staffId, animeId = 0)
                             },
                             onViewAllCast = { animeId, animeTitle ->
-                                overlayState = OverlayState.AllCastDialog(animeId = animeId, animeTitle = animeTitle, previousAnime = null)
+                                overlayState = OverlayState.AllCastDialog(animeId = animeId, animeTitle = animeTitle)
                             },
                             onViewAllStaff = { animeId, animeTitle ->
-                                overlayState = OverlayState.AllStaffDialog(animeId = animeId, animeTitle = animeTitle, previousAnime = null)
+                                overlayState = OverlayState.AllStaffDialog(animeId = animeId, animeTitle = animeTitle)
                             },
                             onViewAllRelations = { animeId, animeTitle ->
-                                overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = animeTitle, previousAnime = null)
+                                overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = animeTitle)
                             },
                         )
                         1 -> ExploreScreen(
@@ -2097,16 +2019,16 @@ fun MainScreen(
                                 overlayState = OverlayState.CharacterDialog(characterId = characterId, animeId = 0)
                             },
                             onStaffClick = { staffId ->
-                                overlayState = OverlayState.StaffDialog(staffId = staffId, animeId = 0, previousAnime = null)
+                                overlayState = OverlayState.StaffDialog(staffId = staffId, animeId = 0)
                             },
                             onViewAllCast = { animeId, animeTitle ->
-                                overlayState = OverlayState.AllCastDialog(animeId = animeId, animeTitle = animeTitle, previousAnime = null)
+                                overlayState = OverlayState.AllCastDialog(animeId = animeId, animeTitle = animeTitle)
                             },
                             onViewAllStaff = { animeId, animeTitle ->
-                                overlayState = OverlayState.AllStaffDialog(animeId = animeId, animeTitle = animeTitle, previousAnime = null)
+                                overlayState = OverlayState.AllStaffDialog(animeId = animeId, animeTitle = animeTitle)
                             },
                             onViewAllRelations = { animeId, animeTitle ->
-                                overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = animeTitle, previousAnime = null)
+                                overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = animeTitle)
                             },
                             onSearchClick = { showSearchScreen = true },
                             localAnimeStatus = localAnimeStatus
@@ -2259,19 +2181,19 @@ fun MainScreen(
                             overlayState = OverlayState.CharacterDialog(characterId = characterId, animeId = 0)
                         },
                         onStaffClick = { staffId ->
-                            overlayState = OverlayState.StaffDialog(staffId = staffId, animeId = 0, previousAnime = null)
-                        },
-                        onViewAllCast = { animeId, animeTitle ->
-                            overlayState = OverlayState.AllCastDialog(animeId = animeId, animeTitle = animeTitle, previousAnime = null)
-                        },
-                        onViewAllStaff = { animeId, animeTitle ->
-                            overlayState = OverlayState.AllStaffDialog(animeId = animeId, animeTitle = animeTitle, previousAnime = null)
-                        },
-                        onViewAllRelations = { animeId, animeTitle ->
-                            overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = animeTitle, previousAnime = null)
-                        }
-                    )
-                }
+                                overlayState = OverlayState.StaffDialog(staffId = staffId, animeId = 0)
+                            },
+                            onViewAllCast = { animeId, animeTitle ->
+                                overlayState = OverlayState.AllCastDialog(animeId = animeId, animeTitle = animeTitle)
+                            },
+                            onViewAllStaff = { animeId, animeTitle ->
+                                overlayState = OverlayState.AllStaffDialog(animeId = animeId, animeTitle = animeTitle)
+                            },
+                            onViewAllRelations = { animeId, animeTitle ->
+                                overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = animeTitle)
+                            }
+                        )
+                    }
 
                 if (isLoadingStream) {
                     Box(
