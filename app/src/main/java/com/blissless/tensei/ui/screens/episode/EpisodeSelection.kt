@@ -15,6 +15,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,6 +39,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -267,6 +269,11 @@ fun RichEpisodeScreen(
     var hasExtensionData by remember { mutableStateOf(false) }
     var isLoadingExtensionEpisodes by remember { mutableStateOf(false) }
 
+    val sortedExtensions = remember(availableExtensions, selectedExtensionPkg) {
+        val selected = selectedExtensionPkg
+        availableExtensions.sortedWith(compareBy<Pair<String, String>> { if (it.second == selected) 0 else 1 }.thenBy { it.first })
+    }
+
     // Sync selectedExtensionPkg with default when it becomes available
     LaunchedEffect(defaultPkg) {
         if (defaultPkg.isNotEmpty() && selectedExtensionPkg == null) {
@@ -422,11 +429,11 @@ fun RichEpisodeScreen(
 
     // Scroll to current episode (next to watch or last watched) with smooth animation
     LaunchedEffect(currentProgress, episodeCount, isLoadingEpisodes) {
-        if (!isLoadingEpisodes) {
+        if (!isLoadingEpisodes && currentProgress > 0) {
             delay(300)
             val scrollIndex = if (currentProgress < episodeCount) currentProgress else currentProgress - 1
             if (scrollIndex >= 0) {
-                listState.animateScrollToItem(scrollIndex)
+                listState.animateScrollToItem(scrollIndex + 1) // +1 for header item
             }
         }
     }
@@ -469,11 +476,13 @@ fun RichEpisodeScreen(
                 .background(if (isOled) Color.Black else MaterialTheme.colorScheme.background)
                 .nestedScroll(nestedScrollConnection)
         ) {
-            if (!anime.banner.isNullOrEmpty() || anime.cover.isNotEmpty()) {
+            // Compact banner overlay with anime info
+            val hasBanner = !anime.banner.isNullOrEmpty() || anime.cover.isNotEmpty()
+            if (hasBanner) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(200.dp)
+                        .height(170.dp)
                         .pointerInput(Unit) {
                             detectVerticalDragGestures(
                                 onDragEnd = { scope.launch { handleDragEnd() } },
@@ -492,15 +501,35 @@ fun RichEpisodeScreen(
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
                     )
-                    Box(modifier = Modifier.fillMaxWidth().height(200.dp).background(Brush.verticalGradient(colors = listOf(Color.Transparent, if (isOled) Color.Black else MaterialTheme.colorScheme.background))))
+                    Box(modifier = Modifier.fillMaxWidth().height(170.dp).background(Brush.verticalGradient(colors = listOf(Color.Transparent, if (isOled) Color.Black else MaterialTheme.colorScheme.background))))
+                    Row(
+                        modifier = Modifier.align(Alignment.BottomStart).padding(start = 14.dp, end = 14.dp, bottom = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        AsyncImage(
+                            model = anime.cover,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.width(40.dp).height(56.dp).clip(RoundedCornerShape(6.dp))
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(text = anime.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis, color = Color.White)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(text = "Progress: $currentProgress / ${if (total > 0) total else "??"}", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.8f))
+                            if (released > 0) {
+                                Text(text = if (released == 1) "$released episode" else "$released episodes", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.6f))
+                            }
+                        }
+                    }
                 }
             }
 
             IconButton(
                 onClick = onDismiss,
                 modifier = Modifier
-                    .padding(top = statusBarsPadding.calculateTopPadding() + 8.dp, start = 16.dp)
                     .align(Alignment.TopStart)
+                    .padding(top = statusBarsPadding.calculateTopPadding() + 12.dp, start = 16.dp)
                     .size(40.dp)
                     .background(Color.Black.copy(alpha = 0.6f), CircleShape)
                     .zIndex(10f)
@@ -512,8 +541,8 @@ fun RichEpisodeScreen(
                 IconButton(
                     onClick = onDownloadClick,
                     modifier = Modifier
-                        .padding(top = statusBarsPadding.calculateTopPadding() + 8.dp, end = 16.dp)
                         .align(Alignment.TopEnd)
+                        .padding(top = statusBarsPadding.calculateTopPadding() + 12.dp, end = 16.dp)
                         .size(40.dp)
                         .background(Color.Black.copy(alpha = 0.6f), CircleShape)
                         .zIndex(10f)
@@ -521,132 +550,161 @@ fun RichEpisodeScreen(
                     Icon(Icons.Default.Download, contentDescription = "Download", tint = Color.White, modifier = Modifier.size(24.dp))
                 }
             }
+
             Box(modifier = Modifier
                 .align(Alignment.TopCenter)
-                .padding(top = statusBarsPadding.calculateTopPadding() + 8.dp)
-                .width(40.dp).height(4.dp)
+                .padding(top = statusBarsPadding.calculateTopPadding() + 12.dp)
+                .width(36.dp).height(4.dp)
                 .background(Color.White.copy(alpha = 0.3f), RoundedCornerShape(2.dp)).zIndex(5f))
-            if (isLoadingEpisodes) { CircularProgressIndicator(modifier = Modifier.align(Alignment.TopCenter).padding(top = statusBarsPadding.calculateTopPadding() + 60.dp).zIndex(10f), color = MaterialTheme.colorScheme.primary) }
 
-            Column(modifier = Modifier
-                .fillMaxSize()
-                .padding(
-                    top = 160.dp + statusBarsPadding.calculateTopPadding(),
+            if (isLoadingEpisodes) {
+                CircularProgressIndicator(
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = statusBarsPadding.calculateTopPadding() + 64.dp).zIndex(10f),
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            // Scrollable content: chips + episodes in one LazyColumn
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().padding(
+                    top = (if (hasBanner) 150.dp + statusBarsPadding.calculateTopPadding() else statusBarsPadding.calculateTopPadding()),
                     bottom = navigationBarsPadding.calculateBottomPadding()
-                )) {
-                Surface(modifier = Modifier.fillMaxWidth(), color = Color.Transparent) {
-                    Column(
-                        modifier = Modifier
-                            .padding(horizontal = 16.dp)
-                            .pointerInput(Unit) {
-                                detectVerticalDragGestures(
-                                    onDragEnd = { scope.launch { handleDragEnd() } },
-                                    onVerticalDrag = { _, dragAmount ->
-                                        scope.launch {
-                                            val multiplier = 3.0f
-                                            offsetY.snapTo((offsetY.value + (dragAmount * multiplier)).coerceAtLeast(0f))
-                                        }
-                                    }
+                ),
+                state = listState
+            ) {
+                // Header section (scrolls away)
+                item {
+                    Column {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        // Extension selector
+                        if (availableExtensions.isNotEmpty()) {
+                            Row(
+                                modifier = Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text("Source:", style = MaterialTheme.typography.labelSmall, color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant)
+                                sortedExtensions.forEach { (extName, extPkg) ->
+                                    FilterChip(
+                                        selected = extPkg == selectedExtensionPkg,
+                                        onClick = { if (extPkg != selectedExtensionPkg) selectedExtensionPkg = extPkg },
+                                        label = { Text(extName, maxLines = 1, style = MaterialTheme.typography.labelSmall) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                            selectedLabelColor = if (isOled || disableMaterialColors) Color.Black else Color.White,
+                                            containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surface
+                                        )
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+                        // Navigation chips
+                        Row(
+                            modifier = Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            val nextEp = currentProgress + 1
+                            if (nextEp <= released) {
+                                FilterChip(
+                                    selected = true,
+                                    onClick = { onEpisodeSelect(nextEp, null) },
+                                    label = { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.PlayArrow, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("Resume Ep $nextEp") } },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                        selectedLabelColor = if (isOled || disableMaterialColors) Color.Black else Color.White
+                                    )
                                 )
                             }
-                    ) {
-                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            AsyncImage(model = anime.cover, contentDescription = anime.title, contentScale = ContentScale.Crop, modifier = Modifier.width(60.dp).height(85.dp).clip(RoundedCornerShape(8.dp)))
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(text = anime.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis, color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground)
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(text = "Progress: $currentProgress / ${if (total > 0) total else "??"}", style = MaterialTheme.typography.bodySmall, color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant)
-                                if (released > 0) { Text(text = if (released == 1) "$released episode aired" else "$released episodes aired", style = MaterialTheme.typography.bodySmall, color = if (isOled) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant) }
+                            FilterChip(
+                                selected = false,
+                                onClick = { scope.launch { listState.animateScrollToItem(1) } },
+                                label = { Text("Ep 1") },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surface
+                                )
+                            )
+                            if (released > 1) {
+                                FilterChip(
+                                    selected = false,
+                                    onClick = { scope.launch { listState.animateScrollToItem(released) } },
+                                    label = { Text("Latest: Ep $released") },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surface
+                                    )
+                                )
                             }
-                        }
-                        Spacer(modifier = Modifier.height(12.dp))
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            val nextEp = currentProgress + 1
-                            if (nextEp <= released) { item { FilterChip(selected = true, onClick = { onEpisodeSelect(nextEp, null) }, label = { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.PlayArrow, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("Resume Ep $nextEp") } }, colors = FilterChipDefaults.filterChipColors(selectedContainerColor = MaterialTheme.colorScheme.primary, selectedLabelColor = if (isOled || disableMaterialColors) Color.Black else Color.White)) } }
-                            item { FilterChip(selected = false, onClick = { scope.launch { listState.animateScrollToItem(0) } }, label = { Text("Ep 1") }, colors = FilterChipDefaults.filterChipColors(containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surface)) }
-                            if (released > 1) { item { FilterChip(selected = false, onClick = { scope.launch { listState.animateScrollToItem(released - 1) } }, label = { Text("Latest: Ep $released") }, colors = FilterChipDefaults.filterChipColors(containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surface)) } }
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                         HorizontalDivider(color = if (isOled) Color.White.copy(alpha = 0.1f) else MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
-                        if (availableExtensions.isNotEmpty()) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 16.dp)) {
-                                Text("Source:", style = MaterialTheme.typography.labelSmall, color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    items(availableExtensions.size) { i ->
-                                        val (extName, extPkg) = availableExtensions[i]
-                                        val isSelected = extPkg == selectedExtensionPkg
-                                        FilterChip(
-                                            selected = isSelected,
-                                            onClick = {
-                                                if (!isSelected) {
-                                                    selectedExtensionPkg = extPkg
-                                                }
-                                            },
-                                            label = { Text(extName, maxLines = 1, style = MaterialTheme.typography.labelSmall) },
-                                            colors = FilterChipDefaults.filterChipColors(
-                                                selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                                selectedLabelColor = if (isOled || disableMaterialColors) Color.Black else Color.White,
-                                                containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surface
-                                            )
-                                        )
-                                    }
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(4.dp))
-                        }
                     }
                 }
-                LazyColumn(modifier = Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(top = 8.dp, bottom = 80.dp)) {
-                    if (displayEpisodes.isNotEmpty()) {
-                        items(displayEpisodes.size) { index ->
-                            val ep = displayEpisodes[index]
-                            val episodeNum = ep.episode
-                            val isWatched = episodeNum <= currentProgress
-                            val isCurrent = episodeNum == currentProgress + 1
-                            val hasAired = episodeNum <= released
-                            val downloadInfo = downloadsInfo["${anime.id}_$episodeNum"]
-                            RichTmdbEpisodeCard(episodeNumber = episodeNum, title = ep.title, description = ep.description, image = ep.image, isWatched = isWatched, isCurrent = isCurrent, hasAired = hasAired, isOled = isOled, isSelected = selectedEpisode == episodeNum, disableMaterialColors = disableMaterialColors, playbackPositions = playbackPositions, playbackDurations = playbackDurations, animeId = anime.id, downloadInfo = downloadInfo, onSelect = { selectedEpisode = episodeNum }, onPlay = {
+
+                // Episode cards
+                if (displayEpisodes.isNotEmpty()) {
+                    items(displayEpisodes.size) { index ->
+                        val ep = displayEpisodes[index]
+                        val episodeNum = ep.episode
+                        val isWatched = episodeNum <= currentProgress
+                        val isCurrent = episodeNum == currentProgress + 1
+                        val hasAired = episodeNum <= released
+                        val downloadInfo = downloadsInfo["${anime.id}_$episodeNum"]
+                        RichTmdbEpisodeCard(
+                            episodeNumber = episodeNum,
+                            title = ep.title,
+                            description = ep.description,
+                            image = ep.image,
+                            isWatched = isWatched,
+                            isCurrent = isCurrent,
+                            hasAired = hasAired,
+                            isOled = isOled,
+                            isSelected = selectedEpisode == episodeNum,
+                            disableMaterialColors = disableMaterialColors,
+                            playbackPositions = playbackPositions,
+                            playbackDurations = playbackDurations,
+                            animeId = anime.id,
+                            downloadInfo = downloadInfo,
+                            onSelect = { selectedEpisode = episodeNum },
+                            onPlay = {
                                 if (hasAired) {
                                     val title = if (ep.title.isNotEmpty() && !ep.title.startsWith("Episode", ignoreCase = true)) ep.title else "Episode $episodeNum"
                                     onEpisodeSelect(episodeNum, title)
                                 } else {
                                     Toast.makeText(context, "Episode not aired yet", Toast.LENGTH_SHORT).show()
                                 }
-                            })
-                        }
-                    } else if (!isLoadingEpisodes) {
-                        items(availableEpisodeNumbers.size) { index ->
-                            val episodeNum = availableEpisodeNumbers[index]
-                            val isWatched = episodeNum <= currentProgress
-                            val isCurrent = episodeNum == currentProgress + 1
-                            val hasAired = episodeNum <= released
-                            SimpleRichEpisodeCard(
-                                episodeNumber = episodeNum,
-                                isWatched = isWatched,
-                                isCurrent = isCurrent,
-                                hasAired = hasAired,
-                                isOled = isOled,
-                                isSelected = selectedEpisode == episodeNum,
-                                disableMaterialColors = disableMaterialColors,
-                                playbackPositions = playbackPositions,
-                                playbackDurations = playbackDurations,
-                                animeId = anime.id,
-                                onSelect = { selectedEpisode = episodeNum },
-                                onPlay = {
-                                    if (hasAired) {
-                                        onEpisodeSelect(episodeNum, "Episode $episodeNum")
-                                    } else {
-                                        Toast.makeText(context, "Episode not aired yet", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                            )
-                        }
+                            }
+                        )
                     }
-                    item { Spacer(modifier = Modifier.height(80.dp)) }
+                } else if (!isLoadingEpisodes) {
+                    items(availableEpisodeNumbers.size) { index ->
+                        val episodeNum = availableEpisodeNumbers[index]
+                        val isWatched = episodeNum <= currentProgress
+                        val isCurrent = episodeNum == currentProgress + 1
+                        val hasAired = episodeNum <= released
+                        SimpleRichEpisodeCard(
+                            episodeNumber = episodeNum,
+                            isWatched = isWatched,
+                            isCurrent = isCurrent,
+                            hasAired = hasAired,
+                            isOled = isOled,
+                            isSelected = selectedEpisode == episodeNum,
+                            disableMaterialColors = disableMaterialColors,
+                            playbackPositions = playbackPositions,
+                            playbackDurations = playbackDurations,
+                            animeId = anime.id,
+                            onSelect = { selectedEpisode = episodeNum },
+                            onPlay = {
+                                if (hasAired) {
+                                    onEpisodeSelect(episodeNum, "Episode $episodeNum")
+                                } else {
+                                    Toast.makeText(context, "Episode not aired yet", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        )
+                    }
                 }
+
+                item { Spacer(modifier = Modifier.height(80.dp)) }
             }
         }
     }
