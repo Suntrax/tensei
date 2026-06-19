@@ -27,8 +27,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -235,8 +233,6 @@ fun HomeAnimeHorizontalList(
     disableMaterialColors: Boolean = false,
     showProgressBar: Boolean = true,
     onAnimeClick: (AnimeMedia, HomeAnimeCardBounds?) -> Unit,
-    onPlayClick: (AnimeMedia) -> Unit,
-    onStatusClick: (AnimeMedia) -> Unit,
     onInfoClick: (AnimeMedia, HomeAnimeCardBounds?) -> Unit = { _, _ -> },
     listIndex: Int = 0,
     screenKey: String = "home",
@@ -343,8 +339,6 @@ fun HomeAnimeHorizontalList(
                             viewModel?.setHomeAnimeCardBounds(anime.id, anime.cover, bounds?.bounds)
                             onAnimeClick(anime, bounds)
                         },
-                        onPlayClick = { onPlayClick(anime) },
-                        onStatusClick = { onStatusClick(anime) },
                         onInfoClick = { bounds ->
                             viewModel?.setHomeAnimeCardBounds(anime.id, anime.cover, bounds?.bounds)
                             onInfoClick(anime, bounds)
@@ -369,8 +363,6 @@ fun HomeAnimeCard(
     disableMaterialColors: Boolean = false,
     showProgressBar: Boolean = true,
     onClick: (HomeAnimeCardBounds?) -> Unit,
-    onPlayClick: () -> Unit,
-    onStatusClick: () -> Unit,
     onInfoClick: (HomeAnimeCardBounds?) -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -456,7 +448,7 @@ fun HomeAnimeCard(
                 Box(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(70.dp)
                     .background(Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.9f)))))
 
-                // Top Row: Episode Counter (left) + Status/Edit Button (right)
+                // Top Row: Episode Counter (left) + Info Button (right)
                 Row(
                     modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(6.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -477,13 +469,13 @@ fun HomeAnimeCard(
                         )
                     }
 
-                    // Status/Edit Button
+                    // Info Button (top right)
                     FilledTonalIconButton(
-                        onClick = onStatusClick,
+                        onClick = { onInfoClick(cardBounds?.let { HomeAnimeCardBounds(anime.id, anime.cover, it) }) },
                         modifier = Modifier.size(32.dp),
                         shape = RoundedCornerShape(10.dp),
                         colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = Color.Black.copy(alpha = 0.6f), contentColor = Color.White)
-                    ) { Icon(imageVector = Icons.Outlined.Edit, contentDescription = "Edit Status", modifier = Modifier.size(18.dp)) }
+                    ) { Icon(imageVector = Icons.Outlined.Info, contentDescription = "Anime Info", modifier = Modifier.size(18.dp)) }
                 }
 
                 // Status indicator bar at top (under the text/buttons)
@@ -513,47 +505,6 @@ fun HomeAnimeCard(
                     }
                 }
 
-                // Bottom Row
-                Row(
-                    modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(horizontal = 6.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Info Button
-                    FilledTonalIconButton(
-                        onClick = { onInfoClick(cardBounds?.let { HomeAnimeCardBounds(anime.id, anime.cover, it) }) },
-                        modifier = Modifier.size(32.dp),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = IconButtonDefaults.filledTonalIconButtonColors(
-                            containerColor = Color.Black.copy(alpha = 0.6f),
-                            contentColor = Color.White
-                        )
-                    ) { Icon(imageVector = Icons.Outlined.Info, contentDescription = "Anime Info", modifier = Modifier.size(18.dp)) }
-
-                    Spacer(modifier = Modifier.weight(1f))
-
-                    // Play Button
-                    FilledTonalIconButton(
-                        onClick = {
-                            if (listType == "CURRENT" || listType == "PAUSED") {
-                                onPlayClick()
-                            } else {
-                                onClick(cardBounds?.let { HomeAnimeCardBounds(anime.id, anime.cover, it) })
-                            }
-                        },
-                        modifier = Modifier.size(32.dp),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = IconButtonDefaults.filledTonalIconButtonColors(
-                            containerColor = Color.Black.copy(alpha = 0.6f),
-                            contentColor = Color.White
-                        )
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.PlayArrow,
-                            contentDescription = if (listType == "CURRENT" || listType == "PAUSED") "Play next episode" else "Episodes",
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
             }
         }
         // Title - use English if preferred and available, otherwise use romaji title

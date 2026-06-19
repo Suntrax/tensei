@@ -619,6 +619,12 @@ fun MainScreen(
 
     var currentEpisodeInfo by remember { mutableStateOf<EpisodeStreams?>(null) }
     var currentEpisodeTitle by remember { mutableStateOf<String?>(null) }
+    var hasPrefetchedNextOnTracking by remember { mutableStateOf(false) }
+
+    LaunchedEffect(currentEpisode) {
+        hasPrefetchedNextOnTracking = false
+    }
+
     var currentCategory by remember { mutableStateOf("sub") }
     var currentServerName by remember { mutableStateOf("") }
     var currentServerIndex by remember { mutableIntStateOf(0) }
@@ -1931,6 +1937,10 @@ fun MainScreen(
                     val trackingPercent = viewModel.trackingPercentage.value
                     if (percentage >= trackingPercent && anime.id > 0) {
                         viewModel.updateAnimeProgress(anime.id, currentEpisode)
+                        if (!hasPrefetchedNextOnTracking && currentEpisode < released) {
+                            hasPrefetchedNextOnTracking = true
+                            prefetchExtensionNextEpisode()
+                        }
                     }
                 },
                 onPreviousEpisode = if (currentEpisode > 1) onPreviousEpisode else null,

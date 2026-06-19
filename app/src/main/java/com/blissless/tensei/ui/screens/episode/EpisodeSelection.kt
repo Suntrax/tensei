@@ -387,6 +387,11 @@ fun RichEpisodeScreen(
         }
     }
 
+    // Pre-fetch extension episodes via default extension for faster playback
+    LaunchedEffect(anime.id) {
+        viewModel.preFetchExtensionEpisodes(anime)
+    }
+
     // Scroll to current episode (next to watch or last watched) with smooth animation
     LaunchedEffect(currentProgress, episodeCount, isLoadingEpisodes) {
         if (!isLoadingEpisodes) {

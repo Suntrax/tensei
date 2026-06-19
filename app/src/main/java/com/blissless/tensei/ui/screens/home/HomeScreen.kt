@@ -427,20 +427,6 @@ fun HomeScreen(
                     LoadingSkeleton(isOled)
                 } else {
                     val onAnimeClick: (AnimeMedia, HomeAnimeCardBounds?) -> Unit = { anime, _ -> selectedAnime = anime; showEpisodeSheet = true }
-                    val onPlayClick: (AnimeMedia, String) -> Unit = { anime, listType ->
-                        if (listType == "CURRENT") {
-                            val nextEp = anime.progress + 1
-                            val released = anime.latestEpisode?.let { it - 1 } ?: anime.totalEpisodes
-                            if (anime.latestEpisode != null && nextEp > released) {
-                                Toast.makeText(context, "Episode not aired yet", Toast.LENGTH_SHORT).show()
-                            } else {
-                                onPlayEpisode(anime, nextEp, null)
-                            }
-                        } else {
-                            onPlayEpisode(anime, 1, null)
-                        }
-                    }
-                    val onStatusClick: (AnimeMedia) -> Unit = { anime -> selectedAnime = anime; showStatusDialog = true }
                     val onInfoClick: (AnimeMedia, HomeAnimeCardBounds?) -> Unit = { anime, bounds ->
                         val cardBounds = bounds?.let {
                             MainViewModel.CardBounds(anime.id, anime.cover, it.bounds)
@@ -518,8 +504,6 @@ fun HomeScreen(
                                 disableMaterialColors = disableMaterialColors,
                                 showProgressBar = false,
                                 onAnimeClick = onAnimeClick,
-                                onPlayClick = { anime -> onPlayClick(anime, "CURRENT") },
-                                onStatusClick = onStatusClick,
                                 onInfoClick = onInfoClick,
                                 listIndex = 0,
                                 screenKey = "home",
@@ -554,8 +538,6 @@ fun HomeScreen(
                                 playbackDurations = playbackDurations,
                                 disableMaterialColors = disableMaterialColors,
                                 onAnimeClick = onAnimeClick,
-                                onPlayClick = { anime -> onPlayClick(anime, "PLANNING") },
-                                onStatusClick = onStatusClick,
                                 onInfoClick = onInfoClick,
                                 listIndex = 1,
                                 screenKey = "home",
@@ -590,8 +572,6 @@ fun HomeScreen(
                                 playbackDurations = playbackDurations,
                                 disableMaterialColors = disableMaterialColors,
                                 onAnimeClick = onAnimeClick,
-                                onPlayClick = { anime -> onPlayClick(anime, "COMPLETED") },
-                                onStatusClick = onStatusClick,
                                 onInfoClick = onInfoClick,
                                 listIndex = 2,
                                 screenKey = "home",
@@ -626,8 +606,6 @@ fun HomeScreen(
                                 playbackDurations = playbackDurations,
                                 disableMaterialColors = disableMaterialColors,
                                 onAnimeClick = onAnimeClick,
-                                onPlayClick = { anime -> onPlayClick(anime, "PAUSED") },
-                                onStatusClick = onStatusClick,
                                 onInfoClick = onInfoClick,
                                 listIndex = 3,
                                 screenKey = "home",
@@ -662,8 +640,6 @@ fun HomeScreen(
                                 playbackDurations = playbackDurations,
                                 disableMaterialColors = disableMaterialColors,
                                 onAnimeClick = onAnimeClick,
-                                onPlayClick = { anime -> onPlayClick(anime, "DROPPED") },
-                                onStatusClick = onStatusClick,
                                 onInfoClick = onInfoClick,
                                 listIndex = 4,
                                 screenKey = "home",

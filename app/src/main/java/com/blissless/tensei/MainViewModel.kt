@@ -88,6 +88,61 @@ class MainViewModel : ViewModel() {
 
     fun getSourceManager(): com.blissless.tensei.stream.SourceManager? = sourceManager
 
+    data class PreFetchedExtensionData(
+        val source: AnimeCatalogueSource,
+        val sAnime: SAnime,
+        val episodes: List<SEpisode>
+    )
+    private val _preFetchedExtensionData = mutableMapOf<Int, PreFetchedExtensionData>()
+
+    fun getPreFetchedExtensionData(animeId: Int): PreFetchedExtensionData? =
+        _preFetchedExtensionData[animeId]
+
+    fun preFetchExtensionEpisodes(anime: AnimeMedia) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _preFetchedExtensionData.remove(anime.id)
+
+            val defaultPkg = defaultExtensionPackage.value
+            if (defaultPkg.isEmpty()) return@launch
+
+            val sm = sourceManager ?: return@launch
+
+            if (sm.getSources().isEmpty()) {
+                sm.loadSources()
+            }
+            val allSources = sm.getSources()
+            val sw = allSources.find { it.extension.packageName == defaultPkg } ?: return@launch
+            val source = sw.source
+
+            val searchTerms = listOfNotNull(anime.titleEnglish, anime.title).distinct()
+            var matchedSAnime: SAnime? = null
+            for (query in searchTerms) {
+                try {
+                    val page = source.getSearchAnime(1, query, AnimeFilterList())
+                    matchedSAnime = page.animes.firstOrNull { a ->
+                        a.title.contains(anime.title, ignoreCase = true) ||
+                                (anime.titleEnglish != null && a.title.contains(anime.titleEnglish, ignoreCase = true))
+                    } ?: page.animes.firstOrNull()
+                    if (matchedSAnime != null) break
+                } catch (_: Exception) { }
+            }
+
+            val sAnime = matchedSAnime ?: return@launch
+
+            val sEpisodes = try {
+                source.getEpisodeList(sAnime)
+            } catch (_: Exception) {
+                try {
+                    val details = source.getAnimeDetails(sAnime)
+                    source.getEpisodeList(details)
+                } catch (_: Exception) { emptyList() }
+            }
+            if (sEpisodes.isEmpty()) return@launch
+
+            _preFetchedExtensionData[anime.id] = PreFetchedExtensionData(source, sAnime, sEpisodes)
+        }
+    }
+
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: android.net.Network) {
             _isOffline.value = false
@@ -2292,74 +2347,84 @@ class MainViewModel : ViewModel() {
 
                 val extensionClient = (source as? eu.kanade.tachiyomi.animesource.online.AnimeHttpSource)?.client
 
-                val searchTerms = listOfNotNull(anime.titleEnglish, anime.title).distinct()
                 var matchedSAnime: SAnime? = null
+                var sEpisodes: List<SEpisode> = emptyList()
 
-                Log.d(epTag, "playEpisodeWithExtension: searching for anime with terms: $searchTerms")
-                for (query in searchTerms) {
-                    try {
-                        val page = source.getSearchAnime(1, query, AnimeFilterList())
-                        val results = page.animes
-                        Log.d(epTag, "${sw.source.name}: got ${results.size} results for \"$query\"")
-                        if (results.isEmpty()) continue
-                        val normalizedQuery = query.lowercase()
-                            .replace(Regex("[-–—_:;]"), " ")
-                            .replace(Regex("['’´`]"), "'")
-                            .replace(Regex("\\s+"), " ")
-                            .trim()
-                        val queryWords = normalizedQuery.split(" ").filter { it.length > 1 }
-                        val scored = results.map { a ->
-                            val title = a.title
-                            val normalizedTitle = title.lowercase()
+                val preFetched = getPreFetchedExtensionData(anime.id)
+                if (preFetched != null && preFetched.source == source) {
+                    Log.i(epTag, "playEpisodeWithExtension: using pre-fetched data for ep $episodeNumber")
+                    matchedSAnime = preFetched.sAnime
+                    sEpisodes = preFetched.episodes
+                }
+
+                if (matchedSAnime == null) {
+                    val searchTerms = listOfNotNull(anime.titleEnglish, anime.title).distinct()
+                    Log.d(epTag, "playEpisodeWithExtension: searching for anime with terms: $searchTerms")
+                    for (query in searchTerms) {
+                        try {
+                            val page = source.getSearchAnime(1, query, AnimeFilterList())
+                            val results = page.animes
+                            Log.d(epTag, "${sw.source.name}: got ${results.size} results for \"$query\"")
+                            if (results.isEmpty()) continue
+                            val normalizedQuery = query.lowercase()
                                 .replace(Regex("[-–—_:;]"), " ")
                                 .replace(Regex("['’´`]"), "'")
                                 .replace(Regex("\\s+"), " ")
                                 .trim()
-                            val titleWords = normalizedTitle.split(" ").filter { it.length > 1 }
+                            val queryWords = normalizedQuery.split(" ").filter { it.length > 1 }
+                            val scored = results.map { a ->
+                                val title = a.title
+                                val normalizedTitle = title.lowercase()
+                                    .replace(Regex("[-–—_:;]"), " ")
+                                    .replace(Regex("['’´`]"), "'")
+                                    .replace(Regex("\\s+"), " ")
+                                    .trim()
+                                val titleWords = normalizedTitle.split(" ").filter { it.length > 1 }
 
-                            val score = when {
-                                normalizedTitle == normalizedQuery -> 1000
-                                normalizedTitle.contains(normalizedQuery) -> 600 + normalizedTitle.length / 10
-                                normalizedQuery.contains(normalizedTitle) -> {
-                                    val lengthPenalty = (normalizedQuery.length - normalizedTitle.length)
-                                    maxOf(50, 400 - lengthPenalty)
+                                val score = when {
+                                    normalizedTitle == normalizedQuery -> 1000
+                                    normalizedTitle.contains(normalizedQuery) -> 600 + normalizedTitle.length / 10
+                                    normalizedQuery.contains(normalizedTitle) -> {
+                                        val lengthPenalty = (normalizedQuery.length - normalizedTitle.length)
+                                        maxOf(50, 400 - lengthPenalty)
+                                    }
+                                    else -> {
+                                        val matchingWords = queryWords.count { w -> titleWords.any { it == w || it.startsWith(w) || w.startsWith(it) } }
+                                        val wordScore = if (queryWords.isNotEmpty()) (matchingWords * 200) / queryWords.size else 0
+                                        wordScore + (matchingWords * 10)
+                                    }
                                 }
-                                else -> {
-                                    val matchingWords = queryWords.count { w -> titleWords.any { it == w || it.startsWith(w) || w.startsWith(it) } }
-                                    val wordScore = if (queryWords.isNotEmpty()) (matchingWords * 200) / queryWords.size else 0
-                                    wordScore + (matchingWords * 10)
-                                }
+                                Log.d(epTag, "  \"${a.title}\" -> score=$score")
+                                a to score
                             }
-                            Log.d(epTag, "  \"${a.title}\" -> score=$score")
-                            a to score
+                            val best = scored.maxByOrNull { it.second }
+                            matchedSAnime = best?.first
+                            if (matchedSAnime != null && best?.second ?: 0 >= 300) break
+                        } catch (e: Exception) {
+                            Log.w("ExtensionSearch", "Search failed for ${sw.source.name}: ${e.message}")
                         }
-                        val best = scored.maxByOrNull { it.second }
-                        matchedSAnime = best?.first
-                        if (matchedSAnime != null && best?.second ?: 0 >= 300) break
-                    } catch (e: Exception) {
-                        Log.w("ExtensionSearch", "Search failed for ${sw.source.name}: ${e.message}")
                     }
-                }
 
-                if (matchedSAnime == null) {
-                    Log.w(epTag, "playEpisodeWithExtension: no matching anime found for ep $episodeNumber after searching all terms")
-                    viewModelScope.launch { _toastMessage.emit("Download failed for Ep $episodeNumber: Could not find '${anime.title}' in extension") }
-                    return@withContext null
-                }
-                Log.i(epTag, "playEpisodeWithExtension: matched anime '${matchedSAnime.title}' (url=${matchedSAnime.url}) for ep $episodeNumber")
-
-                var sEpisodes = sm.getEpisodes(source, matchedSAnime)
-                Log.d(epTag, "playEpisodeWithExtension: got ${sEpisodes.size} episodes from source")
-
-                if (sEpisodes.isEmpty()) {
-                    Log.d(epTag, "playEpisodeWithExtension: no episodes, fetching anime details")
-                    try {
-                        matchedSAnime = sm.getAnimeDetails(source, matchedSAnime)
-                    } catch (e: Exception) {
-                        Log.w(epTag, "playEpisodeWithExtension: getAnimeDetails failed", e)
+                    if (matchedSAnime == null) {
+                        Log.w(epTag, "playEpisodeWithExtension: no matching anime found for ep $episodeNumber after searching all terms")
+                        viewModelScope.launch { _toastMessage.emit("Download failed for Ep $episodeNumber: Could not find '${anime.title}' in extension") }
+                        return@withContext null
                     }
+                    Log.i(epTag, "playEpisodeWithExtension: matched anime '${matchedSAnime.title}' (url=${matchedSAnime.url}) for ep $episodeNumber")
+
                     sEpisodes = sm.getEpisodes(source, matchedSAnime)
-                    Log.d(epTag, "playEpisodeWithExtension: after details, got ${sEpisodes.size} episodes")
+                    Log.d(epTag, "playEpisodeWithExtension: got ${sEpisodes.size} episodes from source")
+
+                    if (sEpisodes.isEmpty()) {
+                        Log.d(epTag, "playEpisodeWithExtension: no episodes, fetching anime details")
+                        try {
+                            matchedSAnime = sm.getAnimeDetails(source, matchedSAnime)
+                        } catch (e: Exception) {
+                            Log.w(epTag, "playEpisodeWithExtension: getAnimeDetails failed", e)
+                        }
+                        sEpisodes = sm.getEpisodes(source, matchedSAnime)
+                        Log.d(epTag, "playEpisodeWithExtension: after details, got ${sEpisodes.size} episodes")
+                    }
                 }
 
                 val sEpisode = if (sEpisodes.isEmpty()) {
