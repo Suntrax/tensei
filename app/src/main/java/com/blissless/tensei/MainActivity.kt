@@ -1869,29 +1869,6 @@ fun MainScreen(
                             preferEnglishTitles = preferEnglishTitles,
                             hideAdultContent = hideAdultContent,
                             favoriteIds = if (viewModel.loginProvider.value == LoginProvider.MAL) malFavorites.map { it.id }.toSet() else aniListFavoriteIds,
-                            onToggleFavorite = { anime ->
-                                val animeMedia = AnimeMedia(
-                                    id = anime.id,
-                                    title = anime.title,
-                                    titleEnglish = anime.titleEnglish,
-                                    cover = anime.cover,
-                                    banner = anime.banner,
-                                    progress = 0,
-                                    totalEpisodes = anime.episodes,
-                                    latestEpisode = anime.latestEpisode,
-                                    averageScore = anime.averageScore,
-                                    genres = anime.genres,
-                                    listStatus = "",
-                                    listEntryId = 0,
-                                    year = anime.year,
-                                    malId = anime.malId
-                                )
-                                if (viewModel.loginProvider.value == LoginProvider.MAL) {
-                                    viewModel.toggleMalFavorite(animeMedia)
-                                } else {
-                                    viewModel.toggleAniListFavorite(anime.id, animeMedia)
-                                }
-                            },
                             onPlayEpisode = onPlayEpisode,
                             currentlyWatching = currentlyWatching,
                             planningToWatch = planningToWatch,
@@ -1899,7 +1876,6 @@ fun MainScreen(
                             onHold = onHold,
                             dropped = dropped,
                             isVisible = true,
-                            onShowAnimeDialog = onShowAnimeDialog,
                             onClearAnimeStack = onClearAnimeStack,
                             onCharacterClick = { characterId ->
                                 overlayState = OverlayState.CharacterDialog(characterId = characterId, animeId = 0)
@@ -1916,8 +1892,7 @@ fun MainScreen(
                             onViewAllRelations = { animeId, animeTitle ->
                                 overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = animeTitle)
                             },
-                            onSearchClick = { showSearchScreen = true },
-                            localAnimeStatus = localAnimeStatus
+                            onSearchClick = { showSearchScreen = true }
                         )
                         2 -> HomeScreen(
                             viewModel = viewModel,

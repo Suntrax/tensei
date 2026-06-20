@@ -86,7 +86,6 @@ fun ExploreAnimeHorizontalList(
     onAddToLocalPlanning: (ExploreAnime) -> Unit = {},
     onRemoveFromLocalStatus: (ExploreAnime) -> Unit = {},
     listIndex: Int = 0,
-    screenKey: String = "explore",
     isVisible: Boolean = true,
     viewModel: com.blissless.tensei.MainViewModel? = null
 ) {
@@ -99,7 +98,7 @@ fun ExploreAnimeHorizontalList(
         derivedStateOf { listState.isScrollInProgress }
     }
     
-    val cinematicProgress = rememberCinematicAnimation(screenKey, isVisible, true)
+    val cinematicProgress = rememberCinematicAnimation("explore", isVisible, true)
     val staggerDelay = listIndex * 50f
     val effectiveProgress = ((cinematicProgress * 1000f - staggerDelay) / 1000f).coerceIn(0f, 1f)
     val easedProgress = easeOutCubic(effectiveProgress)

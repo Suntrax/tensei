@@ -59,6 +59,7 @@ import com.blissless.tensei.ui.components.SectionTitle
 import com.blissless.tensei.ui.screens.details.DetailedAnimeScreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.milliseconds
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,7 +72,6 @@ fun ExploreScreen(
     preferEnglishTitles: Boolean = true,
     hideAdultContent: Boolean = true,
     favoriteIds: Set<Int> = emptySet(),
-    onToggleFavorite: (ExploreAnime) -> Unit = {},
     onPlayEpisode: (AnimeMedia, Int, String?) -> Unit = { _, _, _ -> },
     currentlyWatching: List<AnimeMedia> = emptyList(),
     planningToWatch: List<AnimeMedia> = emptyList(),
@@ -79,15 +79,13 @@ fun ExploreScreen(
     onHold: List<AnimeMedia> = emptyList(),
     dropped: List<AnimeMedia> = emptyList(),
     isVisible: Boolean = true,
-    onShowAnimeDialog: (ExploreAnime, ExploreAnime?) -> Unit = { _, _ -> },
     onClearAnimeStack: () -> Unit = {},
     onCharacterClick: (Int) -> Unit = {},
     onStaffClick: (Int) -> Unit = {},
     onViewAllCast: (Int, String) -> Unit = { _, _ -> },
     onViewAllStaff: (Int, String) -> Unit = { _, _ -> },
     onViewAllRelations: (Int, String) -> Unit = { _, _ -> },
-    onSearchClick: () -> Unit = {},
-    localAnimeStatus: Map<Int, LocalAnimeEntry> = emptyMap()
+    onSearchClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val featuredAnime by viewModel.featuredAnime.collectAsState()
@@ -103,8 +101,6 @@ fun ExploreScreen(
     val apiError by viewModel.apiError.collectAsState()
     val isOffline by viewModel.isOffline.collectAsState()
     val simplifyEpisodeMenu by viewModel.simplifyEpisodeMenu.collectAsState(initial = true)
-    val localFavorites by viewModel.localFavorites.collectAsState()
-    val localFavoriteIds = remember(localFavorites) { localFavorites.keys }
     val localAnimeStatus by viewModel.localAnimeStatus.collectAsState()
     
     val filteredFeaturedAnime = remember(featuredAnime, hideAdultContent) {
@@ -143,9 +139,6 @@ fun ExploreScreen(
     }
 
     // Derive currentStatus from lists dynamically to ensure immediate UI updates
-    val currentStatusForAnime: (Int) -> String? = { animeId ->
-        animeStatusMap[animeId]
-    }
 
     var selectedAnime by remember { mutableStateOf<ExploreAnime?>(null) }
     var showDialog by remember { mutableStateOf(false) }
@@ -241,7 +234,7 @@ fun ExploreScreen(
                 try {
                     scope.launch {
                         try {
-                            delay(100)
+                            delay(100.milliseconds)
                             viewModel.clearExploreAnimeCardBounds()
                             currentCardBounds = null
                             val detailedData = viewModel.fetchDetailedAnimeData(relation.id)
@@ -398,7 +391,7 @@ fun ExploreScreen(
     // Refresh data when screen becomes visible
     LaunchedEffect(isVisible, seasonalAnime) {
         if (isVisible && seasonalAnime.isEmpty()) {
-            delay(100)
+            delay(100.milliseconds)
             viewModel.forceRefreshExplore()
         }
     }
@@ -515,7 +508,6 @@ fun ExploreScreen(
                         viewModel.setLocalAnimeStatus(anime.id, null)
                     },
                     listIndex = 0,
-                    screenKey = "explore",
                     isVisible = isVisible,
                     viewModel = viewModel
                 )
@@ -557,7 +549,6 @@ fun ExploreScreen(
                         viewModel.setLocalAnimeStatus(anime.id, null)
                     },
                     listIndex = 1,
-                    screenKey = "explore",
                     isVisible = isVisible,
                     viewModel = viewModel
                 )
@@ -599,7 +590,6 @@ fun ExploreScreen(
                         viewModel.setLocalAnimeStatus(anime.id, null)
                     },
                     listIndex = 2,
-                    screenKey = "explore",
                     isVisible = isVisible,
                     viewModel = viewModel
                 )
@@ -641,7 +631,6 @@ fun ExploreScreen(
                 },
                 preferEnglishTitles = preferEnglishTitles,
                 listIndex = 3,
-                screenKey = "explore",
                 isVisible = isVisible,
                 viewModel = viewModel
             )
@@ -679,7 +668,6 @@ fun ExploreScreen(
                 },
                 preferEnglishTitles = preferEnglishTitles,
                 listIndex = 4,
-                screenKey = "explore",
                 isVisible = isVisible,
                 viewModel = viewModel
             )
@@ -717,7 +705,6 @@ fun ExploreScreen(
                 },
                 preferEnglishTitles = preferEnglishTitles,
                 listIndex = 5,
-                screenKey = "explore",
                 isVisible = isVisible,
                 viewModel = viewModel
             )
@@ -755,7 +742,6 @@ fun ExploreScreen(
                 },
                 preferEnglishTitles = preferEnglishTitles,
                 listIndex = 6,
-                screenKey = "explore",
                 isVisible = isVisible,
                 viewModel = viewModel
             )
@@ -793,7 +779,6 @@ fun ExploreScreen(
                 },
                 preferEnglishTitles = preferEnglishTitles,
                 listIndex = 7,
-                screenKey = "explore",
                 isVisible = isVisible,
                 viewModel = viewModel
             )
@@ -823,7 +808,6 @@ private fun GenreSection(
     onRemoveFromLocalStatus: (ExploreAnime) -> Unit = {},
     preferEnglishTitles: Boolean = true,
     listIndex: Int = 0,
-    screenKey: String = "explore",
     isVisible: Boolean = true,
     viewModel: MainViewModel
 ) {
@@ -846,7 +830,6 @@ private fun GenreSection(
                 onAddToLocalPlanning = onAddToLocalPlanning,
                 onRemoveFromLocalStatus = onRemoveFromLocalStatus,
                 listIndex = listIndex,
-                screenKey = screenKey,
                 isVisible = isVisible,
                 viewModel = viewModel
             )
