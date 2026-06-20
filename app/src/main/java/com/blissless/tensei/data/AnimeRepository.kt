@@ -45,7 +45,6 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.net.URL
 import java.net.URLEncoder
-import java.util.concurrent.ConcurrentHashMap
 import javax.net.ssl.HttpsURLConnection
 
 /**
@@ -58,11 +57,8 @@ class AnimeRepository(
 ) {
 
     companion object {
-        private const val TAG = "AnimeRepository"
         private val CLIENT_IDS = listOf(BuildConfig.CLIENT_ID_ANILIST)
 
-        // Use all available providers (validated by HTTP check in MiruroService)
-        val PRIORITY_PROVIDERS = emptyList<String>()
     }
 
     private val json = Json {
@@ -170,16 +166,16 @@ class AnimeRepository(
         return graphqlRequest(query, emptyMap())?.let {
             try {
                 json.decodeFromString<ViewerResponse>(it)
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 null
             }
         }
     }
 
     suspend fun fetchUserStats(userId: Int): UserStatsResponse? {
-        val query = """
-            query (${'$'}userId: Int) {
-                User(id: ${'$'}userId) {
+        val query = $$"""
+            query ($userId: Int) {
+                User(id: $userId) {
                     statistics {
                         anime {
                             count
@@ -195,7 +191,7 @@ class AnimeRepository(
         return graphqlRequest(query, mapOf("userId" to userId))?.let {
             try {
                 json.decodeFromString<UserStatsResponse>(it)
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 null
             }
         }
@@ -206,9 +202,9 @@ class AnimeRepository(
     // ============================================
 
     suspend fun fetchMediaLists(userId: Int): MediaListResponse? {
-        val query = """
-            query (${'$'}userId: Int) {
-                MediaListCollection(userId: ${'$'}userId, type: ANIME) {
+        val query = $$"""
+            query ($userId: Int) {
+                MediaListCollection(userId: $userId, type: ANIME) {
                     lists {
                         name
                         status
@@ -239,7 +235,7 @@ class AnimeRepository(
         return graphqlRequest(query, mapOf("userId" to userId))?.let {
             try {
                 json.decodeFromString<MediaListResponse>(it)
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 null
             }
         }
@@ -442,10 +438,10 @@ class AnimeRepository(
         val startTime = currentTime - (24 * 60 * 60)
         val endTime = currentTime + (8 * 24 * 60 * 60)
 
-        val query = """
-            query (${'$'}page: Int, ${'$'}startTime: Int, ${'$'}endTime: Int) {
-                Page(page: ${'$'}page, perPage: 50) {
-                    airingSchedules(airingAt_greater: ${'$'}startTime, airingAt_lesser: ${'$'}endTime, sort: TIME) {
+        val query = $$"""
+            query ($page: Int, $startTime: Int, $endTime: Int) {
+                Page(page: $page, perPage: 50) {
+                    airingSchedules(airingAt_greater: $startTime, airingAt_lesser: $endTime, sort: TIME) {
                         id
                         airingAt
                         episode
@@ -508,10 +504,10 @@ class AnimeRepository(
     suspend fun searchAnime(searchQuery: String): List<ExploreMedia> {
         if (searchQuery.isBlank()) return emptyList()
 
-        val query = """
-            query (${'$'}search: String) {
+        val query = $$"""
+            query ($search: String) {
                 Page(page: 1, perPage: 20) {
-                    media(search: ${'$'}search, type: ANIME, sort: POPULARITY_DESC) {
+                    media(search: $search, type: ANIME, sort: POPULARITY_DESC) {
                         id
                         idMal
                         title { romaji english }
@@ -535,7 +531,7 @@ class AnimeRepository(
             try {
                 val data = json.decodeFromString<ExploreResponse>(it)
                 data.data.Page.media
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 emptyList()
             }
         } ?: emptyList()
@@ -554,23 +550,25 @@ class AnimeRepository(
         page: Int = 1,
         perPage: Int = 30
     ): List<ExploreMedia> {
-        val varDeclarations = mutableListOf("\$sort: [MediaSort]", "\$page: Int", "\$perPage: Int")
+        val varDeclarations = mutableListOf($$"$sort: [MediaSort]", $$"$page: Int",
+            $$"$perPage: Int"
+        )
         val varValues = mutableMapOf<String, Any?>(
             "sort" to listOf(sort),
             "page" to page,
             "perPage" to perPage
         )
-        val mediaArgs = mutableListOf("type: ANIME", "sort: \$sort")
+        val mediaArgs = mutableListOf("type: ANIME", $$"sort: $sort")
         if (search != null) {
-            varDeclarations.add(0, "\$search: String")
-            mediaArgs.add(0, "search: \$search")
+            varDeclarations.add(0, $$"$search: String")
+            mediaArgs.add(0, $$"search: $search")
             varValues["search"] = search
         }
 
         fun addFilter(varName: String, varType: String, argName: String, value: Any?) {
             if (value != null) {
-                varDeclarations.add("\$$varName: $varType")
-                mediaArgs.add("$argName: \$$varName")
+                varDeclarations.add($$"$$$varName: $$varType")
+                mediaArgs.add($$"$$argName: $$$varName")
                 varValues[varName] = value
             }
         }
@@ -583,10 +581,10 @@ class AnimeRepository(
         addFilter("status", "MediaStatus", "status", status)
         addFilter("isAdult", "Boolean", "isAdult", isAdult)
 
-        val query = """
-            query (${varDeclarations.joinToString(", ")}) {
-                Page(page: ${'$'}page, perPage: ${'$'}perPage) {
-                    media(${mediaArgs.joinToString("\n                        ")}) {
+        val query = $$"""
+            query ($${varDeclarations.joinToString(", ")}) {
+                Page(page: $page, perPage: $perPage) {
+                    media($${mediaArgs.joinToString("\n                        ")}) {
                         id
                         idMal
                         title { romaji english }
@@ -636,10 +634,10 @@ class AnimeRepository(
     }
     
     suspend fun findAnimeByMalId(malId: Int): ExploreMedia? {
-        val query = """
-            query (${'$'}malId: Int) {
+        val query = $$"""
+            query ($malId: Int) {
                 Page(page: 1, perPage: 1) {
-                    media(type: ANIME, idMal: ${'$'}malId) {
+                    media(type: ANIME, idMal: $malId) {
                         id
                         idMal
                         title { romaji english native }
@@ -663,7 +661,7 @@ class AnimeRepository(
             try {
                 val data = json.decodeFromString<ExploreResponse>(it)
                 data.data.Page.media.firstOrNull()
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 null
             }
         }
@@ -674,9 +672,9 @@ class AnimeRepository(
     // ============================================
 
     suspend fun fetchDetailedAnime(animeId: Int): DetailedAnimeMedia? {
-        val query = """
-            query (${'$'}id: Int) {
-                Media(id: ${'$'}id, type: ANIME) {
+        val query = $$"""
+            query ($id: Int) {
+                Media(id: $id, type: ANIME) {
                     id
                     idMal
                     title { romaji english native }
@@ -749,16 +747,16 @@ class AnimeRepository(
             try {
                 val data = json.decodeFromString<DetailedAnimeResponse>(response)
                 data.data.Media
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 null
             }
         }
     }
 
     suspend fun fetchAnimeRelationsForOffset(animeId: Int): AnimeRelationsMedia? {
-        val query = """
-            query (${'$'}id: Int!) {
-                Media(id: ${'$'}id, type: ANIME) {
+        val query = $$"""
+            query ($id: Int!) {
+                Media(id: $id, type: ANIME) {
                     id
                     title { romaji english }
                     episodes
@@ -784,7 +782,7 @@ class AnimeRepository(
         return publicGraphqlRequest(query, mapOf("id" to animeId))?.let {
             try {
                 json.decodeFromString<AnimeRelationsResponse>(it).data.Media
-            } catch (e: Exception) { null }
+            } catch (_: Exception) { null }
         }
     }
 
@@ -793,9 +791,9 @@ class AnimeRepository(
     // ============================================
 
     suspend fun fetchCharacter(characterId: Int): CharacterData? {
-        val query = """
-            query (${'$'}id: Int!) {
-                Character(id: ${'$'}id) {
+        val query = $$"""
+            query ($id: Int!) {
+                Character(id: $id) {
                     id
                     name { full native }
                     image { large medium }
@@ -815,16 +813,16 @@ class AnimeRepository(
             try {
                 val data = json.decodeFromString<CharacterResponse>(response)
                 data.data.Character
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 null
             }
         }
     }
 
     suspend fun fetchStaff(staffId: Int): StaffData? {
-        val query = """
-            query (${'$'}id: Int!) {
-                Staff(id: ${'$'}id) {
+        val query = $$"""
+            query ($id: Int!) {
+                Staff(id: $id) {
                     id
                     name { full native }
                     image { large medium }
@@ -843,22 +841,19 @@ class AnimeRepository(
             }
         """.trimIndent()
 
-        val response = publicGraphqlRequest(query, mapOf("id" to staffId))
-        if (response == null) {
-            return null
-        }
+        val response = publicGraphqlRequest(query, mapOf("id" to staffId)) ?: return null
         return try {
             val data = json.decodeFromString<StaffResponse>(response)
             data.data.Staff
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             null
         }
     }
 
     suspend fun fetchAllCharacters(animeId: Int): List<CharacterData>? {
-        val query = """
-            query (${'$'}id: Int!) {
-                Media(id: ${'$'}id, type: ANIME) {
+        val query = $$"""
+            query ($id: Int!) {
+                Media(id: $id, type: ANIME) {
                     characters(perPage: 50) {
                         nodes {
                             id
@@ -875,16 +870,16 @@ class AnimeRepository(
                 val data = json.decodeFromString<AllCharactersResponse>(response)
                 val characters = data.data.Media?.characters?.nodes
                 characters?.distinctBy { it.id }
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 null
             }
         }
     }
 
     suspend fun fetchAllStaff(animeId: Int): List<StaffData>? {
-        val query = """
-            query (${'$'}id: Int!) {
-                Media(id: ${'$'}id, type: ANIME) {
+        val query = $$"""
+            query ($id: Int!) {
+                Media(id: $id, type: ANIME) {
                     staff(perPage: 50) {
                         nodes {
                             id
@@ -898,12 +893,12 @@ class AnimeRepository(
         """.trimIndent()
 
         val response = publicGraphqlRequest(query, mapOf("id" to animeId))
-        return response?.let {
+        return response?.let { resp ->
             try {
-                val data = json.decodeFromString<AllStaffResponse>(it)
+                val data = json.decodeFromString<AllStaffResponse>(resp)
                 val staff = data.data.Media?.staff?.nodes
                 staff?.distinctBy { it.id }
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 null
             }
         }
@@ -913,9 +908,9 @@ class AnimeRepository(
         cacheManager.invalidateUserCache()
         graphQLClient.clearCache() // Invalidate high-performance client cache too
 
-        val query = """
-            mutation (${'$'}mediaId: Int, ${'$'}progress: Int) {
-                SaveMediaListEntry(mediaId: ${'$'}mediaId, progress: ${'$'}progress) {
+        val query = $$"""
+            mutation ($mediaId: Int, $progress: Int) {
+                SaveMediaListEntry(mediaId: $mediaId, progress: $progress) {
                     id
                     progress
                 }
@@ -929,9 +924,9 @@ class AnimeRepository(
         cacheManager.invalidateUserCache()
         graphQLClient.clearCache()
 
-        val query = """
-            mutation (${'$'}mediaId: Int, ${'$'}status: MediaListStatus${if (progress != null) ", ${'$'}progress: Int" else ""}) {
-                SaveMediaListEntry(mediaId: ${'$'}mediaId, status: ${'$'}status${if (progress != null) ", progress: ${'$'}progress" else ""}) {
+        val query = $$"""
+            mutation ($mediaId: Int, $status: MediaListStatus$${if (progress != null) $$", $progress: Int" else ""}) {
+                SaveMediaListEntry(mediaId: $mediaId, status: $status$${if (progress != null) $$", progress: $progress" else ""}) {
                     id
                     status
                 }
@@ -948,9 +943,9 @@ class AnimeRepository(
         cacheManager.invalidateUserCache()
         graphQLClient.clearCache()
 
-        val query = """
-            mutation (${'$'}id: Int) {
-                DeleteMediaListEntry(id: ${'$'}id) {
+        val query = $$"""
+            mutation ($id: Int) {
+                DeleteMediaListEntry(id: $id) {
                     deleted
                 }
             }
@@ -963,9 +958,9 @@ class AnimeRepository(
         cacheManager.invalidateUserCache()
         graphQLClient.clearCache()
 
-        val query = """
-            mutation (${'$'}mediaId: Int, ${'$'}score: Int) {
-                SaveMediaListEntry(mediaId: ${'$'}mediaId, score: ${'$'}score) {
+        val query = $$"""
+            mutation ($mediaId: Int, $score: Int) {
+                SaveMediaListEntry(mediaId: $mediaId, score: $score) {
                     id
                     score
                 }
@@ -984,7 +979,6 @@ class AnimeRepository(
     // ============================================
 
     private val tmdbBearerToken = BuildConfig.TMDB_API_KEY
-    private val episodeOffsetCache = ConcurrentHashMap<Int, Int>()
 
     suspend fun fetchTmdbEpisodes(
         animeTitle: String,
@@ -997,15 +991,15 @@ class AnimeRepository(
             // Detect format from title if not provided
             val detectedFormat = animeFormat ?: detectFormatFromTitle(animeTitle)
             val baseTitle = extractBaseTitle(animeTitle)
-            var searchResults = searchTmdb(baseTitle, detectedFormat, animeYear)
-            if (searchResults.isEmpty()) searchResults = searchTmdb(animeTitle, detectedFormat, animeYear)
+            var searchResults = searchTmdb(baseTitle, detectedFormat)
+            if (searchResults.isEmpty()) searchResults = searchTmdb(animeTitle, detectedFormat)
             // Also try searching with year if available
             if (searchResults.isEmpty() && animeYear != null) {
-                searchResults = searchTmdb("$animeTitle ${animeYear}", detectedFormat)
+                searchResults = searchTmdb("$animeTitle $animeYear", detectedFormat)
             }
             if (searchResults.isEmpty()) return@withContext emptyList()
 
-            val bestMatch = findBestMatch(searchResults, animeTitle, animeYear) ?: return@withContext emptyList()
+            val bestMatch = findBestMatch(searchResults, animeTitle) ?: return@withContext emptyList()
             
             // Check if this is a movie (has title field) vs TV show (has name field)
             val isMovieSearch = bestMatch.title != null
@@ -1064,12 +1058,12 @@ class AnimeRepository(
 
             val result = buildEpisodesFromPool(allSeasonDetails, episodeOffset, latestAiredEpisode, maxEpisodes)
             result
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             emptyList()
         }
     }
 
-    private fun searchTmdb(title: String, format: String? = null, year: Int? = null): List<TmdbSearchResult> {
+    private fun searchTmdb(title: String, format: String? = null): List<TmdbSearchResult> {
         return try {
             val encodedTitle = URLEncoder.encode(title, "UTF-8")
             // Detect movie based on format or title patterns
@@ -1096,9 +1090,6 @@ class AnimeRepository(
                     val response = movieConnection.inputStream.bufferedReader().readText()
                     val searchResponse = json.decodeFromString<TmdbSearchResponse>(response)
                     results.addAll(searchResponse.results)
-                    searchResponse.results.take(3).forEach { 
-                    }
-                } else {
                 }
                 movieConnection.disconnect()
                 
@@ -1153,7 +1144,7 @@ class AnimeRepository(
             }
             
             results
-        } catch (e: Exception) { 
+        } catch (_: Exception) {
             emptyList() 
         }
     }
@@ -1172,7 +1163,7 @@ class AnimeRepository(
                 val response = connection.inputStream.bufferedReader().readText()
                 json.decodeFromString<TmdbTvDetails>(response)
             } else null
-        } catch (e: Exception) { null }
+        } catch (_: Exception) { null }
     }
 
     private suspend fun fetchSeason(tvId: Int, seasonNumber: Int): TmdbSeasonDetails? = withContext(Dispatchers.IO) {
@@ -1189,7 +1180,7 @@ class AnimeRepository(
                 val response = connection.inputStream.bufferedReader().readText()
                 json.decodeFromString<TmdbSeasonDetails>(response)
             } else null
-        } catch (e: Exception) { null }
+        } catch (_: Exception) { null }
     }
 
     private fun buildEpisodesFromPool(
@@ -1243,17 +1234,15 @@ class AnimeRepository(
         }
         
         // If TMDB doesn't have enough episodes, generate placeholders for long-running series
-        if (tmdbEpisodeCount < expectedEpisodeCount && maxEpisodes > 0) {
+        if (tmdbEpisodeCount < expectedEpisodeCount) {
             val startEpisode = tmdbEpisodeCount + 1
-            val endEpisode = expectedEpisodeCount
-            
-            for (epNum in startEpisode..endEpisode) {
-                val relativeNum = epNum
-                val hasAired = latestAiredEpisode == Int.MAX_VALUE || relativeNum <= latestAiredEpisode
+
+            for (epNum in startEpisode..expectedEpisodeCount) {
+                val hasAired = latestAiredEpisode == Int.MAX_VALUE || epNum <= latestAiredEpisode
                 
                 allEpisodes.add(TmdbEpisode(
-                    episode = relativeNum,
-                    title = "Episode $relativeNum",
+                    episode = epNum,
+                    title = "Episode $epNum",
                     description = if (hasAired) "" else "Not yet aired",
                     image = null
                 ))
@@ -1331,10 +1320,6 @@ class AnimeRepository(
             val isSeriesFormat = node.format == "TV" || node.format == "ONA" || node.format == "TV_SHORT"
             val episodes = if (isSeriesFormat) (node.episodes ?: 0) else 0
 
-            if (episodes > 0) {
-            } else {
-            }
-
             totalOffset += episodes + getPrequelEpisodesSum(node.id)
         }
 
@@ -1347,7 +1332,7 @@ class AnimeRepository(
         return publicGraphqlRequest(query, mapOf("id" to animeId))?.let {
             try {
                 val data = json.decodeFromString<AnimeRelationsResponse>(it)
-                data.data.Media.relations?.edges?.mapNotNull { edge ->
+                data.data.Media.relations?.edges?.map { edge ->
                     edge.node.let { node ->
                         AnimeRelation(
                             id = node.id,
@@ -1360,7 +1345,7 @@ class AnimeRepository(
                         )
                     }
                 }
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 null
             }
         }
@@ -1400,7 +1385,7 @@ class AnimeRepository(
                 val firstEpTitle = epJson?.get("episodes")?.jsonArray?.firstOrNull()?.jsonObject?.get("title")?.jsonPrimitive?.content ?: return@withContext Pair(-1, 0)
 
                 Pair(findTmdbEpisodeOffsetByTitle(allSeasonDetails, firstEpTitle), totalEps)
-            } catch (e: Exception) { Pair(-1, 0) }
+            } catch (_: Exception) { Pair(-1, 0) }
         }
     }
 
@@ -1421,7 +1406,7 @@ class AnimeRepository(
         return -1
     }
 
-    private fun findBestMatch(results: List<TmdbSearchResult>, originalTitle: String, year: Int?): TmdbSearchResult? {
+    private fun findBestMatch(results: List<TmdbSearchResult>, originalTitle: String): TmdbSearchResult? {
         val normalizedOriginal = normalizeTitle(originalTitle)
         
         // Check if original title might be Chinese (contains CJK characters)
@@ -1543,10 +1528,10 @@ class AnimeRepository(
     }
 
     suspend fun fetchUserActivity(userId: Int, perPage: Int = 50): List<UserActivity>? {
-        val query = """
-            query (${'$'}userId: Int) {
-                Page(page: 1, perPage: $perPage) {
-                    activities(userId: ${'$'}userId, type: ANIME_LIST, sort: ID_DESC) {
+        val query = $$"""
+            query ($userId: Int) {
+                Page(page: 1, perPage: $$perPage) {
+                    activities(userId: $userId, type: ANIME_LIST, sort: ID_DESC) {
                         ... on ListActivity {
                             createdAt
                             status
@@ -1574,8 +1559,9 @@ class AnimeRepository(
                             progress = activity.progress,
                             createdAt = activity.createdAt,
                             mediaId = activity.media.id,
-                            mediaTitle = activity.media.title?.romaji ?: activity.media.title?.english ?: "Unknown",
-                            mediaTitleEnglish = activity.media.title?.english,
+                            mediaTitle = activity.media.title.romaji ?: activity.media.title.english
+                            ?: "Unknown",
+                            mediaTitleEnglish = activity.media.title.english,
                             mediaCover = activity.media.coverImage?.extraLarge ?: "",
                             episodes = null,
                             averageScore = null,
@@ -1583,14 +1569,14 @@ class AnimeRepository(
                         )
                     } else null
                 }
-            } catch (e: Exception) { null }
+            } catch (_: Exception) { null }
         }
     }
 
     suspend fun fetchUserFavorites(userId: Int): UserFavoritesResponse? {
-        val query = """
-            query (${'$'}userId: Int) {
-                User(id: ${'$'}userId) {
+        val query = $$"""
+            query ($userId: Int) {
+                User(id: $userId) {
                     favourites {
                         anime(page: 1, perPage: 30) {
                             nodes {
@@ -1614,7 +1600,7 @@ class AnimeRepository(
             try {
                 val response = json.decodeFromString<UserFavoritesResponse>(it)
                 response
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 null
             }
         }
@@ -1623,31 +1609,31 @@ class AnimeRepository(
     suspend fun toggleAniListFavorite(mediaId: Int): Boolean {
         graphQLClient.clearCache() // Clear cache to ensure fresh data
         
-        val mutation = """
-            mutation (${'$'}mediaId: Int) {
-                ToggleFavourite(animeId: ${'$'}mediaId) {
+        val mutation = $$"""
+            mutation ($mediaId: Int) {
+                ToggleFavourite(animeId: $mediaId) {
                     anime { nodes { id } }
                 }
             }
         """.trimIndent()
 
         val response = graphqlMutation(mutation, mapOf("mediaId" to mediaId))
-        return response != null && response.isNotEmpty()
+        return !response.isNullOrEmpty()
     }
     
     suspend fun addAniListFavorite(mediaId: Int): Boolean {
-        val mutation = """
-            mutation (${'$'}mediaId: Int) {
-                ToggleFavourite(animeId: ${'$'}mediaId) {
+        val mutation = $$"""
+            mutation ($mediaId: Int) {
+                ToggleFavourite(animeId: $mediaId) {
                     anime { nodes { id } }
                 }
             }
         """.trimIndent()
         
         // Check if already favorited first
-        val checkQuery = """
-            query (${'$'}mediaId: Int) {
-                Media(id: ${'$'}mediaId) {
+        val checkQuery = $$"""
+            query ($mediaId: Int) {
+                Media(id: $mediaId) {
                     id
                     isFavourite
                 }
@@ -1664,18 +1650,18 @@ class AnimeRepository(
     }
     
     suspend fun removeAniListFavorite(mediaId: Int): Boolean {
-        val mutation = """
-            mutation (${'$'}mediaId: Int) {
-                ToggleFavourite(animeId: ${'$'}mediaId) {
+        val mutation = $$"""
+            mutation ($mediaId: Int) {
+                ToggleFavourite(animeId: $mediaId) {
                     anime { nodes { id } }
                 }
             }
         """.trimIndent()
         
         // Check if not favorited first
-        val checkQuery = """
-            query (${'$'}mediaId: Int) {
-                Media(id: ${'$'}mediaId) {
+        val checkQuery = $$"""
+            query ($mediaId: Int) {
+                Media(id: $mediaId) {
                     id
                     isFavourite
                 }
@@ -1694,9 +1680,9 @@ class AnimeRepository(
     suspend fun toggleAniListFavorite(mediaId: Int, addFavorite: Boolean): Boolean {
         if (addFavorite) {
             // Check if already favorited
-            val checkQuery = """
-                query (${'$'}mediaId: Int) {
-                    Media(id: ${'$'}mediaId) {
+            val checkQuery = $$"""
+                query ($mediaId: Int) {
+                    Media(id: $mediaId) {
                         id
                         isFavourite
                     }
@@ -1710,9 +1696,9 @@ class AnimeRepository(
             }
         }
         
-        val mutation = """
-            mutation (${'$'}mediaId: Int) {
-                ToggleFavourite(animeId: ${'$'}mediaId) {
+        val mutation = $$"""
+            mutation ($mediaId: Int) {
+                ToggleFavourite(animeId: $mediaId) {
                     anime { nodes { id } }
                 }
             }

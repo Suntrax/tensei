@@ -140,20 +140,6 @@ data class EpisodeTimestamps(
         return introStart != null || creditsStart != null || recapStart != null
     }
 
-    /**
-     * Check if intro timestamps are valid
-     */
-    fun hasIntro(): Boolean = introStart != null && introEnd != null && introEnd > introStart
-
-    /**
-     * Check if outro/credits timestamps are valid
-     */
-    fun hasOutro(): Boolean = creditsStart != null && creditsEnd != null && creditsEnd > creditsStart
-
-    /**
-     * Check if recap timestamps are valid
-     */
-    fun hasRecap(): Boolean = recapStart != null && recapEnd != null && recapEnd > recapStart
 }
 
 // ============================================
@@ -406,18 +392,6 @@ data class PlaybackPositionCache(
 // ============================================
 // STREAM FETCH RESULT
 // ============================================
-
-data class StreamFetchResult(
-    val stream: AniwatchStreamResult?,
-    val isFallback: Boolean,
-    val requestedCategory: String,
-    val actualCategory: String
-)
-
-data class GraphQLCacheEntry(
-    val response: String,
-    val timestamp: Long
-)
 
 // ============================================
 // API RESPONSE MODELS (AniList)
