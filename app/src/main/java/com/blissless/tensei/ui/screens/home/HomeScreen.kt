@@ -737,7 +737,6 @@ fun HomeScreen(
                 anime = selectedAnime!!,
                 viewModel = viewModel,
                 isOled = isOled,
-                disableMaterialColors = disableMaterialColors,
                 onDismiss = { showEpisodeSheet = false },
                 onEpisodeSelect = { episode, title ->
                     onPlayEpisode(selectedAnime!!, episode, title)

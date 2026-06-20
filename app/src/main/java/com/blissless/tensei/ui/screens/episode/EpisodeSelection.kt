@@ -19,7 +19,6 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -34,7 +33,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
@@ -96,16 +94,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
+import androidx.media3.exoplayer.offline.Download
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import androidx.media3.exoplayer.offline.Download
 import com.blissless.tensei.MainViewModel
-import com.blissless.tensei.download.EpisodeDownloadManager
 import com.blissless.tensei.data.models.AnimeMedia
 import com.blissless.tensei.data.models.TmdbEpisode
+import com.blissless.tensei.download.EpisodeDownloadManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
 fun EpisodeSelectionDialog(
@@ -128,7 +127,7 @@ fun EpisodeSelectionDialog(
     // Auto-scroll to current episode in the simple dialog smoothly
     LaunchedEffect(currentProgress) {
         if (currentProgress > 0) {
-            delay(300)
+            delay(300.milliseconds)
             // Scroll to current episode, keeping it somewhat centered
             val target = (currentProgress - 5).coerceAtLeast(0)
             gridState.animateScrollToItem(target)
@@ -235,13 +234,13 @@ private fun EpisodeButton(
     }
 }
 
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RichEpisodeScreen(
     anime: AnimeMedia,
     viewModel: MainViewModel,
     isOled: Boolean,
-    disableMaterialColors: Boolean = false,
     onDismiss: () -> Unit,
     onEpisodeSelect: (Int, String?) -> Unit,
     onDownloadClick: (() -> Unit)? = null
@@ -264,7 +263,7 @@ fun RichEpisodeScreen(
     // Extension matching state
     val availableExtensions by viewModel.availableExtensions.collectAsState()
     val defaultPkg by viewModel.defaultExtensionPackage.collectAsState()
-    var selectedExtensionPkg by remember { mutableStateOf(if (defaultPkg.isNotEmpty()) defaultPkg else null) }
+    var selectedExtensionPkg by remember { mutableStateOf(defaultPkg.ifEmpty { null }) }
     var extensionEpisodesNumbers by remember { mutableStateOf<Set<Int>>(emptySet()) }
     var hasExtensionData by remember { mutableStateOf(false) }
     var isLoadingExtensionEpisodes by remember { mutableStateOf(false) }
@@ -430,11 +429,9 @@ fun RichEpisodeScreen(
     // Scroll to current episode (next to watch or last watched) with smooth animation
     LaunchedEffect(currentProgress, episodeCount, isLoadingEpisodes) {
         if (!isLoadingEpisodes && currentProgress > 0) {
-            delay(300)
+            delay(300.milliseconds)
             val scrollIndex = if (currentProgress < episodeCount) currentProgress else currentProgress - 1
-            if (scrollIndex >= 0) {
-                listState.animateScrollToItem(scrollIndex + 1) // +1 for header item
-            }
+            listState.animateScrollToItem(scrollIndex + 1)
         }
     }
 
@@ -664,7 +661,6 @@ fun RichEpisodeScreen(
                             hasAired = hasAired,
                             isOled = isOled,
                             isSelected = selectedEpisode == episodeNum,
-                            disableMaterialColors = disableMaterialColors,
                             playbackPositions = playbackPositions,
                             playbackDurations = playbackDurations,
                             animeId = anime.id,
@@ -693,7 +689,6 @@ fun RichEpisodeScreen(
                             hasAired = hasAired,
                             isOled = isOled,
                             isSelected = selectedEpisode == episodeNum,
-                            disableMaterialColors = disableMaterialColors,
                             playbackPositions = playbackPositions,
                             playbackDurations = playbackDurations,
                             animeId = anime.id,
@@ -723,7 +718,6 @@ private fun SimpleRichEpisodeCard(
     hasAired: Boolean,
     isOled: Boolean,
     isSelected: Boolean,
-    disableMaterialColors: Boolean = false,
     playbackPositions: Map<String, Long> = emptyMap(),
     playbackDurations: Map<String, Long> = emptyMap(),
     animeId: Int = 0,
@@ -829,7 +823,7 @@ private fun SimpleRichEpisodeCard(
                 val savedPos = playbackPositions[epPlaybackKey] ?: 0L
                 val epDuration = playbackDurations[epPlaybackKey] ?: 0L
                 val progressRatio = if (savedPos > 0 && epDuration > 0) (savedPos.toFloat() / epDuration).coerceIn(0f, 1f) else 0f
-                val remainingText = if (savedPos > 0 && epDuration > savedPos) {
+                val remainingText = if (savedPos in 1..<epDuration) {
                     val remaining = epDuration - savedPos
                     val mins = (remaining / 60000).toInt()
                     val secs = ((remaining % 60000) / 1000).toInt()
@@ -867,6 +861,7 @@ private fun SimpleRichEpisodeCard(
     }
 }
 
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun RichTmdbEpisodeCard(
@@ -879,7 +874,6 @@ private fun RichTmdbEpisodeCard(
     hasAired: Boolean,
     isOled: Boolean,
     isSelected: Boolean,
-    disableMaterialColors: Boolean = false,
     playbackPositions: Map<String, Long> = emptyMap(),
     playbackDurations: Map<String, Long> = emptyMap(),
     animeId: Int = 0,
@@ -978,7 +972,7 @@ private fun RichTmdbEpisodeCard(
                 val savedPos = playbackPositions[epPlaybackKey] ?: 0L
                 val epDuration = playbackDurations[epPlaybackKey] ?: 0L
                 val progressRatio = if (savedPos > 0 && epDuration > 0) (savedPos.toFloat() / epDuration).coerceIn(0f, 1f) else 0f
-                val remainingText = if (savedPos > 0 && epDuration > savedPos) {
+                val remainingText = if (savedPos in 1..<epDuration) {
                     val remaining = epDuration - savedPos
                     val mins = (remaining / 60000).toInt()
                     val secs = ((remaining % 60000) / 1000).toInt()
@@ -1117,8 +1111,8 @@ private fun formatTimeFromMs(ms: Long): String {
     val seconds = (ms / 1000) % 60
     val minutes = (ms / (1000 * 60)) % 60
     val hours = ms / (1000 * 60 * 60)
-    return if (hours > 0) String.format("%d:%02d:%02d", hours, minutes, seconds)
-    else String.format("%d:%02d", minutes, seconds)
+    return if (hours > 0) String.format(java.util.Locale.ROOT, "%d:%02d:%02d", hours, minutes, seconds)
+    else String.format(java.util.Locale.ROOT, "%d:%02d", minutes, seconds)
 }
 
 
