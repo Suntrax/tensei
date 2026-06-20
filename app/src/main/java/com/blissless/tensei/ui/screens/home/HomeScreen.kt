@@ -922,7 +922,6 @@ fun HomeScreen(
     if (showOfflineFavoritesDialog) {
         OfflineFavoritesDialog(
             favorites = localFavorites,
-            isOled = isOled,
             onDismiss = { showOfflineFavoritesDialog = false },
             onAnimeClick = { anime -> onShowAnimeDialog(anime, null) },
             onRemoveFavorite = { id -> viewModel.toggleLocalFavorite(id) }

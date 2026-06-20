@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -39,14 +38,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
-import com.blissless.tensei.R
 import com.blissless.tensei.data.models.ExploreAnime
 import com.blissless.tensei.data.models.StoredFavorite
 
 @Composable
 fun OfflineFavoritesDialog(
     favorites: Map<Int, StoredFavorite>,
-    isOled: Boolean,
     onDismiss: () -> Unit,
     onAnimeClick: (ExploreAnime) -> Unit,
     onRemoveFavorite: (Int) -> Unit
@@ -103,7 +100,7 @@ fun OfflineFavoritesDialog(
                         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             items(favorites.values.toList()) { fav ->
                                 OfflineFavoriteItem(
-                                    favorite = fav, isOled = isOled,
+                                    favorite = fav,
                                     onClick = {
                                         val exploreAnime = ExploreAnime(
                                             id = fav.id, title = fav.title, cover = fav.cover,
@@ -125,7 +122,7 @@ fun OfflineFavoritesDialog(
 
 @Composable
 private fun OfflineFavoriteItem(
-    favorite: StoredFavorite, isOled: Boolean,
+    favorite: StoredFavorite,
     onClick: () -> Unit, onRemove: () -> Unit
 ) {
     Card(
