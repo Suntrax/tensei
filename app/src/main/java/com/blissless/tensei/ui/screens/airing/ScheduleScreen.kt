@@ -11,20 +11,21 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -40,7 +41,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -67,12 +67,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.windowInsetsPadding
 import coil.compose.AsyncImage
 import com.blissless.tensei.MainViewModel
 import com.blissless.tensei.data.models.AiringScheduleAnime
@@ -80,11 +77,10 @@ import com.blissless.tensei.data.models.AnimeMedia
 import com.blissless.tensei.data.models.ExploreAnime
 import com.blissless.tensei.data.models.isAdultContent
 import com.blissless.tensei.data.models.toDetailedAnimeData
-import com.blissless.tensei.ui.theme.StatusColors
-import com.blissless.tensei.ui.theme.StatusLabels
 import com.blissless.tensei.ui.components.rememberCinematicAnimation
 import com.blissless.tensei.ui.screens.details.DetailedAnimeScreen
-import kotlinx.coroutines.Job
+import com.blissless.tensei.ui.theme.StatusColors
+import com.blissless.tensei.ui.theme.StatusLabels
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -92,6 +88,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import kotlin.math.absoluteValue
+import kotlin.time.Duration.Companion.milliseconds
 
 val DayNames = listOf("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
 val DayAbbreviations = listOf("Su", "Mo", "Tu", "We", "Th", "Fr", "Sa")
@@ -118,14 +115,10 @@ fun ScheduleScreen(
     isOled: Boolean = false,
     isVisible: Boolean = false,
     preventAutoSync: Boolean = true,
-    showStatusColors: Boolean = false,
-    disableMaterialColors: Boolean = false,
     hideAdultContent: Boolean = false,
     preferEnglishTitles: Boolean = true,
     isLoggedIn: Boolean = false,
     onPlayEpisode: (AnimeMedia, Int, String?) -> Unit = { _, _, _ -> },
-    onShowAnimeDialog: (ExploreAnime, ExploreAnime?) -> Unit = { _, _ -> },
-    onClearAnimeStack: () -> Unit = {},
     onAnimeDialogOpen: (Boolean) -> Unit = {},
     onCharacterClick: (Int) -> Unit = {},
     onStaffClick: (Int) -> Unit = {},
@@ -143,10 +136,6 @@ fun ScheduleScreen(
     LaunchedEffect(airingList, scheduleByDay, isLoading) {
         val scheduleHasData = scheduleByDay.values.any { it.isNotEmpty() }
         if ((airingList.isEmpty() || !scheduleHasData) && !isLoading) viewModel.fetchAiringSchedule()
-    }
-
-    val filteredAiringList = remember(airingList, hideAdultContent) {
-        if (hideAdultContent) airingList.filter { !isAdultContent(it.isAdult, it.genres) } else airingList
     }
 
     val scope = rememberCoroutineScope()
@@ -205,21 +194,15 @@ fun ScheduleScreen(
         if (isFavoriteRateLimited) Toast.makeText(context, "Please wait before toggling again", Toast.LENGTH_SHORT).show()
     }
 
-    val onClearAnimeStackHandler: () -> Unit = {
-        val current = firstOpenedAnime
-        if (selectedAnime != null && selectedAnime != firstOpenedAnime) selectedAnime = firstOpenedAnime
-        else { showAnimeDialog = false; selectedAnime = null; firstOpenedAnime = null }
-    }
-
     LaunchedEffect(isLoading) { if (!isLoading && isRefreshing) isRefreshing = false }
     LaunchedEffect(Unit) { if (!preventAutoSync) viewModel.fetchAiringSchedule() }
     LaunchedEffect(isLoading) { if (!isLoading && isRefreshing) isRefreshing = false }
     LaunchedEffect(Unit) {
-        while (true) { delay(300000); currentTime = System.currentTimeMillis() / 1000; if (!preventAutoSync) viewModel.fetchAiringSchedule() }
+        while (true) { delay(300000.milliseconds); currentTime = System.currentTimeMillis() / 1000; if (!preventAutoSync) viewModel.fetchAiringSchedule() }
     }
     LaunchedEffect(Unit) {
         while (true) {
-            delay(1000)
+            delay(1000.milliseconds)
             val newTime = System.currentTimeMillis() / 1000
             currentTime = newTime
             val newCalendar = Calendar.getInstance()
@@ -290,8 +273,6 @@ fun ScheduleScreen(
 
     val nowIndicatorIndexAll = remember(allUpcomingTimelineItems) { allUpcomingTimelineItems.indexOfFirst { it is TimelineItem.NowIndicator } }
     val nowIndicatorIndexByDay = remember(byDayTimelineItems) { byDayTimelineItems.indexOfFirst { it is TimelineItem.NowIndicator } }
-    val scrollJob = remember { mutableStateOf<Job?>(null) }
-    val isScrolling by remember { derivedStateOf { listStateAllUpcoming.isScrollInProgress } }
 
     LaunchedEffect(listStateAllUpcoming.firstVisibleItemIndex, viewMode, currentDayOfWeek) {
         if (viewMode == 0 && !isProgrammaticScroll) {
@@ -305,7 +286,7 @@ fun ScheduleScreen(
     }
 
     LaunchedEffect(isProgrammaticScroll) {
-        if (isProgrammaticScroll) { delay(550); isProgrammaticScroll = false; isInputLocked = false }
+        if (isProgrammaticScroll) { delay(550.milliseconds); isProgrammaticScroll = false; isInputLocked = false }
     }
 
     LaunchedEffect(isVisible, preventAutoSync) {
@@ -319,7 +300,6 @@ fun ScheduleScreen(
     }
 
     val todayPastCount = filteredScheduleByDay[currentDayOfWeek]?.count { it.airingAt <= currentTime } ?: 0
-    val todayFutureCount = filteredScheduleByDay[currentDayOfWeek]?.count { it.airingAt > currentTime } ?: 0
     val totalUpcomingThisWeek = remember(filteredScheduleByDay, currentTime) { filteredScheduleByDay.values.sumOf { dl -> dl.count { it.airingAt > currentTime } } }
     val selectedDayPastCount = filteredScheduleByDay[selectedDay]?.count { it.airingAt <= currentTime } ?: 0
     val selectedDayFutureCount = filteredScheduleByDay[selectedDay]?.count { it.airingAt > currentTime } ?: 0
@@ -463,12 +443,9 @@ fun ScheduleScreen(
                     TimelineScheduleList(
                         timelineItems = timelineItems,
                         currentDayOfWeek = currentDayOfWeek,
-                        currentTime = currentTime,
-                        showStatusColors = showStatusColors,
                         preferEnglishTitles = preferEnglishTitles,
                         animeStatusMap = animeStatusMap,
                         listState = currentListState,
-                        screenKey = "schedule",
                         isVisible = isVisible,
                         onAnimeClick = { anime ->
                             val exploreAnime = ExploreAnime(
@@ -501,7 +478,7 @@ fun ScheduleScreen(
             onUpdateStatus = { if (it != null) viewModel.addExploreAnimeToList(selectedAnime!!, it) },
             onRemove = { viewModel.removeAnimeFromList(selectedAnime!!.id) },
             onRelationClick = { relation ->
-                try { scope.launch { try { delay(100); val d = viewModel.fetchDetailedAnimeData(relation.id); if (d != null) selectedAnime = ExploreAnime(id = relation.id, title = d.title, titleEnglish = d.titleEnglish, cover = d.cover, banner = d.banner, episodes = d.episodes, latestEpisode = d.latestEpisode, averageScore = d.averageScore, genres = d.genres, year = d.year, format = d.format) else Toast.makeText(context, "Anime not found - ID: ${relation.id}", Toast.LENGTH_SHORT).show() } catch (e: Exception) { Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show() } } } catch (e: Exception) { Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show() }
+                try { scope.launch { try { delay(100.milliseconds); val d = viewModel.fetchDetailedAnimeData(relation.id); if (d != null) selectedAnime = ExploreAnime(id = relation.id, title = d.title, titleEnglish = d.titleEnglish, cover = d.cover, banner = d.banner, episodes = d.episodes, latestEpisode = d.latestEpisode, averageScore = d.averageScore, genres = d.genres, year = d.year, format = d.format) else Toast.makeText(context, "Anime not found - ID: ${relation.id}", Toast.LENGTH_SHORT).show() } catch (e: Exception) { Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show() } } } catch (e: Exception) { Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show() }
             },
             onCharacterClick = onCharacterClick, onStaffClick = onStaffClick,
             onViewAllCast = { onViewAllCast(selectedAnime!!.id, selectedAnime!!.title) },
@@ -515,12 +492,9 @@ fun ScheduleScreen(
 private fun TimelineScheduleList(
     timelineItems: List<TimelineItem>,
     currentDayOfWeek: Int,
-    currentTime: Long,
-    showStatusColors: Boolean,
     preferEnglishTitles: Boolean,
     animeStatusMap: Map<Int, String>,
     listState: LazyListState,
-    screenKey: String = "schedule",
     isVisible: Boolean = true,
     onAnimeClick: (AiringScheduleAnime) -> Unit
 ) {
@@ -528,7 +502,7 @@ private fun TimelineScheduleList(
     val density = LocalDensity.current
     val translationYOffset = with(density) { (-30).dp.toPx() }
     val isScrolling by remember { derivedStateOf { listState.isScrollInProgress } }
-    val cinematicProgress = rememberCinematicAnimation(screenKey, isVisible, true)
+    val cinematicProgress = rememberCinematicAnimation("schedule", isVisible, true)
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -546,7 +520,7 @@ private fun TimelineScheduleList(
             val introScale = 0.3f + easedProgress * 0.7f
             val introAlpha = easedProgress.coerceAtLeast(0f)
             val introTranslationY = translationYOffset * (1f - easedProgress)
-            val layoutInfo = listState.layoutInfo
+            val layoutInfo by remember { derivedStateOf { listState.layoutInfo } }
             val visibleItems = layoutInfo.visibleItemsInfo
             val itemInfo = visibleItems.find { it.index == index }
             val centerOffset = if (itemInfo != null) { val ic = itemInfo.offset + itemInfo.size / 2; val sc = (layoutInfo.viewportSize.height / 2).toFloat(); (ic - sc) / sc } else 0f
@@ -560,8 +534,9 @@ private fun TimelineScheduleList(
 
             Box(modifier = Modifier.graphicsLayer { scaleX = finalScale; scaleY = finalScale; alpha = finalAlpha; translationY = finalTranslationY }) {
                 when (item) {
-                    is TimelineItem.DayHeader -> DayHeaderItem(item.dayName, item.dayIndex, item.dayIndex == currentDayOfWeek)
-                    is TimelineItem.Anime -> TimelineAnimeItem(timeFormat.format(Date(item.data.airingAt * 1000L)), item.data, item.isPast, showStatusColors, preferEnglishTitles, animeStatusMap[item.data.id], onClick = { onAnimeClick(item.data) })
+                    is TimelineItem.DayHeader -> DayHeaderItem(item.dayName, item.dayIndex == currentDayOfWeek)
+                    is TimelineItem.Anime -> TimelineAnimeItem(timeFormat.format(Date(item.data.airingAt * 1000L)), item.data, item.isPast,
+                        preferEnglishTitles, animeStatusMap[item.data.id], onClick = { onAnimeClick(item.data) })
                     is TimelineItem.NowIndicator -> CurrentTimeIndicator(item.timeString)
                 }
             }
@@ -571,7 +546,7 @@ private fun TimelineScheduleList(
 }
 
 @Composable
-private fun DayHeaderItem(dayName: String, dayIndex: Int, isToday: Boolean) {
+private fun DayHeaderItem(dayName: String, isToday: Boolean) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -600,7 +575,6 @@ private fun TimelineAnimeItem(
     timeString: String,
     anime: AiringScheduleAnime,
     isPast: Boolean,
-    showStatusColors: Boolean,
     preferEnglishTitles: Boolean,
     animeStatus: String?,
     onClick: () -> Unit

@@ -22,7 +22,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -1949,14 +1948,10 @@ fun MainScreen(
                             isOled = isOled,
                             isVisible = true,
                             preventAutoSync = preventScheduleSync,
-                            showStatusColors = showStatusColors,
-                            disableMaterialColors = disableMaterialColors,
                             hideAdultContent = hideAdultContent,
                             preferEnglishTitles = preferEnglishTitles,
                             isLoggedIn = isLoggedIn,
                             onPlayEpisode = onPlayEpisode,
-                            onShowAnimeDialog = onShowAnimeDialog,
-                            onClearAnimeStack = onClearAnimeStack,
                             onAnimeDialogOpen = { isOpen -> scheduleDialogOpen = isOpen },
                             onCharacterClick = { characterId ->
                                 overlayState = OverlayState.CharacterDialog(characterId = characterId, animeId = 0)
