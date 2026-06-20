@@ -55,18 +55,16 @@ class UpdateViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            try {
-                val channel = NotificationChannel(
-                    "update_downloads",
-                    "Update Downloads",
-                    NotificationManager.IMPORTANCE_LOW
-                ).apply {
-                    description = "Update download progress"
-                }
-                notificationManager.createNotificationChannel(channel)
-            } catch (_: Exception) {}
-        }
+        try {
+            val channel = NotificationChannel(
+                "update_downloads",
+                "Update Downloads",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Update download progress"
+            }
+            notificationManager.createNotificationChannel(channel)
+        } catch (_: Exception) {}
     }
 
     private fun showDownloadNotification(progress: Int, max: Int) {
