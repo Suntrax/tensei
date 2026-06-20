@@ -4,7 +4,6 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.net.URL
@@ -106,12 +105,12 @@ private fun extractRepoName(repoUrl: String): String {
         val url = URL(repoUrl)
         val host = url.host.lowercase()
         val path = url.path.trim('/')
-        when {
-            host == "raw.githubusercontent.com" -> {
+        when (host) {
+            "raw.githubusercontent.com" -> {
                 val parts = path.split('/')
                 if (parts.size >= 2) parts[0] else host
             }
-            host == "github.com" -> {
+            "github.com" -> {
                 val parts = path.split('/')
                 if (parts.isNotEmpty()) parts[0] else host
             }
