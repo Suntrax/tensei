@@ -113,7 +113,7 @@ fun ExploreAnimeHorizontalList(
             items = animeList,
             key = { _, anime -> anime.id }
         ) { index, anime ->
-            val layoutInfo = listState.layoutInfo
+            val layoutInfo by remember { derivedStateOf { listState.layoutInfo } }
             val visibleItems = layoutInfo.visibleItemsInfo
             val itemInfo = visibleItems.find { it.index == index }
             
@@ -147,13 +147,11 @@ fun ExploreAnimeHorizontalList(
             val rotationYVal = (animatedOffset * 15f).coerceIn(-15f, 15f)
             
             val introScale = 0.3f + easedProgress * 0.7f
-            val introAlpha = easedProgress
             val introTranslationY = translationYOffset * (1f - easedProgress)
             
             val finalScale = baseScale * introScale
-            val finalAlpha = baseAlpha * introAlpha
-            val finalTranslationY = introTranslationY
-            
+            val finalAlpha = baseAlpha * easedProgress
+
             val localStatus = localAnimeStatus[anime.id]?.status
             val handleAddLocalPlanning: () -> Unit = { onAddToLocalPlanning(anime) }
             val handleRemoveLocalStatus: () -> Unit = { onRemoveFromLocalStatus(anime) }
@@ -165,7 +163,7 @@ fun ExploreAnimeHorizontalList(
                         scaleY = finalScale
                         alpha = finalAlpha
                         translationX = translationXVal
-                        translationY = finalTranslationY
+                        translationY = introTranslationY
                         rotationY = rotationYVal
                         cameraDistance = cameraDistancePx
                     }
@@ -444,7 +442,7 @@ fun ExploreAnimeCard(
 
         val displayTitle = when {
             preferEnglishTitles && !anime.titleEnglish.isNullOrEmpty() -> anime.titleEnglish
-            !anime.title.isNullOrEmpty() -> anime.title
+            anime.title.isNotEmpty() -> anime.title
             !anime.titleEnglish.isNullOrEmpty() -> anime.titleEnglish
             else -> "Unknown"
         }
