@@ -5,7 +5,6 @@ import eu.kanade.tachiyomi.animesource.model.AnimesPage
 
 interface AnimeCatalogueSource : AnimeSource {
     override val lang: String
-    val supportsLatest: Boolean
 
     suspend fun getPopularAnime(page: Int): AnimesPage
     suspend fun getSearchAnime(page: Int, query: String, filters: AnimeFilterList): AnimesPage
