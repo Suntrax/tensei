@@ -10,6 +10,7 @@ import androidx.core.net.toUri
 import androidx.glance.appwidget.updateAll
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.media3.common.util.UnstableApi
 import com.blissless.tensei.data.AnimeRepository
 import com.blissless.tensei.data.CacheManager
 import com.blissless.tensei.api.jikan.JikanService
@@ -21,13 +22,11 @@ import com.blissless.tensei.data.UserPreferences
 import com.blissless.tensei.data.models.AiringScheduleAnime
 import com.blissless.tensei.data.models.AnimeMedia
 import com.blissless.tensei.data.models.AnimeRelation
-import com.blissless.tensei.data.models.AniwatchStreamResult
 import com.blissless.tensei.data.models.CachedExtensionStream
 import com.blissless.tensei.data.models.CachedHoster
 import com.blissless.tensei.data.models.CachedTrack
 import com.blissless.tensei.data.models.CachedVideo
 import com.blissless.tensei.data.models.DetailedAnimeData
-import com.blissless.tensei.data.models.EpisodeStreams
 import com.blissless.tensei.data.models.ExploreAnime
 import com.blissless.tensei.data.models.ExploreCacheData
 import com.blissless.tensei.data.models.ExploreMedia
@@ -68,7 +67,9 @@ import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.model.Track
 import okhttp3.Headers
 import okhttp3.OkHttpClient
+import kotlin.time.Duration.Companion.milliseconds
 
+@UnstableApi
 class MainViewModel : ViewModel() {
 
     companion object {
@@ -85,8 +86,6 @@ class MainViewModel : ViewModel() {
     private lateinit var context: Context
     private var connectivityCallback: ConnectivityManager.NetworkCallback? = null
     private var sourceManager: com.blissless.tensei.stream.SourceManager? = null
-
-    fun getSourceManager(): com.blissless.tensei.stream.SourceManager? = sourceManager
 
     data class PreFetchedExtensionData(
         val source: AnimeCatalogueSource,
@@ -119,30 +118,30 @@ class MainViewModel : ViewModel() {
     fun preFetchExtensionEpisodes(anime: AnimeMedia, packageName: String? = null) {
         viewModelScope.launch(Dispatchers.IO) {
             _preFetchedExtensionData.remove(anime.id)
-            _preFetchedEpisodeNumbers.value = _preFetchedEpisodeNumbers.value - anime.id
+            _preFetchedEpisodeNumbers.value -= anime.id
 
             val pkg = packageName ?: defaultExtensionPackage.value
             if (pkg.isEmpty()) {
-                _preFetchedEpisodeNumbers.value = _preFetchedEpisodeNumbers.value + (anime.id to emptySet())
+                _preFetchedEpisodeNumbers.value += (anime.id to emptySet())
                 return@launch
             }
 
             val sm = sourceManager
             if (sm == null) {
-                _preFetchedEpisodeNumbers.value = _preFetchedEpisodeNumbers.value + (anime.id to emptySet())
+                _preFetchedEpisodeNumbers.value += (anime.id to emptySet())
                 return@launch
             }
 
             if (sm.getSources().isEmpty()) {
                 try { sm.loadSources() } catch (_: Exception) {
-                    _preFetchedEpisodeNumbers.value = _preFetchedEpisodeNumbers.value + (anime.id to emptySet())
+                    _preFetchedEpisodeNumbers.value += (anime.id to emptySet())
                     return@launch
                 }
             }
             val allSources = sm.getSources()
             val sw = allSources.find { it.extension.packageName == pkg }
             if (sw == null) {
-                _preFetchedEpisodeNumbers.value = _preFetchedEpisodeNumbers.value + (anime.id to emptySet())
+                _preFetchedEpisodeNumbers.value += (anime.id to emptySet())
                 return@launch
             }
             val source = sw.source
@@ -162,7 +161,7 @@ class MainViewModel : ViewModel() {
 
             val sAnime = matchedSAnime
             if (sAnime == null) {
-                _preFetchedEpisodeNumbers.value = _preFetchedEpisodeNumbers.value + (anime.id to emptySet())
+                _preFetchedEpisodeNumbers.value += (anime.id to emptySet())
                 return@launch
             }
 
@@ -176,7 +175,7 @@ class MainViewModel : ViewModel() {
             }
 
             _preFetchedExtensionData[anime.id] = PreFetchedExtensionData(source, sAnime, sEpisodes)
-            _preFetchedEpisodeNumbers.value = _preFetchedEpisodeNumbers.value + (anime.id to sEpisodes.map { it.episode_number.toInt() }.toSet())
+            _preFetchedEpisodeNumbers.value += (anime.id to sEpisodes.map { it.episode_number.toInt() }.toSet())
         }
     }
 
@@ -189,7 +188,7 @@ class MainViewModel : ViewModel() {
             _isOffline.value = true
         }
 
-        override fun onCapabilitiesChanged(network: android.net.Network, capabilities: android.net.NetworkCapabilities) {
+        override fun onCapabilitiesChanged(network: android.net.Network, capabilities: NetworkCapabilities) {
             val hasInternet = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
             _isOffline.value = !hasInternet
         }
@@ -201,7 +200,7 @@ class MainViewModel : ViewModel() {
         apiRetryJob?.cancel()
         apiRetryJob = viewModelScope.launch {
             while (true) {
-                delay(MIN_REFRESH_INTERVAL_MS)
+                delay(MIN_REFRESH_INTERVAL_MS.milliseconds)
                 if (!_isOffline.value && _apiError.value != null) {
                     fetchExploreData(force = true)
                 }
@@ -212,8 +211,8 @@ class MainViewModel : ViewModel() {
     // Sync queue for debounced AniList API calls
     private data class PendingSync(val type: String, val mediaId: Int, val malId: Int? = null, val status: String? = null, val progress: Int? = null, val score: Int? = null, val entryId: Int? = null, val favoriteAdded: Boolean? = null)
     private val pendingSyncs = mutableMapOf<Int, PendingSync>() // mediaId -> pending sync
-    private var syncJob: kotlinx.coroutines.Job? = null
-    private var favoriteSyncJob: kotlinx.coroutines.Job? = null
+    private var syncJob: Job? = null
+    private var favoriteSyncJob: Job? = null
 
     private fun queueSync(mediaId: Int, type: String, malId: Int? = null, status: String? = null, progress: Int? = null, score: Int? = null, entryId: Int? = null, favoriteAdded: Boolean? = null) {
         val existingSync = pendingSyncs[mediaId]
@@ -225,13 +224,13 @@ class MainViewModel : ViewModel() {
             // Favorites use a separate 1-second debounce that resets on each toggle
             favoriteSyncJob?.cancel()
             favoriteSyncJob = viewModelScope.launch {
-                delay(FAVORITE_DEBOUNCE_MS)
+                delay(FAVORITE_DEBOUNCE_MS.milliseconds)
                 executeFavoriteSyncs()
             }
         } else {
             syncJob?.cancel()
             syncJob = viewModelScope.launch {
-                delay(SYNC_DEBOUNCE_MS)
+                delay(SYNC_DEBOUNCE_MS.milliseconds)
                 executePendingSyncs()
             }
         }
@@ -251,7 +250,7 @@ class MainViewModel : ViewModel() {
                 } else {
                     repository.removeAniListFavorite(sync.mediaId)
                 }
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 // Re-queue the failed sync so it retries
                 pendingSyncs[sync.mediaId] = sync
             }
@@ -365,7 +364,6 @@ class MainViewModel : ViewModel() {
             val malId = entry.node.id
             val status = entry.list_status?.status
             val progress = entry.list_status?.num_episodes_watched ?: 0
-            val score = entry.list_status?.score ?: 0
 
             // Find matching anime from cache by MAL ID
             val cachedAnime = cacheManager.detailedAnimeCache.value.values.find {
@@ -421,41 +419,6 @@ class MainViewModel : ViewModel() {
         loadMalFavoritesFromCache()
     }
 
-    fun toggleMalFavorite(anime: AnimeMedia) {
-        val currentFavorites = _malFavorites.value.toMutableList()
-        val existingIndex = currentFavorites.indexOfFirst { it.id == anime.id || it.malId == anime.malId }
-        if (existingIndex >= 0) {
-            currentFavorites.removeAt(existingIndex)
-            userPreferences.toggleLocalFavorite(anime.id)
-            // Also remove from AniList if logged in via AniList
-            if (_loginProvider.value == LoginProvider.ANILIST && anime.id > 0) {
-                _aniListFavorites.value = _aniListFavorites.value.filter { it.id != anime.id }
-                userPreferences.toggleAniListFavorite(anime.id)
-                queueSync(anime.id, "favorite", favoriteAdded = false)
-            }
-        } else {
-            currentFavorites.add(anime)
-            userPreferences.toggleLocalFavorite(anime.id, anime.title, anime.cover, anime.banner, anime.year, anime.averageScore)
-            // Also add to AniList if logged in via AniList
-            if (_loginProvider.value == LoginProvider.ANILIST && anime.id > 0) {
-                val userFavorite = UserFavoriteAnime(
-                    id = anime.id,
-                    title = MediaTitle(romaji = anime.title, english = anime.titleEnglish),
-                    coverImage = MediaCoverImage(extraLarge = anime.cover),
-                    episodes = anime.totalEpisodes,
-                    averageScore = anime.averageScore,
-                    genres = anime.genres,
-                    seasonYear = anime.year
-                )
-                _aniListFavorites.value = _aniListFavorites.value + userFavorite
-                userPreferences.toggleAniListFavorite(anime.id)
-                queueSync(anime.id, "favorite", favoriteAdded = true)
-            }
-        }
-        _malFavorites.value = currentFavorites
-        userPreferences.saveMalFavorites(currentFavorites.map { it.id })
-    }
-
     private fun toggleMalFavoriteById(mediaId: Int) {
         val currentFavorites = _malFavorites.value.toMutableList()
         val existingIndex = currentFavorites.indexOfFirst { it.id == mediaId || it.malId == mediaId }
@@ -469,21 +432,6 @@ class MainViewModel : ViewModel() {
                 currentFavorites.add(anime)
             }
         }
-        _malFavorites.value = currentFavorites
-        userPreferences.saveMalFavorites(currentFavorites.map { it.id })
-    }
-
-    fun isMalFavorite(mediaId: Int): Boolean {
-        return _malFavorites.value.any { it.id == mediaId || it.malId == mediaId }
-    }
-
-    fun getMalFavoriteAnime(): List<AnimeMedia> {
-        return _malFavorites.value
-    }
-
-    fun removeMalFavorite(mediaId: Int) {
-        val currentFavorites = _malFavorites.value.toMutableList()
-        currentFavorites.removeAll { it.id == mediaId || it.malId == mediaId }
         _malFavorites.value = currentFavorites
         userPreferences.saveMalFavorites(currentFavorites.map { it.id })
     }
@@ -512,7 +460,6 @@ class MainViewModel : ViewModel() {
 
     // UI State
     private val _userId = MutableStateFlow<Int?>(null)
-    val userId: StateFlow<Int?> = _userId.asStateFlow()
 
     private val _userName = MutableStateFlow<String?>(null)
     val userName: StateFlow<String?> = _userName.asStateFlow()
@@ -627,7 +574,6 @@ class MainViewModel : ViewModel() {
     // AniList Favorites
     private val _aniListFavorites = MutableStateFlow<List<UserFavoriteAnime>>(emptyList())
     val aniListFavorites: StateFlow<List<UserFavoriteAnime>> = _aniListFavorites.asStateFlow()
-    val aniListFavoriteIds: StateFlow<Set<Int>> get() = userPreferences.aniListFavorites
 
     // Jikan (MAL) Favorites and History
     private val _jikanFavorites = MutableStateFlow<JikanUserFavorites?>(null)
@@ -639,17 +585,9 @@ class MainViewModel : ViewModel() {
     private var jikanService: JikanService? = null
     private var malUsername: String? = null
     private val _malUsername = MutableStateFlow<String?>(null)
-    val malUsernameFlow: StateFlow<String?> = _malUsername.asStateFlow()
 
-    suspend fun getJikanAnimeCover(malId: Int): String? = jikanService?.getAnimeCover(malId)
-
-    private var lastFavoriteToggleTime = 0L
-    private val favoriteToggleCooldownMs = 3000L // 3 second cooldown
     private val _isFavoriteRateLimited = MutableStateFlow(false)
     val isFavoriteRateLimited: StateFlow<Boolean> = _isFavoriteRateLimited.asStateFlow()
-
-    private val _completedSearchResults = MutableStateFlow<List<AnimeMedia>>(emptyList())
-    val completedSearchResults: StateFlow<List<AnimeMedia>> = _completedSearchResults.asStateFlow()
 
     // Preferences Delegations
     val authToken: StateFlow<String?> get() = userPreferences.authToken
@@ -664,23 +602,18 @@ class MainViewModel : ViewModel() {
     val trackingPercentage: StateFlow<Int> get() = userPreferences.trackingPercentage
     val forwardSkipSeconds: StateFlow<Int> get() = userPreferences.forwardSkipSeconds
     val backwardSkipSeconds: StateFlow<Int> get() = userPreferences.backwardSkipSeconds
-    val hideNavbarText: StateFlow<Boolean> get() = userPreferences.hideNavbarText
     val simplifyEpisodeMenu: StateFlow<Boolean> get() = userPreferences.simplifyEpisodeMenu
-    val simplifyAnimeDetails: StateFlow<Boolean> get() = userPreferences.simplifyAnimeDetails
     val autoSkipOpening: StateFlow<Boolean> get() = userPreferences.autoSkipOpening
     val autoSkipEnding: StateFlow<Boolean> get() = userPreferences.autoSkipEnding
     val autoPlayNextEpisode: StateFlow<Boolean> get() = userPreferences.autoPlayNextEpisode
     val localFavorites: StateFlow<Map<Int, StoredFavorite>> get() = userPreferences.localFavorites
-    val localFavoriteIds: Set<Int> get() = userPreferences.localFavoriteIds
     val localAnimeStatus: StateFlow<Map<Int, LocalAnimeEntry>> get() = userPreferences.localAnimeStatus
-    val preferredScraper: StateFlow<String> get() = userPreferences.preferredScraper
     val defaultExtensionPackage: StateFlow<String> get() = userPreferences.defaultExtensionPackage
     val defaultSubtitleLang: StateFlow<String> get() = userPreferences.defaultSubtitleLang
     val downloadPreferredCategory: StateFlow<String> get() = userPreferences.downloadPreferredCategory
     val downloadSubtitleLang: StateFlow<String> get() = userPreferences.downloadSubtitleLang
     val hideAdultContent: StateFlow<Boolean> get() = userPreferences.hideAdultContent
     val startupScreen: StateFlow<Int> get() = userPreferences.startupScreen
-    val streamProvider: StateFlow<Int> get() = userPreferences.streamProvider
 
     // Buffer Settings
     val bufferAheadSeconds: StateFlow<Int> get() = userPreferences.bufferAheadSeconds
@@ -703,20 +636,10 @@ class MainViewModel : ViewModel() {
     private val _pendingUpdateRelease = MutableStateFlow<GitHubRelease?>(null)
     val pendingUpdateRelease: StateFlow<GitHubRelease?> = _pendingUpdateRelease.asStateFlow()
 
-    // Cache Delegations
-    val prefetchedStreams: StateFlow<Map<String, AniwatchStreamResult?>> get() = cacheManager.prefetchedStreams
-    val prefetchedEpisodeInfo: StateFlow<Map<String, EpisodeStreams?>> get() = cacheManager.prefetchedEpisodeInfo
     val playbackPositions: StateFlow<Map<String, Long>> get() = cacheManager.playbackPositions
-    val detailedAnimeCache: StateFlow<Map<Int, DetailedAnimeData>> get() = cacheManager.detailedAnimeCache
 
     // Get cache data source factory for disk caching
     fun getCacheDataSourceFactory(referer: String) = cacheManager.getCacheDataSourceFactory(referer)
-
-    // Check if video is fully cached
-    fun isVideoFullyCached(videoUrl: String) = cacheManager.isVideoFullyCached(videoUrl)
-
-    // Get cache progress
-    fun getCacheProgress(videoUrl: String) = cacheManager.getCacheProgress(videoUrl)
 
     // Download cache management
     fun getDownloadCacheSize(): Long = episodeDownloadManager.getDownloadCacheSize()
@@ -762,45 +685,6 @@ class MainViewModel : ViewModel() {
         _hideNavbar.value = hide
     }
 
-    private val _detailedAnimeScreenData = MutableStateFlow<DetailedAnimeData?>(null)
-    val detailedAnimeScreenData: StateFlow<DetailedAnimeData?> = _detailedAnimeScreenData.asStateFlow()
-
-    fun setDetailedAnimeScreenData(anime: DetailedAnimeData?) {
-        _detailedAnimeScreenData.value = anime
-    }
-
-    private val _richEpisodeScreenAnime = MutableStateFlow<AnimeMedia?>(null)
-    val richEpisodeScreenAnime: StateFlow<AnimeMedia?> = _richEpisodeScreenAnime.asStateFlow()
-
-    fun setRichEpisodeScreenAnime(anime: AnimeMedia?) {
-        _richEpisodeScreenAnime.value = anime
-    }
-
-    private val _userProfileScreenUserId = MutableStateFlow<Int?>(null)
-    val userProfileScreenUserId: StateFlow<Int?> = _userProfileScreenUserId.asStateFlow()
-
-    fun setUserProfileScreenUserId(userId: Int?) {
-        _userProfileScreenUserId.value = userId
-    }
-
-    private val _screenNavigationStack = MutableStateFlow<List<Int>>(emptyList())
-
-    fun navigateToScreen(screenIndex: Int, currentPage: Int) {
-        val currentStack = _screenNavigationStack.value.toMutableList()
-        if (currentStack.isEmpty() || currentStack.last() != screenIndex) {
-            currentStack.add(currentPage)
-            _screenNavigationStack.value = currentStack
-        }
-    }
-
-    fun navigateBack() {
-        val currentStack = _screenNavigationStack.value.toMutableList()
-        if (currentStack.isNotEmpty()) {
-            val previousPage = currentStack.removeLast()
-            _screenNavigationStack.value = currentStack
-        }
-    }
-
     fun setExploreAnimeCardBounds(animeId: Int, coverUrl: String, bounds: android.graphics.RectF?) {
         if (bounds != null && bounds.width() > 0 && bounds.height() > 0) {
             _exploreAnimeCardBounds.value = CardBounds(animeId, coverUrl, bounds)
@@ -825,7 +709,7 @@ class MainViewModel : ViewModel() {
     val isLoggedIn: Boolean get() = _loginProvider.value != LoginProvider.NONE
 
     fun init(context: Context, hasToken: Boolean) {
-        this.context = context
+        this.context = context.applicationContext
         userPreferences = UserPreferences(context)
         cacheManager = CacheManager(userPreferences.getSharedPreferences())
         repository = AnimeRepository(userPreferences, cacheManager)
@@ -930,18 +814,14 @@ class MainViewModel : ViewModel() {
 
     private fun checkConnectivity() {
         try {
-            val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
+            val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
             val network = connectivityManager?.activeNetwork
             val capabilities = connectivityManager?.getNetworkCapabilities(network)
-            val isConnected = capabilities?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+            val isConnected = capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
             _isOffline.value = !isConnected
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             _isOffline.value = false
         }
-    }
-
-    fun refreshConnectivity() {
-        checkConnectivity()
     }
 
     private fun registerConnectivityCallback() {
@@ -952,7 +832,7 @@ class MainViewModel : ViewModel() {
                 .build()
             connectivityCallback = networkCallback
             connectivityManager?.registerNetworkCallback(networkRequest, networkCallback)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
         }
     }
 
@@ -969,10 +849,7 @@ class MainViewModel : ViewModel() {
     }
 
     fun fetchJikanUserData() {
-        val username = malUsername
-        if (username == null) {
-            return
-        }
+        val username = malUsername ?: return
         viewModelScope.launch {
             _jikanFavorites.value = jikanService?.getUserFavorites(username)
             _jikanHistory.value = jikanService?.getUserHistory(username)
@@ -988,10 +865,6 @@ class MainViewModel : ViewModel() {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         }
         context.startActivity(intent)
-    }
-
-    fun handleMalAuthRedirect(intent: Intent?) {
-        handleMalAuthAuthCode(intent?.dataString ?: "")
     }
 
     fun handleMalAuthAuthCode(uriString: String) {
@@ -1204,7 +1077,7 @@ class MainViewModel : ViewModel() {
         _userAvatar.value = data.userAvatar
     }
 
-    private suspend fun loadExploreDataWithCache() {
+    private fun loadExploreDataWithCache() {
         val cachedData = cacheManager.loadExploreDataFromCache()
         if (cachedData != null) {
             updateExploreState(cachedData)
@@ -1251,14 +1124,8 @@ class MainViewModel : ViewModel() {
     }
 
     suspend fun fetchLists(): Boolean {
-        val userId = _userId.value
-        if (userId == null) {
-            return false
-        }
-        val response = repository.fetchMediaLists(userId)
-        if (response == null) {
-            return false
-        }
+        val userId = _userId.value ?: return false
+        val response = repository.fetchMediaLists(userId) ?: return false
 
         val grouped = response.data.MediaListCollection.lists.flatMap { list ->
             list.entries.map { entry ->
@@ -1399,7 +1266,7 @@ class MainViewModel : ViewModel() {
                 _airingAnimeList.value = airingList
                 cacheManager.saveAiringScheduleCache(scheduleByDay, airingList)
                 lastExploreRefreshTime = System.currentTimeMillis()
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 // Keep existing cached data on failure
             }
             _isLoadingSchedule.value = false
@@ -1594,7 +1461,7 @@ class MainViewModel : ViewModel() {
             else -> return
         }
 
-        targetList.value = targetList.value + updatedAnime
+        targetList.value += updatedAnime
     }
 
     fun removeAnimeFromList(mediaId: Int) {
@@ -1612,10 +1479,6 @@ class MainViewModel : ViewModel() {
         if (entryId != null) {
             queueSync(mediaId, "delete", entryId = entryId)
         }
-    }
-
-    fun hasLocalAnimeChanges(): Boolean {
-        return localAnimeStatus.value.isNotEmpty()
     }
 
     fun discardLocalChanges() {
@@ -1679,19 +1542,14 @@ class MainViewModel : ViewModel() {
     fun setTrackingPercentage(percentage: Int) = userPreferences.setTrackingPercentage(percentage)
     fun setForwardSkipSeconds(seconds: Int) = userPreferences.setForwardSkipSeconds(seconds)
     fun setBackwardSkipSeconds(seconds: Int) = userPreferences.setBackwardSkipSeconds(seconds)
-    fun setHideNavbarText(enabled: Boolean) = userPreferences.setHideNavbarText(enabled)
     fun setSimplifyEpisodeMenu(enabled: Boolean) = userPreferences.setSimplifyEpisodeMenu(enabled)
-    fun setSimplifyAnimeDetails(enabled: Boolean) = userPreferences.setSimplifyAnimeDetails(enabled)
     fun setAutoSkipOpening(enabled: Boolean) = userPreferences.setAutoSkipOpening(enabled)
     fun setAutoSkipEnding(enabled: Boolean) = userPreferences.setAutoSkipEnding(enabled)
     fun setAutoPlayNextEpisode(enabled: Boolean) = userPreferences.setAutoPlayNextEpisode(enabled)
-    fun setEnableThumbnailPreview(enabled: Boolean) = userPreferences.setEnableThumbnailPreview(enabled)
-    fun setPreferredScraper(scraper: String) = userPreferences.setPreferredScraper(scraper)
     fun setDefaultExtensionPackage(packageName: String) = userPreferences.setDefaultExtensionPackage(packageName)
     fun setDefaultSubtitleLang(lang: String) = userPreferences.setDefaultSubtitleLang(lang)
     fun setDownloadPreferredCategory(category: String) = userPreferences.setDownloadPreferredCategory(category)
     fun setDownloadSubtitleLang(lang: String) = userPreferences.setDownloadSubtitleLang(lang)
-    fun setStreamProvider(provider: Int) = userPreferences.setStreamProvider(provider)
     fun setHideAdultContent(enabled: Boolean) = userPreferences.setHideAdultContent(enabled)
     fun setStartupScreen(screen: Int) = userPreferences.setStartupScreen(screen)
     fun setBufferAheadSeconds(seconds: Int) = userPreferences.setBufferAheadSeconds(seconds)
@@ -1707,38 +1565,14 @@ class MainViewModel : ViewModel() {
         userPreferences.toggleLocalFavorite(mediaId)
         updateOfflineLists()
     }
-    fun toggleLocalFavorite(mediaId: Int, title: String, cover: String, banner: String?, year: Int?, averageScore: Int?) {
-        userPreferences.toggleLocalFavorite(mediaId, title, cover, banner, year, averageScore)
-        updateOfflineLists()
-    }
-    fun toggleLocalFavorite(anime: ExploreAnime) {
-        userPreferences.toggleLocalFavorite(anime.id, anime.title, anime.cover, anime.banner, anime.year, anime.averageScore)
-        updateOfflineLists()
-    }
-    fun toggleLocalFavorite(anime: AnimeMedia) {
-        userPreferences.toggleLocalFavorite(anime.id, anime.title, anime.cover, anime.banner, anime.year, anime.averageScore)
-        updateOfflineLists()
-    }
-    fun toggleLocalFavorite(anime: DetailedAnimeData) {
-        userPreferences.toggleLocalFavorite(anime.id, anime.title, anime.cover, anime.banner, anime.year, anime.averageScore)
-        updateOfflineLists()
-    }
+
     fun toggleOfflineFavorite(animeId: Int, title: String, cover: String, banner: String?, year: Int?, averageScore: Int?) {
         userPreferences.toggleLocalFavorite(animeId, title, cover, banner, year, averageScore)
         updateOfflineLists()
     }
-    fun isLocalFavorite(mediaId: Int) = userPreferences.isLocalFavorite(mediaId)
-    fun canAddFavorite() = userPreferences.canAddFavorite()
-    fun getLocalFavoriteCount() = userPreferences.getLocalFavoriteCount()
 
-    // Local Anime Status (for offline users)
-    fun getLocalAnimeStatus(mediaId: Int): LocalAnimeEntry? = userPreferences.getLocalAnimeStatus(mediaId)
     fun setLocalAnimeStatus(mediaId: Int, entry: LocalAnimeEntry?) {
         userPreferences.setLocalAnimeStatus(mediaId, entry)
-        updateOfflineLists()
-    }
-    fun updateLocalAnimeProgress(mediaId: Int, progress: Int, totalEpisodes: Int) {
-        userPreferences.updateLocalAnimeProgress(mediaId, progress, totalEpisodes)
         updateOfflineLists()
     }
 
@@ -1746,9 +1580,7 @@ class MainViewModel : ViewModel() {
     val playbackDurations: StateFlow<Map<String, Long>> get() = cacheManager.playbackDurations
     fun savePlaybackPosition(animeId: Int, episode: Int, position: Long, duration: Long = 0L, isOffline: Boolean = false) = cacheManager.savePlaybackPosition(animeId, episode, position, duration, isOffline)
     fun getPlaybackPosition(animeId: Int, episode: Int, isOffline: Boolean = false) = cacheManager.getPlaybackPosition(animeId, episode, isOffline)
-    fun getPlaybackDuration(animeId: Int, episode: Int, isOffline: Boolean = false) = cacheManager.getPlaybackDuration(animeId, episode, isOffline)
     fun clearPlaybackPosition(animeId: Int, episode: Int) = cacheManager.clearPlaybackPosition(animeId, episode)
-    fun clearAllPlaybackPositionsForAnime(animeId: Int) = cacheManager.clearAllPlaybackPositionsForAnime(animeId)
 
     // Stream cache invalidation
     fun invalidateStreamCache(animeId: Int, episode: Int, category: String) {
@@ -1769,18 +1601,7 @@ class MainViewModel : ViewModel() {
 
     // Cache management
     fun getVideoCacheSize(context: Context): Long = cacheManager.getVideoCacheSize(context)
-    fun clearVideoCache(context: Context): Long = cacheManager.clearVideoCache(context)
     fun clearNonEssentialCaches(context: Context) = cacheManager.clearNonEssentialCaches(context)
-
-    /**
-     * Get the best title for Animekai scraping.
-     * Prefers English title for better search results on Animekai.
-     * Falls back to romaji/native title if English is not available.
-     */
-    private fun getScrapingName(anime: AnimeMedia): String {
-        // Use English title for Animekai scraping - it matches better
-        return anime.titleEnglish ?: anime.title
-    }
 
     /**
      * Get stream for a specific server.
@@ -1805,7 +1626,7 @@ class MainViewModel : ViewModel() {
         if (media == null) {
             return null
         }
-        val relationsList = media.relations?.edges?.mapNotNull { edge ->
+        val relationsList = media.relations?.edges?.map { edge ->
             edge.node.let { node ->
                 AnimeRelation(
                     id = node.id,
@@ -1838,9 +1659,11 @@ class MainViewModel : ViewModel() {
             isAdult = media.isAdult,
             characters = media.characters,
             trailerUrl = media.trailer?.let {
-                if (it.site == "youtube") "https://www.youtube.com/watch?v=${it.id}"
-                else if (it.site == "dailymotion") "https://www.dailymotion.com/video/${it.id}"
-                else null
+                when (it.site) {
+                    "youtube" -> "https://www.youtube.com/watch?v=${it.id}"
+                    "dailymotion" -> "https://www.dailymotion.com/video/${it.id}"
+                    else -> null
+                }
             },
             trailerThumbnail = media.trailer?.let {
                 if (it.site == "youtube" && it.id != null) {
@@ -1858,10 +1681,7 @@ class MainViewModel : ViewModel() {
     }
 
     suspend fun fetchDetailedAnimeDataByMalId(malId: Int): DetailedAnimeData? {
-        val media = repository.findAnimeByMalId(malId)
-        if (media == null) {
-            return null
-        }
+        val media = repository.findAnimeByMalId(malId) ?: return null
         return fetchDetailedAnimeData(media.id)
     }
 
@@ -1870,8 +1690,6 @@ class MainViewModel : ViewModel() {
     suspend fun fetchAllCharacters(animeId: Int) = repository.fetchAllCharacters(animeId)
     suspend fun fetchAllStaff(animeId: Int) = repository.fetchAllStaff(animeId)
 
-    // Search & Activity
-    suspend fun searchAnime(query: String) = repository.searchAnime(query).map { mapExploreMedia(it) }
     suspend fun searchAnimeAdvanced(
         search: String? = null,
         genres: List<String>? = null,
@@ -1897,10 +1715,7 @@ class MainViewModel : ViewModel() {
         if (cachedTags == null) cachedTags = repository.fetchAllTags()
         return cachedTags!!
     }
-    fun searchCompletedAnime(query: String) {
-        _completedSearchResults.value = if (query.isEmpty()) _completed.value else _completed.value.filter { it.title.contains(query, ignoreCase = true) }
-    }
-    fun loadAllCompletedAnime() { _completedSearchResults.value = _completed.value }
+
     fun fetchUserActivity() {
         val userId = _userId.value ?: return
         viewModelScope.launch { repository.fetchUserActivity(userId)?.let { _userActivity.value = it } }
@@ -1956,7 +1771,7 @@ class MainViewModel : ViewModel() {
         }
 
         // Convert IDs to UserFavoriteAnime placeholders (will be enriched by detailedAnimeCache if available)
-        val favorites = favoriteIds.mapNotNull { id ->
+        val favorites = favoriteIds.map { id ->
             val cached = cacheManager.detailedAnimeCache.value[id]
             if (cached != null) {
                 UserFavoriteAnime(
@@ -1997,7 +1812,7 @@ class MainViewModel : ViewModel() {
         }
         _aniListFavorites.value = favorites
     }
-    fun toggleAniListFavorite(mediaId: Int, anime: AnimeMedia? = null): Boolean {
+    fun toggleAniListFavorite(mediaId: Int, anime: AnimeMedia? = null) {
         if (_loginProvider.value == LoginProvider.MAL) {
             // Toggle MAL favorite using the ID-based method
             toggleMalFavoriteById(mediaId)
@@ -2026,7 +1841,7 @@ class MainViewModel : ViewModel() {
                         genres = anime.genres,
                         seasonYear = anime.year
                     )
-                    _aniListFavorites.value = _aniListFavorites.value + userFavorite
+                    _aniListFavorites.value += userFavorite
                 } else {
                     val cachedAnime = cacheManager.detailedAnimeCache.value[mediaId]
                     val placeholder = UserFavoriteAnime(
@@ -2038,46 +1853,18 @@ class MainViewModel : ViewModel() {
                         genres = cachedAnime?.genres ?: emptyList(),
                         seasonYear = cachedAnime?.year
                     )
-                    _aniListFavorites.value = _aniListFavorites.value + placeholder
+                    _aniListFavorites.value += placeholder
                 }
             }
 
             // Queue the API call for debounced sync with the desired state
             queueSync(mediaId, "favorite", favoriteAdded = willBeAdded)
-            return true
         }
-        return true
-    }
-    fun updateAnimeRating(mediaId: Int, score: Int) {
-        // Immediately update rating in lists
-        updateRatingInLists(mediaId, score)
-        queueSync(mediaId, "score", score = score)
-    }
-
-    private fun updateRatingInLists(mediaId: Int, score: Int) {
-        val updateInList: (MutableStateFlow<List<AnimeMedia>>, (AnimeMedia) -> AnimeMedia) -> Unit = { list, updater ->
-            list.value = list.value.map { if (it.id == mediaId) updater(it) else it }
-        }
-
-        updateInList(_currentlyWatching) { it.copy(userScore = score) }
-        updateInList(_planningToWatch) { it.copy(userScore = score) }
-        updateInList(_completed) { it.copy(userScore = score) }
-        updateInList(_onHold) { it.copy(userScore = score) }
-        updateInList(_dropped) { it.copy(userScore = score) }
     }
 
     // ============================================
     // PREFETCHING - Streams for adjacent episodes
     // ============================================
-
-    /**
-     * Check if a stream is already cached (synchronous, instant check).
-     * Use this to avoid showing loading indicator for cached streams.
-     */
-    fun isStreamCached(animeId: Int, episode: Int, category: String): Boolean {
-        val key = "${animeId}_${episode}_$category"
-        return cacheManager.hasStream(key)
-    }
 
     private suspend fun refreshReleasingAnimeProgress() {
         if (_loginProvider.value == LoginProvider.MAL) {
@@ -2201,104 +1988,6 @@ class MainViewModel : ViewModel() {
         updateAnimeStatus(anime.id, status, if (status == "CURRENT") 0 else null)
     }
 
-    private suspend fun getExtensionVideos(source: AnimeCatalogueSource, episode: SEpisode, anime: SAnime? = null): List<Video> {
-        return withContext(Dispatchers.IO) {
-            if (anime != null && source is eu.kanade.tachiyomi.animesource.online.AnimeHttpSource) {
-                source.prepareNewEpisode(episode, anime)
-            }
-            val hosters = try {
-                source.getHosterList(episode)
-            } catch (_: Throwable) { null }
-            if (hosters != null && hosters.isNotEmpty()) {
-                hosters.flatMap { hoster ->
-                    if (hoster.lazy) {
-                        try { source.getVideoList(hoster) } catch (_: Throwable) { emptyList() }
-                    } else {
-                        hoster.videoList ?: try { source.getVideoList(hoster) } catch (_: Throwable) { emptyList() }
-                    }
-                }
-            } else {
-                try { source.getVideoList(episode) } catch (_: Throwable) { emptyList() }
-            }
-        }
-    }
-
-    fun logExtensionStreamsForAnime(anime: AnimeMedia) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val defaultPkg = defaultExtensionPackage.value
-            if (defaultPkg.isEmpty()) {
-                return@launch
-            }
-
-            val sm = sourceManager
-            if (sm == null) {
-                return@launch
-            }
-
-            if (sm.getSources().isEmpty()) {
-                sm.loadSources()
-            }
-            val allSources = sm.getSources()
-            val sw = allSources.find { it.extension.packageName == defaultPkg }
-            if (sw == null) {
-                return@launch
-            }
-            val source = sw.source
-
-            val searchTerms = listOfNotNull(
-                anime.titleEnglish,
-                anime.title
-            ).distinct()
-
-            var matchedSAnime: SAnime? = null
-
-            for (query in searchTerms) {
-                try {
-                    val page = source.getSearchAnime(1, query, AnimeFilterList())
-                    Log.w("ExtensionSearch", "${source.name}: got ${page.animes.size} results for \"$query\"")
-                    page.animes.forEach { a ->
-                        Log.i("ExtensionSearch", "  -> ${a.title}")
-                    }
-                    matchedSAnime = page.animes.firstOrNull { a: SAnime ->
-                        a.title.contains(anime.title, ignoreCase = true) ||
-                                (anime.titleEnglish != null && a.title.contains(anime.titleEnglish, ignoreCase = true))
-                    } ?: page.animes.firstOrNull()
-                    if (matchedSAnime != null) {
-                        break
-                    }
-                } catch (e: Exception) {
-                    Log.w("ExtensionSearch", "Search failed for ${source.name}: ${e.message}")
-                }
-            }
-
-            if (matchedSAnime == null) {
-                return@launch
-            }
-
-            var sEpisodes: List<SEpisode> = try {
-                source.getEpisodeList(matchedSAnime)
-            } catch (_: Exception) { emptyList() }
-
-            if (sEpisodes.isEmpty()) {
-                try {
-                    matchedSAnime = source.getAnimeDetails(matchedSAnime)
-                } catch (e: Exception) {
-                }
-
-                sEpisodes = try {
-                    source.getEpisodeList(matchedSAnime)
-                } catch (_: Exception) { emptyList() }
-            }
-
-            for (sEpisode in sEpisodes) {
-                try {
-                    getExtensionVideos(source, sEpisode, matchedSAnime)
-                } catch (e: Exception) {
-                }
-            }
-        }
-    }
-
     data class ExtensionStreamResult(
         val url: String,
         val referer: String,
@@ -2352,7 +2041,6 @@ class MainViewModel : ViewModel() {
         }
         Log.i(epTag, "playEpisodeWithExtension: anime=${anime.id} ep=$episodeNumber pkg=$defaultPackage")
         return withContext(Dispatchers.IO) {
-            val overallStart = System.currentTimeMillis()
             try {
                 val sm = sourceManager
                 if (sm == null) {
@@ -2437,7 +2125,7 @@ class MainViewModel : ViewModel() {
                             }
                             val best = scored.maxByOrNull { it.second }
                             matchedSAnime = best?.first
-                            if (matchedSAnime != null && best?.second ?: 0 >= 300) break
+                            if (matchedSAnime != null && (best?.second ?: 0) >= 300) break
                         } catch (e: Exception) {
                             Log.w("ExtensionSearch", "Search failed for ${sw.source.name}: ${e.message}")
                         }
@@ -2495,22 +2183,22 @@ class MainViewModel : ViewModel() {
 
                 val hosters = try {
                     source.getHosterList(sEpisode)
-                } catch (e: Throwable) {
+                } catch (_: Throwable) {
                     null
                 }
 
-                if (hosters != null && hosters.isNotEmpty()) {
+                if (!hosters.isNullOrEmpty()) {
                     resolvedHosters = hosters
                     for (hoster in hosters) {
                         val hosterVideos = try {
                             if (hoster.lazy) source.getVideoList(hoster) else hoster.videoList ?: source.getVideoList(hoster)
-                        } catch (e: Throwable) {
+                        } catch (_: Throwable) {
                             emptyList()
                         }
                         hosterVideos.forEach { allVideos.add(VideoWithHoster(it, hoster.hosterName)) }
                     }
                 } else {
-                    val directVideos = try { source.getVideoList(sEpisode) } catch (e: Throwable) { emptyList() }
+                    val directVideos = try { source.getVideoList(sEpisode) } catch (_: Throwable) { emptyList() }
                     directVideos.forEach { allVideos.add(VideoWithHoster(it, "")) }
                 }
 
@@ -2606,7 +2294,7 @@ class MainViewModel : ViewModel() {
                             audioTracks = v.audioTracks.map { CachedTrack(it.url, it.lang) },
                         )
                     },
-                    hosters = derivedHosters?.map { CachedHoster(hosterUrl = it.hosterUrl, hosterName = it.hosterName) },
+                    hosters = derivedHosters.map { CachedHoster(hosterUrl = it.hosterUrl, hosterName = it.hosterName) },
                     videoHeaders = videoHeaders,
                     cachedAt = System.currentTimeMillis(),
                 ))
@@ -2680,7 +2368,7 @@ class MainViewModel : ViewModel() {
                     videoHeaders = videoHeaders,
                     source = source,
                 )
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 null
             }
         }
@@ -2692,7 +2380,7 @@ class MainViewModel : ViewModel() {
             try {
                 val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
                 connectivityManager?.unregisterNetworkCallback(callback)
-            } catch (e: Exception) {
+            } catch (_: Exception) {
             }
         }
     }
