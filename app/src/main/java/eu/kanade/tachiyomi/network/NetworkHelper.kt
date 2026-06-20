@@ -41,9 +41,6 @@ class NetworkHelper {
                     request
                 }
                 val response = chain.proceed(newRequest)
-                if (response.code == 500) {
-                    // HTTP 500 logged silently
-                }
                 response
             }
 
