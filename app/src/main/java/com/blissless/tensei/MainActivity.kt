@@ -1901,23 +1901,11 @@ fun MainScreen(
                             showStatusColors = showStatusColors,
                             simplifyEpisodeMenu = simplifyEpisodeMenu,
                             preferEnglishTitles = preferEnglishTitles,
-                            hideAdultContent = hideAdultContent,
                             onOverlayOpenChange = { overlayOpen = it },
                             onNavigateToSettings = {
                                 showSettings = true
                             },
-                            onStartDownload = { media ->
-                                overlayState = OverlayState.EpisodeDownloadDialog(anime = media)
-                            },
                             favoriteIds = if (viewModel.loginProvider.value == LoginProvider.MAL) malFavorites.map { it.id }.toSet() else aniListFavoriteIds,
-                            onToggleLocalFavorite = { animeId -> viewModel.toggleLocalFavorite(animeId) },
-                            onToggleFavorite = { anime -> 
-                                if (viewModel.loginProvider.value == LoginProvider.MAL) {
-                                    viewModel.toggleMalFavorite(anime)
-                                } else {
-                                    viewModel.toggleAniListFavorite(anime.id, anime)
-                                }
-                            },
                             onPlayEpisode = onPlayEpisode,
                             onLoginClick = { viewModel.loginWithAniList() },
                             onShowAnimeDialog = onShowAnimeDialog,

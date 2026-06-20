@@ -98,6 +98,7 @@ import com.blissless.tensei.ui.screens.downloads.EpisodeDownloadDialog
 import com.blissless.tensei.ui.screens.status.StatusListScreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.milliseconds
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -108,11 +109,7 @@ fun HomeScreen(
     showStatusColors: Boolean = true,
     simplifyEpisodeMenu: Boolean = true,
     preferEnglishTitles: Boolean = true,
-    hideAdultContent: Boolean = false,
     favoriteIds: Set<Int> = emptySet(),
-    onToggleLocalFavorite: (Int) -> Unit = {},
-    onToggleFavorite: (AnimeMedia) -> Unit = {},
-    onPlayerStateChange: (Boolean) -> Unit = {},
     onPlayEpisode: (AnimeMedia, Int, String?) -> Unit = { _, _, _ -> },
     onLoginClick: () -> Unit = {},
     onShowAnimeDialog: (ExploreAnime, ExploreAnime?) -> Unit = { _, _ -> },
@@ -126,7 +123,6 @@ fun HomeScreen(
     onOverlayOpenChange: (Boolean) -> Unit = {},
     onNavigateToSettings: (() -> Unit)? = null,
     onNavigateToSearch: () -> Unit = {},
-    onStartDownload: (AnimeMedia) -> Unit = {},
     currentScreenIndex: Int = 0,
     playbackPositions: Map<String, Long> = emptyMap(),
     playbackDurations: Map<String, Long> = emptyMap()
@@ -193,7 +189,7 @@ fun HomeScreen(
         }
     }
 
-    val hasOfflineContent = !isLoggedIn && (localFavorites.isNotEmpty() || viewModel.localAnimeStatus.value.isNotEmpty())
+    val hasOfflineContent = !isLoggedIn && (localFavorites.isNotEmpty() || localAnimeStatus.isNotEmpty())
     val showWelcomeCard = !isLoggedIn && allListsEmpty && !hasOfflineContent
 
     var isRefreshing by remember { mutableStateOf(false) }
@@ -214,9 +210,6 @@ fun HomeScreen(
     val disableMaterialColors by viewModel.disableMaterialColors.collectAsState(initial = false)
 
     val tmdbEpisodeCache by viewModel.tmdbEpisodeCache.collectAsState()
-
-    val authToken by viewModel.authToken.collectAsState()
-    val actuallyLoggedIn = authToken != null
 
     val apiError by viewModel.apiError.collectAsState()
     val isOffline by viewModel.isOffline.collectAsState()
@@ -284,7 +277,7 @@ fun HomeScreen(
                                 containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                             ),
                             onClick = { if (isLoggedIn) showProfileSheet = true },
-                            enabled = isLoggedIn
+                            enabled = true
                         ) {
                             Row(
                                 modifier = Modifier.padding(start = 10.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
@@ -297,12 +290,12 @@ fun HomeScreen(
                                         contentDescription = "User Avatar",
                                         contentScale = ContentScale.Crop,
                                         modifier = Modifier.size(40.dp).clip(CircleShape)
-                                    );
+                                    )
                                     Spacer(modifier = Modifier.width(8.dp))
                                 }
                                 else if (isLoggedIn) {
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Icon(Icons.Default.AccountCircle, contentDescription = "User", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(40.dp));
+                                    Icon(Icons.Default.AccountCircle, contentDescription = "User", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(40.dp))
                                     Spacer(modifier = Modifier.width(8.dp))
                                 }
 
@@ -314,24 +307,22 @@ fun HomeScreen(
                                 }
                             }
                         }
-                        if (isLoggedIn) {
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Card(
-                                modifier = Modifier.height(IntrinsicSize.Min),
-                                shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                                ),
-                                onClick = onNavigateToSearch
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Card(
+                            modifier = Modifier.height(IntrinsicSize.Min),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            ),
+                            onClick = onNavigateToSearch
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text("Search", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Spacer(modifier = Modifier.weight(1f))
-                                    Icon(Icons.Default.Search, contentDescription = "Search", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
-                                }
+                                Text("Search", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(modifier = Modifier.weight(1f))
+                                Icon(Icons.Default.Search, contentDescription = "Search", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
                             }
                         }
                     }
@@ -767,7 +758,6 @@ fun HomeScreen(
     }
 
     if (showStatusDialog && selectedAnime != null) {
-        val isAnimeFavorite = favoriteIds.contains(selectedAnime!!.id)
         HomeAnimeStatusDialog(
             anime = selectedAnime!!,
             isOled = isOled,
@@ -883,7 +873,7 @@ fun HomeScreen(
                         } else {
                             Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
                         }
-                    } catch (e: Exception) {
+                    } catch (_: Exception) {
                         Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
                     }
                 }
@@ -1089,10 +1079,7 @@ fun HomeScreen(
     LaunchedEffect(isLoading, isRefreshing) {
         if (isRefreshing) {
             // Use a timeout to ensure refreshing stops even if loading state gets stuck
-            delay(15000)
-            isRefreshing = false
-        }
-        if (!isLoading && isRefreshing) {
+            delay(15000.milliseconds)
             isRefreshing = false
         }
     }
