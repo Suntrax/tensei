@@ -788,9 +788,6 @@ fun HomeScreen(
         HomeAnimeStatusDialog(
             anime = selectedAnime!!,
             isOled = isOled,
-            showStatusColors = showStatusColors,
-            isFavorite = isAnimeFavorite,
-            onToggleFavorite = { onToggleFavorite(selectedAnime!!) },
             onDismiss = { showStatusDialog = false },
             onRemove = {
                 viewModel.removeAnimeFromList(selectedAnime!!.id)

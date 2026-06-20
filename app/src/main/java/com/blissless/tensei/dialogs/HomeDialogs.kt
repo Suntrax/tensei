@@ -2,9 +2,7 @@ package com.blissless.tensei.dialogs
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -14,15 +12,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
@@ -33,7 +28,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -47,7 +41,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -61,14 +54,10 @@ import com.blissless.tensei.ui.components.StatusButton
 fun HomeAnimeStatusDialog(
     anime: AnimeMedia,
     isOled: Boolean,
-    showStatusColors: Boolean = false,
-    isFavorite: Boolean = false,
-    onToggleFavorite: () -> Unit = {},
     onDismiss: () -> Unit,
     onRemove: () -> Unit,
     onUpdate: (String, Int?) -> Unit
 ) {
-    val context = LocalContext.current
     var selectedStatus by remember { mutableStateOf(anime.listStatus) }
     var selectedProgress by remember { mutableStateOf(if (anime.progress > 0) anime.progress.toString() else "") }
     var markedForRemoval by remember { mutableStateOf(false) }
@@ -95,7 +84,7 @@ fun HomeAnimeStatusDialog(
                         Text(anime.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         Spacer(modifier = Modifier.height(4.dp))
                         val latestEp = anime.latestEpisode?.takeIf { it > 0 }
-                        val totalEp = anime.totalEpisodes?.takeIf { it > 0 }
+                        val totalEp = anime.totalEpisodes.takeIf { it > 0 }
                         val progressText = when {
                             latestEp != null && latestEp > 0 && totalEp != null -> "${anime.progress} / $latestEp / $totalEp"
                             latestEp != null && latestEp > 0 -> "${anime.progress} / $latestEp"
@@ -205,7 +194,7 @@ fun HomeAnimeStatusDialog(
                 Text("Episode Progress", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
                 Spacer(modifier = Modifier.height(8.dp))
 
-                val maxEp = anime.latestEpisode?.takeIf { it > 0 } ?: anime.totalEpisodes?.takeIf { it > 0 }
+                val maxEp = anime.latestEpisode?.takeIf { it > 0 } ?: anime.totalEpisodes.takeIf { it > 0 }
 
                 OutlinedTextField(
                     value = selectedProgress,
@@ -248,93 +237,3 @@ fun HomeAnimeStatusDialog(
         }
     }
 }
-
-@Composable
-private fun StatusBadge(status: String) {
-    Surface(shape = RoundedCornerShape(6.dp), color = HomeStatusColors.getContainerColor(status)) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)) {
-            Icon(
-                imageVector = when(status) { "CURRENT" -> Icons.Default.PlayArrow; "PLANNING" -> Icons.Default.Bookmark; "COMPLETED" -> Icons.Default.Check; "PAUSED" -> Icons.Default.Pause; "DROPPED" -> Icons.Default.Close; else -> Icons.Default.Info },
-                contentDescription = null, modifier = Modifier.size(14.dp), tint = HomeStatusColors.getColor(status)
-            )
-            Spacer(modifier = Modifier.width(4.dp))
-            Text(
-                text = when(status) { "CURRENT" -> "Watching"; "PLANNING" -> "Planning"; "COMPLETED" -> "Completed"; "PAUSED" -> "On Hold"; "DROPPED" -> "Dropped"; else -> status },
-                style = MaterialTheme.typography.labelMedium, color = HomeStatusColors.getColor(status)
-            )
-        }
-    }
-}
-
-@Composable
-fun StatusButtonsGrid(
-    selectedStatus: String,
-    markedForRemoval: Boolean,
-    showAnimation: Boolean,
-    scale: Float,
-    onStatusSelected: (String) -> Unit,
-    onRemoveToggled: () -> Unit
-) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        StatusButton(
-            Icons.Default.PlayArrow,
-            "Watching",
-            selectedStatus == "CURRENT" && !markedForRemoval,
-            { onStatusSelected("CURRENT") },
-            Modifier.weight(1f)
-                .scale(if (selectedStatus == "CURRENT" && showAnimation && !markedForRemoval) scale else 1f),
-            HomeStatusColors.getColor("CURRENT")
-        )
-        StatusButton(
-            Icons.Default.Bookmark,
-            "Planning",
-            selectedStatus == "PLANNING" && !markedForRemoval,
-            { onStatusSelected("PLANNING") },
-            Modifier.weight(1f)
-                .scale(if (selectedStatus == "PLANNING" && showAnimation && !markedForRemoval) scale else 1f),
-            HomeStatusColors.getColor("PLANNING")
-        )
-    }
-    Spacer(modifier = Modifier.height(6.dp))
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        StatusButton(
-            Icons.Default.Check,
-            "Completed",
-            selectedStatus == "COMPLETED" && !markedForRemoval,
-            { onStatusSelected("COMPLETED") },
-            Modifier.weight(1f)
-                .scale(if (selectedStatus == "COMPLETED" && showAnimation && !markedForRemoval) scale else 1f),
-            HomeStatusColors.getColor("COMPLETED")
-        )
-        StatusButton(
-            Icons.Default.Pause,
-            "On Hold",
-            selectedStatus == "PAUSED" && !markedForRemoval,
-            { onStatusSelected("PAUSED") },
-            Modifier.weight(1f)
-                .scale(if (selectedStatus == "PAUSED" && showAnimation && !markedForRemoval) scale else 1f),
-            HomeStatusColors.getColor("PAUSED")
-        )
-    }
-    Spacer(modifier = Modifier.height(6.dp))
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Button(
-            onClick = onRemoveToggled,
-            modifier = Modifier.weight(1f).height(44.dp),
-            shape = RoundedCornerShape(10.dp),
-            enabled = selectedStatus.isNotEmpty(),
-            colors = ButtonDefaults.buttonColors(
-                disabledContainerColor = Color.Gray.copy(alpha = 0.15f),
-                disabledContentColor = Color.Gray,
-                containerColor = if (selectedStatus.isEmpty()) Color.Gray.copy(alpha = 0.15f) else Color.Red.copy(alpha = 0.2f),
-                contentColor = if (selectedStatus.isEmpty()) Color.Gray else Color.Red
-            ),
-            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-        ) {
-            Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
-            Spacer(modifier = Modifier.width(4.dp))
-            Text("Remove", fontWeight = FontWeight.Medium, style = MaterialTheme.typography.labelMedium, maxLines = 1)
-        }
-    }
-}
-
