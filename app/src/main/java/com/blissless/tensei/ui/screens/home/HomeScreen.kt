@@ -122,6 +122,7 @@ fun HomeScreen(
     onViewAllRelations: (Int, String) -> Unit = { _, _ -> },
     onOverlayOpenChange: (Boolean) -> Unit = {},
     onNavigateToSettings: (() -> Unit)? = null,
+    onNoExtension: () -> Unit = {},
     onNavigateToSearch: () -> Unit = {},
     currentScreenIndex: Int = 0,
     playbackPositions: Map<String, Long> = emptyMap(),
@@ -155,6 +156,7 @@ fun HomeScreen(
     var showUserProfileDialog by remember { mutableStateOf(false) }
     var showProfileSheet by remember { mutableStateOf(false) }
     var showDetailedAnimeScreen by remember { mutableStateOf(false) }
+    val defaultPkg by viewModel.defaultExtensionPackage.collectAsState()
 
     // Status list screen state
     var showStatusListScreen by remember { mutableStateOf(false) }
@@ -457,7 +459,7 @@ fun HomeScreen(
                                 preferEnglishTitles = preferEnglishTitles,
                                 disableMaterialColors = disableMaterialColors,
                                 onPlayClick = { anime, episode ->
-                                    val released = anime.latestEpisode?.let { it - 1 } ?: anime.totalEpisodes
+                                    val released = anime.latestEpisode ?: anime.totalEpisodes
                                     if (anime.latestEpisode != null && episode > released) {
                                         Toast.makeText(context, "Episode not aired yet", Toast.LENGTH_SHORT).show()
                                     } else {
@@ -682,7 +684,7 @@ fun HomeScreen(
                     val lt = statusListType
                     if (lt == "CURRENT") {
                         val nextEp = anime.progress + 1
-                        val released = anime.latestEpisode?.let { it - 1 } ?: anime.totalEpisodes
+                        val released = anime.latestEpisode ?: anime.totalEpisodes
                         if (anime.latestEpisode != null && nextEp > released) {
                             Toast.makeText(context, "Episode not aired yet", Toast.LENGTH_SHORT).show()
                         } else {
@@ -723,7 +725,7 @@ fun HomeScreen(
                     showEpisodeSheet = false
                 }
             )
-        } else {
+        } else if (defaultPkg.isNotEmpty()) {
             RichEpisodeScreen(
                 anime = selectedAnime!!,
                 viewModel = viewModel,
@@ -737,6 +739,12 @@ fun HomeScreen(
                     showDownloadDialog = true
                 }
             )
+        }
+    }
+
+    LaunchedEffect(showEpisodeSheet, selectedAnime) {
+        if (showEpisodeSheet && selectedAnime != null && !simplifyEpisodeMenu && defaultPkg.isEmpty()) {
+            onNoExtension()
         }
     }
 

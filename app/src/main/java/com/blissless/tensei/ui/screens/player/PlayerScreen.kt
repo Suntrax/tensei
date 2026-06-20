@@ -13,9 +13,6 @@ import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -48,15 +45,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.BrightnessHigh
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
-import androidx.compose.material.icons.filled.Hd
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -64,7 +60,6 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Speed
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -78,7 +73,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
-import androidx.compose.ui.draw.scale
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -97,10 +91,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -113,6 +107,9 @@ import androidx.core.net.toUri
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
@@ -130,7 +127,6 @@ import androidx.media3.ui.PlayerView
 import com.blissless.tensei.api.AnimeSkipService
 import com.blissless.tensei.data.models.EpisodeStreams
 import com.blissless.tensei.data.models.EpisodeTimestamps
-import com.blissless.tensei.data.models.QualityOption
 import com.blissless.tensei.data.models.ServerInfo
 import com.blissless.tensei.data.models.Timestamp
 import kotlinx.coroutines.Dispatchers
@@ -138,9 +134,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
 import java.util.Locale
 import kotlin.math.abs
+import kotlin.time.Duration.Companion.milliseconds
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -151,27 +147,23 @@ fun PlayerScreen(
     subtitleTracks: List<eu.kanade.tachiyomi.animesource.model.Track> = emptyList(),
     currentEpisode: Int = 1,
     totalEpisodes: Int = 0,
-    latestAiredEpisode: Int? = null,
     animeName: String = "",
     episodeTitle: String? = null,
     animeId: Int = 0,
     malId: Int = 0,
     animeYear: Int? = null,
-    episodeLength: Int = 1440,
     isLoadingStream: Boolean = false,
     episodeInfo: EpisodeStreams? = null,
     currentServerName: String = "",
     currentCategory: String = "sub",
     isFallbackStream: Boolean = false,
     requestedCategory: String = "sub",
-    actualCategory: String = "sub",
     forwardSkipSeconds: Int = 10,
     backwardSkipSeconds: Int = 10,
     autoSkipOpening: Boolean = false,
     autoSkipEnding: Boolean = false,
     autoPlayNextEpisode: Boolean = false,
     savedPosition: Long = 0L,
-    qualityOptions: List<QualityOption> = emptyList(),
     currentQuality: String = "Auto",
     isLatestEpisode: Boolean = false,
     disableMaterialColors: Boolean = false,
@@ -194,16 +186,11 @@ fun PlayerScreen(
     onPreviousEpisode: (() -> Unit)? = null,
     onNextEpisode: (() -> Unit)? = null,
     onServerChange: ((serverName: String, category: String) -> Unit)? = null,
-    onQualityChange: ((qualityUrl: String, qualityName: String) -> Unit)? = null,
     onPlaybackError: (() -> Unit)? = null,
-    onTryNextServer: (() -> Unit)? = null,
-    onUpdateServerIndex: ((Int) -> Unit)? = null,
-    onAutoTryNextServer: (() -> Unit)? = null,
     onInvalidateStreamCache: (() -> Unit)? = null,
     onPrefetchAdjacent: (() -> Unit)? = null,
     onGetCacheDataSourceFactory: (String) -> CacheDataSource.Factory? = { null },
     onBackClick: (() -> Unit)? = null,
-    episodeTrigger: Int = 0,
     extensionOkHttpClient: okhttp3.OkHttpClient? = null,
     extensionVideoHeaders: Map<String, String> = emptyMap(),
     extensionServers: List<ServerInfo> = emptyList(),
@@ -285,7 +272,6 @@ fun PlayerScreen(
     var skipIndicatorText by remember { mutableStateOf("") }
     var skipIsForward by remember { mutableStateOf(true) }
     var skipResetJob by remember { mutableStateOf<Job?>(null) }
-    var hideControlsJob by remember { mutableStateOf<Job?>(null) }
 
     var playerVolume by remember { mutableFloatStateOf(1f) }
     var currentBrightness by remember { mutableFloatStateOf(0.5f) }
@@ -293,11 +279,7 @@ fun PlayerScreen(
     var showBrightnessOverlay by remember { mutableStateOf(false) }
 
     LaunchedEffect(showControls, hasError, showSkipIndicator) {
-        if (showControls || hasError || showSkipIndicator) {
-            controlsVisible = true
-        } else {
-            controlsVisible = false
-        }
+        controlsVisible = showControls || hasError || showSkipIndicator
     }
     
     // Helper to check if device has internet connection
@@ -418,11 +400,7 @@ fun PlayerScreen(
                 .setDefaultRequestProperties(mapOf("Referer" to referer))
         }
         
-        val dataSourceFactory = if (cacheDataSourceFactory != null) {
-            cacheDataSourceFactory
-        } else {
-            upstreamFactory
-        }
+        val dataSourceFactory = cacheDataSourceFactory ?: upstreamFactory
         
         ExoPlayer.Builder(context)
             .setMediaSourceFactory(
@@ -503,7 +481,7 @@ fun PlayerScreen(
         isOffline = false
 
         exoPlayer.stop()
-        delay(100)
+        delay(100.milliseconds)
         exoPlayer.clearMediaItems()
 
         val startPositionMs = if (savedPosition > 0) savedPosition else 0L
@@ -562,8 +540,8 @@ fun PlayerScreen(
 
     LaunchedEffect(isPlaying, hasTriggeredPrefetch, hasError, isLatestEpisode) {
         if (isPlaying && !hasTriggeredPrefetch && !hasError && onPrefetchAdjacent != null && !isLatestEpisode) {
-            delay(5000)
-            if (!hasTriggeredPrefetch && isPlaying && !hasError && !isLatestEpisode) {
+            delay(5000.milliseconds)
+            if (!hasTriggeredPrefetch && isPlaying && !hasError) {
                 hasTriggeredPrefetch = true
                 onPrefetchAdjacent.invoke()
             }
@@ -585,7 +563,7 @@ fun PlayerScreen(
         }
     }
 
-fun seekBy(milliseconds: Long, isForward: Boolean) {
+fun seekBy(milliseconds: Long) {
         isManuallySeeking = true
          
         // Show skip indicator (separate from player UI)
@@ -615,7 +593,7 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
         // Schedule reset after 500ms of no taps
         skipResetJob?.cancel()
         skipResetJob = scope.launch {
-            delay(500)
+            delay(500.milliseconds)
             showSkipIndicator = false
             isManuallySeeking = false
             accumulatedSkipMs = 0L
@@ -624,7 +602,7 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
 
     LaunchedEffect(exoPlayer, videoUrl) {
         while (true) {
-            delay(500)
+            delay(500.milliseconds)
             if (!isDragging) {
                 currentPosition = exoPlayer.currentPosition
                 duration = exoPlayer.duration
@@ -686,7 +664,7 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
                 if (timestamps != null && timestamps.hasTimestamps()) {
                     episodeTimestamps = timestamps
                 }
-            } catch (e: Exception) {
+            } catch (_: Exception) {
             }
         }
 
@@ -734,7 +712,7 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
 
     LaunchedEffect(exoPlayer, hasTriggeredProgressUpdate) {
         while (!hasTriggeredProgressUpdate) {
-            delay(1000)
+            delay(1000.milliseconds)
             if (exoPlayer.playbackState == Player.STATE_READY && exoPlayer.duration > 0) {
                 val percentage = ((exoPlayer.currentPosition.toFloat() / exoPlayer.duration) * 100).toInt()
                 onProgressUpdate(percentage)
@@ -744,8 +722,8 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
 
     LaunchedEffect(showControls, isPlaying, isDragging, hasError, showServerMenu, showQualityMenu, showSpeedMenu, showSubtitleMenu, isManuallySeeking) {
         if (showControls && isPlaying && !isDragging && !hasError && !showServerMenu && !showQualityMenu && !showSpeedMenu && !showSubtitleMenu && !isManuallySeeking) {
-            delay(2000)
-            if (showControls && !isDragging && !hasError && isPlaying && !showServerMenu && !showQualityMenu && !showSpeedMenu && !showSubtitleMenu && !isManuallySeeking) {
+            delay(2000.milliseconds)
+            if (showControls && !isDragging && !hasError && isPlaying && !showServerMenu && !showSpeedMenu && !showSubtitleMenu && !isManuallySeeking) {
                 showControls = false
             }
         }
@@ -818,17 +796,10 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
         
         // Small delay before triggering server change to ensure error popup disappears
         scope.launch {
-            delay(50)
+            delay(50.milliseconds)
             serverChangeTrigger++
         }
         onServerChange?.invoke(serverName, category)
-    }
-
-    fun handleQualityChange(qualityUrl: String, qualityName: String) {
-        savedPositionForQuality = exoPlayer.currentPosition
-        pendingQualityChange = qualityName
-        selectedQuality = qualityName
-        onQualityChange?.invoke(qualityUrl, qualityName)
     }
 
     fun handlePlaybackError() {
@@ -942,7 +913,7 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
                                         }
                                         showBrightnessOverlay = true
                                         scope.launch {
-                                            delay(1500)
+                                            delay(1500.milliseconds)
                                             showBrightnessOverlay = false
                                         }
                                     } else {
@@ -951,7 +922,7 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
                                         exoPlayer.volume = playerVolume
                                         showVolumeOverlay = true
                                         scope.launch {
-                                            delay(1500)
+                                            delay(1500.milliseconds)
                                             showVolumeOverlay = false
                                         }
                                     }
@@ -967,7 +938,7 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
                                 val now = System.currentTimeMillis()
                                 if (now - lastLeftTapTime < 300) {
                                     // Double tap - seek
-                                    seekBy(-(backwardSkipSeconds * 1000L), false)
+                                    seekBy(-(backwardSkipSeconds * 1000L))
                                 } else {
                                     // Single tap - toggle controls
                                     showControls = !showControls
@@ -1009,7 +980,7 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
                                         exoPlayer.volume = playerVolume
                                         showVolumeOverlay = true
                                         scope.launch {
-                                            delay(1500)
+                                            delay(1500.milliseconds)
                                             showVolumeOverlay = false
                                         }
                                     } else {
@@ -1022,7 +993,7 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
                                         }
                                         showBrightnessOverlay = true
                                         scope.launch {
-                                            delay(1500)
+                                            delay(1500.milliseconds)
                                             showBrightnessOverlay = false
                                         }
                                     }
@@ -1038,7 +1009,7 @@ fun seekBy(milliseconds: Long, isForward: Boolean) {
                                 val now = System.currentTimeMillis()
                                 if (now - lastRightTapTime < 300) {
                                     // Double tap - seek
-                                    seekBy(forwardSkipSeconds * 1000L, true)
+                                    seekBy(forwardSkipSeconds * 1000L)
                                 } else {
                                     // Single tap - toggle controls
                                     showControls = !showControls

@@ -477,7 +477,7 @@ private fun StatusListAnimeCard(
     val progressColor = if (disableMaterialColors) Color.White else MaterialTheme.colorScheme.primary
 
     val total = anime.totalEpisodes
-    val released = anime.latestEpisode?.let { it - 1 } ?: total
+    val released = anime.latestEpisode ?: total
 
     val progressText = when (listType) {
         "CURRENT" -> {

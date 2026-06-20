@@ -1277,6 +1277,12 @@ fun MainScreen(
                 viewModel.setLocalAnimeStatus(exploreDialog.anime.id, null)
             },
             isLoggedIn = isLoggedIn,
+            onNavigateToSettings = {
+                overlayState = OverlayState.None
+                showSettings = true
+                pendingSettingsGroup = if (extUiState.extensions.isEmpty()) "extensions" else "stream"
+            },
+            onNoExtension = { showNoExtDialog = true },
             onRelationClick = { relation ->
                 try {
                     scope.launch {
@@ -1351,11 +1357,6 @@ fun MainScreen(
                 )
             },
             preferEnglishTitles = preferEnglishTitles,
-            onNavigateToSettings = {
-                overlayState = OverlayState.None
-                showSettings = true
-                pendingSettingsGroup = if (extUiState.extensions.isEmpty()) "extensions" else "stream"
-            }
         )
     }
 
@@ -1477,7 +1478,8 @@ fun MainScreen(
                 overlayState = OverlayState.None
                 showSettings = true
                 pendingSettingsGroup = if (extUiState.extensions.isEmpty()) "extensions" else "stream"
-            }
+            },
+            onNoExtension = { showNoExtDialog = true }
         )
     }
 
@@ -1689,6 +1691,7 @@ fun MainScreen(
             confirmButton = {
                 TextButton(onClick = {
                     showNoExtDialog = false
+                    overlayState = OverlayState.None
                     showSettings = true
                     pendingSettingsGroup = if (extUiState.extensions.isEmpty()) "extensions" else "stream"
                 }) {
@@ -1705,7 +1708,7 @@ fun MainScreen(
 
     if (showPlayer && currentVideoUrl != null) {
         currentAnime?.let { anime ->
-            val released = anime.latestEpisode?.let { it - 1 } ?: anime.totalEpisodes
+            val released = anime.latestEpisode ?: anime.totalEpisodes
             PlayerScreen(
                 videoUrl = currentVideoUrl!!,
                 referer = currentReferer,
@@ -1713,7 +1716,6 @@ fun MainScreen(
                 subtitleTracks = currentSubtitleTracks,
                 currentEpisode = currentEpisode,
                 totalEpisodes = totalEpisodes,
-                latestAiredEpisode = released,
                 animeName = anime.title,
                 episodeTitle = currentEpisodeTitle,
                 animeId = anime.id,
@@ -1725,11 +1727,9 @@ fun MainScreen(
                 currentCategory = currentCategory,
                 isFallbackStream = isFallbackStream && !isManualServerChange,
                 requestedCategory = requestedCategory,
-                actualCategory = actualCategory,
                 forwardSkipSeconds = forwardSkipSeconds,
                 backwardSkipSeconds = backwardSkipSeconds,
                 savedPosition = savedPlaybackPosition,
-                qualityOptions = currentQualityOptions,
                 currentQuality = currentQuality,
                 // Animekai timestamps (PRIMARY source)
                 animekaiIntroStart = animekaiIntroStart,
@@ -1758,11 +1758,7 @@ fun MainScreen(
                 onPreviousEpisode = if (currentEpisode > 1) onPreviousEpisode else null,
                 onNextEpisode = if (currentEpisode < released) onNextEpisode else null,
                 isLatestEpisode = currentEpisode >= released && released > 0,
-                onQualityChange = { qualityUrl, qualityName -> changeQuality(qualityUrl, qualityName) },
                 onPlaybackError = { onPlaybackError() },
-                onTryNextServer = { onPlaybackError() },
-                onUpdateServerIndex = { index -> currentServerIndex = index },
-                onAutoTryNextServer = { autoTryNextServer() },
                 onInvalidateStreamCache = { invalidateCurrentStreamCache() },
                 autoSkipOpening = autoSkipOpening,
                 autoSkipEnding = autoSkipEnding,
@@ -1790,7 +1786,6 @@ fun MainScreen(
                     PlayerData.extensionEpisode = null
                     PlayerData.allHosters = emptyList()
                 },
-                episodeTrigger = episodeTrigger,
                 extensionOkHttpClient = extensionOkHttpClient,
                 extensionVideoHeaders = extensionVideoHeaders,
                 extensionServers = extensionServers,
@@ -1823,6 +1818,31 @@ fun MainScreen(
             }
         }
     } else {
+        if (showSettings) {
+            val settingsInitialGroup = pendingSettingsGroup
+            Dialog(
+                onDismissRequest = { showSettings = false; pendingSettingsGroup = null },
+                properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+            ) {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    SettingsScreen(
+                        viewModel = viewModel,
+                        isLoggedIn = isLoggedIn,
+                        showStatusColors = showStatusColors,
+                        autoSkipOpening = autoSkipOpening,
+                        autoSkipEnding = autoSkipEnding,
+                        autoPlayNextEpisode = autoPlayNextEpisode,
+                        disableMaterialColors = disableMaterialColors,
+                        preferredCategory = preferredCategory,
+                        initialGroup = settingsInitialGroup
+                    )
+                }
+            }
+        }
+
         Scaffold(
             containerColor = if (isOled) Color.Black else MaterialTheme.colorScheme.background,
             contentWindowInsets = WindowInsets(0, 0, 0, 0)
@@ -1904,7 +1924,9 @@ fun MainScreen(
                             onOverlayOpenChange = { overlayOpen = it },
                             onNavigateToSettings = {
                                 showSettings = true
+                                pendingSettingsGroup = if (extUiState.extensions.isEmpty()) "extensions" else "stream"
                             },
+                            onNoExtension = { showNoExtDialog = true },
                             favoriteIds = if (viewModel.loginProvider.value == LoginProvider.MAL) malFavorites.map { it.id }.toSet() else aniListFavoriteIds,
                             onPlayEpisode = onPlayEpisode,
                             onLoginClick = { viewModel.loginWithAniList() },
@@ -1958,30 +1980,6 @@ fun MainScreen(
                             isOled = isOled,
                             onNavbarHidden = viewModel::setHideNavbar,
                         )
-                    }
-                }
-
-                if (showSettings) {
-                    Dialog(
-                        onDismissRequest = { showSettings = false; pendingSettingsGroup = null },
-                        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
-                    ) {
-                        Surface(
-                            modifier = Modifier.fillMaxSize(),
-                            color = MaterialTheme.colorScheme.background
-                        ) {
-                            SettingsScreen(
-                                viewModel = viewModel,
-                                isLoggedIn = isLoggedIn,
-                                showStatusColors = showStatusColors,
-                                autoSkipOpening = autoSkipOpening,
-                                autoSkipEnding = autoSkipEnding,
-                                autoPlayNextEpisode = autoPlayNextEpisode,
-                                disableMaterialColors = disableMaterialColors,
-                                preferredCategory = preferredCategory,
-                                initialGroup = pendingSettingsGroup
-                            )
-                        }
                     }
                 }
 
@@ -2096,7 +2094,7 @@ fun MainScreen(
                         },
                         onPlayClick = { anime ->
                             val nextEp = anime.progress + 1
-                            val released = anime.latestEpisode?.let { it - 1 } ?: anime.totalEpisodes
+                            val released = anime.latestEpisode ?: anime.totalEpisodes
                             if (anime.latestEpisode != null && nextEp > released) {
                                 Toast.makeText(context, "Episode not aired yet", Toast.LENGTH_SHORT).show()
                             } else {

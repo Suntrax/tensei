@@ -348,7 +348,7 @@ fun HomeAnimeCard(
     val progressColor = if (disableMaterialColors) Color.White else MaterialTheme.colorScheme.primary
 
     val total = anime.totalEpisodes
-    val released = anime.latestEpisode?.let { it - 1 } ?: total
+    val released = anime.latestEpisode ?: total
 
     val nextEpisode = anime.progress + 1
     val playbackKey = "${anime.id}_$nextEpisode"

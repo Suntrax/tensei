@@ -58,6 +58,7 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -176,6 +177,7 @@ fun DetailedAnimeScreen(
     onViewAllRelations: (Int, String) -> Unit = { _, _ -> },
     preferEnglishTitles: Boolean = true,
     onNavigateToSettings: (() -> Unit)? = null,
+    onNoExtension: () -> Unit = {},
     initialCardBounds: MainViewModel.CardBounds? = null
 ) {
     val context = LocalContext.current
@@ -772,16 +774,18 @@ fun DetailedAnimeScreen(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                         ),
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
+                        Box(modifier = Modifier.padding(12.dp)) {
                             val notYetAired = displayData.status == "NOT_YET_RELEASED"
 
                             Button(
-                                onClick = { showEpisodeSelection = true }, modifier = Modifier.weight(1f).height(48.dp),
+                                onClick = {
+                                    if (viewModel.defaultExtensionPackage.value.isEmpty()) {
+                                        onNoExtension()
+                                    } else {
+                                        showEpisodeSelection = true
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth().height(48.dp),
                                 shape = RoundedCornerShape(12.dp),
                                 enabled = !notYetAired,
                                 colors = ButtonDefaults.buttonColors(
@@ -792,51 +796,6 @@ fun DetailedAnimeScreen(
                                 Icon(Icons.Default.PlayArrow, null, Modifier.size(20.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text("Watch Now", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge)
-                            }
-
-                            OutlinedButton(
-                                onClick = {
-                                    if (isLoggedIn) {
-                                        val animeMedia = AnimeMedia(
-                                            id = anime.id,
-                                            title = anime.title,
-                                            titleEnglish = anime.titleEnglish,
-                                            cover = anime.cover,
-                                            banner = anime.banner,
-                                            totalEpisodes = anime.episodes,
-                                            averageScore = anime.averageScore,
-                                            genres = anime.genres,
-                                            year = anime.year
-                                        )
-                                        viewModel.toggleAniListFavorite(anime.id, animeMedia)
-                                    } else {
-                                        viewModel.toggleOfflineFavorite(
-                                            anime.id,
-                                            anime.title,
-                                            anime.cover,
-                                            anime.banner,
-                                            anime.year,
-                                            anime.averageScore
-                                        )
-                                    }
-                                },
-                                modifier = Modifier.height(48.dp),
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.outlinedButtonColors(
-                                    containerColor = if (effectiveIsFavorite) Color(0xFFFF1744).copy(alpha = 0.15f) else Color.Transparent,
-                                    contentColor = if (effectiveIsFavorite) Color(0xFFFF1744) else MaterialTheme.colorScheme.onSurface
-                                ),
-                                border = BorderStroke(
-                                    1.5.dp,
-                                    if (effectiveIsFavorite) Color(0xFFFF1744) else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
-                                )
-                            ) {
-                                Icon(
-                                    if (effectiveIsFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                                    null,
-                                    Modifier.size(22.dp),
-                                    tint = if (effectiveIsFavorite) Color(0xFFFF1744) else MaterialTheme.colorScheme.onSurface
-                                )
                             }
                         }
                     }
@@ -950,17 +909,109 @@ fun DetailedAnimeScreen(
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Text("Change", fontWeight = FontWeight.SemiBold)
                                     }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    OutlinedButton(
+                                        onClick = {
+                                            if (isLoggedIn) {
+                                                val animeMedia = AnimeMedia(
+                                                    id = anime.id,
+                                                    title = anime.title,
+                                                    titleEnglish = anime.titleEnglish,
+                                                    cover = anime.cover,
+                                                    banner = anime.banner,
+                                                    totalEpisodes = anime.episodes,
+                                                    averageScore = anime.averageScore,
+                                                    genres = anime.genres,
+                                                    year = anime.year
+                                                )
+                                                viewModel.toggleAniListFavorite(anime.id, animeMedia)
+                                            } else {
+                                                viewModel.toggleOfflineFavorite(
+                                                    anime.id,
+                                                    anime.title,
+                                                    anime.cover,
+                                                    anime.banner,
+                                                    anime.year,
+                                                    anime.averageScore
+                                                )
+                                            }
+                                        },
+                                        modifier = Modifier.height(40.dp),
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            containerColor = if (effectiveIsFavorite) Color(0xFFFF1744).copy(alpha = 0.15f) else Color.Transparent,
+                                            contentColor = if (effectiveIsFavorite) Color(0xFFFF1744) else MaterialTheme.colorScheme.onSurface
+                                        ),
+                                        border = BorderStroke(
+                                            1.5.dp,
+                                            if (effectiveIsFavorite) Color(0xFFFF1744) else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                                        )
+                                    ) {
+                                        Icon(
+                                            if (effectiveIsFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                                            null,
+                                            Modifier.size(20.dp),
+                                            tint = if (effectiveIsFavorite) Color(0xFFFF1744) else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
                                 }
                             } else {
-                                Button(
-                                    onClick = { showStatusDialog = true },
-                                    modifier = Modifier.fillMaxWidth().height(44.dp),
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                                ) {
-                                    Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Add to List", fontWeight = FontWeight.SemiBold)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Button(
+                                        onClick = { showStatusDialog = true },
+                                        modifier = Modifier.weight(1f).height(44.dp),
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                                    ) {
+                                        Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("Add to List", fontWeight = FontWeight.SemiBold)
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    OutlinedButton(
+                                        onClick = {
+                                            if (isLoggedIn) {
+                                                val animeMedia = AnimeMedia(
+                                                    id = anime.id,
+                                                    title = anime.title,
+                                                    titleEnglish = anime.titleEnglish,
+                                                    cover = anime.cover,
+                                                    banner = anime.banner,
+                                                    totalEpisodes = anime.episodes,
+                                                    averageScore = anime.averageScore,
+                                                    genres = anime.genres,
+                                                    year = anime.year
+                                                )
+                                                viewModel.toggleAniListFavorite(anime.id, animeMedia)
+                                            } else {
+                                                viewModel.toggleOfflineFavorite(
+                                                    anime.id,
+                                                    anime.title,
+                                                    anime.cover,
+                                                    anime.banner,
+                                                    anime.year,
+                                                    anime.averageScore
+                                                )
+                                            }
+                                        },
+                                        modifier = Modifier.height(40.dp),
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            containerColor = if (effectiveIsFavorite) Color(0xFFFF1744).copy(alpha = 0.15f) else Color.Transparent,
+                                            contentColor = if (effectiveIsFavorite) Color(0xFFFF1744) else MaterialTheme.colorScheme.onSurface
+                                        ),
+                                        border = BorderStroke(
+                                            1.5.dp,
+                                            if (effectiveIsFavorite) Color(0xFFFF1744) else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                                        )
+                                    ) {
+                                        Icon(
+                                            if (effectiveIsFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                                            null,
+                                            Modifier.size(20.dp),
+                                            tint = if (effectiveIsFavorite) Color(0xFFFF1744) else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
                                 }
                             }
                         }

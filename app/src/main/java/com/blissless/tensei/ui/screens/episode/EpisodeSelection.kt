@@ -116,7 +116,7 @@ fun EpisodeSelectionDialog(
 ) {
     val context = LocalContext.current
     val total = anime.totalEpisodes
-    val released = anime.latestEpisode?.let { it - 1 } ?: total
+    val released = anime.latestEpisode ?: total
     val episodeCount = if (total > 0) total else released.coerceAtLeast(1)
     val currentProgress = anime.progress
     val gridState = rememberLazyGridState()
@@ -247,7 +247,7 @@ fun RichEpisodeScreen(
 ) {
     val context = LocalContext.current
     val total = anime.totalEpisodes
-    val released = anime.latestEpisode?.let { it - 1 } ?: total
+    val released = anime.latestEpisode ?: total
     val episodeCount = if (total > 0) total else released.coerceAtLeast(1)
     val currentProgress = anime.progress
     val playbackPositions by viewModel.playbackPositions.collectAsState()
@@ -446,14 +446,14 @@ fun RichEpisodeScreen(
         }
     }
 
-    // Re-fetch when user selects a specific extension (null = show nothing)
+    // Re-fetch when user selects a specific extension
     LaunchedEffect(selectedExtensionPkg) {
         if (selectedExtensionPkg != null) {
             isLoadingExtensionEpisodes = true
             viewModel.preFetchExtensionEpisodes(anime, selectedExtensionPkg)
         } else {
             extensionEpisodesNumbers = emptySet()
-            hasExtensionData = true
+            hasExtensionData = false
             isLoadingExtensionEpisodes = false
         }
     }

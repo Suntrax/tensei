@@ -109,7 +109,7 @@ fun EpisodeDownloadDialog(
     val extViewModel: ExtensionsViewModel = viewModel()
     val extUiState by extViewModel.uiState.collectAsState()
     val total = anime.totalEpisodes.coerceAtLeast(1)
-    val released = anime.latestEpisode?.let { it - 1 } ?: total
+    val released = anime.latestEpisode ?: total
     val displayTitle = if (preferEnglishTitles && !anime.titleEnglish.isNullOrEmpty()) anime.titleEnglish else anime.title
 
     val downloadsInfo by downloadManager.downloadsInfo.collectAsState()
@@ -645,6 +645,7 @@ fun EpisodeDownloadDialog(
                 TextButton(onClick = {
                     showNoExtDialog = false
                     onNavigateToSettings?.invoke()
+                    onDismiss()
                 }) {
                     Text(if (extUiState.extensions.isEmpty()) "Go to Extensions" else "Go to Stream Settings")
                 }

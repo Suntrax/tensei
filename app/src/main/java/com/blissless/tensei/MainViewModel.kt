@@ -381,7 +381,7 @@ class MainViewModel : ViewModel() {
                     banner = cachedAnime.banner,
                     progress = progress,
                     totalEpisodes = cachedAnime.episodes,
-                    latestEpisode = cachedAnime.nextAiringEpisode,
+                    latestEpisode = cachedAnime.latestEpisode ?: cachedAnime.nextAiringEpisode?.let { it - 1 },
                     status = cachedAnime.status ?: "",
                     averageScore = cachedAnime.averageScore,
                     genres = cachedAnime.genres,
@@ -1108,7 +1108,7 @@ class MainViewModel : ViewModel() {
                     banner = cachedAnime.banner,
                     progress = entry.progress,
                     totalEpisodes = cachedAnime.episodes,
-                    latestEpisode = cachedAnime.nextAiringEpisode,
+                    latestEpisode = cachedAnime.latestEpisode ?: cachedAnime.nextAiringEpisode?.let { it - 1 },
                     status = cachedAnime.status ?: "",
                     averageScore = cachedAnime.averageScore,
                     genres = cachedAnime.genres,
@@ -1270,7 +1270,7 @@ class MainViewModel : ViewModel() {
                     banner = entry.media.bannerImage,
                     progress = entry.progress ?: 0,
                     totalEpisodes = entry.media.episodes ?: 0,
-                    latestEpisode = entry.media.nextAiringEpisode?.episode,
+                    latestEpisode = entry.media.nextAiringEpisode?.episode?.let { it - 1 },
                     status = entry.media.status ?: "",
                     averageScore = entry.media.averageScore,
                     genres = entry.media.genres ?: emptyList(),
@@ -2090,7 +2090,8 @@ class MainViewModel : ViewModel() {
             chunk.map { anime ->
                 viewModelScope.async {
                     repository.fetchDetailedAnime(anime.id)?.let { media ->
-                        if (media.nextAiringEpisode?.episode != anime.latestEpisode) return@async anime.copy(latestEpisode = media.nextAiringEpisode?.episode)
+                        val newLatestEpisode = media.nextAiringEpisode?.episode?.let { it - 1 }
+                        if (newLatestEpisode != anime.latestEpisode) return@async anime.copy(latestEpisode = newLatestEpisode)
                     }
                     null
                 }
