@@ -1257,52 +1257,6 @@ fun MainScreen(
             onRemove = {
                 viewModel.removeAnimeFromList(exploreDialog.anime.id)
             },
-            onToggleFavorite = { _ ->
-                if (viewModel.loginProvider.value == LoginProvider.MAL) {
-                    val animeMedia = AnimeMedia(
-                        id = exploreDialog.anime.id,
-                        title = exploreDialog.anime.title,
-                        titleEnglish = exploreDialog.anime.titleEnglish,
-                        cover = exploreDialog.anime.cover,
-                        banner = exploreDialog.anime.banner,
-                        progress = 0,
-                        totalEpisodes = exploreDialog.anime.episodes,
-                        latestEpisode = exploreDialog.anime.latestEpisode,
-                        status = "",
-                        averageScore = exploreDialog.anime.averageScore,
-                        genres = exploreDialog.anime.genres,
-                        listStatus = "",
-                        listEntryId = 0,
-                        year = exploreDialog.anime.year,
-                        malId = exploreDialog.anime.malId
-                    )
-                    viewModel.toggleMalFavorite(animeMedia)
-                } else {
-                    val animeMedia = AnimeMedia(
-                        id = exploreDialog.anime.id,
-                        title = exploreDialog.anime.title,
-                        titleEnglish = exploreDialog.anime.titleEnglish,
-                        cover = exploreDialog.anime.cover,
-                        banner = exploreDialog.anime.banner,
-                        progress = 0,
-                        totalEpisodes = exploreDialog.anime.episodes,
-                        latestEpisode = exploreDialog.anime.latestEpisode,
-                        status = "",
-                        averageScore = exploreDialog.anime.averageScore,
-                        genres = exploreDialog.anime.genres,
-                        listStatus = "",
-                        listEntryId = 0,
-                        year = exploreDialog.anime.year,
-                        malId = exploreDialog.anime.malId
-                    )
-                    viewModel.toggleAniListFavorite(exploreDialog.anime.id, animeMedia)
-                }
-            },
-            localStatus = localAnimeStatus[exploreDialog.anime.id]?.status,
-            isLocalFavorite = localFavoriteIds.contains(exploreDialog.anime.id),
-            onToggleLocalFavorite = { id ->
-                viewModel.toggleLocalFavorite(id, exploreDialog.anime.title, exploreDialog.anime.cover, exploreDialog.anime.banner, exploreDialog.anime.year, exploreDialog.anime.averageScore)
-            },
             onUpdateLocalStatus = { status ->
                 val currentEntry = localAnimeStatus[exploreDialog.anime.id]
                 if (status != null) {
@@ -1323,7 +1277,6 @@ fun MainScreen(
                 viewModel.setLocalAnimeStatus(exploreDialog.anime.id, null)
             },
             isLoggedIn = isLoggedIn,
-            onLoginClick = { viewModel.loginWithAniList() },
             onRelationClick = { relation ->
                 try {
                     scope.launch {
@@ -1402,9 +1355,6 @@ fun MainScreen(
                 overlayState = OverlayState.None
                 showSettings = true
                 pendingSettingsGroup = if (extUiState.extensions.isEmpty()) "extensions" else "stream"
-            },
-            onStartDownload = { media ->
-                overlayState = OverlayState.EpisodeDownloadDialog(anime = media)
             }
         )
     }
@@ -1453,10 +1403,6 @@ fun MainScreen(
                 viewModel.removeAnimeFromList(selectedAnimeState!!.id)
                 showDetailedAnimeScreen = false
             },
-            onToggleFavorite = { _ ->
-                viewModel.toggleAniListFavorite(selectedAnimeState!!.id, selectedAnimeState!!)
-            },
-            onLoginClick = { viewModel.loginWithAniList() },
             onRelationClick = { relation ->
                 try {
                     scope.launch {
@@ -1509,8 +1455,6 @@ fun MainScreen(
             onViewAllStaff = { overlayState = OverlayState.AllStaffDialog(animeId = selectedAnimeState!!.id, animeTitle = selectedAnimeState!!.title) },
             onViewAllRelations = { animeId, title -> overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = title) },
             isLoggedIn = isLoggedIn,
-            isLocalFavorite = localFavoriteIds.contains(selectedAnimeState!!.id),
-            onToggleLocalFavorite = { id -> viewModel.toggleLocalFavorite(id, selectedAnimeState!!.title, selectedAnimeState!!.cover, selectedAnimeState!!.banner, selectedAnimeState!!.year, selectedAnimeState!!.averageScore) },
             onUpdateLocalStatus = { status ->
                 val currentEntry = localAnimeStatus[selectedAnimeState!!.id]
                 if (status != null) {
@@ -1533,9 +1477,6 @@ fun MainScreen(
                 overlayState = OverlayState.None
                 showSettings = true
                 pendingSettingsGroup = if (extUiState.extensions.isEmpty()) "extensions" else "stream"
-            },
-            onStartDownload = { media ->
-                overlayState = OverlayState.EpisodeDownloadDialog(anime = media)
             }
         )
     }

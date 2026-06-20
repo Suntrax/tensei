@@ -236,7 +236,6 @@ fun ExploreScreen(
             onRemove = {
                 viewModel.removeAnimeFromList(anime.id)
             },
-            onToggleFavorite = { onToggleFavorite(anime) },
             isLoggedIn = isLoggedIn,
             onRelationClick = { relation ->
                 try {

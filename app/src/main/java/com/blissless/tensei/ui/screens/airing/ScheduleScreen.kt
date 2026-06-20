@@ -468,7 +468,6 @@ fun ScheduleScreen(
         DetailedAnimeScreen(
             anime = selectedAnime!!.toDetailedAnimeData(), viewModel = viewModel, isOled = isOled,
             currentStatus = currentStatus, currentProgress = currentProgress, isFavorite = isFavorite, isLoggedIn = isLoggedIn,
-            onToggleFavorite = { viewModel.toggleAniListFavorite(selectedAnime!!.id) },
             onDismiss = { if (firstOpenedAnime != null && selectedAnime!!.id != firstOpenedAnime!!.id) selectedAnime = firstOpenedAnime else { showAnimeDialog = false; selectedAnime = null; firstOpenedAnime = null; onAnimeDialogOpen(false) } },
             onSwipeToClose = { showAnimeDialog = false; selectedAnime = null; firstOpenedAnime = null; onAnimeDialogOpen(false) },
             onPlayEpisode = { episode, _ ->

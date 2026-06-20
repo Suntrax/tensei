@@ -857,10 +857,6 @@ fun HomeScreen(
                 viewModel.removeAnimeFromList(selectedAnime!!.id)
                 showDetailedAnimeScreen = false
             },
-            onToggleFavorite = { _ ->
-                onToggleFavorite(selectedAnime!!)
-            },
-            onLoginClick = onLoginClick,
             onRelationClick = { relation ->
                 scope.launch {
                     try {

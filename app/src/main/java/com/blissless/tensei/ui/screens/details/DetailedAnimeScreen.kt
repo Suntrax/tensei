@@ -4,7 +4,6 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
@@ -45,20 +44,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Category
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Link
-import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlayCircle
-import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Timer
@@ -70,8 +65,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -121,6 +114,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
+import androidx.core.net.toUri
 import coil.compose.AsyncImage
 import com.blissless.tensei.MainViewModel
 import com.blissless.tensei.data.models.AnimeMedia
@@ -128,11 +122,11 @@ import com.blissless.tensei.data.models.AnimeRelation
 import com.blissless.tensei.data.models.DetailedAnimeData
 import com.blissless.tensei.data.models.LocalAnimeEntry
 import com.blissless.tensei.data.models.TagData
+import com.blissless.tensei.dialogs.HomeAnimeStatusDialog
 import com.blissless.tensei.ui.components.rememberCinematicAnimation
 import com.blissless.tensei.ui.screens.downloads.EpisodeDownloadDialog
 import com.blissless.tensei.ui.screens.episode.EpisodeSelectionDialog
 import com.blissless.tensei.ui.screens.episode.RichEpisodeScreen
-import com.blissless.tensei.dialogs.HomeAnimeStatusDialog
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -140,6 +134,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.absoluteValue
 import kotlin.math.roundToInt
+import kotlin.time.Duration.Companion.milliseconds
 
 private fun formatDate(dateStr: String): String {
     return try {
@@ -148,7 +143,7 @@ private fun formatDate(dateStr: String): String {
             val date = LocalDate.of(parts[0].toInt(), parts[1].toInt(), parts[2].toInt())
             date.format(DateTimeFormatter.ofPattern("d MMMM, yyyy"))
         } else dateStr
-    } catch (e: Exception) {
+    } catch (_: Exception) {
         dateStr
     }
 }
@@ -161,10 +156,8 @@ fun DetailedAnimeScreen(
     isOled: Boolean = false,
     currentStatus: String? = null,
     currentProgress: Int? = null,
-    localStatus: String? = null,
     isLoggedIn: Boolean = false,
     isFavorite: Boolean = false,
-    isLocalFavorite: Boolean = false,
     simplifyEpisodeMenu: Boolean = false,
     onDismiss: () -> Unit,
     onNavigateBack: () -> Unit = onDismiss,
@@ -173,11 +166,8 @@ fun DetailedAnimeScreen(
     onUpdateStatus: (String?) -> Unit = {},
     onUpdateProgress: (Int) -> Unit = {},
     onRemove: () -> Unit = {},
-    onToggleFavorite: (DetailedAnimeData) -> Unit = {},
-    onToggleLocalFavorite: (Int) -> Unit = {},
     onUpdateLocalStatus: (String?) -> Unit = {},
     onRemoveLocalStatus: () -> Unit = {},
-    onLoginClick: () -> Unit = {},
     onRelationClick: (AnimeRelation) -> Unit = {},
     onCharacterClick: (Int) -> Unit = {},
     onStaffClick: (Int) -> Unit = {},
@@ -186,7 +176,6 @@ fun DetailedAnimeScreen(
     onViewAllRelations: (Int, String) -> Unit = { _, _ -> },
     preferEnglishTitles: Boolean = true,
     onNavigateToSettings: (() -> Unit)? = null,
-    onStartDownload: (AnimeMedia) -> Unit = {},
     initialCardBounds: MainViewModel.CardBounds? = null
 ) {
     val context = LocalContext.current
@@ -224,7 +213,6 @@ fun DetailedAnimeScreen(
         displayProgress = currentProgress ?: effectiveLocalProgress ?: 0
     }
 
-    val effectiveStatus = if (isLoggedIn) currentStatus else (effectiveLocalStatus ?: localStatus)
     val effectiveOnUpdateStatus = if (isLoggedIn) onUpdateStatus else onUpdateLocalStatus
     val effectiveOnUpdateProgress = if (isLoggedIn) onUpdateProgress else { progress ->
         viewModel.setLocalAnimeStatus(
@@ -282,27 +270,6 @@ fun DetailedAnimeScreen(
 
     val coverAnimationProgress = remember(anime.id) { Animatable(0f) }
 
-    val animatedCoverScale by animateFloatAsState(
-        targetValue = if (initialCardBounds != null) 1f else 1f,
-        animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing),
-        label = "coverScale"
-    )
-    val animatedCoverOffsetX by animateFloatAsState(
-        targetValue = if (initialCardBounds != null) 0f else 0f,
-        animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing),
-        label = "coverOffsetX"
-    )
-    val animatedCoverOffsetY by animateFloatAsState(
-        targetValue = if (initialCardBounds != null) 0f else 0f,
-        animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing),
-        label = "coverOffsetY"
-    )
-    val animatedCoverCornerRadius by animateFloatAsState(
-        targetValue = if (initialCardBounds != null) 12f else 12f,
-        animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing),
-        label = "coverCornerRadius"
-    )
-
     LaunchedEffect(initialCardBounds) {
         if (initialCardBounds != null) {
             transitionProgress = 1f
@@ -325,7 +292,7 @@ fun DetailedAnimeScreen(
         if (previousAnimeId != 0 && previousAnimeId != anime.id) {
             isTransitioning = true
             coverAnimationProgress.snapTo(0f)
-            delay(150)
+            delay(150.milliseconds)
             isTransitioning = false
         }
         previousAnimeId = anime.id
@@ -338,7 +305,7 @@ fun DetailedAnimeScreen(
                 detailedData = anime
             }
             relations = detailedData?.relations ?: anime.relations
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             detailedData = anime
         } finally {
             isLoadingDetails = false
@@ -561,7 +528,7 @@ fun DetailedAnimeScreen(
             IconButton(
                 onClick = {
                     val shareText = buildString {
-                        displayData.title.let { append(it) }
+                        append(displayData.title)
                         append("\n\n")
                         append("https://anilist.co/anime/${displayData.id}")
                     }
@@ -645,13 +612,12 @@ fun DetailedAnimeScreen(
                                     .height(cardHeight)
                                     .zIndex(if (initialCardBounds != null && coverAnimationProgress.value < 1f) 100f else 0f)
                                     .graphicsLayer {
-                                        val startBounds = initialCardBounds
-                                        if (startBounds != null) {
+                                        if (initialCardBounds != null) {
                                             val progress = FastOutSlowInEasing.transform(coverAnimationProgress.value)
-                                            val startX = startBounds.bounds.left
-                                            val startY = startBounds.bounds.top
-                                            val startWidth = startBounds.bounds.width()
-                                            val startHeight = startBounds.bounds.height()
+                                            val startX = initialCardBounds.bounds.left
+                                            val startY = initialCardBounds.bounds.top
+                                            val startWidth = initialCardBounds.bounds.width()
+                                            val startHeight = initialCardBounds.bounds.height()
 
                                             val currentWidth = startWidth + (cardWidth.toPx() - startWidth) * progress
                                             val currentHeight = startHeight + (cardHeight.toPx() - startHeight) * progress
@@ -783,7 +749,7 @@ fun DetailedAnimeScreen(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                                     )
                                 }
-                                displayData.format?.let { format ->
+                                displayData.format?.let { _ ->
                                     Text(
                                         formatDisplay,
                                         style = MaterialTheme.typography.bodySmall,
@@ -1065,8 +1031,8 @@ fun DetailedAnimeScreen(
                             // Info grid - 2 columns
                             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Row(modifier = Modifier.fillMaxWidth()) {
-                                    displayData.format?.let { 
-                                        InfoItemRow("Format", it.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() }, modifier = Modifier.weight(1f)) 
+                                    displayData.format?.let { format ->
+                                        InfoItemRow("Format", format.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() }, modifier = Modifier.weight(1f)) 
                                     }
                                     displayData.status?.let { 
                                         InfoItemRow("Status", statusDisplay, modifier = Modifier.weight(1f)) 
@@ -1110,7 +1076,7 @@ fun DetailedAnimeScreen(
                                 .padding(horizontal = 16.dp)
                                 .clip(RoundedCornerShape(16.dp))
                                 .clickable {
-                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(displayData.trailerUrl))
+                                    val intent = Intent(Intent.ACTION_VIEW, displayData.trailerUrl.toUri())
                                     context.startActivity(intent)
                                 },
                             shape = RoundedCornerShape(16.dp),
@@ -1157,7 +1123,7 @@ fun DetailedAnimeScreen(
                                     ) {
                                         FilledIconButton(
                                             onClick = {
-                                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(displayData.trailerUrl))
+                                                val intent = Intent(Intent.ACTION_VIEW, displayData.trailerUrl.toUri())
                                                 context.startActivity(intent)
                                             },
                                             modifier = Modifier.size(60.dp),
@@ -1440,7 +1406,7 @@ fun DetailedAnimeScreen(
                                         items = filteredRelations,
                                         key = { _, relation -> relation.id }
                                     ) { index, relation ->
-                                        val layoutInfo = relationListState.layoutInfo
+                                        val layoutInfo by remember { derivedStateOf { relationListState.layoutInfo } }
                                         val visibleItems = layoutInfo.visibleItemsInfo
                                         val itemInfo = visibleItems.find { it.index == index }
 
@@ -1591,7 +1557,7 @@ fun DetailedAnimeScreen(
 
                 // Cast Section
                 val castList = displayData.characters?.nodes
-                if (castList != null && castList.isNotEmpty()) {
+                if (!castList.isNullOrEmpty()) {
                     item {
                         Spacer(modifier = Modifier.height(20.dp))
                         Card(
@@ -1645,7 +1611,7 @@ fun DetailedAnimeScreen(
                                         items = castList,
                                         key = { _, character -> character.id }
                                     ) { index, character ->
-                                        val layoutInfo = castListState.layoutInfo
+                                        val layoutInfo by remember { derivedStateOf { castListState.layoutInfo } }
                                         val visibleItems = layoutInfo.visibleItemsInfo
                                         val itemInfo = visibleItems.find { it.index == index }
 
@@ -1741,7 +1707,7 @@ fun DetailedAnimeScreen(
 
                 // Staff Section
                 val staffList = displayData.staff?.edges
-                if (staffList != null && staffList.isNotEmpty()) {
+                if (!staffList.isNullOrEmpty()) {
                     item {
                         Spacer(modifier = Modifier.height(20.dp))
                         Card(
@@ -1840,7 +1806,7 @@ fun DetailedAnimeScreen(
                                                 modifier = Modifier
                                                     .width(80.dp)
                                                     .clip(RoundedCornerShape(12.dp))
-                                                    .clickable { staffEdge.node.id?.let { id -> onStaffClick(id) } }
+                                                    .clickable { staffEdge.node.id.let { id -> onStaffClick(id) } }
                                                     .graphicsLayer {
                                                         scaleX = introScale * scrollScale
                                                         scaleY = introScale * scrollScale
@@ -2026,28 +1992,6 @@ fun DetailedAnimeScreen(
 }
 
 @Composable
-private fun StatusChip(label: String, icon: ImageVector, color: Color, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    FilterChip(
-        selected = selected, onClick = onClick,
-        label = { 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
-            ) { 
-                Icon(icon, null, Modifier.size(14.dp)); 
-                Spacer(Modifier.width(3.dp)); 
-                Text(label, fontSize = 12.sp); 
-                Spacer(Modifier.width(3.dp)) 
-            } 
-        },
-        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = color.copy(alpha = 0.2f), selectedLabelColor = color),
-        border = BorderStroke(1.dp, if (selected) color else Color.Gray.copy(alpha = 0.3f)),
-        modifier = modifier
-    )
-}
-
-@Composable
 private fun InfoStat(label: String, value: String, icon: ImageVector, color: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Surface(
@@ -2066,31 +2010,6 @@ private fun InfoStat(label: String, value: String, icon: ImageVector, color: Col
 }
 
 @Composable
-private fun InfoPill(label: String, value: String, modifier: Modifier = Modifier) {
-    Surface(
-        modifier = modifier.padding(end = 4.dp),
-        shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-        ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-            )
-            Text(
-                text = value,
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-        }
-    }
-}
-
-@Composable
 private fun InfoItemRow(label: String, value: String, modifier: Modifier = Modifier) {
     Column(modifier = modifier.padding(end = 8.dp)) {
         Text(
@@ -2105,12 +2024,6 @@ private fun InfoItemRow(label: String, value: String, modifier: Modifier = Modif
             color = MaterialTheme.colorScheme.onSurface
         )
     }
-}
-
-private fun formatNumber(num: Int): String = when {
-    num >= 1_000_000 -> String.format(Locale.US, "%.1fM", num / 1_000_000.0)
-    num >= 1_000 -> String.format(Locale.US, "%.1fK", num / 1_000.0)
-    else -> num.toString()
 }
 
 private fun easeOut(t: Float): Float {
