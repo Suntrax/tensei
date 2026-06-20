@@ -411,8 +411,9 @@ fun EpisodeDownloadDialog(
                         onClick = { mode = DownloadMode.ALL },
                         label = { Text("All") },
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primary,
-                            selectedLabelColor = if (isOled) Color.Black else Color.White
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     )
                     FilterChip(
@@ -420,8 +421,9 @@ fun EpisodeDownloadDialog(
                         onClick = { mode = DownloadMode.UNDOWNLOADED },
                         label = { Text("Undownloaded") },
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primary,
-                            selectedLabelColor = if (isOled) Color.Black else Color.White
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     )
                     FilterChip(
@@ -429,8 +431,9 @@ fun EpisodeDownloadDialog(
                         onClick = { mode = DownloadMode.SELECTIVE },
                         label = { Text("Selective") },
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primary,
-                            selectedLabelColor = if (isOled) Color.Black else Color.White
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     )
                     FilterChip(
@@ -438,8 +441,9 @@ fun EpisodeDownloadDialog(
                         onClick = { mode = DownloadMode.RANGE },
                         label = { Text("Range") },
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primary,
-                            selectedLabelColor = if (isOled) Color.Black else Color.White
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     )
                 }

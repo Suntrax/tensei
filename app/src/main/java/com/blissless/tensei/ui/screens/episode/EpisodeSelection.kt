@@ -590,9 +590,10 @@ fun RichEpisodeScreen(
                                         onClick = { if (extPkg != selectedExtensionPkg) selectedExtensionPkg = extPkg },
                                         label = { Text(extName, maxLines = 1, style = MaterialTheme.typography.labelSmall) },
                                         colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                            selectedLabelColor = if (isOled || disableMaterialColors) Color.Black else Color.White,
-                                            containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surface
+                                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                            containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surface,
+                                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     )
                                 }
@@ -611,8 +612,10 @@ fun RichEpisodeScreen(
                                     onClick = { onEpisodeSelect(nextEp, null) },
                                     label = { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.PlayArrow, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("Resume Ep $nextEp") } },
                                     colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                        selectedLabelColor = if (isOled || disableMaterialColors) Color.Black else Color.White
+                                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surface,
+                                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 )
                             }
@@ -621,7 +624,8 @@ fun RichEpisodeScreen(
                                 onClick = { scope.launch { listState.animateScrollToItem(1) } },
                                 label = { Text("Ep 1") },
                                 colors = FilterChipDefaults.filterChipColors(
-                                    containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surface
+                                    containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surface,
+                                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             )
                             if (released > 1) {
@@ -630,7 +634,8 @@ fun RichEpisodeScreen(
                                     onClick = { scope.launch { listState.animateScrollToItem(released) } },
                                     label = { Text("Latest: Ep $released") },
                                     colors = FilterChipDefaults.filterChipColors(
-                                        containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surface
+                                        containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surface,
+                                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 )
                             }

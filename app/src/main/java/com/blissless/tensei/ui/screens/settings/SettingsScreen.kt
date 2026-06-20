@@ -526,8 +526,8 @@ private fun SettingsChoiceChip(
             )
         },
         colors = FilterChipDefaults.filterChipColors(
-            selectedContainerColor = MaterialTheme.colorScheme.primary,
-            selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
             labelColor = MaterialTheme.colorScheme.onSurfaceVariant
         ),
