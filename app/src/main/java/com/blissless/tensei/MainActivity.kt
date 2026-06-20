@@ -1649,7 +1649,6 @@ fun MainScreen(
             animeId = allCastDialog.animeId,
             animeTitle = allCastDialog.animeTitle,
             viewModel = viewModel,
-            isOled = isOled,
             onDismiss = {
                 overlayState = OverlayState.None
             },
@@ -1660,29 +1659,6 @@ fun MainScreen(
                     animeId = allCastDialog.animeId,
                     previousStates = allCastDialog.previousStates + allCastDialog
                 )
-            },
-            onAnimeClick = { animeId ->
-                scope.launch {
-                    val detailedData = viewModel.fetchDetailedAnimeData(animeId)
-                    if (detailedData != null) {
-                        val newAnime = ExploreAnime(
-                            id = detailedData.id,
-                            title = detailedData.title,
-                            titleEnglish = detailedData.titleEnglish,
-                            cover = detailedData.cover,
-                            banner = detailedData.banner,
-                            episodes = detailedData.episodes,
-                            latestEpisode = detailedData.latestEpisode,
-                            averageScore = detailedData.averageScore,
-                            genres = detailedData.genres,
-                            year = detailedData.year,
-                            format = detailedData.format
-                        )
-                        overlayState = OverlayState.ExploreAnimeDialog(anime = newAnime, firstAnime = newAnime, isFirstOpen = false)
-                    } else {
-                        Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
-                    }
-                }
             }
         )
     }
@@ -1694,7 +1670,6 @@ fun MainScreen(
             animeId = allStaffDialog.animeId,
             animeTitle = allStaffDialog.animeTitle,
             viewModel = viewModel,
-            isOled = isOled,
             onDismiss = {
                 overlayState = OverlayState.None
             },
@@ -1705,29 +1680,6 @@ fun MainScreen(
                     animeId = allStaffDialog.animeId,
                     previousStates = allStaffDialog.previousStates + allStaffDialog
                 )
-            },
-            onAnimeClick = { animeId ->
-                scope.launch {
-                    val detailedData = viewModel.fetchDetailedAnimeData(animeId)
-                    if (detailedData != null) {
-                        val newAnime = ExploreAnime(
-                            id = detailedData.id,
-                            title = detailedData.title,
-                            titleEnglish = detailedData.titleEnglish,
-                            cover = detailedData.cover,
-                            banner = detailedData.banner,
-                            episodes = detailedData.episodes,
-                            latestEpisode = detailedData.latestEpisode,
-                            averageScore = detailedData.averageScore,
-                            genres = detailedData.genres,
-                            year = detailedData.year,
-                            format = detailedData.format
-                        )
-                        overlayState = OverlayState.ExploreAnimeDialog(anime = newAnime, firstAnime = newAnime, isFirstOpen = false)
-                    } else {
-                        Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
-                    }
-                }
             }
         )
     }

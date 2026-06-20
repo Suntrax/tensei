@@ -34,7 +34,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -59,11 +58,9 @@ fun AllCastScreen(
     animeId: Int,
     animeTitle: String,
     viewModel: MainViewModel,
-    isOled: Boolean = false,
     onDismiss: () -> Unit,
     onNavigateBack: () -> Unit = onDismiss,
-    onCharacterClick: (Int) -> Unit,
-    onAnimeClick: (Int) -> Unit
+    onCharacterClick: (Int) -> Unit
 ) {
     var characters by remember { mutableStateOf<List<CharacterData>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
@@ -73,10 +70,10 @@ fun AllCastScreen(
 
     LaunchedEffect(animeId) {
         isLoading = true
-        try {
-            characters = viewModel.fetchAllCharacters(animeId) ?: emptyList()
-        } catch (e: Exception) {
-            characters = emptyList()
+        characters = try {
+            viewModel.fetchAllCharacters(animeId) ?: emptyList()
+        } catch (_: Exception) {
+            emptyList()
         }
         isLoading = false
     }
@@ -200,11 +197,9 @@ fun AllStaffScreen(
     animeId: Int,
     animeTitle: String,
     viewModel: MainViewModel,
-    isOled: Boolean = false,
     onDismiss: () -> Unit,
     onNavigateBack: () -> Unit = onDismiss,
-    onStaffClick: (Int) -> Unit,
-    onAnimeClick: (Int) -> Unit
+    onStaffClick: (Int) -> Unit
 ) {
     var staff by remember { mutableStateOf<List<StaffData>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
@@ -214,10 +209,10 @@ fun AllStaffScreen(
 
     LaunchedEffect(animeId) {
         isLoading = true
-        try {
-            staff = viewModel.fetchAllStaff(animeId) ?: emptyList()
-        } catch (e: Exception) {
-            staff = emptyList()
+        staff = try {
+            viewModel.fetchAllStaff(animeId) ?: emptyList()
+        } catch (_: Exception) {
+            emptyList()
         }
         isLoading = false
     }
