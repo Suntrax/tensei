@@ -1,10 +1,10 @@
 package com.blissless.tensei.ui.screens.profile
 
 import android.content.Intent
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -26,7 +26,6 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
@@ -64,8 +63,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
@@ -75,7 +74,6 @@ import com.blissless.tensei.api.jikan.JikanHistoryEntry
 import com.blissless.tensei.api.jikan.JikanImageUrls
 import com.blissless.tensei.api.jikan.JikanImages
 import com.blissless.tensei.api.myanimelist.LoginProvider
-import com.blissless.tensei.data.models.ExploreAnime
 import com.blissless.tensei.data.models.UserAnimeStats
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -92,10 +90,8 @@ enum class UserProfileSection {
 @Composable
 fun UserProfileScreen(
     viewModel: MainViewModel,
-    isOled: Boolean,
     preferEnglishTitles: Boolean = true,
     onDismiss: () -> Unit,
-    onShowAnimeDialog: (ExploreAnime, ExploreAnime?) -> Unit,
     onShowDetailedAnimeFromMal: (Int) -> Unit,
     onShowDetailedAnimeFromAniList: (Int) -> Unit
 ) {
@@ -152,7 +148,8 @@ fun UserProfileScreen(
             val entries = userActivity.take(50).map { activity ->
                 val progressStr = activity.progress
                 val episodeDisplay = progressStr?.let { prog ->
-                    val nums = prog.filter { it.isDigit() }.chunked(2).map { it.toIntOrNull() }.filterNotNull()
+                    val nums =
+                        prog.filter { it.isDigit() }.chunked(2).mapNotNull { it.toIntOrNull() }
                     when {
                         nums.size >= 2 && nums[1] > nums[0] -> "${nums[0]}-${nums[1]}"
                         nums.isNotEmpty() -> "Episode ${nums[0]}"
@@ -266,14 +263,12 @@ fun UserProfileScreen(
                     when (selectedSection) {
                         UserProfileSection.ABOUT_ME -> AboutMeContent(
                             username = userName ?: "User",
-                            isOled = isOled, loginProvider = loginProvider,
                             userAvatar = userAvatar, userBanner = userBanner,
-                            userBio = userBio, userSiteUrl = userSiteUrl,
-                            userCreatedAt = userCreatedAt, userStats = userStats,
-                            onShareClick = {}
+                            userBio = userBio,
+                            userCreatedAt = userCreatedAt, userStats = userStats
                         )
                         UserProfileSection.FAVORITES -> FavoritesContent(
-                            favorites = favorites, isOled = isOled,
+                            favorites = favorites,
                             preferEnglishTitles = preferEnglishTitles,
                             onAnimeClick = { anime ->
                                 if (anime.malId != 0) {
@@ -287,7 +282,7 @@ fun UserProfileScreen(
                             }
                         )
                         UserProfileSection.HISTORY -> HistoryContent(
-                            history = history, isOled = isOled,
+                            history = history,
                             preferEnglishTitles = preferEnglishTitles,
                             onAnimeClick = { entry ->
                                 if (loginProvider == LoginProvider.MAL) {
@@ -370,11 +365,10 @@ private fun UserProfileNavButton(
 
 @Composable
 private fun AboutMeContent(
-    username: String, isOled: Boolean, loginProvider: LoginProvider,
+    username: String,
     userAvatar: String? = null, userBanner: String? = null,
-    userBio: String? = null, userSiteUrl: String? = null,
-    userCreatedAt: Long? = null, userStats: UserAnimeStats? = null,
-    onShareClick: () -> Unit = {}
+    userBio: String? = null,
+    userCreatedAt: Long? = null, userStats: UserAnimeStats? = null
 ) {
     var showFullscreenAvatar by remember { mutableStateOf(false) }
 
@@ -538,7 +532,7 @@ private fun formatDate(timestamp: Long): String {
 
 @Composable
 private fun FavoritesContent(
-    favorites: List<JikanFavoriteAnime>, isOled: Boolean,
+    favorites: List<JikanFavoriteAnime>,
     preferEnglishTitles: Boolean,
     onAnimeClick: (JikanFavoriteAnime) -> Unit,
     onRemoveFavorite: ((JikanFavoriteAnime) -> Unit)? = null
@@ -560,9 +554,9 @@ private fun FavoritesContent(
             verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(vertical = 8.dp)
         ) {
-            itemsIndexed(favorites) { index, anime ->
+            itemsIndexed(favorites) { _, anime ->
                 FavoriteItem(
-                    anime = anime, isOled = isOled,
+                    anime = anime,
                     preferEnglishTitles = preferEnglishTitles,
                     onClick = { onAnimeClick(anime) },
                     onRemove = { onRemoveFavorite?.invoke(anime) }
@@ -574,7 +568,7 @@ private fun FavoritesContent(
 
 @Composable
 private fun FavoriteItem(
-    anime: JikanFavoriteAnime, isOled: Boolean,
+    anime: JikanFavoriteAnime,
     preferEnglishTitles: Boolean,
     onClick: () -> Unit,
     onRemove: (() -> Unit)? = null
@@ -656,7 +650,7 @@ private fun FavoriteItem(
 }
 @Composable
 private fun HistoryContent(
-    history: List<JikanHistoryEntry>, isOled: Boolean,
+    history: List<JikanHistoryEntry>,
     preferEnglishTitles: Boolean,
     onAnimeClick: (JikanHistoryEntry) -> Unit,
     statuses: List<String> = emptyList(),
@@ -681,7 +675,7 @@ private fun HistoryContent(
         ) {
             itemsIndexed(history) { index, entry ->
                 HistoryItem(
-                    entry = entry, isOled = isOled,
+                    entry = entry,
                     preferEnglishTitles = preferEnglishTitles,
                     onClick = { onAnimeClick(entry) },
                     status = statuses.getOrNull(index),
@@ -694,7 +688,7 @@ private fun HistoryContent(
 
 @Composable
 private fun HistoryItem(
-    entry: JikanHistoryEntry, isOled: Boolean,
+    entry: JikanHistoryEntry,
     preferEnglishTitles: Boolean, onClick: () -> Unit,
     status: String? = null, progress: String? = null
 ) {
@@ -747,7 +741,5 @@ private fun formatTimestamp(timestamp: Long): String {
     val sdf = SimpleDateFormat("d MMMM, yyyy - HH:mm", Locale.getDefault())
     return sdf.format(Date(timestamp * 1000))
 }
-
-private fun easeOutCubic(t: Float): Float = (1f - (1f - t) * (1f - t) * (1f - t)).coerceIn(0f, 1f)
 
 

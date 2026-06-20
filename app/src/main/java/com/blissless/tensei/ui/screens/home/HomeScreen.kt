@@ -1074,10 +1074,8 @@ fun HomeScreen(
     if (showUserProfileDialog) {
         UserProfileScreen(
             viewModel = viewModel,
-            isOled = isOled,
             preferEnglishTitles = preferEnglishTitles,
             onDismiss = { showUserProfileDialog = false },
-            onShowAnimeDialog = { anime, _ -> onShowAnimeDialog(anime, null) },
             onShowDetailedAnimeFromMal = onShowDetailedAnimeFromMal,
             onShowDetailedAnimeFromAniList = onShowDetailedAnimeFromAniList
         )
