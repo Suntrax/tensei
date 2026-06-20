@@ -23,7 +23,6 @@ import kotlin.math.sqrt
 class AudioFingerprinter(private val context: Context) {
 
     companion object {
-        private const val TAG = "AudioFingerprinter"
 
         // Fingerprint parameters
         private const val SAMPLE_RATE = 22050
@@ -50,18 +49,38 @@ class AudioFingerprinter(private val context: Context) {
         val duration: Float,
         val energyProfile: FloatArray,
         val peakPattern: IntArray
-    )
+    ) {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (javaClass != other?.javaClass) return false
+
+            other as AudioFingerprint
+
+            if (duration != other.duration) return false
+            if (!energyProfile.contentEquals(other.energyProfile)) return false
+            if (!peakPattern.contentEquals(other.peakPattern)) return false
+
+            return true
+        }
+
+        override fun hashCode(): Int {
+            var result = duration.hashCode()
+            result = 31 * result + energyProfile.contentHashCode()
+            result = 31 * result + peakPattern.contentHashCode()
+            return result
+        }
+    }
 
     /**
      * Extract fingerprint from an OP/ED audio/video URL
      */
     suspend fun extractFingerprintFromUrl(url: String): AudioFingerprint? = withContext(Dispatchers.IO) {
         try {
-            val audioFile = downloadAudioSegment(url, FINGERPRINT_DURATION_MS) ?: return@withContext null
+            val audioFile = downloadAudioSegment(url) ?: return@withContext null
             val fingerprint = generateFingerprint(audioFile)
             audioFile.delete()
             fingerprint
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             null
         }
     }
@@ -73,7 +92,7 @@ class AudioFingerprinter(private val context: Context) {
         episodePath: String,
         opFingerprint: AudioFingerprint,
         episodeDuration: Float
-    ): MatchResult? = findTimestamp(episodePath, opFingerprint, OP_SEARCH_WINDOW_SECONDS.coerceAtMost(episodeDuration.toInt()), episodeDuration, "OP")
+    ): MatchResult? = findTimestamp(episodePath, opFingerprint, OP_SEARCH_WINDOW_SECONDS.coerceAtMost(episodeDuration.toInt()), episodeDuration)
 
     /**
      * Find ED timestamp in episode by matching fingerprint
@@ -84,7 +103,8 @@ class AudioFingerprinter(private val context: Context) {
         episodeDuration: Float
     ): MatchResult? {
         val searchStart = (episodeDuration - ED_SEARCH_WINDOW_SECONDS).coerceAtLeast(0f)
-        return findTimestamp(episodePath, edFingerprint, ED_SEARCH_WINDOW_SECONDS, episodeDuration, "ED", searchStart)
+        return findTimestamp(episodePath, edFingerprint, ED_SEARCH_WINDOW_SECONDS, episodeDuration,
+            searchStart)
     }
 
     private suspend fun findTimestamp(
@@ -92,7 +112,6 @@ class AudioFingerprinter(private val context: Context) {
         fingerprint: AudioFingerprint,
         searchWindowSeconds: Int,
         episodeDuration: Float,
-        searchType: String,
         searchStartOffset: Float = 0f
     ): MatchResult? = withContext(Dispatchers.IO) {
         try {
@@ -106,10 +125,10 @@ class AudioFingerprinter(private val context: Context) {
             val endTime = startTime + fingerprint.duration
 
             MatchResult(true, startTime, endTime.coerceAtMost(episodeDuration), matchPosition.second)
-        } catch (e: Exception) { null }
+        } catch (_: Exception) { null }
     }
 
-    private fun downloadAudioSegment(url: String, durationMs: Int): File? {
+    private fun downloadAudioSegment(url: String): File? {
         return try {
             val tempFile = File(context.cacheDir, "audio_${System.currentTimeMillis()}.webm")
             val connection = java.net.URL(url).openConnection() as javax.net.ssl.HttpsURLConnection
@@ -132,7 +151,7 @@ class AudioFingerprinter(private val context: Context) {
             }
             connection.disconnect()
             if (tempFile.length() > 0) tempFile else { tempFile.delete(); null }
-        } catch (e: Exception) { null }
+        } catch (_: Exception) { null }
     }
 
     private fun generateFingerprint(audioFile: File): AudioFingerprint? {
@@ -164,7 +183,7 @@ class AudioFingerprinter(private val context: Context) {
             val energyProfile = computeEnergyProfile(samples)
             val peakPattern = computePeakPattern(energyProfile)
             AudioFingerprint(samples.size.toFloat() / SAMPLE_RATE, energyProfile, peakPattern)
-        } catch (e: Exception) { null }
+        } catch (_: Exception) { null }
     }
 
     private fun extractAudioSamples(extractor: MediaExtractor, format: MediaFormat): FloatArray {
@@ -281,7 +300,7 @@ class AudioFingerprinter(private val context: Context) {
             val energyProfile = computeEnergyProfile(samples)
             val peakPattern = computePeakPattern(energyProfile)
             AudioFingerprint(samples.size.toFloat() / SAMPLE_RATE, energyProfile, peakPattern)
-        } catch (e: Exception) { null }
+        } catch (_: Exception) { null }
     }
 
     private fun extractAudioSamplesForDuration(extractor: MediaExtractor, format: MediaFormat, maxDurationSeconds: Int): FloatArray {
