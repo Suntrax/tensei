@@ -17,16 +17,15 @@ import androidx.glance.GlanceModifier
 import androidx.glance.Image
 import androidx.glance.ImageProvider
 import androidx.glance.action.action
-import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
+import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
+import androidx.glance.appwidget.components.CircleIconButton
 import androidx.glance.appwidget.lazy.LazyColumn
 import androidx.glance.appwidget.lazy.items
 import androidx.glance.appwidget.provideContent
-import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.updateAll
-import androidx.glance.appwidget.components.CircleIconButton
 import androidx.glance.background
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
@@ -56,18 +55,17 @@ import com.blissless.tensei.data.models.isAdultContent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
-import java.text.SimpleDateFormat
 import java.util.Calendar
-import java.util.Date
-import java.util.Locale
 import java.util.concurrent.TimeUnit
+import androidx.core.content.edit
+import androidx.core.graphics.createBitmap
+import androidx.core.graphics.scale
 
 private const val PREFS_NAME = "airing_schedule_widget"
 private const val ANILIST_PREFS = "anilist_prefs"
@@ -125,14 +123,14 @@ object AiringScheduleWidget : GlanceAppWidget() {
         if (data.entries.isEmpty() || isAuthed != wasAuthed) {
             try {
                 val fresh = withContext(Dispatchers.IO) {
-                    WidgetScheduleFetcher.quickFetch(context, token)
+                    WidgetScheduleFetcher.quickFetch(token)
                 }
                 if (fresh.entries.isNotEmpty()) {
                     saveWidgetData(context, fresh, isAuthed)
                     withContext(Dispatchers.IO) { cacheCovers(context, fresh.entries) }
                     data = fresh
                 }
-            } catch (e: Exception) {
+            } catch (_: Exception) {
             }
         }
 
@@ -177,7 +175,7 @@ object AiringScheduleWidget : GlanceAppWidget() {
         val s = prefs.getString(KEY_DATA, null) ?: return WidgetScheduleData(emptyList())
         return try {
             json.decodeFromString<WidgetScheduleData>(s)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             WidgetScheduleData(emptyList())
         }
     }
@@ -191,7 +189,7 @@ object AiringScheduleWidget : GlanceAppWidget() {
         if (!bypassCooldown && last != 0L && now - last < COOLDOWN_MS) {
             return
         }
-        prefs.edit().putLong(KEY_REFRESH_TIME, now).apply()
+        prefs.edit { putLong(KEY_REFRESH_TIME, now) }
         WorkManager.getInstance(context).enqueueUniqueWork(
             WORK_NOW, ExistingWorkPolicy.REPLACE,
             OneTimeWorkRequestBuilder<AiringScheduleWorker>().build()
@@ -439,15 +437,15 @@ class AiringScheduleWidgetReceiver : GlanceAppWidgetReceiver() {
 private fun saveWidgetData(context: Context, data: WidgetScheduleData, isAuthed: Boolean = false) {
     val j = Json { ignoreUnknownKeys = true; coerceInputValues = true }
     val saved = j.encodeToString(data)
-    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
-        .putString(KEY_DATA, saved)
-        .putLong(KEY_UPD, System.currentTimeMillis())
-        .putBoolean(KEY_WAS_AUTH, isAuthed)
-        .commit()
+    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit(commit = true) {
+        putString(KEY_DATA, saved)
+            .putLong(KEY_UPD, System.currentTimeMillis())
+            .putBoolean(KEY_WAS_AUTH, isAuthed)
+    }
 }
 
 private fun roundCorners(bitmap: Bitmap, radiusPx: Float): Bitmap {
-    val out = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
+    val out = createBitmap(bitmap.width, bitmap.height)
     val canvas = android.graphics.Canvas(out)
     canvas.drawColor(0xFF242424.toInt())
     val paint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -466,9 +464,9 @@ private suspend fun updateWidget(context: Context) {
             glanceIds.forEach { id -> AiringScheduleWidget.update(context, id) }
             return
         }
-    } catch (e: Exception) {
+    } catch (_: Exception) {
     }
-    try { AiringScheduleWidget.updateAll(context) } catch (e: Exception) {
+    try { AiringScheduleWidget.updateAll(context) } catch (_: Exception) {
     }
 }
 
@@ -489,13 +487,13 @@ private fun cacheCovers(context: Context, entries: List<WidgetAiringEntry>) {
                 val scale = minOf(168f / w, 240f / h)
                 val sw = (w * scale).toInt()
                 val sh = (h * scale).toInt()
-                val scaled = Bitmap.createScaledBitmap(bitmap, sw, sh, true)
+                val scaled = bitmap.scale(sw, sh)
                 if (scaled != bitmap) bitmap.recycle()
                 val rounded = roundCorners(scaled, 8f)
                 FileOutputStream(file).use { rounded.compress(Bitmap.CompressFormat.JPEG, 80, it) }
                 rounded.recycle()
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
         }
     }
 }
@@ -511,7 +509,7 @@ class AiringScheduleWorker(context: Context, params: WorkerParameters) : Corouti
             saveWidgetData(applicationContext, data, token != null)
             updateWidget(applicationContext)
             Result.success()
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             if (runAttemptCount < 3) Result.retry() else Result.failure()
         }
     }
@@ -521,10 +519,12 @@ object WidgetScheduleFetcher {
 
     private val json = Json { ignoreUnknownKeys = true; coerceInputValues = true }
 
-    fun quickFetch(context: Context, authToken: String? = null): WidgetScheduleData {
+    fun quickFetch(authToken: String? = null): WidgetScheduleData {
         val ct = System.currentTimeMillis() / 1000
         val body = JSONObject().apply {
-            put("query", "query(\$p:Int,\$s:Int,\$e:Int){Page(page:\$p,perPage:50){airingSchedules(airingAt_greater:\$s,airingAt_lesser:\$e,sort:TIME){id airingAt episode timeUntilAiring mediaId media{id idMal title{romaji english}coverImage{extraLarge}episodes status averageScore genres seasonYear isAdult mediaListEntry{id status}}}}}")
+            put("query",
+                $$"query($p:Int,$s:Int,$e:Int){Page(page:$p,perPage:50){airingSchedules(airingAt_greater:$s,airingAt_lesser:$e,sort:TIME){id airingAt episode timeUntilAiring mediaId media{id idMal title{romaji english}coverImage{extraLarge}episodes status averageScore genres seasonYear isAdult mediaListEntry{id status}}}}}"
+            )
             put("variables", JSONObject(mapOf("p" to 1, "s" to (ct - 86400).toInt(), "e" to (ct + 86400).toInt())))
         }
         val resp = execute(body.toString(), authToken, shortTimeout = true)
@@ -534,7 +534,8 @@ object WidgetScheduleFetcher {
 
     fun fetch(context: Context, authToken: String? = null): WidgetScheduleData {
         val ct = System.currentTimeMillis() / 1000
-        val query = "query(\$p:Int,\$s:Int,\$e:Int){Page(page:\$p,perPage:50){airingSchedules(airingAt_greater:\$s,airingAt_lesser:\$e,sort:TIME){id airingAt episode timeUntilAiring mediaId media{id idMal title{romaji english}coverImage{extraLarge}episodes status averageScore genres seasonYear isAdult mediaListEntry{id status}}}}}"
+        val query =
+            $$"query($p:Int,$s:Int,$e:Int){Page(page:$p,perPage:50){airingSchedules(airingAt_greater:$s,airingAt_lesser:$e,sort:TIME){id airingAt episode timeUntilAiring mediaId media{id idMal title{romaji english}coverImage{extraLarge}episodes status averageScore genres seasonYear isAdult mediaListEntry{id status}}}}}"
         val entries = mutableListOf<WidgetAiringEntry>()
         var page = 1
         while (page <= 5) {
@@ -549,7 +550,7 @@ object WidgetScheduleFetcher {
                 entries.addAll(parsed)
                 if (parsed.size < 50) break
                 page++
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 break
             }
         }
