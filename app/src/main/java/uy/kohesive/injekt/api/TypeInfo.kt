@@ -19,7 +19,6 @@ fun Type.erasedType(): Class<Any> {
     }
 }
 
-inline fun <reified T : Any> typeRef(): FullTypeReference<T> = object : FullTypeReference<T>() {}
 inline fun <reified T : Any> fullType(): FullTypeReference<T> = object : FullTypeReference<T>() {}
 
 interface TypeReference<T> {
