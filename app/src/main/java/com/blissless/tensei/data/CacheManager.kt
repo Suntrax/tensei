@@ -34,12 +34,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.json.Json
 import java.io.File
 
+@UnstableApi
 class CacheManager(private val sharedPreferences: SharedPreferences) {
 
     companion object {
-        private const val TAG = "CacheManager"
         private const val CACHE_DURATION_MS = 7 * 24 * 60 * 60 * 1000L
-        private const val AIRING_CACHE_DURATION_MS = 1 * 60 * 60 * 1000L
         private const val STREAM_CACHE_DURATION_MS = 24 * 60 * 60 * 1000L // 24 hours
 
         private const val CACHE_EXPLORE_TIME = "cache_explore_time"
@@ -74,7 +73,7 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
             videoDbProvider = dbProvider
             videoCache = SimpleCache(cacheDir, evictor, dbProvider)
             isCacheInitialized = true
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // Cache initialization failed, continue without caching
         }
     }
@@ -94,14 +93,6 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
             .setUpstreamDataSourceFactory(httpDataSourceFactory)
             // Don't use FLAG_IGNORE_CACHE_ON_ERROR - we want to use cache even if there are issues
     }
-    
-    // Get the raw SimpleCache for direct access if needed
-    @OptIn(UnstableApi::class)
-    fun getVideoCache(): SimpleCache? = videoCache
-
-    // Get the database provider for sharing with DownloadManager
-    @OptIn(UnstableApi::class)
-    fun getDatabaseProvider(): StandaloneDatabaseProvider? = videoDbProvider
 
     private fun getContentLength(videoUrl: String, referer: String): Long {
         return try {
@@ -113,7 +104,7 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
             val length = connection.contentLengthLong
             connection.disconnect()
             length
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             -1
         }
     }
@@ -127,8 +118,8 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
             val cachedSpans = cache.getCachedSpans(key)
             val cachedBytes = cachedSpans.sumOf { it.length }
             val contentLength = getContentLength(videoUrl, "")
-            contentLength > 0 && cachedBytes >= contentLength
-        } catch (e: Exception) {
+            contentLength in 1..cachedBytes
+        } catch (_: Exception) {
             false
         }
     }
@@ -147,7 +138,7 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
             } else {
                 null
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             null
         }
     }
@@ -157,10 +148,6 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
         isLenient = true
         coerceInputValues = true
     }
-
-    // Stream cache with timestamps for TTL (30 minutes)
-    private val _streamCacheTimestamps = MutableStateFlow<Map<String, Long>>(emptyMap())
-    private val streamCacheTtlMs = 30 * 60 * 1000L // 30 minutes
 
     private val _prefetchedStreams = MutableStateFlow<Map<String, AniwatchStreamResult?>>(emptyMap())
     val prefetchedStreams: StateFlow<Map<String, AniwatchStreamResult?>> = _prefetchedStreams.asStateFlow()
@@ -194,7 +181,7 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
             if (timestamp != null) {
                 val age = System.currentTimeMillis() - timestamp
                 if (age > TMDB_CACHE_MAX_AGE_MS) {
-                    _tmdbEpisodeCache.value = _tmdbEpisodeCache.value - animeId
+                    _tmdbEpisodeCache.value -= animeId
                     _tmdbCacheTimestamps.remove(animeId)
                     return null
                 }
@@ -204,13 +191,13 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
     }
 
     fun cacheTmdbEpisodes(animeId: Int, episodes: List<TmdbEpisode>) {
-        _tmdbEpisodeCache.value = _tmdbEpisodeCache.value + (animeId to episodes)
+        _tmdbEpisodeCache.value += (animeId to episodes)
         _tmdbCacheTimestamps[animeId] = System.currentTimeMillis()
         saveTmdbEpisodeCache()
     }
 
     fun clearTmdbEpisodeCache(animeId: Int) {
-        _tmdbEpisodeCache.value = _tmdbEpisodeCache.value - animeId
+        _tmdbEpisodeCache.value -= animeId
         _tmdbCacheTimestamps.remove(animeId)
         _persistentTmdbIds.remove(animeId)
         saveTmdbEpisodeCache()
@@ -265,8 +252,7 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
 
     fun saveTmdbEpisodeCache() {
         try {
-            val entries = _tmdbEpisodeCache.value.mapValues { (id, episodes) ->
-                val timestamp = _tmdbCacheTimestamps[id] ?: System.currentTimeMillis()
+            val entries = _tmdbEpisodeCache.value.mapValues { (_, episodes) ->
                 json.encodeToString(episodes)
             }
             val timestamped = entries.mapKeys { (id, _) ->
@@ -305,7 +291,7 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
             val jsonString = json.encodeToString(HomeCacheData.serializer(), data)
             sharedPreferences.edit { putString(CACHE_HOME_DATA, jsonString) }
             setCacheTime(CACHE_HOME_TIME)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
         }
     }
 
@@ -314,7 +300,7 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
         if (cachedData != null && isCacheValid(CACHE_HOME_TIME)) {
             return try {
                 json.decodeFromString<HomeCacheData>(cachedData)
-            } catch (e: Exception) { null }
+            } catch (_: Exception) { null }
         }
         return null
     }
@@ -324,7 +310,7 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
             val jsonString = json.encodeToString(ExploreCacheData.serializer(), data)
             sharedPreferences.edit { putString(CACHE_EXPLORE_DATA, jsonString) }
             setCacheTime(CACHE_EXPLORE_TIME)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
         }
     }
 
@@ -333,7 +319,7 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
         if (cachedData != null && isCacheValid(CACHE_EXPLORE_TIME)) {
             return try {
                 json.decodeFromString<ExploreCacheData>(cachedData)
-            } catch (e: Exception) { null }
+            } catch (_: Exception) { null }
         }
         return null
     }
@@ -344,7 +330,7 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
             val jsonString = json.encodeToString(AiringCacheData.serializer(), cacheData)
             sharedPreferences.edit { putString(CACHE_AIRING_DATA, jsonString) }
             setCacheTime(CACHE_AIRING_TIME)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
         }
     }
 
@@ -352,7 +338,7 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
         val cachedData = sharedPreferences.getString(CACHE_AIRING_DATA, null) ?: return null
         return try {
             json.decodeFromString<AiringCacheData>(cachedData)
-        } catch (e: Exception) { null }
+        } catch (_: Exception) { null }
     }
 
     fun loadStreamCache() {
@@ -400,7 +386,7 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
 
             _prefetchedStreams.value = streamMap
             _prefetchedEpisodeInfo.value = episodeMap
-        } catch (e: Exception) {
+        } catch (_: Exception) {
         }
     }
 
@@ -446,7 +432,7 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
 
             val jsonString = json.encodeToString(StreamCacheData.serializer(), StreamCacheData(entries))
             sharedPreferences.edit { putString(CACHE_STREAM_DATA, jsonString) }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
         }
     }
 
@@ -456,15 +442,15 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
             val cacheData = json.decodeFromString<PlaybackPositionCache>(cachedData)
             _playbackPositions.value = cacheData.positions
             _playbackDurations.value = cacheData.durations
-        } catch (e: Exception) {
+        } catch (_: Exception) {
         }
     }
 
     fun savePlaybackPosition(animeId: Int, episode: Int, position: Long, duration: Long = 0L, isOffline: Boolean = false) {
         val key = "${animeId}_$episode${if (isOffline) "_offline" else ""}"
-        _playbackPositions.value = _playbackPositions.value + (key to position)
+        _playbackPositions.value += (key to position)
         if (duration > 0L) {
-            _playbackDurations.value = _playbackDurations.value + (key to duration)
+            _playbackDurations.value += (key to duration)
         }
         try {
             val jsonString = json.encodeToString(
@@ -472,7 +458,7 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
                 PlaybackPositionCache(_playbackPositions.value, _playbackDurations.value)
             )
             sharedPreferences.edit { putString(CACHE_PLAYBACK_POSITIONS, jsonString) }
-        } catch (e: Exception) { }
+        } catch (_: Exception) { }
     }
 
     fun getPlaybackPosition(animeId: Int, episode: Int, isOffline: Boolean = false): Long = _playbackPositions.value["${animeId}_$episode${if (isOffline) "_offline" else ""}"] ?: 0L
@@ -482,8 +468,8 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
     fun clearPlaybackPosition(animeId: Int, episode: Int, isOffline: Boolean = false) {
         val key = "${animeId}_$episode${if (isOffline) "_offline" else ""}"
         if (_playbackPositions.value.containsKey(key)) {
-            _playbackPositions.value = _playbackPositions.value - key
-            _playbackDurations.value = _playbackDurations.value - key
+            _playbackPositions.value -= key
+            _playbackDurations.value -= key
             sharedPreferences.edit {
                 val jsonString = json.encodeToString(
                     PlaybackPositionCache.serializer(),
@@ -506,28 +492,6 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
             )
             putString(CACHE_PLAYBACK_POSITIONS, jsonString)
         }
-    }
-
-    fun getCachedStream(key: String): AniwatchStreamResult? {
-        val stream = _prefetchedStreams.value[key]
-        if (stream != null) {
-        }
-        return stream
-    }
-
-    fun cacheStream(key: String, stream: AniwatchStreamResult?) {
-        _prefetchedStreams.value = _prefetchedStreams.value + (key to stream)
-        // Store timestamp for TTL tracking
-        _streamCacheTimestamps.value = _streamCacheTimestamps.value + (key to System.currentTimeMillis())
-        saveStreamCache()
-    }
-
-    fun getCachedEpisodeInfo(key: String): EpisodeStreams? {
-        return _prefetchedEpisodeInfo.value[key]
-    }
-
-    fun cacheEpisodeInfo(key: String, info: EpisodeStreams) {
-        _prefetchedEpisodeInfo.value = _prefetchedEpisodeInfo.value + (key to info)
     }
 
     fun hasStream(key: String): Boolean {
@@ -614,22 +578,8 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
     private val DETAILED_ANIME_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000L // 24 hours
     private val MAX_DETAILED_ANIME_CACHE_SIZE = 50
 
-    fun getCachedDetailedAnime(animeId: Int): DetailedAnimeData? {
-        val data = _detailedAnimeCache.value[animeId]
-        val timestamp = _detailedAnimeCacheTimestamps[animeId]
-
-        if (data != null && timestamp != null) {
-            val age = System.currentTimeMillis() - timestamp
-            if (age > DETAILED_ANIME_CACHE_MAX_AGE_MS) {
-                clearDetailedAnimeCache(animeId)
-                return null
-            }
-        }
-        return data
-    }
-
     fun cacheDetailedAnime(animeId: Int, data: DetailedAnimeData) {
-        _detailedAnimeCache.value = _detailedAnimeCache.value + (animeId to data)
+        _detailedAnimeCache.value += (animeId to data)
         _detailedAnimeCacheTimestamps[animeId] = System.currentTimeMillis()
         trimDetailedAnimeCacheToLimit()
     }
@@ -693,7 +643,7 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
                 cache.release()
                 videoCache = null
                 isCacheInitialized = false
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 // Cache release failed
             }
         }
@@ -707,7 +657,7 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
                     file.delete()
                 }
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // Disk cleanup failed
         }
 
@@ -721,9 +671,9 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
             try {
                 val cacheDir = File(context.cacheDir, "video_cache")
                 if (cacheDir.exists()) {
-                    return cacheDir.walkTopDown().filter { it.isFile }.map { it.length() }.sum()
+                    return cacheDir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
                 }
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 // Error getting cache size
             }
         }
@@ -732,9 +682,9 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
         try {
             val cacheDir = File(context.cacheDir, "video_cache")
             if (cacheDir.exists()) {
-                return cacheDir.walkTopDown().filter { it.isFile }.map { it.length() }.sum()
+                return cacheDir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // Error getting disk cache size
         }
         return 0L
