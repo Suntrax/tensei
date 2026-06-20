@@ -15,7 +15,6 @@ import java.util.concurrent.TimeUnit
 class AnimeThemesService {
 
     companion object {
-        private const val TAG = "AnimeThemesService"
         private const val API_BASE = "https://api.animethemes.moe"
     }
 
@@ -39,7 +38,7 @@ class AnimeThemesService {
                         getAnimeThemesBySlug(variation)
                     }
                 }
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 null
             }
         }
@@ -57,13 +56,13 @@ class AnimeThemesService {
             client.newCall(request).execute().use { response ->
                 if (response.isSuccessful) {
                     val body = response.body.string()
-                    if (body != null) {
+                    run {
                         val data = json.decodeFromString<AnimeThemesApiResponse>(body)
                         extractThemesFromAnime(data.anime)
-                    } else null
+                    }
                 } else null
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             null
         }
     }

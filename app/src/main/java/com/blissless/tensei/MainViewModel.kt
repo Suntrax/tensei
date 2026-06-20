@@ -830,7 +830,7 @@ class MainViewModel : ViewModel() {
         cacheManager = CacheManager(userPreferences.getSharedPreferences())
         repository = AnimeRepository(userPreferences, cacheManager)
         malApiService = MalApiService(context)
-        jikanService = JikanService(context)
+        jikanService = JikanService()
         sourceManager = com.blissless.tensei.stream.SourceManager(context)
 
         // Initialize video cache for offline playback

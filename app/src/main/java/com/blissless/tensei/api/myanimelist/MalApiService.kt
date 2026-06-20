@@ -6,24 +6,18 @@ import android.util.Base64
 import com.blissless.tensei.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.Json
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
-import java.security.MessageDigest
+import androidx.core.net.toUri
 
-class MalApiService(private val context: Context) {
+class MalApiService(context: Context) {
 
     companion object {
         private const val MAL_API_BASE = "https://api.myanimelist.net/v2"
         private const val TIMEOUT_MS = 15000
-    }
-
-    private val json = Json {
-        ignoreUnknownKeys = true
-        isLenient = true
     }
 
     private val authManager = MalAuthManager(context)
@@ -45,7 +39,7 @@ class MalApiService(private val context: Context) {
                 "&code_challenge=$codeVerifier" +
                 "&scope=${URLEncoder.encode(scope, "UTF-8")}"
 
-        return Uri.parse(url)
+        return url.toUri()
     }
 
     private fun generateCodeVerifier(): String {
@@ -54,22 +48,11 @@ class MalApiService(private val context: Context) {
         return (1..64).map { chars.random() }.joinToString("")
     }
 
-    private fun generateS256Challenge(verifier: String): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        val hash = digest.digest(verifier.toByteArray(Charsets.US_ASCII))
-        // Base64url encode without padding
-        return Base64.encodeToString(hash, Base64.NO_WRAP or Base64.URL_SAFE or Base64.NO_PADDING)
-    }
-
     suspend fun exchangeCodeForToken(code: String, clientId: String, clientSecret: String? = null): Boolean =
         withContext(Dispatchers.IO) {
             try {
                 val redirectUri = "animescraper://success"
-                val codeVerifier = authManager.getCodeVerifier()
-
-                if (codeVerifier == null) {
-                    return@withContext false
-                }
+                val codeVerifier = authManager.getCodeVerifier() ?: return@withContext false
 
                 authManager.clearCodeVerifier()
 
@@ -95,7 +78,7 @@ class MalApiService(private val context: Context) {
 
                 val postData = buildString {
                     append("client_id=$clientId")
-                    if (useClientSecret && !clientSecret.isNullOrBlank()) {
+                    if (useClientSecret && clientSecret.isNotBlank()) {
                         append("&client_secret=$clientSecret")
                     }
                     append("&grant_type=authorization_code")
@@ -118,7 +101,6 @@ class MalApiService(private val context: Context) {
                     true
                 } else {
                     val errorReader = BufferedReader(InputStreamReader(conn.errorStream))
-                    val errorResponse = errorReader.readText()
                     errorReader.close()
                     false
                 }
@@ -148,7 +130,7 @@ class MalApiService(private val context: Context) {
         }
     }
 
-    private suspend fun fetchUserInfo() {
+    private fun fetchUserInfo() {
         val response = makeGetRequest("$MAL_API_BASE/users/@me?fields=name,picture")
         if (response != null) {
             try {
@@ -182,10 +164,7 @@ class MalApiService(private val context: Context) {
                     url += "&status=$status"
                 }
 
-                val response = makeGetRequest(url, paginated = true)
-                if (response == null) {
-                    break
-                }
+                val response = makeGetRequest(url) ?: break
 
                 try {
                     val items = parseAnimeListResponse(response)
@@ -195,10 +174,6 @@ class MalApiService(private val context: Context) {
                     entries.addAll(items)
                     offset += limit
 
-                    val pagingMatch = Regex("\"next\"\\s*:\\s*\"([^\"]+)\"").find(response)
-                    if (pagingMatch == null) {
-                        break
-                    }
                 } catch (e: Exception) {
                     e.printStackTrace()
                     break
@@ -211,11 +186,11 @@ class MalApiService(private val context: Context) {
     private fun parseAnimeListResponse(jsonStr: String): List<MalAnimeListEntry> {
         val entries = mutableListOf<MalAnimeListEntry>()
 
-        val dataMatch = Regex("\"data\"\\s*:\\s*\\[(.*?)\\]\\s*,\\s*\"paging\"", RegexOption.DOT_MATCHES_ALL).find(jsonStr)
+        val dataMatch = Regex("\"data\"\\s*:\\s*\\[(.*?)]\\s*,\\s*\"paging\"", RegexOption.DOT_MATCHES_ALL).find(jsonStr)
         val dataStr = if (dataMatch != null) {
             dataMatch.groupValues[1]
         } else {
-            val altMatch = Regex("\"data\"\\s*:\\s*\\[(.*)\\]", RegexOption.DOT_MATCHES_ALL).find(jsonStr)
+            val altMatch = Regex("\"data\"\\s*:\\s*\\[(.*)]", RegexOption.DOT_MATCHES_ALL).find(jsonStr)
             if (altMatch != null) altMatch.groupValues[1] else jsonStr
         }
 
@@ -286,7 +261,7 @@ class MalApiService(private val context: Context) {
                         ) else null
                     )
                 )
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 // skip malformed entries
             }
 
@@ -323,11 +298,7 @@ class MalApiService(private val context: Context) {
     suspend fun updateAnimeStatus(animeId: Int, status: String?, score: Int? = null, episodesWatched: Int? = null): Boolean =
         withContext(Dispatchers.IO) {
             try {
-                val authHeader = authManager.getAuthHeader()
-
-                if (authHeader == null) {
-                    return@withContext false
-                }
+                val authHeader = authManager.getAuthHeader() ?: return@withContext false
 
                 val url = URL("$MAL_API_BASE/anime/$animeId/my_list_status")
 
@@ -382,32 +353,7 @@ class MalApiService(private val context: Context) {
         }
     }
 
-    suspend fun getAnimeDetails(animeId: Int): Map<String, Any>? = withContext(Dispatchers.IO) {
-        val fields = "id,title,main_picture,num_episodes,status,mean,rank,popularity,genres"
-        val response = makeGetRequest("$MAL_API_BASE/anime/$animeId?fields=$fields")
-        response?.let { parseJsonToMap(it) }
-    }
-
-    private fun parseJsonToMap(jsonStr: String): Map<String, Any> {
-        val result = mutableMapOf<String, Any>()
-
-        Regex("\"(\\w+)\"\\s*:\\s*(?:\"([^\"]*)\"|(\\d+)|(\\[.*?\\]))").findAll(jsonStr).forEach { match ->
-            val key = match.groupValues[1]
-            val strVal = match.groupValues[2]
-            val numVal = match.groupValues[3]
-            val arrVal = match.groupValues[4]
-
-            when {
-                strVal.isNotEmpty() -> result[key] = strVal
-                numVal.isNotEmpty() -> result[key] = numVal.toIntOrNull() ?: 0
-                arrVal.isNotEmpty() -> result[key] = arrVal
-            }
-        }
-
-        return result
-    }
-
-    private fun makeGetRequest(path: String, paginated: Boolean = false): String? {
+    private fun makeGetRequest(path: String): String? {
         return try {
             val authHeader = authManager.getAuthHeader() ?: return null
 

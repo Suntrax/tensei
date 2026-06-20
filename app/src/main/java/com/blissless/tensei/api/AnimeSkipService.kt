@@ -19,7 +19,6 @@ import com.blissless.tensei.data.models.Timestamp
 class AnimeSkipService(private val context: Context? = null) {
 
     companion object {
-        private const val TAG = "AnimeSkipService"
         private const val API_URL = "https://api.aniskip.com/v2/skip-times"
         private const val DEFAULT_EPISODE_LENGTH = 1440
         private const val MAX_INTRO_DURATION = 150
@@ -44,7 +43,7 @@ class AnimeSkipService(private val context: Context? = null) {
 
     private fun isValidIntro(start: Int?, end: Int?, episodeLength: Int?): Boolean {
         if (start == null || end == null) return false
-        if (start < 0 || end <= start) return false
+        if (start !in 0..<end) return false
         val duration = end - start
         if (duration > MAX_INTRO_DURATION) {
             return false
@@ -57,7 +56,7 @@ class AnimeSkipService(private val context: Context? = null) {
 
     private fun isValidOutro(start: Int?, end: Int?, episodeLength: Int?): Boolean {
         if (start == null || end == null) return false
-        if (start < 0 || end <= start) return false
+        if (start !in 0..<end) return false
         val duration = end - start
         if (duration > MAX_OUTRO_DURATION) {
             return false
@@ -125,7 +124,6 @@ class AnimeSkipService(private val context: Context? = null) {
         animeName: String = "",
         animeYear: Int? = null,
         animeId: Int = 0,
-        episodePath: String? = null,
         animekaiIntroStart: Int? = null,
         animekaiIntroEnd: Int? = null,
         animekaiOutroStart: Int? = null,
@@ -168,7 +166,7 @@ class AnimeSkipService(private val context: Context? = null) {
 
         // 4. FALLBACK: Try AnimeThemes
         if (animeName.isNotEmpty()) {
-            val fingerprintResult = tryAnimeThemesFallback(animeName, animeYear, episodeNumber, episodeLength, episodePath)
+            val fingerprintResult = tryAnimeThemesFallback(animeName, animeYear, episodeNumber, episodeLength)
             if (fingerprintResult != null && fingerprintResult.hasTimestamps()) {
                 timestampCache?.saveFromEpisodeTimestamps(
                     animeId, animeName, episodeNumber, fingerprintResult, "animethemes"
@@ -184,8 +182,7 @@ class AnimeSkipService(private val context: Context? = null) {
         animeName: String,
         animeYear: Int?,
         episodeNumber: Int,
-        episodeLength: Int,
-        episodePath: String?
+        episodeLength: Int
     ): EpisodeTimestamps? = withContext(Dispatchers.IO) {
         try {
             val themesResult = animeThemesService.searchAnimeThemes(animeName, animeYear) ?: return@withContext null
@@ -211,7 +208,7 @@ class AnimeSkipService(private val context: Context? = null) {
                     }
                 )
             } else null
-        } catch (e: Exception) { null }
+        } catch (_: Exception) { null }
     }
 
     suspend fun getSkipTimestamps(
@@ -223,7 +220,7 @@ class AnimeSkipService(private val context: Context? = null) {
         return try {
             val url = "$API_URL/$malId/$episodeNumber?types[]=op&types[]=ed&episodeLength=$episodeLength"
             executeGetRequest(url)?.let { parseAniSkipResponse(it, episodeNumber) }
-        } catch (e: Exception) { null }
+        } catch (_: Exception) { null }
     }
 
     suspend fun getSkipTimestampsByName(
@@ -281,7 +278,7 @@ class AnimeSkipService(private val context: Context? = null) {
                 }
                 bestMatch?.malId ?: candidates.firstOrNull()?.malId
             }
-        } catch (e: Exception) { null }
+        } catch (_: Exception) { null }
     }
 
     private fun parseAniSkipResponse(response: String, episodeNumber: Int): EpisodeTimestamps? {
@@ -310,7 +307,7 @@ class AnimeSkipService(private val context: Context? = null) {
                 recapStart = null, recapEnd = null,
                 allTimestamps = data.results.map { Timestamp(it.interval.startTime, it.skipType, it.skipType) }
             )
-        } catch (e: Exception) { null }
+        } catch (_: Exception) { null }
     }
 
     private suspend fun executeGetRequest(urlString: String): String? = withContext(Dispatchers.IO) {
@@ -323,7 +320,7 @@ class AnimeSkipService(private val context: Context? = null) {
             if (connection.responseCode == 200) {
                 connection.inputStream.bufferedReader().use { it.readText() }
             } else null
-        } catch (e: Exception) { null }
+        } catch (_: Exception) { null }
     }
 }
 

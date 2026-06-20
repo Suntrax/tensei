@@ -54,7 +54,7 @@ data class MalListStatus(
     val updated_at: String? = null
 )
 
-class MalAuthManager(private val context: Context) {
+class MalAuthManager(context: Context) {
     
     companion object {
         private const val PREFS_NAME = "mal_auth_prefs"
@@ -68,15 +68,13 @@ class MalAuthManager(private val context: Context) {
         private const val KEY_CODE_VERIFIER = "code_verifier"
         private const val KEY_CODE_VERIFIER_TIME = "code_verifier_time"
         private const val CODE_VERIFIER_EXPIRY_MS = 10 * 60 * 1000L // 10 minutes
-        
-        private const val MAL_API_BASE = "https://api.myanimelist.net/v2"
+
     }
     
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     
-    private val _accessToken = MutableStateFlow<String?>(prefs.getString(KEY_ACCESS_TOKEN, null))
-    val accessToken: StateFlow<String?> = _accessToken.asStateFlow()
-    
+    private val _accessToken = MutableStateFlow(prefs.getString(KEY_ACCESS_TOKEN, null))
+
     private val _userInfo = MutableStateFlow<MalUserInfo?>(null)
     val userInfo: StateFlow<MalUserInfo?> = _userInfo.asStateFlow()
     
@@ -143,7 +141,7 @@ class MalAuthManager(private val context: Context) {
         val verifier = prefs.getString(KEY_CODE_VERIFIER, null) ?: return null
         val timestamp = prefs.getLong(KEY_CODE_VERIFIER_TIME, 0)
         
-        // Check if expired (10 minute window)
+        // Check if expired (10-minute window)
         if (System.currentTimeMillis() - timestamp > CODE_VERIFIER_EXPIRY_MS) {
             clearCodeVerifier()
             return null

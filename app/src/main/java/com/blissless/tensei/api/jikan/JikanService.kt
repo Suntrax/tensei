@@ -1,6 +1,5 @@
 package com.blissless.tensei.api.jikan
 
-import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
@@ -65,7 +64,7 @@ data class JikanHistoryEntry(
     val status: String? = null
 )
 
-class JikanService(private val context: Context) {
+class JikanService {
     
     companion object {
         private const val JIKAN_API_BASE = "https://api.jikan.moe/v4"
@@ -92,7 +91,7 @@ class JikanService(private val context: Context) {
             } else {
                 null
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             null
         }
     }
@@ -117,7 +116,7 @@ class JikanService(private val context: Context) {
             } else {
                 null
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             null
         }
     }
