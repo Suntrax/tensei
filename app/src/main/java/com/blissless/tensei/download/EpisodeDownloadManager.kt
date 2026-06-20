@@ -1,5 +1,6 @@
 package com.blissless.tensei.download
 
+import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -7,12 +8,12 @@ import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.util.Log
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.net.toUri
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.DataSource
@@ -31,14 +32,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import androidx.core.content.edit
 
-@Suppress("UnstableApiUsage")
+@UnstableApi
 class EpisodeDownloadManager(private val context: Context) {
 
     companion object {
@@ -46,7 +47,6 @@ class EpisodeDownloadManager(private val context: Context) {
         private const val PREFS_NAME = "episode_downloads"
         private const val METADATA_KEY = "download_metadata"
         private const val NOTIFICATION_CHANNEL = "anime_downloads"
-        private const val NOTIFICATION_ID_BASE = 1000
     }
 
     data class DownloadInfo(
@@ -116,16 +116,12 @@ class EpisodeDownloadManager(private val context: Context) {
     private val _errors = MutableSharedFlow<String>(extraBufferCapacity = 16)
     val errors: SharedFlow<String> = _errors.asSharedFlow()
 
-    private val _notificationTaps = MutableSharedFlow<String>(extraBufferCapacity = 4)
-    val notificationTaps: SharedFlow<String> = _notificationTaps.asSharedFlow()
-
     private var metadataStore: MutableMap<String, DownloadMetadata> = mutableMapOf()
     private val headersStore: MutableMap<String, Map<String, String>> = mutableMapOf()
 
     private val prefs: SharedPreferences
         get() = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
-    private var notificationIdCounter = NOTIFICATION_ID_BASE
     private val batchResults = mutableMapOf<String, MutableList<String>>()
     private val batchTotals = mutableMapOf<String, Int>()
     private val batchEpisodeNumbers = mutableMapOf<String, Set<Int>>()
@@ -134,21 +130,19 @@ class EpisodeDownloadManager(private val context: Context) {
     val activeBatches: StateFlow<Set<String>> = _activeBatches.asStateFlow()
 
     private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            try {
-                val channel = NotificationChannel(
-                    NOTIFICATION_CHANNEL,
-                    "Episode Downloads",
-                    NotificationManager.IMPORTANCE_LOW
-                ).apply {
-                    description = "Episode download progress and completion"
-                }
-                val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                nm.createNotificationChannel(channel)
-                Log.d(TAG, "createNotificationChannel: channel created")
-            } catch (e: Exception) {
-                Log.w(TAG, "createNotificationChannel: failed", e)
+        try {
+            val channel = NotificationChannel(
+                NOTIFICATION_CHANNEL,
+                "Episode Downloads",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Episode download progress and completion"
             }
+            val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            nm.createNotificationChannel(channel)
+            Log.d(TAG, "createNotificationChannel: channel created")
+        } catch (e: Exception) {
+            Log.w(TAG, "createNotificationChannel: failed", e)
         }
     }
 
@@ -181,12 +175,6 @@ class EpisodeDownloadManager(private val context: Context) {
         }
     }
 
-    private fun cancelNotification(episodeKey: String) {
-        try {
-            NotificationManagerCompat.from(context).cancel(episodeKey.hashCode())
-        } catch (_: Exception) {}
-    }
-
     fun startBatchNotification(animeName: String, total: Int, episodes: Set<Int> = emptySet()) {
         try {
             val batchId = "batch_${animeName.hashCode()}"
@@ -194,7 +182,7 @@ class EpisodeDownloadManager(private val context: Context) {
             batchTotals[animeName] = total
             batchEpisodeNumbers[animeName] = episodes
             batchCancelledFlags.remove(animeName)
-            _activeBatches.value = _activeBatches.value + animeName
+            _activeBatches.value += animeName
             val tapIntent = Intent(context, com.blissless.tensei.MainActivity::class.java).apply {
                 putExtra("notification_anime", animeName)
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -262,7 +250,7 @@ class EpisodeDownloadManager(private val context: Context) {
 
             if (remaining == 0) {
                 batchResults.remove(batchId)
-                _activeBatches.value = _activeBatches.value - animeName
+                _activeBatches.value -= animeName
                 batchEpisodeNumbers.remove(animeName)
             }
         } catch (e: Exception) {
@@ -270,36 +258,8 @@ class EpisodeDownloadManager(private val context: Context) {
         }
     }
 
-    fun sendBatchCompleteNotification(animeName: String, successCount: Int, failCount: Int) {
-        try {
-            val title = "Downloads Complete"
-            val content = "$successCount episodes downloaded${if (failCount > 0) ", $failCount failed" else ""}"
-            val tapIntent = Intent(context, com.blissless.tensei.MainActivity::class.java).apply {
-                putExtra("notification_anime", animeName)
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            }
-            val pendingIntent = PendingIntent.getActivity(
-                context, animeName.hashCode(), tapIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            val notification = NotificationCompat.Builder(context, NOTIFICATION_CHANNEL)
-                .setSmallIcon(android.R.drawable.stat_sys_download_done)
-                .setContentTitle(title)
-                .setContentText(content)
-                .setStyle(NotificationCompat.InboxStyle()
-                    .setBigContentTitle(animeName)
-                    .setSummaryText(content))
-                .setAutoCancel(true)
-                .setContentIntent(pendingIntent)
-                .build()
-            notifyWithPermission("batch_complete".hashCode(), notification)
-        } catch (e: Exception) {
-            Log.w(TAG, "sendBatchCompleteNotification: failed", e)
-        }
-    }
-
     fun cancelBatchNotification(animeName: String, completed: Int = 0, total: Int = 0) {
-        _activeBatches.value = _activeBatches.value - animeName
+        _activeBatches.value -= animeName
         batchCancelledFlags.remove(animeName)
         try {
             val batchId = "batch_${animeName.hashCode()}"
@@ -395,7 +355,7 @@ class EpisodeDownloadManager(private val context: Context) {
                                     val bytes = download.bytesDownloaded
                                     val contentLen = download.contentLength
                                     Log.i(TAG, "onDownloadChanged: $id COMPLETED, bytes=$bytes contentLength=$contentLen url=${download.request.uri.toString().take(80)}")
-                                    if (bytes > 0 && bytes < 1_000_000L) {
+                                    if (bytes in 1..<1_000_000L) {
                                         Log.w(TAG, "onDownloadChanged: $id completed but only $bytes bytes, likely a stub file")
                                     }
                                     val now = System.currentTimeMillis()
@@ -422,6 +382,22 @@ class EpisodeDownloadManager(private val context: Context) {
                                         sendNotification(id, "Failed download for", "${meta.animeName} - Ep ${meta.episode}", icon = android.R.drawable.stat_sys_warning)
                                     }
                                 }
+                            }
+
+                            Download.STATE_QUEUED -> {
+                                TODO()
+                            }
+
+                            Download.STATE_REMOVING -> {
+                                TODO()
+                            }
+
+                            Download.STATE_RESTARTING -> {
+                                TODO()
+                            }
+
+                            Download.STATE_STOPPED -> {
+                                TODO()
                             }
                         }
                         updateDownloadInfo(download)
@@ -520,7 +496,7 @@ class EpisodeDownloadManager(private val context: Context) {
             category = meta?.category ?: "sub",
             downloadTimestamp = meta?.downloadTimestamp ?: 0L,
         )
-        _downloadsInfo.value = _downloadsInfo.value + (id to info)
+        _downloadsInfo.value += (id to info)
     }
 
     private fun reconcileState() {
@@ -589,7 +565,7 @@ class EpisodeDownloadManager(private val context: Context) {
 
         val isStreaming = mimeType == "application/x-mpegurl" || mimeType == "application/dash+xml"
         val request = try {
-            DownloadRequest.Builder(id, Uri.parse(videoUrl))
+            DownloadRequest.Builder(id, videoUrl.toUri())
                 .apply {
                     if (!isStreaming) {
                         setCustomCacheKey(cacheKey)
@@ -673,32 +649,8 @@ class EpisodeDownloadManager(private val context: Context) {
         headersStore.remove(id)
         updateActiveHeaders()
         saveMetadataToPrefs()
-        prefs.edit().remove("headers_$id").apply()
+        prefs.edit {remove("headers_$id") }
         Log.d(TAG, "removeDownload: $id removed successfully")
-    }
-
-    fun retryDownload(id: String) {
-        val meta = metadataStore[id] ?: return
-        Log.i(TAG, "retryDownload: $id")
-        downloadManager?.removeDownload(id)
-        metadataStore.remove(id)
-        headersStore.remove(id)
-        saveMetadataToPrefs()
-        startDownload(
-            animeId = meta.animeId,
-            animeName = meta.animeName,
-            episode = meta.episode,
-            videoUrl = meta.videoUrl,
-            referer = meta.referer,
-            videoTitle = meta.videoTitle,
-            subtitleUrl = meta.subtitleUrl,
-            subtitleTracks = emptyList(),
-            videoHeaders = headersStore[id] ?: emptyMap(),
-            mimeType = if (meta.videoUrl.contains(".m3u8")) "application/x-mpegurl" else "video/mp4",
-            malId = meta.malId,
-            year = meta.year,
-            category = meta.category,
-        )
     }
 
     fun removeAnime(animeName: String) {
@@ -708,10 +660,6 @@ class EpisodeDownloadManager(private val context: Context) {
         for (id in ids) {
             removeDownload(id)
         }
-    }
-
-    fun getBatchTotal(animeName: String): Int {
-        return batchTotals[animeName] ?: 0
     }
 
     fun getBatchEpisodes(animeName: String): Set<Int> {
@@ -724,7 +672,7 @@ class EpisodeDownloadManager(private val context: Context) {
 
     fun cancelBatch(animeName: String) {
         batchCancelledFlags[animeName] = true
-        _activeBatches.value = _activeBatches.value - animeName
+        _activeBatches.value -= animeName
         val completed = _downloadsInfo.value.values.count {
             it.animeName == animeName && it.state == Download.STATE_COMPLETED
         }
@@ -741,36 +689,6 @@ class EpisodeDownloadManager(private val context: Context) {
         cancelBatchNotification(animeName, completed, total)
     }
 
-    fun getCompletedDownloads(): List<DownloadInfo> {
-        return _downloadsInfo.value.values.filter { it.state == Download.STATE_COMPLETED }
-    }
-
-    fun isEpisodeDownloaded(animeId: Int, episode: Int): Boolean {
-        return _downloadsInfo.value["${animeId}_$episode"]?.state == Download.STATE_COMPLETED
-    }
-
-    fun isEpisodeDownloadedByName(animeName: String, episode: Int): Boolean {
-        return _downloadsInfo.value.values.any {
-            it.animeName == animeName && it.episode == episode && it.state == Download.STATE_COMPLETED
-        }
-    }
-
-    fun getDownloadInfo(animeId: Int, episode: Int): DownloadInfo? {
-        return _downloadsInfo.value["${animeId}_$episode"]
-    }
-
-    fun getGroupedDownloads(): List<GroupedDownload> {
-        val completed = getCompletedDownloads()
-        val grouped = completed.groupBy { it.animeName }
-        return grouped.map { (name, infos) ->
-            GroupedDownload(
-                animeName = name,
-                episodes = infos.sortedBy { it.episode },
-                totalSize = infos.sumOf { if (it.totalBytes > 0) it.totalBytes else it.downloadedBytes },
-            )
-        }.sortedBy { it.animeName }
-    }
-
     data class GroupedDownload(
         val animeName: String,
         val episodes: List<DownloadInfo>,
@@ -781,7 +699,7 @@ class EpisodeDownloadManager(private val context: Context) {
         val cache = downloadCache ?: return null
         return CacheDataSource.Factory()
             .setCache(cache)
-            .setUpstreamDataSourceFactory(DataSource.Factory { FileDataSource() })
+            .setUpstreamDataSourceFactory { FileDataSource() }
             .setFlags(0)
     }
 
@@ -866,7 +784,7 @@ class EpisodeDownloadManager(private val context: Context) {
                     response.close()
                     return@runBlocking fallbackVideoMimeType(url)
                 }
-                val contentType = response.body?.contentType()
+                val contentType = response.body.contentType()
                 if (contentType != null) {
                     val ct = contentType.type.lowercase() + "/" + contentType.subtype.lowercase()
                     if (ct.contains("mpegurl") || ct == "application/vnd.apple.mpegurl") {
@@ -875,13 +793,12 @@ class EpisodeDownloadManager(private val context: Context) {
                         return@runBlocking "application/x-mpegurl"
                     }
                 }
-                val body = response.body ?: run {
-                    response.close()
-                    return@runBlocking fallbackVideoMimeType(url)
-                }
+                val body = response.body
                 val stream = body.byteStream()
                 val first = ByteArray(20)
-                val read = try { stream.read(first) } finally { stream.close() }
+                val read = stream.use { stream ->
+                    stream.read(first)
+                }
                 response.close()
                 if (read >= 7) {
                     val header = String(first, 0, read, Charsets.UTF_8)
@@ -908,7 +825,7 @@ class EpisodeDownloadManager(private val context: Context) {
 
     private fun saveHeadersForDownload(id: String, headers: Map<String, String>) {
         try {
-            prefs.edit().putString("headers_$id", json.encodeToString(headers)).apply()
+            prefs.edit {putString("headers_$id", json.encodeToString(headers))}
             Log.d(TAG, "saveHeadersForDownload: saved headers for $id")
         } catch (e: Exception) {
             Log.w(TAG, "saveHeadersForDownload: failed for $id", e)
@@ -917,7 +834,7 @@ class EpisodeDownloadManager(private val context: Context) {
 
     private fun saveMetadataToPrefs() {
         try {
-            prefs.edit().putString(METADATA_KEY, json.encodeToString(metadataStore)).apply()
+            prefs.edit { putString(METADATA_KEY, json.encodeToString(metadataStore)) }
             Log.d(TAG, "saveMetadataToPrefs: saved ${metadataStore.size} entries")
         } catch (e: Exception) {
             Log.w(TAG, "saveMetadataToPrefs: failed", e)
@@ -951,6 +868,7 @@ class EpisodeDownloadManager(private val context: Context) {
         }
     }
 
+    @SuppressLint("UseKtx")
     fun clearDownloadCache(): Long {
         Log.i(TAG, "clearDownloadCache: clearing all downloads")
         var bytesCleared = 0L
@@ -975,7 +893,7 @@ class EpisodeDownloadManager(private val context: Context) {
             _downloadsInfo.value = emptyMap()
             metadataStore.clear()
             headersStore.clear()
-            prefs.edit().clear().apply()
+            prefs.edit { clear() }
             Log.i(TAG, "clearDownloadCache: complete, cleared $bytesCleared bytes")
         } catch (e: Exception) {
             Log.e(TAG, "clearDownloadCache: failed", e)
@@ -987,7 +905,7 @@ class EpisodeDownloadManager(private val context: Context) {
         try {
             val cacheDir = File(context.cacheDir, "download_cache")
             if (cacheDir.exists()) {
-                val size = cacheDir.walkTopDown().filter { it.isFile }.map { it.length() }.sum()
+                val size = cacheDir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
                 Log.d(TAG, "getDownloadCacheSize: $size bytes")
                 return size
             }
