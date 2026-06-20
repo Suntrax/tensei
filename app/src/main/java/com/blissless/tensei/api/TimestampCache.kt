@@ -17,7 +17,6 @@ import com.blissless.tensei.data.models.Timestamp
 class TimestampCache(private val context: Context) {
 
     companion object {
-        private const val TAG = "TimestampCache"
         private const val PREFS_NAME = "timestamp_cache"
         private const val KEY_CACHE_DATA = "cache_data"
         private const val KEY_CACHE_VERSION = "cache_version"
@@ -83,7 +82,7 @@ class TimestampCache(private val context: Context) {
         return try {
             val cacheData = loadCacheData()
             cacheData.entries[key]
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             null
         }
     }
@@ -110,7 +109,7 @@ class TimestampCache(private val context: Context) {
             val newData = CacheData(entries = mutableEntries.toMap())
             saveCacheData(newData)
 
-        } catch (e: Exception) {
+        } catch (_: Exception) {
         }
     }
 
@@ -167,62 +166,6 @@ class TimestampCache(private val context: Context) {
         )
     }
 
-    /**
-     * Clear all cached timestamps
-     */
-    fun clearCache() {
-        prefs.edit { clear() }
-    }
-
-    /**
-     * Clear cached timestamps for a specific anime
-     */
-    fun clearAnimeCache(animeId: Int, animeName: String) {
-        try {
-            val currentData = loadCacheData()
-            val mutableEntries = currentData.entries.toMutableMap()
-
-            val keysToRemove = mutableEntries.keys.filter { key ->
-                key.startsWith("$animeId|") || key.contains("|$animeName|")
-            }
-
-            keysToRemove.forEach { mutableEntries.remove(it) }
-
-            val newData = CacheData(entries = mutableEntries.toMap())
-            saveCacheData(newData)
-
-        } catch (e: Exception) {
-        }
-    }
-
-    /**
-     * Get cache statistics
-     */
-    fun getCacheStats(): CacheStats {
-        val cacheData = loadCacheData()
-        val entries = cacheData.entries.values
-
-        return CacheStats(
-            totalEntries = entries.size,
-            aniskipCount = entries.count { it.source == "aniskip" },
-            animethemesCount = entries.count { it.source == "animethemes" },
-            fingerprintCount = entries.count { it.source == "fingerprint" },
-            animekaiCount = entries.count { it.source == "animekai" },
-            oldestEntry = entries.minByOrNull { it.timestamp }?.timestamp,
-            newestEntry = entries.maxByOrNull { it.timestamp }?.timestamp
-        )
-    }
-
-    data class CacheStats(
-        val totalEntries: Int,
-        val aniskipCount: Int,
-        val animethemesCount: Int,
-        val fingerprintCount: Int,
-        val animekaiCount: Int,
-        val oldestEntry: Long?,
-        val newestEntry: Long?
-    )
-
     // Helper functions
 
     private fun generateKey(animeId: Int, episodeNumber: Int): String {
@@ -249,7 +192,7 @@ class TimestampCache(private val context: Context) {
             } else {
                 CacheData()
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             CacheData()
         }
     }
