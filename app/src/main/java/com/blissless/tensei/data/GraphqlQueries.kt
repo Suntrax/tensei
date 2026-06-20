@@ -14,71 +14,6 @@ object GraphqlQueries {
     // ============================================
     // FRAGMENTS - Reusable field selections
     // ============================================
-    
-    /**
-     * Minimal media fields for lists (reduces payload by ~60%)
-     */
-    const val MEDIA_LIST_FRAGMENT = """
-        fragment MediaListFields on Media {
-            id
-            idMal
-            title { romaji english }
-            coverImage { extraLarge }
-            bannerImage
-            episodes
-            status
-            averageScore
-            genres
-            seasonYear
-            nextAiringEpisode { episode airingAt }
-        }
-    """
-
-    /**
-     * Minimal fields for explore/grid displays
-     */
-    const val MEDIA_EXPLORE_FRAGMENT = """
-        fragment MediaExploreFields on Media {
-            id
-            idMal
-            title { romaji english }
-            coverImage { extraLarge }
-            bannerImage
-            episodes
-            status
-            averageScore
-            genres
-            seasonYear
-            isAdult
-            startDate { year }
-            nextAiringEpisode { episode airingAt }
-        }
-    """
-
-    /**
-     * Minimal fields for airing schedule
-     */
-    const val AIRING_FRAGMENT = """
-        fragment AiringFields on AiringSchedule {
-            id
-            airingAt
-            episode
-            timeUntilAiring
-            mediaId
-            media {
-                id
-                idMal
-                title { romaji english }
-                coverImage { extraLarge }
-                episodes
-                status
-                averageScore
-                genres
-                seasonYear
-                isAdult
-            }
-        }
-    """
 
     // ============================================
     // USER QUERIES
@@ -119,9 +54,9 @@ object GraphqlQueries {
     /**
      * Get anime relations (sequels, prequels, adaptations, etc.)
      */
-    val GET_ANIME_RELATIONS = """
-        query (${'$'}id: Int!) {
-            Media(id: ${'$'}id, type: ANIME) {
+    val GET_ANIME_RELATIONS = $$"""
+        query ($id: Int!) {
+            Media(id: $id, type: ANIME) {
                 id
                 title { romaji english }
                 relations {
