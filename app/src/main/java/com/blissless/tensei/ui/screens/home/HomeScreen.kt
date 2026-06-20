@@ -424,7 +424,7 @@ fun HomeScreen(
                 }
 
                 if (isLoading && allListsEmpty) {
-                    LoadingSkeleton(isOled)
+                    LoadingSkeleton()
                 } else {
                     val onAnimeClick: (AnimeMedia, HomeAnimeCardBounds?) -> Unit = { anime, _ -> selectedAnime = anime; showEpisodeSheet = true }
                     val onInfoClick: (AnimeMedia, HomeAnimeCardBounds?) -> Unit = { anime, bounds ->
@@ -449,7 +449,6 @@ fun HomeScreen(
                                 title = "Continue Watching",
                                 icon = Icons.Default.PlayArrow,
                                 count = continueWatchingAnime.size,
-                                isOled = isOled,
                                 iconTint = HomeStatusColors.getColor("CURRENT"),
                                 onClick = {
                                     statusListTitle = "Continue Watching"
@@ -482,7 +481,6 @@ fun HomeScreen(
                                 title = "Currently Watching",
                                 icon = Icons.Default.PlayArrow,
                                 count = effectiveCurrentlyWatching.size,
-                                isOled = isOled,
                                 iconTint = HomeStatusColors.getColor("CURRENT"),
                                 onClick = {
                                     statusListTitle = "Currently Watching"
@@ -495,10 +493,8 @@ fun HomeScreen(
                             HomeAnimeHorizontalList(
                                 animeList = effectiveCurrentlyWatching,
                                 listType = "CURRENT",
-                                isOled = isOled,
                                 showStatusColors = showStatusColors,
                                 preferEnglishTitles = preferEnglishTitles,
-                                isLoggedIn = isLoggedIn,
                                 playbackPositions = playbackPositions,
                                 playbackDurations = playbackDurations,
                                 disableMaterialColors = disableMaterialColors,
@@ -517,7 +513,6 @@ fun HomeScreen(
                                 title = "Planning to Watch",
                                 icon = Icons.Default.Bookmark,
                                 count = effectivePlanningToWatch.size,
-                                isOled = isOled,
                                 iconTint = HomeStatusColors.getColor("PLANNING"),
                                 onClick = {
                                     statusListTitle = "Planning to Watch"
@@ -530,10 +525,8 @@ fun HomeScreen(
                             HomeAnimeHorizontalList(
                                 animeList = effectivePlanningToWatch,
                                 listType = "PLANNING",
-                                isOled = isOled,
                                 showStatusColors = showStatusColors,
                                 preferEnglishTitles = preferEnglishTitles,
-                                isLoggedIn = isLoggedIn,
                                 playbackPositions = playbackPositions,
                                 playbackDurations = playbackDurations,
                                 disableMaterialColors = disableMaterialColors,
@@ -551,7 +544,6 @@ fun HomeScreen(
                                 title = "Completed",
                                 icon = Icons.Default.Check,
                                 count = effectiveCompleted.size,
-                                isOled = isOled,
                                 iconTint = HomeStatusColors.getColor("COMPLETED"),
                                 onClick = {
                                     statusListTitle = "Completed"
@@ -564,10 +556,8 @@ fun HomeScreen(
                             HomeAnimeHorizontalList(
                                 animeList = effectiveCompleted,
                                 listType = "COMPLETED",
-                                isOled = isOled,
                                 showStatusColors = showStatusColors,
                                 preferEnglishTitles = preferEnglishTitles,
-                                isLoggedIn = isLoggedIn,
                                 playbackPositions = playbackPositions,
                                 playbackDurations = playbackDurations,
                                 disableMaterialColors = disableMaterialColors,
@@ -585,7 +575,6 @@ fun HomeScreen(
                                 title = "On Hold",
                                 icon = Icons.Default.Pause,
                                 count = effectiveOnHold.size,
-                                isOled = isOled,
                                 iconTint = HomeStatusColors.getColor("PAUSED"),
                                 onClick = {
                                     statusListTitle = "On Hold"
@@ -598,10 +587,8 @@ fun HomeScreen(
                             HomeAnimeHorizontalList(
                                 animeList = effectiveOnHold,
                                 listType = "PAUSED",
-                                isOled = isOled,
                                 showStatusColors = showStatusColors,
                                 preferEnglishTitles = preferEnglishTitles,
-                                isLoggedIn = isLoggedIn,
                                 playbackPositions = playbackPositions,
                                 playbackDurations = playbackDurations,
                                 disableMaterialColors = disableMaterialColors,
@@ -619,7 +606,6 @@ fun HomeScreen(
                                 title = "Dropped",
                                 icon = Icons.Default.Delete,
                                 count = effectiveDropped.size,
-                                isOled = isOled,
                                 iconTint = HomeStatusColors.getColor("DROPPED"),
                                 onClick = {
                                     statusListTitle = "Dropped"
@@ -632,10 +618,8 @@ fun HomeScreen(
                             HomeAnimeHorizontalList(
                                 animeList = effectiveDropped,
                                 listType = "DROPPED",
-                                isOled = isOled,
                                 showStatusColors = showStatusColors,
                                 preferEnglishTitles = preferEnglishTitles,
-                                isLoggedIn = isLoggedIn,
                                 playbackPositions = playbackPositions,
                                 playbackDurations = playbackDurations,
                                 disableMaterialColors = disableMaterialColors,

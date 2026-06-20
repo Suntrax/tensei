@@ -368,7 +368,6 @@ fun DownloadsScreen(
                             title = "Continue Watching",
                             icon = Icons.Default.PlayArrow,
                             count = continueWatchingAnime.size,
-                            isOled = isOled,
                         )
                     }
                     item(key = "continue_watching_row") {
