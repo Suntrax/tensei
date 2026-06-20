@@ -1829,8 +1829,6 @@ fun MainScreen(
                 ) {
                     SettingsScreen(
                         viewModel = viewModel,
-                        isLoggedIn = isLoggedIn,
-                        showStatusColors = showStatusColors,
                         autoSkipOpening = autoSkipOpening,
                         autoSkipEnding = autoSkipEnding,
                         autoPlayNextEpisode = autoPlayNextEpisode,

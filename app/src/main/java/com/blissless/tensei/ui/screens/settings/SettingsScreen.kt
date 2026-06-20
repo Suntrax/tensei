@@ -108,19 +108,17 @@ import com.blissless.tensei.extensions.ExtensionsScreen
 import com.blissless.tensei.extensions.ExtensionsViewModel
 import com.blissless.tensei.update.UpdateViewModel
 import kotlin.math.round
+import androidx.core.net.toUri
+import java.util.Locale
 
 @Composable
 fun SettingsScreen(
     viewModel: MainViewModel,
-    isLoggedIn: Boolean,
-    showStatusColors: Boolean = true,
     autoSkipOpening: Boolean = false,
     autoSkipEnding: Boolean = false,
     autoPlayNextEpisode: Boolean = true,
     disableMaterialColors: Boolean = false,
     preferredCategory: String = "sub",
-    preferredScraper: String = "Animekai",
-    onNavigateBack: () -> Unit = {},
     initialGroup: String? = null
 ) {
     var selectedGroup by remember { mutableStateOf<String?>(null) }
@@ -174,10 +172,11 @@ fun SettingsScreen(
                 "appearance" -> AppearanceSettingsPage(viewModel = viewModel, disableMaterialColors = disableMaterialColors, onBack = { selectedGroup = null })
                 "general" -> GeneralSettingsPage(viewModel = viewModel, onBack = { selectedGroup = null })
                 "downloads" -> DownloadsSettingsPage(viewModel = viewModel, onBack = { selectedGroup = null })
-                "stream" -> StreamSettingsPage(viewModel = viewModel, disableMaterialColors = disableMaterialColors, preferredCategory = preferredCategory, onNavigateToExtensions = { selectedGroup = "extensions" }, onBack = { selectedGroup = null })
+                "stream" -> StreamSettingsPage(viewModel = viewModel,
+                    preferredCategory = preferredCategory, onNavigateToExtensions = { selectedGroup = "extensions" }, onBack = { selectedGroup = null })
                 "player" -> PlayerSettingsPage(viewModel = viewModel, autoSkipOpening = autoSkipOpening, autoSkipEnding = autoSkipEnding, autoPlayNextEpisode = autoPlayNextEpisode, onBack = { selectedGroup = null })
                 "cache" -> CacheSettingsPage(viewModel = viewModel, context = LocalContext.current, onBack = { selectedGroup = null })
-                "extensions" -> ExtensionsSettingsPage(viewModel = viewModel, onBack = { selectedGroup = null })
+                "extensions" -> ExtensionsSettingsPage(onBack = { selectedGroup = null })
                 "about" -> AboutSettingsPage(viewModel = viewModel, onBack = { selectedGroup = null })
             }
         }
@@ -613,7 +612,7 @@ private fun AccountSettingsPage(
             val providerName = when (loginProvider) {
                 LoginProvider.ANILIST -> "AniList"
                 LoginProvider.MAL -> "MyAnimeList"
-                LoginProvider.NONE -> ""
+                else -> ""
             }
 
             SectionHeader("SIGNED IN")
@@ -918,7 +917,6 @@ private fun GeneralSettingsPage(
 @Composable
 private fun StreamSettingsPage(
     viewModel: MainViewModel,
-    disableMaterialColors: Boolean,
     preferredCategory: String,
     onNavigateToExtensions: () -> Unit,
     onBack: () -> Unit
@@ -1162,7 +1160,6 @@ private fun DownloadsSettingsPage(
     val lifecycleOwner = LocalLifecycleOwner.current
     val downloadPreferredCategory by viewModel.downloadPreferredCategory.collectAsState(initial = "same_as_stream")
     val downloadSubtitleLang by viewModel.downloadSubtitleLang.collectAsState(initial = "same_as_stream")
-    val streamPreferredCategory by viewModel.preferredCategory.collectAsState(initial = "sub")
     val streamSubtitleLang by viewModel.defaultSubtitleLang.collectAsState()
     var isIgnoringBattery by remember { mutableStateOf(checkBatteryOpt(context)) }
     DisposableEffect(lifecycleOwner) {
@@ -1250,11 +1247,12 @@ private fun DownloadsSettingsPage(
                     } else {
                         try {
                             val intent = android.content.Intent(
-                                android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                                android.net.Uri.parse("package:${context.packageName}")
+                                android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS,
+                                "package:${context.packageName}".toUri()
                             )
                             context.startActivity(intent)
-                        } catch (_: Exception) {}
+                        } catch (_: Exception) {
+                        }
                     }
                 }) {
                     Text(
@@ -1511,7 +1509,6 @@ private fun CacheRow(
 
 @Composable
 private fun ExtensionsSettingsPage(
-    viewModel: MainViewModel,
     onBack: () -> Unit
 ) {
     val extViewModel: ExtensionsViewModel = viewModel()
@@ -1679,7 +1676,7 @@ private fun AboutSettingsPage(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
                         onClick = {
-                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(githubUrl))
+                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, githubUrl.toUri())
                             context.startActivity(intent)
                         }
                     )
@@ -1735,11 +1732,11 @@ private fun formatFileSize(bytes: Long): String {
         bytes < 1024 -> "$bytes B"
         bytes < 1024 * 1024 -> "${bytes / 1024} KB"
         bytes < 1024 * 1024 * 1024 -> "${bytes / (1024 * 1024)} MB"
-        else -> String.format("%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0))
+        else -> String.format(Locale.getDefault(), "%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0))
     }
 }
 
-private fun checkBatteryOpt(context: android.content.Context): Boolean {
-    val pm = context.getSystemService(android.content.Context.POWER_SERVICE) as? android.os.PowerManager
+private fun checkBatteryOpt(context: Context): Boolean {
+    val pm = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
     return pm?.isIgnoringBatteryOptimizations(context.packageName) == true
 }
