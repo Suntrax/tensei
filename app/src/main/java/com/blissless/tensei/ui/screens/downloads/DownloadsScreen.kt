@@ -642,7 +642,6 @@ fun DownloadsScreen(
             OfflinePlayerScreen(
                 downloadInfo = playingDownload!!,
                 downloadManager = downloadManager,
-                isOled = isOled,
                 useMonochrome = useMonochrome,
                 defaultSubtitleLang = defaultSubtitleLang,
                 swipeVolume = swipeVolume,

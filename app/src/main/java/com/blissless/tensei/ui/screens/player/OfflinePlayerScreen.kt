@@ -3,13 +3,9 @@ package com.blissless.tensei.ui.screens.player
 import android.app.Activity
 import android.content.pm.ActivityInfo
 import android.net.Uri
-import android.os.Build
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -41,22 +37,21 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.BrightnessHigh
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FastRewind
-import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Speed
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -66,7 +61,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
-import androidx.compose.ui.draw.scale
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -82,34 +76,34 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
-import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
+import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
+import com.blissless.tensei.api.AnimeSkipService
 import com.blissless.tensei.data.models.EpisodeTimestamps
 import com.blissless.tensei.data.models.TmdbEpisode
-import com.blissless.tensei.api.AnimeSkipService
 import com.blissless.tensei.download.EpisodeDownloadManager
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -118,13 +112,14 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Locale
 import kotlin.math.abs
+import kotlin.time.Duration.Companion.milliseconds
+import androidx.core.net.toUri
 
 @UnstableApi
 @Composable
 fun OfflinePlayerScreen(
     downloadInfo: EpisodeDownloadManager.DownloadInfo,
     downloadManager: EpisodeDownloadManager,
-    isOled: Boolean,
     onDismiss: () -> Unit,
     allEpisodes: List<EpisodeDownloadManager.DownloadInfo> = emptyList(),
     onNavbarHidden: (Boolean) -> Unit = {},
@@ -177,7 +172,6 @@ fun OfflinePlayerScreen(
     var skipIndicatorText by remember { mutableStateOf("") }
     var skipIsForward by remember { mutableStateOf(true) }
     var skipResetJob by remember { mutableStateOf<Job?>(null) }
-    var hideControlsJob by remember { mutableStateOf<Job?>(null) }
 
     var playerVolume by remember { mutableFloatStateOf(1f) }
     var currentBrightness by remember { mutableFloatStateOf(0.5f) }
@@ -202,7 +196,8 @@ fun OfflinePlayerScreen(
         if (subtitleTrackList.isNotEmpty()) {
             val idx = subtitleTrackList.indexOfFirst {
                 it.lang.equals(defaultSubtitleLang, ignoreCase = true)
-            }.let { if (it >= 0) it else
+            }.let { it ->
+                if (it >= 0) it else
                 subtitleTrackList.indexOfFirst {
                     it.lang.equals("English", ignoreCase = true)
                 }.let { if (it >= 0) it else 0 }
@@ -219,7 +214,6 @@ fun OfflinePlayerScreen(
     }
     var currentIndex by remember { mutableIntStateOf(initialIndex) }
     val currentDownload = if (sortedEpisodes.isNotEmpty()) sortedEpisodes[currentIndex] else downloadInfo
-    var subtitlePath by remember { mutableStateOf<String?>(currentDownload.subtitlePath) }
 
     // Skip timestamp state
     var episodeTimestamps by remember { mutableStateOf<EpisodeTimestamps?>(null) }
@@ -259,7 +253,7 @@ fun OfflinePlayerScreen(
                 val controller = WindowCompat.getInsetsController(window, window.decorView)
                 controller.show(WindowInsetsCompat.Type.systemBars())
                 WindowCompat.setDecorFitsSystemWindows(window, true)
-                activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
             }
         }
     }
@@ -273,21 +267,17 @@ fun OfflinePlayerScreen(
                 controller.show(WindowInsetsCompat.Type.systemBars())
                 WindowCompat.setDecorFitsSystemWindows(window, true)
             }
-            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
     }
 
     var exoPlayer by remember { mutableStateOf<ExoPlayer?>(null) }
 
     LaunchedEffect(showControls, showError) {
-        if (showControls || showError) {
-            controlsVisible = true
-        } else {
-            controlsVisible = false
-        }
+        controlsVisible = showControls || showError
     }
 
-    fun seekBy(milliseconds: Long, isForward: Boolean) {
+    fun seekBy(milliseconds: Long) {
         val player = exoPlayer ?: return
         skipIndicatorText = if (milliseconds > 0) "+${abs(milliseconds / 1000)}s" else "-${abs(milliseconds / 1000)}s"
         skipIsForward = milliseconds >= 0
@@ -298,7 +288,7 @@ fun OfflinePlayerScreen(
         sliderValue = newPosition.toFloat()
         skipResetJob?.cancel()
         skipResetJob = scope.launch {
-            delay(500)
+            delay(500.milliseconds)
             showSkipIndicator = false
         }
     }
@@ -337,7 +327,7 @@ fun OfflinePlayerScreen(
             emptyList()
         }
         return MediaItem.Builder()
-            .setUri(Uri.parse(currentDownload.videoUrl))
+            .setUri(currentDownload.videoUrl.toUri())
             .setMimeType(mimeType)
             .setSubtitleConfigurations(subtitleConfigs)
             .build()
@@ -420,7 +410,7 @@ fun OfflinePlayerScreen(
         val player = exoPlayer ?: return@LaunchedEffect
         var saveCounter = 0
         while (true) {
-            delay(500)
+            delay(500.milliseconds)
             if (!isDragging) {
                 currentPosition = player.currentPosition
                 duration = player.duration
@@ -443,7 +433,7 @@ fun OfflinePlayerScreen(
 
     LaunchedEffect(showControls, isPlaying, isDragging, showError, showSpeedMenu) {
         if (showControls && isPlaying && !isDragging && !showError && !showSpeedMenu) {
-            delay(2000)
+            delay(2000.milliseconds)
             if (showControls && !isDragging && !showError && isPlaying && !showSpeedMenu) {
                 showControls = false
             }
@@ -491,14 +481,13 @@ fun OfflinePlayerScreen(
     // Auto-skip logic
     LaunchedEffect(currentPosition, effectiveTimestamps) {
         if (showError) return@LaunchedEffect
-        val ts = effectiveTimestamps
         val posSeconds = currentPosition / 1000
 
-        if (ts.introStart != null && ts.introEnd != null) {
-            val isInIntro = posSeconds >= ts.introStart && posSeconds < ts.introEnd
+        if (effectiveTimestamps.introStart != null && effectiveTimestamps.introEnd != null) {
+            val isInIntro = posSeconds >= effectiveTimestamps.introStart && posSeconds < effectiveTimestamps.introEnd
             if (isInIntro) {
                 if (autoSkipOpening && !hasSkippedIntro) {
-                    exoPlayer?.seekTo(ts.introEnd * 1000L)
+                    exoPlayer?.seekTo(effectiveTimestamps.introEnd * 1000L)
                     exoPlayer?.play()
                     hasSkippedIntro = true
                 }
@@ -508,8 +497,8 @@ fun OfflinePlayerScreen(
             }
         }
 
-        if (ts.creditsStart != null) {
-            val isInCredits = posSeconds >= ts.creditsStart
+        if (effectiveTimestamps.creditsStart != null) {
+            val isInCredits = posSeconds >= effectiveTimestamps.creditsStart
             if (isInCredits) {
                 if (autoSkipEnding && !hasSkippedOutro) {
                     val isLatest = currentIndex >= sortedEpisodes.lastIndex
@@ -602,7 +591,7 @@ fun OfflinePlayerScreen(
                                     }
                                     showBrightnessOverlay = true
                                     scope.launch {
-                                        delay(1500)
+                                        delay(1500.milliseconds)
                                         showBrightnessOverlay = false
                                     }
                                 } else {
@@ -611,7 +600,7 @@ fun OfflinePlayerScreen(
                                     exoPlayer?.volume = playerVolume
                                     showVolumeOverlay = true
                                     scope.launch {
-                                        delay(1500)
+                                        delay(1500.milliseconds)
                                         showVolumeOverlay = false
                                     }
                                 }
@@ -624,7 +613,7 @@ fun OfflinePlayerScreen(
                         onTap = {
                             val now = System.currentTimeMillis()
                             if (now - lastLeftTapTime < 300) {
-                                seekBy(-10000L, false)
+                                seekBy(-10000L)
                             } else {
                                 showControls = !showControls
                             }
@@ -660,7 +649,7 @@ fun OfflinePlayerScreen(
                                     exoPlayer?.volume = playerVolume
                                     showVolumeOverlay = true
                                     scope.launch {
-                                        delay(1500)
+                                        delay(1500.milliseconds)
                                         showVolumeOverlay = false
                                     }
                                 } else {
@@ -673,7 +662,7 @@ fun OfflinePlayerScreen(
                                     }
                                     showBrightnessOverlay = true
                                     scope.launch {
-                                        delay(1500)
+                                        delay(1500.milliseconds)
                                         showBrightnessOverlay = false
                                     }
                                 }
@@ -686,7 +675,7 @@ fun OfflinePlayerScreen(
                         onTap = {
                             val now = System.currentTimeMillis()
                             if (now - lastRightTapTime < 300) {
-                                seekBy(10000L, true)
+                                seekBy(10000L)
                             } else {
                                 showControls = !showControls
                             }
@@ -1185,9 +1174,8 @@ fun OfflinePlayerScreen(
                                 backgroundColor = Color.Black.copy(alpha = 0.6f),
                                 iconTint = Color.White,
                                 onClick = {
-                                    val ts = effectiveTimestamps
-                                    if (ts.introEnd != null) {
-                                        exoPlayer?.seekTo(ts.introEnd * 1000L)
+                                    if (effectiveTimestamps.introEnd != null) {
+                                        exoPlayer?.seekTo(effectiveTimestamps.introEnd * 1000L)
                                         exoPlayer?.play()
                                         hasSkippedIntro = true
                                     }
@@ -1203,7 +1191,7 @@ fun OfflinePlayerScreen(
                                 iconTint = Color.White,
                                 onClick = {
                                     if (isLatest) {
-                                        if (exoPlayer?.duration ?: 0 > 0) {
+                                        if ((exoPlayer?.duration ?: 0) > 0) {
                                             exoPlayer?.seekTo(exoPlayer?.duration ?: 0)
                                         }
                                     } else {
