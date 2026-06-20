@@ -12,10 +12,9 @@ import androidx.core.content.edit
 /**
  * Manages user preferences and settings
  */
-class UserPreferences(private val context: Context) {
+class UserPreferences(context: Context) {
 
     companion object {
-        private const val TAG = "UserPreferences"
         private const val PREFS_NAME = "anilist_prefs"
         private const val TOKEN_KEY = "auth_token"
 
@@ -122,7 +121,6 @@ class UserPreferences(private val context: Context) {
 
     // Thumbnail extraction for seekbar preview
     private val _enableThumbnailPreview = MutableStateFlow(false)
-    val enableThumbnailPreview: StateFlow<Boolean> = _enableThumbnailPreview.asStateFlow()
 
     // Preferred Scraper
     private val _preferredScraper = MutableStateFlow("Animekai")
@@ -193,7 +191,7 @@ class UserPreferences(private val context: Context) {
     private fun saveAniListFavorites(favorites: Set<Int>) {
         val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
         val encoded = json.encodeToString(kotlinx.serialization.serializer(), favorites.toList())
-        sharedPreferences.edit().putString(KEY_ANILIST_FAVORITES, encoded).apply()
+        sharedPreferences.edit {putString(KEY_ANILIST_FAVORITES, encoded)}
     }
 
     private fun loadAniListFavorites() {
@@ -203,7 +201,7 @@ class UserPreferences(private val context: Context) {
                 val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
                 val list = json.decodeFromString<List<Int>>(kotlinx.serialization.serializer(), saved)
                 _aniListFavorites.value = list.toSet()
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 _aniListFavorites.value = emptySet()
             }
         }
@@ -482,25 +480,6 @@ class UserPreferences(private val context: Context) {
         saveLocalFavorites(currentFavorites)
     }
 
-    /**
-     * Update metadata for an existing favorite.
-     */
-    fun updateFavoriteMetadata(
-        mediaId: Int,
-        title: String,
-        cover: String,
-        banner: String?,
-        year: Int?,
-        averageScore: Int?
-    ) {
-        val currentFavorites = _localFavorites.value.toMutableMap()
-        if (currentFavorites.containsKey(mediaId)) {
-            currentFavorites[mediaId] = StoredFavorite(mediaId, title, cover, banner, year, averageScore)
-            _localFavorites.value = currentFavorites
-            saveLocalFavorites(currentFavorites)
-        }
-    }
-
     private fun saveLocalFavorites(favorites: Map<Int, StoredFavorite>) {
         val json = kotlinx.serialization.json.Json {
             ignoreUnknownKeys = true
@@ -526,7 +505,7 @@ class UserPreferences(private val context: Context) {
                 try {
                     val fav = json.decodeFromString(StoredFavorite.serializer(), favJson)
                     favorites[fav.id] = fav
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                 }
             }
             _localFavorites.value = favorites
@@ -564,13 +543,6 @@ class UserPreferences(private val context: Context) {
                 .remove("cache_airing_data")
                 .remove("cache_airing_time")
         }
-    }
-
-    /**
-     * Clear all preferences (useful for debugging or complete reset)
-     */
-    fun clearAllPreferences() {
-        sharedPreferences.edit {clear()}
     }
 
     fun getSharedPreferences(): SharedPreferences = sharedPreferences
@@ -624,7 +596,7 @@ class UserPreferences(private val context: Context) {
 
     private fun loadLocalAnimeStatus() {
         val saved = sharedPreferences.getStringSet(KEY_LOCAL_ANIME_STATUS, null)
-        if (saved != null && saved.isNotEmpty()) {
+        if (!saved.isNullOrEmpty()) {
             try {
                 val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
                 val statusMap = mutableMapOf<Int, LocalAnimeEntry>()
@@ -632,12 +604,12 @@ class UserPreferences(private val context: Context) {
                     try {
                         val entry = json.decodeFromString(LocalAnimeEntry.serializer(), entryJson)
                         statusMap[entry.id] = entry
-                    } catch (e: Exception) {
+                    } catch (_: Exception) {
                         // Skip invalid entries
                     }
                 }
                 _localAnimeStatus.value = statusMap
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 _localAnimeStatus.value = emptyMap()
             }
         }
