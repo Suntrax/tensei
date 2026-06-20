@@ -2,19 +2,18 @@ package com.blissless.tensei.stream
 
 import android.content.Context
 import android.util.Log
+import com.blissless.tensei.extensions.Extension
+import com.blissless.tensei.extensions.ExtensionDetector
 import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
-import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.Hoster
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
-import com.blissless.tensei.extensions.Extension
-import com.blissless.tensei.extensions.ExtensionDetector
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-class SourceManager(private val context: Context) {
+class SourceManager(context: Context) {
     private val detector = ExtensionDetector(context)
     private val loader = ExtensionLoader(context)
     @Volatile
@@ -93,7 +92,7 @@ class SourceManager(private val context: Context) {
             }
             try {
                 source.getHosterList(episode)
-            } catch (e: Throwable) {
+            } catch (_: Throwable) {
                 try {
                     val videos = source.getVideoList(episode)
                     if (videos.isNotEmpty()) {
@@ -130,46 +129,8 @@ class SourceManager(private val context: Context) {
             }
             try {
                 source.getVideoList(episode)
-            } catch (e: Throwable) {
+            } catch (_: Throwable) {
                 emptyList()
-            }
-        }
-    }
-
-    suspend fun getVideos(source: AnimeCatalogueSource, episode: SEpisode, anime: SAnime? = null): List<Video> {
-        return withContext(Dispatchers.IO) {
-            if (anime != null && source is AnimeHttpSource) {
-                source.prepareNewEpisode(episode, anime)
-            }
-            val hosters = try {
-                source.getHosterList(episode)
-            } catch (e: Throwable) {
-                null
-            }
-            if (hosters != null && hosters.isNotEmpty()) {
-                hosters.flatMap { hoster ->
-                    if (hoster.lazy) {
-                        source.getVideoList(hoster)
-                    } else {
-                        hoster.videoList ?: source.getVideoList(hoster)
-                    }
-                }
-            } else {
-                try {
-                    source.getVideoList(episode)
-                } catch (e: Throwable) {
-                    emptyList()
-                }
-            }
-        }
-    }
-
-    suspend fun resolveVideoUrl(source: AnimeCatalogueSource, video: Video): String {
-        return withContext(Dispatchers.IO) {
-            try {
-                (source as? AnimeHttpSource)?.getVideoUrl(video) ?: video.videoUrl
-            } catch (e: Throwable) {
-                video.videoUrl
             }
         }
     }
