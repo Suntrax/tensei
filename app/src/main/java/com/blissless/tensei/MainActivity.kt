@@ -1546,7 +1546,6 @@ fun MainScreen(
         CharacterScreen(
             characterId = characterDialog.characterId,
             viewModel = viewModel,
-            isOled = isOled,
             onDismiss = {
                 overlayState = OverlayState.None
             },
@@ -1597,7 +1596,6 @@ fun MainScreen(
         StaffScreen(
             staffId = staffDialog.staffId,
             viewModel = viewModel,
-            isOled = isOled,
             onDismiss = {
                 overlayState = OverlayState.None
             },

@@ -1,7 +1,6 @@
 package com.blissless.tensei.ui.screens.character
 
 import android.content.Intent
-import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -63,6 +62,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
+import androidx.core.net.toUri
 import coil.compose.AsyncImage
 import com.blissless.tensei.MainViewModel
 import com.blissless.tensei.data.models.CharacterData
@@ -70,7 +70,7 @@ import com.blissless.tensei.data.models.StaffData
 
 private val boldRegex = Regex("__(.+?)__")
 private val italicRegex = Regex("_(.+?)_")
-private val linkRegex = Regex("\\[(.+?)\\]\\((.+?)\\)")
+private val linkRegex = Regex("\\[(.+?)]\\((.+?)\\)")
 
 private fun formatBioText(text: String, color: Color, primary: Color, animeTitles: Map<String, Int> = emptyMap()): AnnotatedString {
     val cleaned = text
@@ -100,7 +100,7 @@ private fun formatBioText(text: String, color: Color, primary: Color, animeTitle
             candidates.sortBy { it.first }
             val (_, chosenRegex) = if (candidates.size > 1 && candidates[0].first == candidates[1].first) {
                 val bold = candidates.find { it.second == boldRegex }
-                if (bold != null) bold else candidates.first()
+                bold ?: candidates.first()
             } else {
                 candidates.first()
             }
@@ -193,7 +193,6 @@ private fun AnnotatedString.Builder.appendAnimeTitles(text: String, animeTitles:
 fun CharacterScreen(
     characterId: Int,
     viewModel: MainViewModel,
-    isOled: Boolean = false,
     onDismiss: () -> Unit,
     onNavigateBack: () -> Unit = onDismiss,
     onAnimeClick: (Int) -> Unit,
@@ -376,7 +375,7 @@ fun CharacterScreen(
                                                         onStaffClick?.invoke(staffMatch.groupValues[1].toInt())
                                                     } else {
                                                         context.startActivity(
-                                                            Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                                            Intent(Intent.ACTION_VIEW, url.toUri())
                                                         )
                                                     }
                                                 }
@@ -466,7 +465,6 @@ fun CharacterScreen(
 fun StaffScreen(
     staffId: Int,
     viewModel: MainViewModel,
-    isOled: Boolean = false,
     onDismiss: () -> Unit,
     onNavigateBack: () -> Unit = onDismiss,
     onAnimeClick: (Int) -> Unit,
@@ -662,7 +660,7 @@ fun StaffScreen(
                                                         onStaffClick?.invoke(staffMatch.groupValues[1].toInt())
                                                     } else {
                                                         context.startActivity(
-                                                            Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                                            Intent(Intent.ACTION_VIEW, url.toUri())
                                                         )
                                                     }
                                                 }
