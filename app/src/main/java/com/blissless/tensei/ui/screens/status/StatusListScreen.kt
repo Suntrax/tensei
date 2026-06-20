@@ -1,18 +1,11 @@
 package com.blissless.tensei.ui.screens.status
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -35,11 +28,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Sort
-import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Edit
@@ -50,14 +41,14 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.Surface
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -76,14 +67,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -94,7 +85,6 @@ import com.blissless.tensei.ui.components.HomeAnimeCardBounds
 import com.blissless.tensei.ui.components.HomeStatusColors
 import com.blissless.tensei.ui.components.rememberCinematicAnimation
 import kotlin.math.absoluteValue
-import kotlin.math.roundToInt
 
 enum class SortOption(val label: String, val icon: ImageVector) {
     ALPHABETICAL_A_Z("A-Z", Icons.AutoMirrored.Filled.Sort),
@@ -114,11 +104,8 @@ fun StatusListScreen(
     icon: ImageVector,
     animeList: List<AnimeMedia>,
     listType: String,
-    isOled: Boolean,
     showStatusColors: Boolean = true,
     preferEnglishTitles: Boolean = true,
-    isLoggedIn: Boolean = false,
-    disableMaterialColors: Boolean = false,
     onAnimeClick: (AnimeMedia, HomeAnimeCardBounds?) -> Unit = { _, _ -> },
     onPlayClick: (AnimeMedia) -> Unit = {},
     onInfoClick: (AnimeMedia, HomeAnimeCardBounds?) -> Unit = { _, _ -> },
@@ -127,12 +114,10 @@ fun StatusListScreen(
     onDismiss: () -> Unit = {}
 ) {
     val iconTint = HomeStatusColors.getColor(listType)
-    val context = LocalContext.current
     val focusManager = LocalFocusManager.current
 
     BackHandler(onBack = onBackClick)
 
-    var selectedAnime by remember { mutableStateOf<AnimeMedia?>(null) }
     var offsetY by remember { mutableFloatStateOf(0f) }
     val animatedOffset by animateFloatAsState(
         targetValue = offsetY,
@@ -300,8 +285,6 @@ fun StatusListScreen(
                     }
                 }
             } else {
-                val statusColor = HomeStatusColors.getColor(listType)
-                val progressColor = if (disableMaterialColors) Color.White else MaterialTheme.colorScheme.primary
                 val density = LocalDensity.current
                 val translationYOffset = with(density) { (-30).dp.toPx() }
 
@@ -309,7 +292,10 @@ fun StatusListScreen(
                     derivedStateOf { gridState.isScrollInProgress }
                 }
 
-                val cinematicProgress = rememberCinematicAnimation("statusList_$listType", true, true)
+                val cinematicProgress = rememberCinematicAnimation("statusList_$listType",
+                    isVisible = true,
+                    playOncePerSession = true
+                )
 
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
@@ -377,11 +363,8 @@ fun StatusListScreen(
                             StatusListAnimeCard(
                                 anime = anime,
                                 listType = listType,
-                                isOled = isOled,
                                 showStatusColors = showStatusColors,
                                 preferEnglishTitles = preferEnglishTitles,
-                                isLoggedIn = isLoggedIn,
-                                disableMaterialColors = disableMaterialColors,
                                 onClick = { bounds -> onAnimeClick(anime, bounds) },
                                 onPlayClick = { onPlayClick(anime) },
                                 onInfoClick = { bounds -> onInfoClick(anime, bounds) },
@@ -461,11 +444,8 @@ private fun easeOutCubic(t: Float): Float {
 private fun StatusListAnimeCard(
     anime: AnimeMedia,
     listType: String,
-    isOled: Boolean,
     showStatusColors: Boolean,
     preferEnglishTitles: Boolean,
-    isLoggedIn: Boolean,
-    disableMaterialColors: Boolean,
     onClick: (HomeAnimeCardBounds?) -> Unit,
     onPlayClick: () -> Unit,
     onInfoClick: (HomeAnimeCardBounds?) -> Unit,
@@ -474,7 +454,6 @@ private fun StatusListAnimeCard(
     val context = LocalContext.current
     var cardBounds by remember { mutableStateOf<android.graphics.RectF?>(null) }
     val statusColor = HomeStatusColors.getColor(listType)
-    val progressColor = if (disableMaterialColors) Color.White else MaterialTheme.colorScheme.primary
 
     val total = anime.totalEpisodes
     val released = anime.latestEpisode ?: total

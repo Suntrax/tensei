@@ -674,11 +674,8 @@ fun HomeScreen(
                 icon = statusListIcon,
                 animeList = statusListAnime,
                 listType = statusListType,
-                isOled = isOled,
                 showStatusColors = showStatusColors,
                 preferEnglishTitles = preferEnglishTitles,
-                isLoggedIn = isLoggedIn,
-                disableMaterialColors = disableMaterialColors,
                 onAnimeClick = { anime, _ -> selectedAnime = anime; showEpisodeSheet = true },
                 onPlayClick = { anime ->
                     val lt = statusListType

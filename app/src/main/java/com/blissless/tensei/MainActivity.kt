@@ -2058,11 +2058,8 @@ fun MainScreen(
                         icon = statusListIcon ?: Icons.Default.PlayArrow,
                         animeList = statusListAnime,
                         listType = statusListType,
-                        isOled = isOled,
                         showStatusColors = showStatusColors,
                         preferEnglishTitles = preferEnglishTitles,
-                        isLoggedIn = isLoggedIn,
-                        disableMaterialColors = disableMaterialColors,
                         onAnimeClick = { anime, bounds ->
                             viewModel.setHomeAnimeCardBounds(anime.id, anime.cover, bounds?.bounds)
                             selectedAnimeState = anime
