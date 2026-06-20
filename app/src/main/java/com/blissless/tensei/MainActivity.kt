@@ -1650,7 +1650,6 @@ fun MainScreen(
             animeId = allRelationsDialog.animeId,
             animeTitle = allRelationsDialog.animeTitle,
             viewModel = viewModel,
-            isOled = isOled,
             onDismiss = {
                 overlayState = OverlayState.None
             },

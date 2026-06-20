@@ -58,7 +58,6 @@ fun AllRelationsScreen(
     animeId: Int,
     animeTitle: String,
     viewModel: MainViewModel,
-    isOled: Boolean = false,
     onDismiss: () -> Unit,
     onNavigateBack: () -> Unit = onDismiss,
     onAnimeClick: (Int) -> Unit
@@ -71,10 +70,10 @@ fun AllRelationsScreen(
 
     LaunchedEffect(animeId) {
         isLoading = true
-        try {
-            relations = viewModel.fetchAnimeRelations(animeId) ?: emptyList()
-        } catch (e: Exception) {
-            relations = emptyList()
+        relations = try {
+            viewModel.fetchAnimeRelations(animeId) ?: emptyList()
+        } catch (_: Exception) {
+            emptyList()
         }
         isLoading = false
     }
