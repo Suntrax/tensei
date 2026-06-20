@@ -112,6 +112,7 @@ abstract class RenameApkTask : DefaultTask() {
 }
 
 val renameReleaseApk = tasks.register<RenameApkTask>("renameReleaseApk") {
+    description = "renaming apks to tensei<arch>.apk"
     apkDir = layout.buildDirectory.dir("outputs/apk/release")
     versionName = android.defaultConfig.versionName
 }
