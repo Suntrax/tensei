@@ -68,6 +68,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -106,7 +107,6 @@ import com.blissless.tensei.ui.screens.details.DetailedAnimeScreen
 import com.blissless.tensei.ui.screens.explore.ExploreScreen
 import com.blissless.tensei.ui.screens.home.HomeScreen
 import com.blissless.tensei.ui.screens.player.PlayerScreen
-import com.blissless.tensei.ui.screens.episode.ExtensionStreamParams
 import com.blissless.tensei.ui.screens.airing.ScheduleScreen
 import com.blissless.tensei.ui.screens.settings.SettingsScreen
 import com.blissless.tensei.ui.screens.downloads.DownloadsScreen
@@ -121,6 +121,7 @@ import com.blissless.tensei.ui.theme.ThemeMode
 import com.blissless.tensei.update.UpdateViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.milliseconds
 
 class MainActivity : ComponentActivity() {
 
@@ -148,22 +149,21 @@ class MainActivity : ComponentActivity() {
         handleAuthCallback(intent)
 
         setContent {
-            val activity = this@MainActivity
             var showSplash by remember { mutableStateOf(true) }
-            var splashProgress by remember { mutableStateOf(1f) }
+            var splashProgress by remember { mutableFloatStateOf(1f) }
 
             LaunchedEffect(mainViewModel.splashReady) {
                 if (mainViewModel.splashReady.value) {
                     splashProgress = 2f
-                    delay(400)
+                    delay(400.milliseconds)
                     showSplash = false
                 }
             }
 
             LaunchedEffect(Unit) {
-                delay(1400)
+                delay(1400.milliseconds)
                 splashProgress = 2f
-                delay(400)
+                delay(400.milliseconds)
                 showSplash = false
             }
 
@@ -409,37 +409,18 @@ class MainActivity : ComponentActivity() {
                 // Try to set frame rate directly on the decor view's surface (API 30+)
                 try {
                     val decorView = window.decorView
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                        decorView.viewTreeObserver.addOnPreDrawListener {
-                            // Keep requesting high frame rate
-                            decorView.postInvalidateOnAnimation()
-                            true
-                        }
+                    decorView.viewTreeObserver.addOnPreDrawListener {
+                        // Keep requesting high frame rate
+                        decorView.postInvalidateOnAnimation()
+                        true
                     }
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     // Ignore - this is optional enhancement
                 }
             }
 
         } catch (e: Exception) {
             // Gracefully handle any errors - fallback to system default
-            e.printStackTrace()
-        }
-    }
-
-    /**
-     * Reset to default refresh rate behavior.
-     */
-    private fun disableHighRefreshRate() {
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                // Reset to default display mode (0)
-                window.attributes = window.attributes.apply {
-                    preferredDisplayModeId = 0
-                    preferredRefreshRate = 0f // Let system decide
-                }
-            }
-        } catch (e: Exception) {
             e.printStackTrace()
         }
     }
@@ -465,12 +446,9 @@ class MainActivity : ComponentActivity() {
         if (intent == null) {
             return
         }
-        
-        val uriString = intent.dataString
-        if (uriString == null) {
-            return
-        }
-        
+
+        val uriString = intent.dataString ?: return
+
         // Check if it's MAL auth (contains code= parameter)
         if (!isMalAuthHandled && uriString.contains("code=") && uriString.startsWith("animescraper://success")) {
             isMalAuthHandled = true
@@ -501,7 +479,7 @@ fun MainScreen(
     isLoggedIn: Boolean
 ) {
     val hideNavbar by viewModel.hideNavbar.collectAsState()
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val extViewModel: ExtensionsViewModel = viewModel()
     val extUiState by extViewModel.uiState.collectAsState()
@@ -512,29 +490,13 @@ fun MainScreen(
 
     var preloadedPages by remember { mutableStateOf(setOf(1, 3)) }
 
-    var screenNavigationStack by remember { mutableStateOf<List<Int>>(emptyList()) }
-
     var overlayOpen by remember { mutableStateOf(false) }
-
-    val onNavigateBack: () -> Unit = {
-        val stack = screenNavigationStack.toMutableList()
-        if (stack.isNotEmpty()) {
-            val prevPage = stack.removeLast()
-            screenNavigationStack = stack
-            currentPage = prevPage
-        }
-    }
-
-    val detailedAnimeScreenData by viewModel.detailedAnimeScreenData.collectAsState()
-    val richEpisodeScreenAnime by viewModel.richEpisodeScreenAnime.collectAsState()
 
     val currentlyWatching by viewModel.currentlyWatching.collectAsState()
     val planningToWatch by viewModel.planningToWatch.collectAsState()
     val completed by viewModel.completed.collectAsState()
     val onHold by viewModel.onHold.collectAsState()
     val dropped by viewModel.dropped.collectAsState()
-    val prefetchedStreams by viewModel.prefetchedStreams.collectAsState()
-    val prefetchedEpisodeInfo by viewModel.prefetchedEpisodeInfo.collectAsState()
 
     val forwardSkipSeconds by viewModel.forwardSkipSeconds.collectAsState(initial = 10)
     val backwardSkipSeconds by viewModel.backwardSkipSeconds.collectAsState(initial = 10)
@@ -545,8 +507,6 @@ fun MainScreen(
     val aniListFavorites by viewModel.aniListFavorites.collectAsState()
     val aniListFavoriteIds = remember(aniListFavorites) { aniListFavorites.map { it.id }.toSet() }
     val malFavorites by viewModel.malFavorites.collectAsState()
-    val localFavorites by viewModel.localFavorites.collectAsState()
-    val localFavoriteIds = remember(localFavorites) { localFavorites.keys }
     val localAnimeStatus by viewModel.localAnimeStatus.collectAsState()
     val isFavoriteRateLimited by viewModel.isFavoriteRateLimited.collectAsState()
     val playbackPositions by viewModel.playbackPositions.collectAsState()
@@ -569,15 +529,6 @@ fun MainScreen(
     val swipeVolume by viewModel.swipeVolume.collectAsState(initial = false)
     val swipeBrightness by viewModel.swipeBrightness.collectAsState(initial = false)
     val swipeSwap by viewModel.swipeSwap.collectAsState(initial = false)
-
-    LaunchedEffect(currentlyWatching) {
-        if (currentlyWatching.isNotEmpty()) {
-            // Auto-prefetch disabled for now
-            // currentlyWatching.take(3).forEach { anime ->
-            //     viewModel.prefetchCurrentEpisodeStream(anime)
-            // }
-        }
-    }
 
     val isLoadingHome by viewModel.isLoadingHome.collectAsState()
     LaunchedEffect(isLoadingHome) {
@@ -664,12 +615,10 @@ fun MainScreen(
     var extensionSourcePackage by remember { mutableStateOf("") }
     var extensionEpisodeUrl by remember { mutableStateOf("") }
     var extensionEpisodeNumber by remember { mutableIntStateOf(0) }
-    var extensionEpisodeTrigger by remember { mutableIntStateOf(0) }
-    var extensionServers by remember { mutableStateOf<List<ServerInfo>>(emptyList<ServerInfo>()) }
+    var extensionServers by remember { mutableStateOf(emptyList<ServerInfo>()) }
     var extensionName by remember { mutableStateOf("") }
     var currentSubtitleTracks by remember { mutableStateOf<List<eu.kanade.tachiyomi.animesource.model.Track>>(emptyList()) }
     var cachedExtensionNext by remember { mutableStateOf<MainViewModel.ExtensionStreamResult?>(null) }
-    var cachedExtensionPrev by remember { mutableStateOf<MainViewModel.ExtensionStreamResult?>(null) }
     val episodeCache = remember { mutableMapOf<Int, MainViewModel.ExtensionStreamResult>() }
     
     // Callback to show detailed anime from MAL history using AniList API
@@ -756,19 +705,11 @@ fun MainScreen(
     }
     
     // Wrapper for callbacks that expect single parameter
-    val onShowAnimeDialogSingle: (ExploreAnime) -> Unit = { anime -> 
-        onShowAnimeDialog(anime, null) 
-    }
 
     // Callback to pop the navigation stack (when closing from ExploreScreen inline dialog or system back)
     val onClearAnimeStack: () -> Unit = {
         val prev = overlayState.previousStates
         overlayState = if (prev.isNotEmpty()) prev.last() else OverlayState.None
-    }
-
-    // Helper to get English title for scraping (Animekai works better with English titles)
-    fun getScrapingName(anime: AnimeMedia): String {
-        return anime.titleEnglish ?: anime.title
     }
 
     fun sanitizeEpisodeTitle(title: String?): String? {
@@ -777,13 +718,13 @@ fun MainScreen(
     }
 
     fun playExtensionVideo(result: MainViewModel.ExtensionStreamResult, index: Int) {
-        result.videos.forEachIndexed { i, v ->
+        result.videos.forEachIndexed { _, _ ->
         }
         val video = result.videos.find { it.videoUrl == result.url }
             ?: result.videos.getOrNull(index)
             ?: return
         streamError = null
-        currentEpisodeTitle = sanitizeEpisodeTitle(result.episode?.name) ?: "Episode ${currentEpisode}"
+        currentEpisodeTitle = sanitizeEpisodeTitle(result.episode?.name) ?: "Episode $currentEpisode"
         currentVideoUrl = video.videoUrl
         currentReferer = video.headers?.let { h ->
             (0 until h.size).firstOrNull { h.name(it).equals("Referer", ignoreCase = true) }
@@ -799,7 +740,7 @@ fun MainScreen(
         }
         currentSubtitleTracks = sortedTracks
         currentSubtitleUrl = sortedTracks.firstOrNull()?.url
-        sortedTracks.forEachIndexed { i, t ->
+        sortedTracks.forEachIndexed { _, _ ->
         }
         extensionName = result.source?.name ?: ""
         currentServerName = result.hosters?.firstOrNull()?.hosterName ?: extensionName.ifEmpty { "Extension" }
@@ -831,7 +772,7 @@ fun MainScreen(
                     !it.videoTitle.contains("dub", ignoreCase = true) && it.subtitleTracks.isNotEmpty()
                 }
                 if (subVideo != null) {
-                    subVideo.subtitleTracks.forEachIndexed { i, t ->
+                    subVideo.subtitleTracks.forEachIndexed { _, _ ->
                     }
                     currentSubtitleTracks = currentSubtitleTracks + subVideo.subtitleTracks
                     if (currentSubtitleUrl == null) {
@@ -840,47 +781,6 @@ fun MainScreen(
                 }
             }
         }
-    }
-
-    fun playFromExtensionSearch(params: ExtensionStreamParams) {
-        streamError = null
-        currentEpisodeTitle = "Episode ${params.episodeNumber}"
-        currentVideoUrl = params.videoUrl
-        currentReferer = params.referer
-        currentSubtitleUrl = params.subtitleUrl
-        extensionName = params.extensionName.ifEmpty { params.allHosters.firstOrNull()?.hosterName ?: "Extension" }
-        currentServerName = if (params.allHosters.isNotEmpty()) params.allHosters.first().hosterName else extensionName
-        currentCategory = if (params.allVideos.firstOrNull()?.videoTitle?.contains("dub", ignoreCase = true) == true) "dub" else "sub"
-        actualCategory = currentCategory
-        requestedCategory = preferredCategory
-        currentQualityOptions = emptyList()
-        currentQuality = "Auto"
-        currentServerIndex = 0
-        extensionOkHttpClient = params.extensionClient
-        extensionVideoHeaders = params.extensionHeaders
-        extensionHosters = params.allHosters
-        extensionSourcePackage = params.sourcePackageName
-        extensionEpisodeUrl = params.episodeUrl
-        extensionEpisodeNumber = params.episodeNumber
-        extensionServers = params.allHosters.map { hoster ->
-            ServerInfo(name = hoster.hosterName, url = hoster.hosterUrl)
-        }
-        if (currentAnime == null) {
-            currentAnime = AnimeMedia(
-                id = 0,
-                title = params.animeName,
-                cover = "",
-                progress = 0,
-                totalEpisodes = params.episodeNumber + 1,
-                latestEpisode = null,
-                year = null,
-            )
-        }
-        currentEpisode = params.episodeNumber
-        if (currentAnime != null && currentAnime!!.id > 0) {
-            savedPlaybackPosition = viewModel.getPlaybackPosition(currentAnime!!.id, params.episodeNumber)
-        }
-        showPlayer = true
     }
 
     fun loadAndPlayEpisode(anime: AnimeMedia, episode: Int) {
@@ -900,10 +800,8 @@ fun MainScreen(
             pendingExtResult = null
             showExtHosterDialog = false
             showExtVideoDialog = false
-            val fetchStartTime = System.currentTimeMillis()
             scope.launch {
                 val result = viewModel.playEpisodeWithExtension(anime, episode, extPackage)
-                val fetchDuration = System.currentTimeMillis() - fetchStartTime
                 pendingExtResult = result
                 if (result != null && result.videos.isNotEmpty()) {
                     extensionVideos = result.videos
@@ -938,7 +836,7 @@ fun MainScreen(
             val tmdbEpisodes = viewModel.fetchTmdbEpisodes(anime.title, anime.id, anime.year, anime.format)
             val title = tmdbEpisodes.find { it.episode == episode }?.title
             sanitizeEpisodeTitle(title) ?: "Episode $episode"
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             "Episode $episode"
         }
     }
@@ -964,7 +862,6 @@ fun MainScreen(
             val result = viewModel.playEpisodeWithExtension(currentAnime!!, ep, pkg)
             if (result != null) {
                 episodeCache[ep] = result
-            } else {
             }
         }
     }
@@ -979,7 +876,6 @@ fun MainScreen(
             if (result != null) {
                 cachedExtensionNext = result
                 episodeCache[nextEp] = result
-            } else {
             }
         }
     }
@@ -999,7 +895,7 @@ fun MainScreen(
                 currentReferer = cached.referer
                 currentSubtitleUrl = cached.subtitleUrl
                 currentSubtitleTracks = cached.videos.firstOrNull()?.subtitleTracks ?: emptyList()
-                currentServerName = if (cached.hosters != null && cached.hosters.isNotEmpty()) cached.hosters.first().hosterName else "Extension"
+                currentServerName = if (!cached.hosters.isNullOrEmpty()) cached.hosters.first().hosterName else "Extension"
                 currentCategory = "sub"
                 currentQualityOptions = cached.videos.map { QualityOption(quality = it.videoTitle, url = it.videoUrl, width = it.resolution ?: 0) }
                 currentQuality = cached.videoTitle
@@ -1031,7 +927,7 @@ fun MainScreen(
                         currentReferer = result.referer
                         currentSubtitleUrl = result.subtitleUrl
                         currentSubtitleTracks = result.videos.firstOrNull()?.subtitleTracks ?: emptyList()
-                        currentServerName = if (result.hosters != null && result.hosters.isNotEmpty()) result.hosters.first().hosterName else "Extension"
+                        currentServerName = if (!result.hosters.isNullOrEmpty()) result.hosters.first().hosterName else "Extension"
                         currentCategory = "sub"
                         currentQualityOptions = result.videos.map { QualityOption(quality = it.videoTitle, url = it.videoUrl, width = it.resolution ?: 0) }
                         currentQuality = result.videoTitle
@@ -1070,7 +966,7 @@ fun MainScreen(
                 currentReferer = cached.referer
                 currentSubtitleUrl = cached.subtitleUrl
                 currentSubtitleTracks = cached.videos.firstOrNull()?.subtitleTracks ?: emptyList()
-                currentServerName = if (cached.hosters != null && cached.hosters.isNotEmpty()) cached.hosters.first().hosterName else "Extension"
+                currentServerName = if (!cached.hosters.isNullOrEmpty()) cached.hosters.first().hosterName else "Extension"
                 currentCategory = "sub"
                 currentQualityOptions = cached.videos.map { QualityOption(quality = it.videoTitle, url = it.videoUrl, width = it.resolution ?: 0) }
                 currentQuality = cached.videoTitle
@@ -1103,7 +999,7 @@ fun MainScreen(
                         currentReferer = result.referer
                         currentSubtitleUrl = result.subtitleUrl
                         currentSubtitleTracks = result.videos.firstOrNull()?.subtitleTracks ?: emptyList()
-                        currentServerName = if (result.hosters != null && result.hosters.isNotEmpty()) result.hosters.first().hosterName else "Extension"
+                        currentServerName = if (!result.hosters.isNullOrEmpty()) result.hosters.first().hosterName else "Extension"
                         currentCategory = "sub"
                         currentQualityOptions = result.videos.map { QualityOption(quality = it.videoTitle, url = it.videoUrl, width = it.resolution ?: 0) }
                         currentQuality = result.videoTitle
@@ -1154,11 +1050,6 @@ fun MainScreen(
         }
     }
 
-    fun changeQuality(qualityUrl: String, qualityName: String) {
-        currentVideoUrl = qualityUrl
-        currentQuality = qualityName
-    }
-
     fun invalidateCurrentStreamCache() {
         currentAnime?.let { anime ->
             viewModel.invalidateStreamCache(anime.id, currentEpisode, currentCategory)
@@ -1170,44 +1061,8 @@ fun MainScreen(
         // Invalidate the cache for this stream
         invalidateCurrentStreamCache()
 
-        currentAnime?.let { anime ->
-            val servers = if (currentCategory == "sub") currentEpisodeInfo?.subServers else currentEpisodeInfo?.dubServers
+        currentAnime?.let { _ ->
 
-            if (servers != null && servers.size > 1) {
-                val nextIndex = (currentServerIndex + 1) % servers.size
-                val nextServer = servers[nextIndex]
-            }
-        }
-    }
-
-    fun autoTryNextServer() {
-        val servers = if (currentCategory == "sub") currentEpisodeInfo?.subServers else currentEpisodeInfo?.dubServers
-
-        if (servers == null || servers.size <= 1) {
-            onPlaybackError()
-            return
-        }
-
-        // Try each server in sequence until one works or we've tried all
-        var triedIndex = currentServerIndex
-        var foundWorking = false
-
-        for (i in 1..servers.size) {
-            triedIndex = (triedIndex + 1) % servers.size
-            val nextServer = servers[triedIndex]
-
-
-            // Update current server index immediately
-            currentServerIndex = triedIndex
-
-            // Try this server
-            // If this is the last server, don't try more
-            if (triedIndex == currentServerIndex && i == servers.size - 1) {
-                break
-            }
-
-            // Return early - changeServer will handle loading and we'll try next on error
-            return
         }
     }
 
@@ -1221,7 +1076,7 @@ fun MainScreen(
             currentStatus = animeStatusMap[exploreDialog.anime.id],
             currentProgress = animeProgressMap[exploreDialog.anime.id],
             isFavorite = isAnimeFavorite,
-            initialCardBounds = viewModel.exploreAnimeCardBounds.value,
+            initialCardBounds = viewModel.exploreAnimeCardBounds.collectAsState().value,
             onDismiss = {
                 overlayState = OverlayState.None
             },
@@ -1287,7 +1142,7 @@ fun MainScreen(
                 try {
                     scope.launch {
                         try {
-                            delay(100)
+                            delay(100.milliseconds)
                             val detailedData = viewModel.fetchDetailedAnimeData(relation.id)
                             if (detailedData != null) {
                                 viewModel.clearExploreAnimeCardBounds()
@@ -1408,7 +1263,7 @@ fun MainScreen(
                 try {
                     scope.launch {
                         try {
-                            delay(100)
+                            delay(100.milliseconds)
                             val detailedData = viewModel.fetchDetailedAnimeData(relation.id)
                             if (detailedData != null) {
                                 currentCardBounds = null
@@ -1432,11 +1287,11 @@ fun MainScreen(
                             } else {
                                 Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
                             }
-                        } catch (e: Exception) {
+                        } catch (_: Exception) {
                             Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
                         }
                     }
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
                 }
             },
@@ -1756,7 +1611,7 @@ fun MainScreen(
                 },
                 onPreviousEpisode = if (currentEpisode > 1) onPreviousEpisode else null,
                 onNextEpisode = if (currentEpisode < released) onNextEpisode else null,
-                isLatestEpisode = currentEpisode >= released && released > 0,
+                isLatestEpisode = released in 1..currentEpisode,
                 onPlaybackError = { onPlaybackError() },
                 onInvalidateStreamCache = { invalidateCurrentStreamCache() },
                 autoSkipOpening = autoSkipOpening,
@@ -1885,7 +1740,7 @@ fun MainScreen(
                             showAnimeCardButtons = showAnimeCardButtons,
                             preferEnglishTitles = preferEnglishTitles,
                             hideAdultContent = hideAdultContent,
-                            favoriteIds = if (viewModel.loginProvider.value == LoginProvider.MAL) malFavorites.map { it.id }.toSet() else aniListFavoriteIds,
+                            favoriteIds = if (viewModel.loginProvider.collectAsState().value == LoginProvider.MAL) malFavorites.map { it.id }.toSet() else aniListFavoriteIds,
                             onPlayEpisode = onPlayEpisode,
                             currentlyWatching = currentlyWatching,
                             planningToWatch = planningToWatch,
@@ -1924,7 +1779,7 @@ fun MainScreen(
                                 pendingSettingsGroup = if (extUiState.extensions.isEmpty()) "extensions" else "stream"
                             },
                             onNoExtension = { showNoExtDialog = true },
-                            favoriteIds = if (viewModel.loginProvider.value == LoginProvider.MAL) malFavorites.map { it.id }.toSet() else aniListFavoriteIds,
+                            favoriteIds = if (viewModel.loginProvider.collectAsState().value == LoginProvider.MAL) malFavorites.map { it.id }.toSet() else aniListFavoriteIds,
                             onPlayEpisode = onPlayEpisode,
                             onLoginClick = { viewModel.loginWithAniList() },
                             onShowAnimeDialog = onShowAnimeDialog,
@@ -1996,8 +1851,8 @@ fun MainScreen(
                         completed = completed,
                         onHold = onHold,
                         dropped = dropped,
-                        localAnimeStatus = viewModel.localAnimeStatus.value,
-                        favoriteIds = if (viewModel.loginProvider.value == LoginProvider.MAL) malFavorites.map { it.id }.toSet() else aniListFavoriteIds,
+                        localAnimeStatus = viewModel.localAnimeStatus.collectAsState().value,
+                        favoriteIds = if (viewModel.loginProvider.collectAsState().value == LoginProvider.MAL) malFavorites.map { it.id }.toSet() else aniListFavoriteIds,
                         onClose = { showSearchScreen = false },
                         onPlayEpisode = onPlayEpisode,
                         onCharacterClick = { characterId ->
@@ -2092,8 +1947,6 @@ fun MainScreen(
                     )
                 }
 
-                val isOledTheme = isOled
-                val primaryColor = MaterialTheme.colorScheme.primary
                 val surfaceColor = if (isOled) Color.Black else MaterialTheme.colorScheme.surface
                 val onSurfaceColor = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
                 val primaryContainerColor = MaterialTheme.colorScheme.primaryContainer
@@ -2155,14 +2008,6 @@ fun MainScreen(
                                         },
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    val alpha by animateFloatAsState(
-                                        targetValue = if (isSelected) 1f else 0f,
-                                        animationSpec = tween(
-                                            durationMillis = 200,
-                                            easing = LinearEasing
-                                        ),
-                                        label = "alpha_$index"
-                                    )
 
                                     if (isSelected) {
                                         val pillColor = if (disableMaterialColors) {
@@ -2207,7 +2052,7 @@ fun MainScreen(
                                         Icon(
                                             icons[index],
                                             contentDescription = item,
-                                            tint = if (isOledTheme) Color.White.copy(alpha = 0.6f) else onSurfaceColor.copy(alpha = 0.6f),
+                                            tint = if (isOled) Color.White.copy(alpha = 0.6f) else onSurfaceColor.copy(alpha = 0.6f),
                                             modifier = Modifier.size(20.dp)
                                         )
                                     }
@@ -2220,7 +2065,7 @@ fun MainScreen(
 
 streamError?.let { error ->
                     LaunchedEffect(error) {
-                        delay(3500)
+                        delay(3500.milliseconds)
                         streamError = null
                     }
 
