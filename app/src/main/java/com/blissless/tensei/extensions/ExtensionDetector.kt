@@ -52,10 +52,7 @@ class ExtensionDetector(private val context: Context) {
         if (hasFeature) {
             return true
         }
-        val metaData = pkgInfo.applicationInfo?.metaData
-        if (metaData == null) {
-            return false
-        }
+        val metaData = pkgInfo.applicationInfo?.metaData ?: return false
         return metaData.containsKey(METADATA_SOURCE_CLASS) ||
                 metaData.containsKey(METADATA_ANIME_SOURCE_CLASS) ||
                 metaData.containsKey(METADATA_SOURCE_FACTORY)
@@ -70,13 +67,13 @@ class ExtensionDetector(private val context: Context) {
 
         val icon = try {
             ai.loadIcon(pm)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             null
         }
 
         return Extension(
             packageName = pkgInfo.packageName,
-            name = pm.getApplicationLabel(ai).toString() ?: pkgInfo.packageName,
+            name = pm.getApplicationLabel(ai).toString(),
             versionName = pkgInfo.versionName ?: "",
             versionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 pkgInfo.longVersionCode
