@@ -1,10 +1,10 @@
 package com.blissless.tensei.extensions
 
+import android.annotation.SuppressLint
 import android.app.Application
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.widget.Toast
 import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
@@ -16,12 +16,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonObject
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
-import java.net.URL
 import java.util.concurrent.TimeUnit
+import kotlin.time.Duration.Companion.milliseconds
+import androidx.core.content.edit
 
 data class ExtensionsUiState(
     val isLoading: Boolean = true,
@@ -94,14 +94,6 @@ class ExtensionsViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    fun openExtensionSettings(packageName: String) {
-        val context = getApplication<Application>()
-        val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-            data = Uri.parse("package:$packageName")
-        }
-        context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-    }
-
     fun addRepo(url: String) {
         val trimmed = url.trim()
         if (trimmed.isBlank()) return
@@ -138,6 +130,7 @@ class ExtensionsViewModel(application: Application) : AndroidViewModel(applicati
         _uiState.value = _uiState.value.copy(refreshMessage = null)
     }
 
+    @SuppressLint("RequestInstallPackagesPolicy")
     fun installExtension(repoExtension: RepoExtension) {
         val ctx = getApplication<Application>()
         viewModelScope.launch {
@@ -171,7 +164,7 @@ class ExtensionsViewModel(application: Application) : AndroidViewModel(applicati
                 pm.getPackageInfo(packageName, 0)
                 return
             } catch (_: PackageManager.NameNotFoundException) {
-                kotlinx.coroutines.delay(1000)
+                kotlinx.coroutines.delay(1000.milliseconds)
             }
         }
     }
@@ -182,7 +175,7 @@ class ExtensionsViewModel(application: Application) : AndroidViewModel(applicati
         if (!response.isSuccessful) {
             throw Exception("Server returned ${response.code} ${response.message}")
         }
-        val body = response.body.string() ?: throw Exception("Empty response")
+        val body = response.body.string()
         val json = Json { ignoreUnknownKeys = true }
         val element = json.parseToJsonElement(body)
         val repo = parseRepoJson(repoUrl, element)
@@ -239,7 +232,7 @@ class ExtensionsViewModel(application: Application) : AndroidViewModel(applicati
     private fun persistRepos() {
         val urls = _uiState.value.repos.map { it.url }
         val json = Json.encodeToString(urls)
-        repoPrefs.edit().putString(KEY_SAVED_REPOS, json).apply()
+        repoPrefs.edit {putString(KEY_SAVED_REPOS, json) }
     }
 
     private fun updateRepoState(url: String, transform: RepoState.() -> RepoState) {
