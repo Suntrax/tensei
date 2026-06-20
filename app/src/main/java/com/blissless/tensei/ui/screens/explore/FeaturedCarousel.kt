@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -60,23 +59,21 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.blissless.tensei.R
 import com.blissless.tensei.data.models.ExploreAnime
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
 fun FeaturedCarousel(
     animeList: List<ExploreAnime>,
-    onAnimeClick: (ExploreAnime) -> Unit,
     onStatusClick: (ExploreAnime) -> Unit,
     onPlayClick: (ExploreAnime) -> Unit,
     onInfoClick: (ExploreAnime) -> Unit,
     onSearchClick: () -> Unit = {},
     animeStatusMap: Map<Int, String> = emptyMap(),
     preferEnglishTitles: Boolean = true,
-    isOled: Boolean = false,
     isDialogOpen: Boolean = false,
     autoScrollEnabled: Boolean = true,
     isVisible: Boolean = true
@@ -98,12 +95,14 @@ fun FeaturedCarousel(
     var isHeaderSwiping by remember { mutableStateOf(false) }
     var timerResetSignal by remember { mutableIntStateOf(0) }
 
-    LaunchedEffect(pagerState.isScrollInProgress, pagerState.currentPageOffsetFraction) {
+    val currentPageOffsetFraction by remember { derivedStateOf { pagerState.currentPageOffsetFraction } }
+
+    LaunchedEffect(pagerState.isScrollInProgress, currentPageOffsetFraction) {
         if (pagerState.isScrollInProgress) {
             pageWhenScrollStarted = pagerState.currentPage
         } else if (pagerState.currentPage != pageWhenScrollStarted) {
             headerVisible = false
-            delay(80)
+            delay(80.milliseconds)
             headerVisible = true
             pageWhenScrollStarted = pagerState.currentPage
         }
@@ -118,11 +117,10 @@ fun FeaturedCarousel(
     LaunchedEffect(autoScrollEnabled, isVisible, isHeaderSwiping, isDialogOpen, timerResetSignal) {
         if (autoScrollEnabled && isVisible && !isHeaderSwiping && !isDialogOpen) {
             while (true) {
-                delay(4500)
-                if (isHeaderSwiping) continue
+                delay(4500.milliseconds)
 
                 headerVisible = false
-                delay(80)
+                delay(80.milliseconds)
                 headerVisible = true
                 
                 autoScrollJob = scope.launch {
@@ -133,7 +131,7 @@ fun FeaturedCarousel(
                 }
                 autoScrollJob?.join()
                 
-                delay(300)
+                delay(300.milliseconds)
             }
         }
     }

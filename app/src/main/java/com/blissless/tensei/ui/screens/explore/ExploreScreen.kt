@@ -445,7 +445,6 @@ fun ExploreScreen(
             if (filteredFeaturedAnime.isNotEmpty()) {
                 FeaturedCarousel(
                     animeList = filteredFeaturedAnime,
-                    onAnimeClick = onFeaturedAnimeClickStable,
                     onStatusClick = { anime ->
                         selectedAnime = anime
                         showStatusDialog = true
@@ -458,7 +457,6 @@ fun ExploreScreen(
                     onSearchClick = onSearchClick,
                     animeStatusMap = animeStatusMap,
                     preferEnglishTitles = preferEnglishTitles,
-                    isOled = isOled,
                     isDialogOpen = showDialog || showStatusDialog || showEpisodeSelection,
                     autoScrollEnabled = isVisible && !showDialog
                 )
