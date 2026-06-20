@@ -24,11 +24,3 @@ val StatusLabels = mapOf(
     "DROPPED" to "Dropped"
 )
 
-fun getStatusColor(status: String?): Color {
-    return StatusColors[status] ?: Color.Gray
-}
-
-fun getStatusContainerColor(status: String?): Color {
-    return getStatusColor(status).copy(alpha = 0.2f)
-}
-
