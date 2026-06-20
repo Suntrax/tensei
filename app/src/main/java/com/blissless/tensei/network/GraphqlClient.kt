@@ -6,7 +6,6 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
 import kotlinx.coroutines.launch
@@ -14,11 +13,11 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.Json
 import java.net.URL
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import javax.net.ssl.HttpsURLConnection
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Result wrapper for GraphQL requests with metadata
@@ -28,10 +27,7 @@ data class GraphQLResult<T>(
     val error: GraphQLError?,
     val fromCache: Boolean,
     val retryCount: Int
-) {
-    val isSuccess: Boolean get() = data != null && error == null
-    val isFailure: Boolean get() = error != null
-}
+)
 
 data class GraphQLError(
     val message: String,
@@ -66,16 +62,9 @@ data class GraphQLConfig(
  */
 class GraphQLClient(
     private val endpoint: String = "https://graphql.anilist.co",
-    private val config: GraphQLConfig = GraphQLConfig(),
-    private val json: Json = Json {
-        ignoreUnknownKeys = true
-        isLenient = true
-        coerceInputValues = true
-    }
+    private val config: GraphQLConfig = GraphQLConfig()
 ) {
-    companion object {
-        private const val TAG = "GraphQLClient"
-    }
+    companion object;
 
     // Request queue channel (unlimited buffer)
     private val requestChannel = Channel<QueuedRequest<*>>(UNLIMITED)
@@ -136,7 +125,7 @@ class GraphQLClient(
 
             try {
                 val result = executeRequestWithRetry(request)
-                request.continuation.resume(result) { cause, _, _ -> }
+                request.continuation.resume(result) { _, _, _ -> }
             } catch (e: Exception) {
                 request.continuation.resume(
                     GraphQLResult(
@@ -145,7 +134,7 @@ class GraphQLClient(
                                     fromCache = false,
                                     retryCount = 0
                                 )
-                ) { cause, _, _ -> }
+                ) { _, _, _ -> }
             }
         }
     }
@@ -160,7 +149,7 @@ class GraphQLClient(
         repeat(config.maxRetries + 1) { attempt ->
             if (attempt > 0) {
                 val delay = calculateBackoffDelay(attempt - 1, lastError?.retryAfter)
-                kotlinx.coroutines.delay(delay)
+                kotlinx.coroutines.delay(delay.milliseconds)
             }
 
             val response = executeHttpRequest(request)
@@ -303,7 +292,7 @@ class GraphQLClient(
         }
 
         if (delayNeeded > 0) {
-            kotlinx.coroutines.delay(delayNeeded)
+            kotlinx.coroutines.delay(delayNeeded.milliseconds)
             synchronized(rateLimitState) {
                 rateLimitState.isLimited = false
             }
@@ -325,7 +314,7 @@ class GraphQLClient(
         }
 
         if (delayNeeded > 0) {
-            kotlinx.coroutines.delay(delayNeeded)
+            kotlinx.coroutines.delay(delayNeeded.milliseconds)
         }
 
         synchronized(intervalLock) {
@@ -448,7 +437,7 @@ class GraphQLClient(
                             fromCache = true,
                             retryCount = 0
                         )
-                    ) { cause, _, _ -> }
+                    ) { _, _, _ -> }
                     return@suspendCancellableCoroutine
                 }
             }
@@ -469,12 +458,12 @@ class GraphQLClient(
                                 fromCache = false,
                                 retryCount = 0
                             )
-                        ) { cause, _, _ -> }
+                        ) { _, _, _ -> }
                     } else {
                         // Fall through to queue new request
                         queueRequest(query, variables, requiresAuth, authToken, clientIds, parser, cacheKey, continuation)
                     }
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     queueRequest(query, variables, requiresAuth, authToken, clientIds, parser, cacheKey, continuation)
                 }
             }
@@ -505,7 +494,7 @@ class GraphQLClient(
                 // Cache successful response
                 cacheResponse(cacheKey, response)
                 // Complete deduplication deferred
-                pendingRequests.remove(cacheKey)
+                pendingRequests.remove(cacheKey) ?: Unit
                 parser(response)
             },
             continuation = continuation
@@ -521,17 +510,9 @@ class GraphQLClient(
                                     fromCache = false,
                                     retryCount = 0
                                 )
-                ) { cause, _, _ -> }
+                ) { _, _, _ -> }
             }
         }
-    }
-
-    /**
-     * Invalidate all cache entries matching a predicate
-     */
-    fun invalidateCache(predicate: (String) -> Boolean = { true }) {
-        val keysToRemove = responseCache.keys.filter(predicate)
-        keysToRemove.forEach { responseCache.remove(it) }
     }
 
     /**
@@ -542,14 +523,6 @@ class GraphQLClient(
         pendingRequests.clear()
     }
 
-    /**
-     * Shutdown the client
-     */
-    fun shutdown() {
-        queueProcessorJob?.cancel()
-        scope.cancel()
-        clearCache()
-    }
 }
 
 // ============================================
