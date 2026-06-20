@@ -9,19 +9,44 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Subtitles
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -37,6 +62,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
 import androidx.media3.common.text.Cue
 import androidx.media3.common.text.CueGroup
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -45,10 +71,10 @@ import androidx.media3.ui.SubtitleView
 import eu.kanade.tachiyomi.animesource.model.Track
 import eu.kanade.tachiyomi.animesource.model.Video
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import okhttp3.OkHttpClient
-import java.util.concurrent.TimeUnit
+import androidx.core.net.toUri
+import kotlin.time.Duration.Companion.milliseconds
 
+@UnstableApi
 class PlayerActivity : ComponentActivity() {
 
     private var player: ExoPlayer? = null
@@ -87,7 +113,7 @@ class PlayerActivity : ComponentActivity() {
 
         fun buildMediaItem(video: Video, subtitle: Track?): MediaItem {
             val builder = MediaItem.Builder()
-                .setUri(android.net.Uri.parse(video.videoUrl))
+                .setUri(video.videoUrl.toUri())
             builder.setMediaMetadata(
                     androidx.media3.common.MediaMetadata.Builder()
                         .setTitle(PlayerData.animeTitle)
@@ -102,7 +128,7 @@ class PlayerActivity : ComponentActivity() {
                 }
                 builder.setSubtitleConfigurations(
                     listOf(
-                        MediaItem.SubtitleConfiguration.Builder(android.net.Uri.parse(track.url))
+                        MediaItem.SubtitleConfiguration.Builder(track.url.toUri())
                             .setMimeType(mime)
                             .setLanguage(track.lang)
                             .setSelectionFlags(C.SELECTION_FLAG_DEFAULT or C.SELECTION_FLAG_AUTOSELECT)
@@ -145,7 +171,7 @@ class PlayerActivity : ComponentActivity() {
             val first = videos.getOrNull(startQuality)
             if (first != null) {
                 val mediaItemBuilder = MediaItem.Builder()
-                    .setUri(android.net.Uri.parse(first.videoUrl))
+                    .setUri(first.videoUrl.toUri())
 
                 // Add subtitle config
                 val sub = PlayerData.selectedSubtitle
@@ -155,7 +181,7 @@ class PlayerActivity : ComponentActivity() {
                         sub.url.contains(".srt") -> "application/x-subrip"
                         else -> "text/vtt"
                     }
-                    val subConfig = MediaItem.SubtitleConfiguration.Builder(android.net.Uri.parse(sub.url))
+                    val subConfig = MediaItem.SubtitleConfiguration.Builder(sub.url.toUri())
                         .setMimeType(subMime)
                         .setLanguage(sub.lang)
                         .setSelectionFlags(C.SELECTION_FLAG_DEFAULT or C.SELECTION_FLAG_AUTOSELECT)
@@ -235,7 +261,7 @@ class PlayerActivity : ComponentActivity() {
 
                     LaunchedEffect(player) {
                         while (true) {
-                            delay(200)
+                            delay(200.milliseconds)
                             playbackPosition = player?.currentPosition ?: 0L
                             playbackDuration = player?.duration ?: 0L
                         }
@@ -286,8 +312,7 @@ class PlayerActivity : ComponentActivity() {
                                     onSelect = { idx ->
                                         showQualitySheet = false; playVideo(videos[idx])
                                     },
-                                    onToggleAdaptive = { adaptiveMode = !adaptiveMode },
-                                    onDismiss = { showQualitySheet = false }
+                                    onToggleAdaptive = { adaptiveMode = !adaptiveMode }
                                 )
                             }
                             if (showSubSheet) {
@@ -299,8 +324,7 @@ class PlayerActivity : ComponentActivity() {
                                         selectedSubtitle = track
                                         PlayerData.selectedSubtitle = track
                                         currentVideo?.let { playVideo(it) }
-                                    },
-                                    onDismiss = { showSubSheet = false }
+                                    }
                                 )
                             }
                             if (showAudioSheet) {
@@ -312,8 +336,7 @@ class PlayerActivity : ComponentActivity() {
                                         selectedAudio = track
                                         PlayerData.selectedAudio = track
                                         currentVideo?.let { playVideo(it) }
-                                    },
-                                    onDismiss = { showAudioSheet = false }
+                                    }
                                 )
                             }
 
@@ -435,8 +458,7 @@ private fun QualitySheet(
     currentIndex: Int,
     adaptiveMode: Boolean,
     onSelect: (Int) -> Unit,
-    onToggleAdaptive: () -> Unit,
-    onDismiss: () -> Unit
+    onToggleAdaptive: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
@@ -474,7 +496,7 @@ private fun QualitySheet(
 }
 
 @Composable
-private fun SubtitleSheet(tracks: List<Track>, selected: Track?, onSelect: (Track?) -> Unit, onDismiss: () -> Unit) {
+private fun SubtitleSheet(tracks: List<Track>, selected: Track?, onSelect: (Track?) -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xEE333333))
@@ -507,7 +529,7 @@ private fun SubtitleSheet(tracks: List<Track>, selected: Track?, onSelect: (Trac
 }
 
 @Composable
-private fun AudioSheet(tracks: List<Track>, selected: Track?, onSelect: (Track?) -> Unit, onDismiss: () -> Unit) {
+private fun AudioSheet(tracks: List<Track>, selected: Track?, onSelect: (Track?) -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xEE333333))
