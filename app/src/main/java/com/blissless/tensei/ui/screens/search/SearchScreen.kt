@@ -1,6 +1,5 @@
 package com.blissless.tensei.ui.screens.search
 
-import com.blissless.tensei.data.models.isAdultContent
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -10,6 +9,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -37,8 +36,8 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
@@ -63,10 +62,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -86,6 +85,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.blissless.tensei.MainViewModel
@@ -93,11 +93,13 @@ import com.blissless.tensei.data.models.AnimeMedia
 import com.blissless.tensei.data.models.ExploreAnime
 import com.blissless.tensei.data.models.LocalAnimeEntry
 import com.blissless.tensei.data.models.MediaTag
+import com.blissless.tensei.data.models.isAdultContent
 import com.blissless.tensei.data.models.toDetailedAnimeData
-import androidx.compose.ui.window.Dialog
 import com.blissless.tensei.ui.screens.details.DetailedAnimeScreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.milliseconds
+import java.util.Locale
 
 val ALL_GENRES = listOf(
     "Action", "Adventure", "Comedy", "Drama", "Fantasy", "Horror",
@@ -145,7 +147,6 @@ fun SearchScreen(
     dropped: List<AnimeMedia>,
     localAnimeStatus: Map<Int, LocalAnimeEntry>,
     favoriteIds: Set<Int>,
-    onToggleFavorite: (AnimeMedia) -> Unit,
     onClose: () -> Unit,
     onPlayEpisode: (AnimeMedia, Int, String?) -> Unit,
     onCharacterClick: (Int) -> Unit = {},
@@ -267,7 +268,7 @@ fun SearchScreen(
 
     LaunchedEffect(filters.query) {
         if (filters.query.isNotBlank()) {
-            delay(400)
+            delay(400.milliseconds)
             performSearch()
         }
     }
@@ -289,7 +290,7 @@ fun SearchScreen(
     }
 
     LaunchedEffect(Unit) {
-        delay(200)
+        delay(200.milliseconds)
         focusRequester.requestFocus()
     }
 
@@ -500,7 +501,6 @@ fun SearchScreen(
                     items(filteredResults, key = { it.id }) { anime ->
                         SearchResultCard(
                             anime = anime,
-                            isOled = isOled,
                             preferEnglishTitles = preferEnglishTitles,
                             onClick = {
                                 keyboardController?.hide()
@@ -519,7 +519,7 @@ fun SearchScreen(
                                     TextButton(onClick = { performSearch(currentPage + 1) }) {
                                         Text("Load More", color = MaterialTheme.colorScheme.primary)
                                         Spacer(modifier = Modifier.width(4.dp))
-                                        Icon(Icons.Default.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                                        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
                                     }
                                 }
                             }
@@ -586,7 +586,6 @@ fun SearchScreen(
 
     if (showGenreSheet) {
         MultiSelectSheet(
-            title = "Select Genres",
             options = ALL_GENRES,
             selected = filters.genres,
             onToggle = { genre ->
@@ -613,7 +612,6 @@ fun SearchScreen(
 @Composable
 private fun SearchResultCard(
     anime: ExploreAnime,
-    isOled: Boolean,
     preferEnglishTitles: Boolean,
     onClick: () -> Unit
 ) {
@@ -641,7 +639,7 @@ private fun SearchResultCard(
                     ) {
                         Icon(Icons.Default.Star, contentDescription = null, tint = Color(0xFFFFD700), modifier = Modifier.size(12.dp))
                         Spacer(modifier = Modifier.width(2.dp))
-                        Text(String.format("%.1f", displayScore), color = Color(0xFFFFD700), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                        Text(String.format(Locale.getDefault(), "%.1f", displayScore), color = Color(0xFFFFD700), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -689,14 +687,13 @@ private fun FilterRow(
                 }
                 Spacer(modifier = Modifier.width(8.dp))
             }
-            Icon(Icons.Default.ArrowForward, contentDescription = null, tint = Color.White.copy(alpha = 0.4f), modifier = Modifier.size(18.dp))
+            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = Color.White.copy(alpha = 0.4f), modifier = Modifier.size(18.dp))
         }
     }
 }
 
 @Composable
 private fun MultiSelectSheet(
-    title: String,
     options: List<String>,
     selected: Set<String>,
     onToggle: (String) -> Unit,
@@ -720,7 +717,7 @@ private fun MultiSelectSheet(
                     modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(title, color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("Select Genres", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.weight(1f))
                     IconButton(onClick = onDismiss) {
                         Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White.copy(alpha = 0.6f))

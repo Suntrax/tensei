@@ -2000,27 +2000,6 @@ fun MainScreen(
                         dropped = dropped,
                         localAnimeStatus = viewModel.localAnimeStatus.value,
                         favoriteIds = if (viewModel.loginProvider.value == LoginProvider.MAL) malFavorites.map { it.id }.toSet() else aniListFavoriteIds,
-                        onToggleFavorite = { anime ->
-                            if (viewModel.loginProvider.value == LoginProvider.MAL) {
-                                val animeMedia = AnimeMedia(
-                                    id = anime.id, title = anime.title, titleEnglish = anime.titleEnglish,
-                                    cover = anime.cover, banner = anime.banner, progress = 0,
-                                    totalEpisodes = anime.totalEpisodes, latestEpisode = anime.latestEpisode,
-                                    status = "", averageScore = anime.averageScore, genres = anime.genres,
-                                    listStatus = "", listEntryId = 0, year = anime.year, malId = anime.malId
-                                )
-                                viewModel.toggleMalFavorite(animeMedia)
-                            } else {
-                                val animeMedia = AnimeMedia(
-                                    id = anime.id, title = anime.title, titleEnglish = anime.titleEnglish,
-                                    cover = anime.cover, banner = anime.banner, progress = 0,
-                                    totalEpisodes = anime.totalEpisodes, latestEpisode = anime.latestEpisode,
-                                    status = "", averageScore = anime.averageScore, genres = anime.genres,
-                                    listStatus = "", listEntryId = 0, year = anime.year, malId = anime.malId
-                                )
-                                viewModel.toggleAniListFavorite(anime.id, animeMedia)
-                            }
-                        },
                         onClose = { showSearchScreen = false },
                         onPlayEpisode = onPlayEpisode,
                         onCharacterClick = { characterId ->
