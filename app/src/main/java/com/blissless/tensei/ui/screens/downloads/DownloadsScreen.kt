@@ -1,6 +1,8 @@
 package com.blissless.tensei.ui.screens.downloads
 
+import android.annotation.SuppressLint
 import androidx.activity.compose.BackHandler
+import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -40,9 +42,6 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.AlertDialog
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
-
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -73,7 +72,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.offline.Download
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
@@ -85,7 +86,8 @@ import com.blissless.tensei.ui.components.ContinueWatchingRow
 import com.blissless.tensei.ui.components.SectionHeader
 import com.blissless.tensei.ui.screens.player.OfflinePlayerScreen
 
-@android.annotation.SuppressLint("UnstableApiUsage")
+@OptIn(UnstableApi::class)
+@SuppressLint("UnstableApiUsage")
 @Composable
 fun DownloadsScreen(
     viewModel: MainViewModel,
@@ -339,8 +341,7 @@ fun DownloadsScreen(
                                 TextButton(onClick = {
                                     try {
                                         val intent = android.content.Intent(
-                                            android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                                            "package:${context.packageName}".toUri()
+                                            android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS
                                         )
                                         context.startActivity(intent)
                                     } catch (_: Exception) {}
@@ -383,7 +384,7 @@ fun DownloadsScreen(
                                 val group = groupedDownloads.find { it.animeName == anime.title }
                                 val download = group?.episodes?.find { it.episode == episode }
                                 if (download != null) {
-                                    playerEpisodes = group?.episodes ?: emptyList()
+                                    playerEpisodes = group.episodes
                                     playingDownload = download
                                 }
                             }
@@ -731,7 +732,6 @@ fun DownloadsScreen(
                             val isFailed = state == Download.STATE_FAILED
                             val isDownloading = state == Download.STATE_DOWNLOADING
                             val isQueued = state == Download.STATE_QUEUED
-                            val isWaiting = state == null
                             val bgColor = when {
                                 isDone -> if (isOled) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
                                 isFailed -> if (isOled) Color(0xFF2E1A1A) else Color(0xFFFFEBEE)
@@ -837,7 +837,8 @@ fun DownloadsScreen(
     }
 }
 
-@android.annotation.SuppressLint("UnstableApiUsage")
+@OptIn(UnstableApi::class)
+@SuppressLint("UnstableApiUsage")
 @Composable
 private fun DownloadedEpisodesDialog(
     anime: EpisodeDownloadManager.GroupedDownload,
@@ -1141,6 +1142,7 @@ private fun formatTimeFromMs(ms: Long): String {
     else String.format(java.util.Locale.ROOT, "%d:%02d", minutes, seconds)
 }
 
+@OptIn(UnstableApi::class)
 @Composable
 private fun DownloadsAnimeCard(
     anime: EpisodeDownloadManager.GroupedDownload,
