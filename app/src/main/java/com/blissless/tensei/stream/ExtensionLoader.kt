@@ -36,10 +36,7 @@ class ExtensionLoader(private val context: Context) {
         val ai = pm.getApplicationInfo(extension.packageName, 0)
         val apkPath = ai.sourceDir
 
-        val sourceClass = extension.sourceClass
-        if (sourceClass == null) {
-            return emptyList()
-        }
+        val sourceClass = extension.sourceClass ?: return emptyList()
 
         val sourceClassName = if (sourceClass.startsWith(".")) {
             "${extension.packageName}$sourceClass"
@@ -73,9 +70,6 @@ class ExtensionLoader(private val context: Context) {
         }
     }
 
-    fun clearCache() {
-        loaderCache.clear()
-    }
 }
 
 
