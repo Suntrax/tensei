@@ -54,12 +54,12 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -84,6 +84,7 @@ import com.blissless.tensei.data.models.AnimeMedia
 import com.blissless.tensei.ui.components.HomeAnimeCardBounds
 import com.blissless.tensei.ui.components.HomeStatusColors
 import com.blissless.tensei.ui.components.rememberCinematicAnimation
+import kotlinx.coroutines.launch
 import kotlin.math.absoluteValue
 
 enum class SortOption(val label: String, val icon: ImageVector) {
@@ -155,6 +156,12 @@ fun StatusListScreen(
         }
     }
 
+    val gridState = rememberLazyGridState()
+    val scope = rememberCoroutineScope()
+    val scrollToTop = {
+        scope.launch { gridState.animateScrollToItem(0) }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -182,7 +189,10 @@ fun StatusListScreen(
         Column(modifier = Modifier.fillMaxSize()) {
             TopAppBar(
                 title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable { scrollToTop() }
+                    ) {
                         Icon(
                             imageVector = icon,
                             contentDescription = null,
@@ -249,12 +259,6 @@ fun StatusListScreen(
                 shape = RoundedCornerShape(12.dp)
             )
 
-            val gridState = rememberLazyGridState()
-
-            LaunchedEffect(selectedSort) {
-                gridState.animateScrollToItem(0)
-            }
-
             if (animeList.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -314,16 +318,17 @@ fun StatusListScreen(
                         val introAlpha = easedProgress.coerceAtLeast(0f)
                         val introTranslationY = translationYOffset * (1f - easedProgress)
 
-                        val layoutInfo = gridState.layoutInfo
-                        val visibleItems = layoutInfo.visibleItemsInfo
-                        val itemInfo = visibleItems.find { it.index == index }
-
-                        val centerOffset = if (itemInfo != null) {
-                            val itemCenter = itemInfo.offset.y + itemInfo.size.height / 2
-                            val screenCenter = (layoutInfo.viewportSize.height / 2).toFloat()
-                            (itemCenter - screenCenter) / screenCenter
-                        } else {
-                            0f
+                        val centerOffset by remember {
+                            derivedStateOf {
+                                val layoutInfo = gridState.layoutInfo
+                                val visibleItems = layoutInfo.visibleItemsInfo
+                                val itemInfo = visibleItems.find { it.index == index }
+                                if (itemInfo != null) {
+                                    val itemCenter = itemInfo.offset.y + itemInfo.size.height / 2
+                                    val screenCenter = (layoutInfo.viewportSize.height / 2).toFloat()
+                                    (itemCenter - screenCenter) / screenCenter
+                                } else 0f
+                            }
                         }
 
                         val animatedOffset by animateFloatAsState(
@@ -394,7 +399,7 @@ fun StatusListScreen(
                     SortOption.entries.forEach { option ->
                         val isSelected = option == selectedSort
                         Surface(
-                            onClick = { focusManager.clearFocus(); selectedSort = option; showSortSheet = false },
+                            onClick = { focusManager.clearFocus(); selectedSort = option; showSortSheet = false; scrollToTop() },
                             color = if (isSelected) iconTint.copy(alpha = 0.12f) else Color.Transparent,
                             shape = RoundedCornerShape(0.dp),
                             modifier = Modifier.fillMaxWidth()
