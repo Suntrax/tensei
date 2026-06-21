@@ -108,6 +108,10 @@ private val statusColors = mapOf(
     "DROPPED" to Color(0xFFF44336),
     "REPEATING" to Color(0xFF00BCD4)
 )
+@Composable
+@Suppress("RestrictedApi")
+private fun cp(color: Color): ColorProvider = ColorProvider(color)
+
 object AiringScheduleWidget : GlanceAppWidget() {
 
     private val json = Json { ignoreUnknownKeys = true; coerceInputValues = true }
@@ -244,7 +248,7 @@ object AiringScheduleWidget : GlanceAppWidget() {
 
         Column(
             modifier = GlanceModifier.fillMaxSize()
-                .background(ColorProvider(bgColor))
+                .background(cp(bgColor))
                 .padding(start = 14.dp, top = 14.dp, end = 14.dp, bottom = 12.dp)
         ) {
             Row(
@@ -253,14 +257,14 @@ object AiringScheduleWidget : GlanceAppWidget() {
             ) {
                 Column(modifier = GlanceModifier.defaultWeight()) {
                     Text(dayNames[dow], style = TextStyle(
-                        color = ColorProvider(titleColor), fontSize = 16.sp, fontWeight = FontWeight.Bold
+                        color = cp(titleColor), fontSize = 16.sp, fontWeight = FontWeight.Bold
                     ))
                     Text("${items.size} airing today", style = TextStyle(
-                        color = ColorProvider(mutedColor), fontSize = 12.sp
+                        color = cp(mutedColor), fontSize = 12.sp
                     ))
                 }
-                val refreshBg = ColorProvider(if (isDark) Color(0x33FFFFFF) else Color(0x33000000))
-                val refreshIconTint = ColorProvider(if (isDark) Color.White else Color(0xFF616161))
+                val refreshBg = cp(if (isDark) Color(0x33FFFFFF) else Color(0x33000000))
+                val refreshIconTint = cp(if (isDark) Color.White else Color(0xFF616161))
                 CircleIconButton(
                     imageProvider = ImageProvider(R.drawable.ic_refresh),
                     contentDescription = "Refresh",
@@ -281,7 +285,7 @@ object AiringScheduleWidget : GlanceAppWidget() {
                             modifier = GlanceModifier.fillMaxWidth().padding(vertical = 20.dp),
                             contentAlignment = Alignment.Center,
                             content = @Composable { Text("No anime airing today", style = TextStyle(
-                                color = ColorProvider(dimColor), fontSize = 14.sp
+                                color = cp(dimColor), fontSize = 14.sp
                             ))}
                         )
                     }
@@ -291,7 +295,7 @@ object AiringScheduleWidget : GlanceAppWidget() {
                             Box(
                                 modifier = GlanceModifier.fillMaxWidth()
                                     .padding(horizontal = 2.dp)
-                                    .background(ColorProvider(itemBgColor)),
+                                    .background(cp(itemBgColor)),
                                 content = @Composable {
                                     AiringItem(e, coverCache[e.id], nowTs, context, preferEnglish, isDark)
                                 }
@@ -308,11 +312,11 @@ object AiringScheduleWidget : GlanceAppWidget() {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("Updated $ago", style = TextStyle(
-                    color = ColorProvider(dimColor), fontSize = 10.sp
+                    color = cp(dimColor), fontSize = 10.sp
                 ))
                 Spacer(GlanceModifier.defaultWeight())
                 Text("Tensei", style = TextStyle(
-                    color = ColorProvider(faintColor), fontSize = 10.sp, fontWeight = FontWeight.Bold
+                    color = cp(faintColor), fontSize = 10.sp, fontWeight = FontWeight.Bold
                 ))
             }
             Spacer(GlanceModifier.height(4.dp))
@@ -374,14 +378,14 @@ object AiringScheduleWidget : GlanceAppWidget() {
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (statusColor != null) {
-                Box(modifier = GlanceModifier.width(3.dp).height(80.dp).background(ColorProvider(statusColor)), content = {})
+                Box(modifier = GlanceModifier.width(3.dp).height(80.dp).background(cp(statusColor)), content = {})
                 Spacer(GlanceModifier.width(4.dp))
             }
             val coverBg = if (isDark) Color(0xFF242424) else Color(0xFFE0E0E0)
             val coverPlaceholderText = if (isDark) Color(0xFF616161) else Color(0xFF9E9E9E)
             Box(
                 modifier = GlanceModifier.size(56.dp, 80.dp)
-                    .background(ColorProvider(coverBg)),
+                    .background(cp(coverBg)),
                 contentAlignment = Alignment.Center,
                 content = @Composable {
                     if (coverBitmap != null) {
@@ -392,7 +396,7 @@ object AiringScheduleWidget : GlanceAppWidget() {
                         )
                     } else {
                         Text(displayTitle.take(1), style = TextStyle(
-                            color = ColorProvider(coverPlaceholderText), fontSize = 18.sp
+                            color = cp(coverPlaceholderText), fontSize = 18.sp
                         ))
                     }
                 }
@@ -400,29 +404,29 @@ object AiringScheduleWidget : GlanceAppWidget() {
             Spacer(GlanceModifier.width(10.dp))
             Column(modifier = GlanceModifier.defaultWeight()) {
                 Text(displayTitle, style = TextStyle(
-                    color = ColorProvider(titleColor), fontSize = 13.sp,
+                    color = cp(titleColor), fontSize = 13.sp,
                     fontWeight = FontWeight.Medium
                 ))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (statusColor != null) {
                     Text("\u25CF", style = TextStyle(
-                        color = ColorProvider(statusColor), fontSize = 8.sp
+                        color = cp(statusColor), fontSize = 8.sp
                     ))
                     Spacer(GlanceModifier.width(4.dp))
                 }
                 Text("Ep ${e.airingEpisode}", style = TextStyle(
-                    color = ColorProvider(infoColor), fontSize = 11.sp
+                    color = cp(infoColor), fontSize = 11.sp
                 ))
                 if (score.isNotEmpty()) {
                     Text(score, style = TextStyle(
-                        color = ColorProvider(infoColor), fontSize = 11.sp
+                        color = cp(infoColor), fontSize = 11.sp
                     ))
                 }
             }
             }
             Spacer(GlanceModifier.width(6.dp))
             Text(displayTime, style = TextStyle(
-                color = ColorProvider(if (isPast) Color(0xFFF44336) else Color(0xFF4CAF50)),
+                color = cp(if (isPast) Color(0xFFF44336) else Color(0xFF4CAF50)),
                 fontSize = 11.sp, fontWeight = FontWeight.Medium
             ))
             Spacer(GlanceModifier.width(4.dp))
@@ -444,12 +448,12 @@ private fun saveWidgetData(context: Context, data: WidgetScheduleData, isAuthed:
     }
 }
 
-private fun roundCorners(bitmap: Bitmap, radiusPx: Float): Bitmap {
+private fun roundCorners(bitmap: Bitmap): Bitmap {
     val out = createBitmap(bitmap.width, bitmap.height)
     val canvas = android.graphics.Canvas(out)
     canvas.drawColor(0xFF242424.toInt())
     val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-    canvas.drawRoundRect(RectF(0f, 0f, bitmap.width.toFloat(), bitmap.height.toFloat()), radiusPx, radiusPx, paint)
+    canvas.drawRoundRect(RectF(0f, 0f, bitmap.width.toFloat(), bitmap.height.toFloat()), 8f, 8f, paint)
     paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN)
     canvas.drawBitmap(bitmap, 0f, 0f, paint)
     if (bitmap != out) bitmap.recycle()
@@ -489,7 +493,7 @@ private fun cacheCovers(context: Context, entries: List<WidgetAiringEntry>) {
                 val sh = (h * scale).toInt()
                 val scaled = bitmap.scale(sw, sh)
                 if (scaled != bitmap) bitmap.recycle()
-                val rounded = roundCorners(scaled, 8f)
+                val rounded = roundCorners(scaled)
                 FileOutputStream(file).use { rounded.compress(Bitmap.CompressFormat.JPEG, 80, it) }
                 rounded.recycle()
             }
