@@ -67,7 +67,7 @@ class UpdateViewModel(application: Application) : AndroidViewModel(application) 
         } catch (_: Exception) {}
     }
 
-    private fun showDownloadNotification(progress: Int, max: Int) {
+    private fun showDownloadNotification(progress: Int) {
         val ctx = getApplication<Application>()
         if (ActivityCompat.checkSelfPermission(ctx, android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             return
@@ -76,7 +76,7 @@ class UpdateViewModel(application: Application) : AndroidViewModel(application) 
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentTitle("Downloading update")
             .setContentText("$progress%")
-            .setProgress(max, progress, false)
+            .setProgress(100, progress, false)
             .setOngoing(true)
             .setSilent(true)
             .build()
@@ -131,7 +131,7 @@ class UpdateViewModel(application: Application) : AndroidViewModel(application) 
 
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isDownloading = true, downloadProgress = 0f, error = null)
-            showDownloadNotification(0, 100)
+            showDownloadNotification(0)
             try {
                 val file = downloadApk(asset.downloadUrl, "tensei-update")
                 dismissDownloadNotification()
@@ -181,7 +181,7 @@ class UpdateViewModel(application: Application) : AndroidViewModel(application) 
                     if (contentLength > 0) {
                         val progress = (bytesRead.toFloat() / contentLength).coerceIn(0f, 1f)
                         _uiState.value = _uiState.value.copy(downloadProgress = progress)
-                        showDownloadNotification((progress * 100).toInt(), 100)
+                        showDownloadNotification((progress * 100).toInt())
                     }
                 }
             }
