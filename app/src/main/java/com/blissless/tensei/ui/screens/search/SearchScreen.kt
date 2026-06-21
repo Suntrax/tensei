@@ -362,6 +362,7 @@ fun SearchScreen(
             ) {
                 Row(
                     modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
                         .clickable { showFilters = !showFilters }
                         .padding(vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
