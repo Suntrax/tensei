@@ -538,7 +538,7 @@ private fun StatusListAnimeCard(
                         )
                 )
 
-                // Top Row: Episode Counter (left) + Status/Edit Button (right)
+                // Top Row: Episode Counter (left) + Info Button (right)
                 Row(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
@@ -560,9 +560,9 @@ private fun StatusListAnimeCard(
                         )
                     }
 
-                    // Status/Edit Button
+                    // Info Button
                     FilledTonalIconButton(
-                        onClick = onStatusClick,
+                        onClick = { onInfoClick(cardBounds?.let { HomeAnimeCardBounds(anime.id, anime.cover, it) }) },
                         modifier = Modifier.size(32.dp),
                         shape = RoundedCornerShape(10.dp),
                         colors = IconButtonDefaults.filledTonalIconButtonColors(
@@ -571,8 +571,8 @@ private fun StatusListAnimeCard(
                         )
                     ) {
                         Icon(
-                            imageVector = Icons.Outlined.Edit,
-                            contentDescription = "Edit Status",
+                            imageVector = Icons.Outlined.Info,
+                            contentDescription = "Info",
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -589,7 +589,7 @@ private fun StatusListAnimeCard(
                     )
                 }
 
-                // Bottom Row: Info Button (left) + Play Button (right)
+                // Bottom Row: Edit Status Button (left) + Play Button (right)
                 Row(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
@@ -598,7 +598,7 @@ private fun StatusListAnimeCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     FilledTonalIconButton(
-                        onClick = { onInfoClick(cardBounds?.let { HomeAnimeCardBounds(anime.id, anime.cover, it) }) },
+                        onClick = onStatusClick,
                         modifier = Modifier.size(32.dp),
                         shape = RoundedCornerShape(10.dp),
                         colors = IconButtonDefaults.filledTonalIconButtonColors(
@@ -607,8 +607,8 @@ private fun StatusListAnimeCard(
                         )
                     ) {
                         Icon(
-                            imageVector = Icons.Outlined.Info,
-                            contentDescription = "Info",
+                            imageVector = Icons.Outlined.Edit,
+                            contentDescription = "Edit Status",
                             modifier = Modifier.size(18.dp)
                         )
                     }
