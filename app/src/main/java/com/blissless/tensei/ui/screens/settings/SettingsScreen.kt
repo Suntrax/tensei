@@ -1585,7 +1585,7 @@ private fun AboutSettingsPage(
         SectionHeader("APP")
         SettingsCard {
             Row(
-                modifier = Modifier.padding(vertical = 4.dp),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
@@ -1602,7 +1602,7 @@ private fun AboutSettingsPage(
                         modifier = Modifier.size(36.dp).clip(CircleShape)
                     )
                 }
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text("Tensei", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
                     @Suppress("DEPRECATION")
                     Text(
