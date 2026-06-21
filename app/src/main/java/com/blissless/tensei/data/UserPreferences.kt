@@ -253,7 +253,7 @@ class UserPreferences(context: Context) {
         _bufferAheadSeconds.value = sharedPreferences.getInt(KEY_BUFFER_AHEAD_SECONDS, 60)
         _bufferSizeMb.value = sharedPreferences.getInt(KEY_BUFFER_SIZE_MB, 200)
         _showBufferIndicator.value = sharedPreferences.getBoolean(KEY_SHOW_BUFFER_INDICATOR, true)
-        _checkUpdatesOnStart.value = sharedPreferences.getBoolean(KEY_CHECK_UPDATES_ON_START, false)
+        _checkUpdatesOnStart.value = sharedPreferences.getBoolean(KEY_CHECK_UPDATES_ON_START, true)
         _swipeVolume.value = sharedPreferences.getBoolean(KEY_SWIPE_VOLUME, false)
         _swipeBrightness.value = sharedPreferences.getBoolean(KEY_SWIPE_BRIGHTNESS, false)
         _swipeSwap.value = sharedPreferences.getBoolean(KEY_SWIPE_SWAP, false)
@@ -616,7 +616,7 @@ class UserPreferences(context: Context) {
     }
     
     // Check for Updates on Start
-    private val _checkUpdatesOnStart = MutableStateFlow(false)
+    private val _checkUpdatesOnStart = MutableStateFlow(true)
     val checkUpdatesOnStart: StateFlow<Boolean> = _checkUpdatesOnStart.asStateFlow()
 
     // Swipe Gesture Controls
