@@ -1269,21 +1269,63 @@ private fun DownloadsSettingsPage(
             onDismissRequest = { showSubtitleLangPicker = false },
             title = { Text("Preferred Subtitle Language") },
             text = {
-                Column {
-                    TextButton(onClick = { viewModel.setDownloadSubtitleLang("same_as_stream"); showSubtitleLangPicker = false }, modifier = Modifier.fillMaxWidth()) {
-                        Text(
-                            "Same as stream ($streamSubtitleLang)",
-                            color = if (downloadSubtitleLang == "same_as_stream") MaterialTheme.colorScheme.primary else Color.Unspecified,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    val isSameAsStream = downloadSubtitleLang == "same_as_stream"
+                    TextButton(
+                        onClick = { viewModel.setDownloadSubtitleLang("same_as_stream"); showSubtitleLangPicker = false },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            RadioButton(
+                                selected = isSameAsStream,
+                                onClick = null,
+                                colors = RadioButtonDefaults.colors(
+                                    selectedColor = MaterialTheme.colorScheme.primary
+                                )
+                            )
+                            Text(
+                                "Same as stream ($streamSubtitleLang)",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = if (isSameAsStream) FontWeight.SemiBold else FontWeight.Normal,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (isSameAsStream) {
+                                Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                            }
+                        }
                     }
                     subtitleLanguages.forEach { lang ->
-                        TextButton(onClick = { viewModel.setDownloadSubtitleLang(lang); showSubtitleLangPicker = false }, modifier = Modifier.fillMaxWidth()) {
-                            Text(
-                                lang,
-                                color = if (downloadSubtitleLang == lang) MaterialTheme.colorScheme.primary else Color.Unspecified,
-                                modifier = Modifier.fillMaxWidth()
-                            )
+                        val isSelected = lang == downloadSubtitleLang
+                        TextButton(
+                            onClick = { viewModel.setDownloadSubtitleLang(lang); showSubtitleLangPicker = false },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                RadioButton(
+                                    selected = isSelected,
+                                    onClick = null,
+                                    colors = RadioButtonDefaults.colors(
+                                        selectedColor = MaterialTheme.colorScheme.primary
+                                    )
+                                )
+                                Text(
+                                    lang,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                if (isSelected) {
+                                    Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                }
+                            }
                         }
                     }
                 }
