@@ -211,7 +211,7 @@ abstract class AnimeHttpSource : AnimeCatalogueSource {
         request: Request,
         listener: ProgressListener,
     ): Response {
-        return client.newCachelessCallWithProgress(request)
+        return client.newCachelessCallWithProgress(request, listener)
     }
 
     fun SEpisode.setUrlWithoutDomain(url: String) {
