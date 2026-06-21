@@ -196,8 +196,10 @@ fun DetailedAnimeScreen(
     var selectedTagForDescription by remember { mutableStateOf<TagData?>(null) }
     var fullscreenImageUrl by remember { mutableStateOf<String?>(null) }
     var showEpisodeSelection by remember { mutableStateOf(false) }
+    var showNoDefaultExtDialog by remember { mutableStateOf(false) }
     var showStatusDialog by remember { mutableStateOf(false) }
 
+    val defaultExtPkg by viewModel.defaultExtensionPackage.collectAsState()
     val localFavorites by viewModel.localFavorites.collectAsState()
     val aniListFavorites by viewModel.aniListFavorites.collectAsState()
     val localAnimeStatus by viewModel.localAnimeStatus.collectAsState()
@@ -425,7 +427,7 @@ fun DetailedAnimeScreen(
             titleEnglish = anime.titleEnglish,
             cover = anime.cover,
             banner = anime.banner,
-            progress = 0,
+            progress = displayProgress,
             totalEpisodes = anime.episodes,
             latestEpisode = anime.latestEpisode,
             status = anime.status ?: "",
@@ -479,6 +481,27 @@ fun DetailedAnimeScreen(
                     onNavigateToSettings = onNavigateToSettings
                 )
             }
+        }
+
+        if (showNoDefaultExtDialog) {
+            AlertDialog(
+                onDismissRequest = { showNoDefaultExtDialog = false },
+                title = { Text("No Default Extension") },
+                text = { Text("Set a default extension in Settings to enable streaming.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showNoDefaultExtDialog = false
+                        onNoExtension()
+                    }) {
+                        Text("Go to Settings")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showNoDefaultExtDialog = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
         }
 
         Box(
@@ -779,8 +802,8 @@ fun DetailedAnimeScreen(
 
                             Button(
                                 onClick = {
-                                    if (viewModel.defaultExtensionPackage.value.isEmpty()) {
-                                        onNoExtension()
+                                    if (defaultExtPkg.isEmpty()) {
+                                        showNoDefaultExtDialog = true
                                     } else {
                                         showEpisodeSelection = true
                                     }
@@ -813,54 +836,53 @@ fun DetailedAnimeScreen(
                         ),
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Surface(
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                                    modifier = Modifier.size(36.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                                        Icon(
-                                            Icons.AutoMirrored.Filled.PlaylistAdd,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(20.dp)
+                            val totalEps = anime.episodes.takeIf { it > 0 } ?: anime.episodes
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                                            Icon(
+                                                Icons.AutoMirrored.Filled.PlaylistAdd,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Text(
+                                        if (isLoggedIn) "Add to List" else "Local List",
+                                        style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    if (!isLoggedIn) {
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            "(Offline)",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
                                         )
                                     }
                                 }
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Text(
-                                    if (isLoggedIn) "Add to List" else "Local List",
-                                    style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                if (!isLoggedIn) {
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        "(Offline)",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(16.dp))
-                            val totalEps = anime.episodes.takeIf { it > 0 } ?: anime.episodes
-
-                            if (statusToCheck != null) {
-                                val statusColor = when (statusToCheck) {
-                                    "CURRENT" -> Color(0xFF2196F3)
-                                    "PLANNING" -> Color(0xFF9C27B0)
-                                    "COMPLETED" -> Color(0xFF4CAF50)
-                                    "PAUSED" -> Color(0xFFFFC107)
-                                    "DROPPED" -> Color(0xFFF44336)
-                                    else -> MaterialTheme.colorScheme.primary
-                                }
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
+                                if (statusToCheck != null) {
+                                    val statusColor = when (statusToCheck) {
+                                        "CURRENT" -> Color(0xFF2196F3)
+                                        "PLANNING" -> Color(0xFF9C27B0)
+                                        "COMPLETED" -> Color(0xFF4CAF50)
+                                        "PAUSED" -> Color(0xFFFFC107)
+                                        "DROPPED" -> Color(0xFFF44336)
+                                        else -> MaterialTheme.colorScheme.primary
+                                    }
+                                    Column(horizontalAlignment = Alignment.End) {
                                         Surface(
                                             shape = RoundedCornerShape(6.dp),
                                             color = statusColor.copy(alpha = 0.2f)
@@ -881,27 +903,31 @@ fun DetailedAnimeScreen(
                                             )
                                         }
                                         if (totalEps > 0) {
-                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Spacer(modifier = Modifier.height(4.dp))
                                             Row(verticalAlignment = Alignment.CenterVertically) {
                                                 Text(
                                                     text = "$statusProgress",
-                                                    style = MaterialTheme.typography.titleLarge,
+                                                    style = MaterialTheme.typography.titleMedium,
                                                     fontWeight = FontWeight.Bold,
                                                     color = MaterialTheme.colorScheme.onSurface
                                                 )
                                                 Text(
                                                     text = " / $totalEps",
-                                                    style = MaterialTheme.typography.titleLarge,
+                                                    style = MaterialTheme.typography.titleMedium,
                                                     fontWeight = FontWeight.Light,
                                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                                                 )
                                             }
                                         }
                                     }
-                                    Spacer(modifier = Modifier.width(12.dp))
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(16.dp))
+                            if (statusToCheck != null) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
                                     Button(
                                         onClick = { showStatusDialog = true },
-                                        modifier = Modifier.height(44.dp),
+                                        modifier = Modifier.weight(1f).height(44.dp),
                                         shape = RoundedCornerShape(12.dp),
                                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                                     ) {
@@ -936,7 +962,7 @@ fun DetailedAnimeScreen(
                                                 )
                                             }
                                         },
-                                        modifier = Modifier.height(40.dp),
+                                        modifier = Modifier.height(44.dp),
                                         shape = RoundedCornerShape(10.dp),
                                         colors = ButtonDefaults.outlinedButtonColors(
                                             containerColor = if (effectiveIsFavorite) Color(0xFFFF1744).copy(alpha = 0.15f) else Color.Transparent,
@@ -994,7 +1020,7 @@ fun DetailedAnimeScreen(
                                                 )
                                             }
                                         },
-                                        modifier = Modifier.height(40.dp),
+                                        modifier = Modifier.height(44.dp),
                                         shape = RoundedCornerShape(10.dp),
                                         colors = ButtonDefaults.outlinedButtonColors(
                                             containerColor = if (effectiveIsFavorite) Color(0xFFFF1744).copy(alpha = 0.15f) else Color.Transparent,

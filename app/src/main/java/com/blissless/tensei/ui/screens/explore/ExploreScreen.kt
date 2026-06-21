@@ -85,7 +85,8 @@ fun ExploreScreen(
     onViewAllCast: (Int, String) -> Unit = { _, _ -> },
     onViewAllStaff: (Int, String) -> Unit = { _, _ -> },
     onViewAllRelations: (Int, String) -> Unit = { _, _ -> },
-    onSearchClick: () -> Unit = {}
+    onSearchClick: () -> Unit = {},
+    onNoExtension: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val featuredAnime by viewModel.featuredAnime.collectAsState()
@@ -274,6 +275,10 @@ fun ExploreScreen(
             onViewAllStaff = { onViewAllStaff(selectedAnime!!.id, selectedAnime!!.title) },
             onViewAllRelations = { animeId, title ->
                 onViewAllRelations(animeId, title)
+            },
+            onNoExtension = {
+                showDialog = false
+                onNoExtension()
             }
         )
     }

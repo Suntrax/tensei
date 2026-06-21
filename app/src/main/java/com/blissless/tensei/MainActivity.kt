@@ -1137,7 +1137,11 @@ fun MainScreen(
                 showSettings = true
                 pendingSettingsGroup = if (extUiState.extensions.isEmpty()) "extensions" else "stream"
             },
-            onNoExtension = { showNoExtDialog = true },
+            onNoExtension = {
+                overlayState = OverlayState.None
+                showSettings = true
+                pendingSettingsGroup = if (extUiState.extensions.isEmpty()) "extensions" else "stream"
+            },
             onRelationClick = { relation ->
                 try {
                     scope.launch {
@@ -1334,7 +1338,11 @@ fun MainScreen(
                 showSettings = true
                 pendingSettingsGroup = if (extUiState.extensions.isEmpty()) "extensions" else "stream"
             },
-            onNoExtension = { showNoExtDialog = true }
+            onNoExtension = {
+                overlayState = OverlayState.None
+                showSettings = true
+                pendingSettingsGroup = if (extUiState.extensions.isEmpty()) "extensions" else "stream"
+            }
         )
     }
 
@@ -1731,6 +1739,10 @@ fun MainScreen(
                             onViewAllRelations = { animeId, animeTitle ->
                                 overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = animeTitle)
                             },
+                            onNoExtension = {
+                                showSettings = true
+                                pendingSettingsGroup = if (extUiState.extensions.isEmpty()) "extensions" else "stream"
+                            }
                         )
                         1 -> ExploreScreen(
                             viewModel = viewModel,
@@ -1764,7 +1776,11 @@ fun MainScreen(
                             onViewAllRelations = { animeId, animeTitle ->
                                 overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = animeTitle)
                             },
-                            onSearchClick = { showSearchScreen = true }
+                            onSearchClick = { showSearchScreen = true },
+                            onNoExtension = {
+                                showSettings = true
+                                pendingSettingsGroup = if (extUiState.extensions.isEmpty()) "extensions" else "stream"
+                            }
                         )
                         2 -> HomeScreen(
                             viewModel = viewModel,
@@ -1776,9 +1792,11 @@ fun MainScreen(
                             onOverlayOpenChange = { overlayOpen = it },
                             onNavigateToSettings = {
                                 showSettings = true
+                            },
+                            onNoExtension = {
+                                showSettings = true
                                 pendingSettingsGroup = if (extUiState.extensions.isEmpty()) "extensions" else "stream"
                             },
-                            onNoExtension = { showNoExtDialog = true },
                             favoriteIds = if (viewModel.loginProvider.collectAsState().value == LoginProvider.MAL) malFavorites.map { it.id }.toSet() else aniListFavoriteIds,
                             onPlayEpisode = onPlayEpisode,
                             onLoginClick = { viewModel.loginWithAniList() },
@@ -1869,6 +1887,10 @@ fun MainScreen(
                             },
                             onViewAllRelations = { animeId, animeTitle ->
                                 overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = animeTitle)
+                            },
+                            onNoExtension = {
+                                showSettings = true
+                                pendingSettingsGroup = if (extUiState.extensions.isEmpty()) "extensions" else "stream"
                             }
                         )
                     }

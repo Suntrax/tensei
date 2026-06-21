@@ -2,6 +2,7 @@ package com.blissless.tensei.ui.screens.search
 
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -86,6 +87,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.media3.common.util.UnstableApi
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.blissless.tensei.MainViewModel
@@ -133,6 +135,7 @@ data class SearchFilters(
     val sort: String = "POPULARITY_DESC"
 )
 
+@OptIn(UnstableApi::class)
 @Composable
 fun SearchScreen(
     viewModel: MainViewModel,
@@ -153,7 +156,8 @@ fun SearchScreen(
     onStaffClick: (Int) -> Unit = {},
     onViewAllCast: (Int, String) -> Unit = { _, _ -> },
     onViewAllStaff: (Int, String) -> Unit = { _, _ -> },
-    onViewAllRelations: (Int, String) -> Unit = { _, _ -> }
+    onViewAllRelations: (Int, String) -> Unit = { _, _ -> },
+    onNoExtension: () -> Unit = {}
 ) {
     var filters by remember { mutableStateOf(SearchFilters()) }
     var results by remember { mutableStateOf<List<ExploreAnime>>(emptyList()) }
@@ -306,7 +310,7 @@ fun SearchScreen(
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 16.dp, top = 36.dp),
+                modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 16.dp, top = 32.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = { keyboardController?.hide(); onClose() }) {
@@ -316,12 +320,12 @@ fun SearchScreen(
             }
 
             Card(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
                 shape = RoundedCornerShape(14.dp),
                 colors = CardDefaults.cardColors(containerColor = if (isOled) Color(0xFF1A1A1A) else Color(0xFF2A2A2A))
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(Icons.Default.Search, contentDescription = null, tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(22.dp))
@@ -352,7 +356,7 @@ fun SearchScreen(
             }
 
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -467,12 +471,12 @@ fun SearchScreen(
             }
 
             if (isSearching) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Box(modifier = Modifier.fillMaxSize().padding(top = 128.dp), contentAlignment = Alignment.TopCenter) {
                     CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 }
             } else if (hasSearched && filteredResults.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(top = 128.dp)) {
                         Icon(Icons.Default.Search, contentDescription = null, tint = Color.White.copy(alpha = 0.2f), modifier = Modifier.size(48.dp))
                         Spacer(modifier = Modifier.height(12.dp))
                         Text("No results found", color = Color.White.copy(alpha = 0.4f), style = MaterialTheme.typography.titleMedium)
@@ -480,12 +484,12 @@ fun SearchScreen(
                     }
                 }
             } else if (!hasSearched) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.Search, contentDescription = null, tint = Color.White.copy(alpha = 0.15f), modifier = Modifier.size(64.dp))
-                        Spacer(modifier = Modifier.height(16.dp))
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(top = 128.dp)) {
+                        Icon(Icons.Default.Search, contentDescription = null, tint = Color.White.copy(alpha = 0.15f), modifier = Modifier.size(48.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
                         Text("Discover Anime", color = Color.White.copy(alpha = 0.35f), style = MaterialTheme.typography.titleLarge)
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(2.dp))
                         Text("Search by name or use filters above", color = Color.White.copy(alpha = 0.25f), style = MaterialTheme.typography.bodySmall)
                     }
                 }
@@ -576,7 +580,11 @@ fun SearchScreen(
             onCharacterClick = onCharacterClick, onStaffClick = onStaffClick,
             onViewAllCast = { onViewAllCast(selectedAnime!!.id, selectedAnime!!.title) },
             onViewAllStaff = { onViewAllStaff(selectedAnime!!.id, selectedAnime!!.title) },
-            onViewAllRelations = { animeId, title -> onViewAllRelations(animeId, title) }
+            onViewAllRelations = { animeId, title -> onViewAllRelations(animeId, title) },
+            onNoExtension = {
+                showDetailDialog = false
+                onNoExtension()
+            }
         )
     }
 

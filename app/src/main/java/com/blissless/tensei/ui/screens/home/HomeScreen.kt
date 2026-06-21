@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SignalWifiOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -156,6 +157,7 @@ fun HomeScreen(
     var showUserProfileDialog by remember { mutableStateOf(false) }
     var showProfileSheet by remember { mutableStateOf(false) }
     var showDetailedAnimeScreen by remember { mutableStateOf(false) }
+    var showNoExtensionDialog by remember { mutableStateOf(false) }
     val defaultPkg by viewModel.defaultExtensionPackage.collectAsState()
 
     // Status list screen state
@@ -740,9 +742,31 @@ fun HomeScreen(
     }
 
     LaunchedEffect(showEpisodeSheet, selectedAnime) {
-        if (showEpisodeSheet && selectedAnime != null && !simplifyEpisodeMenu && defaultPkg.isEmpty()) {
-            onNoExtension()
+        if (showEpisodeSheet && selectedAnime != null && defaultPkg.isEmpty()) {
+            showEpisodeSheet = false
+            showNoExtensionDialog = true
         }
+    }
+
+    if (showNoExtensionDialog) {
+        AlertDialog(
+            onDismissRequest = { showNoExtensionDialog = false },
+            title = { Text("No Default Extension") },
+            text = { Text("Set a default extension in Settings to enable streaming.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showNoExtensionDialog = false
+                    onNoExtension()
+                }) {
+                    Text("Go to Settings")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNoExtensionDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     if (showDownloadDialog && selectedAnime != null) {
@@ -882,6 +906,10 @@ fun HomeScreen(
                         Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
                     }
                 }
+            },
+            onNoExtension = {
+                showDetailedAnimeScreen = false
+                onNoExtension()
             },
             onCharacterClick = onCharacterClick,
             onStaffClick = onStaffClick,

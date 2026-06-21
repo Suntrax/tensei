@@ -124,7 +124,8 @@ fun ScheduleScreen(
     onStaffClick: (Int) -> Unit = {},
     onViewAllCast: (Int, String) -> Unit = { _, _ -> },
     onViewAllStaff: (Int, String) -> Unit = { _, _ -> },
-    onViewAllRelations: (Int, String) -> Unit = { _, _ -> }
+    onViewAllRelations: (Int, String) -> Unit = { _, _ -> },
+    onNoExtension: () -> Unit = {}
 ) {
     val airingList by viewModel.airingAnimeList.collectAsState()
     val scheduleByDay by viewModel.airingSchedule.collectAsState()
@@ -482,7 +483,11 @@ fun ScheduleScreen(
             onCharacterClick = onCharacterClick, onStaffClick = onStaffClick,
             onViewAllCast = { onViewAllCast(selectedAnime!!.id, selectedAnime!!.title) },
             onViewAllStaff = { onViewAllStaff(selectedAnime!!.id, selectedAnime!!.title) },
-            onViewAllRelations = { id, title -> onViewAllRelations(id, title) }
+            onViewAllRelations = { id, title -> onViewAllRelations(id, title) },
+            onNoExtension = {
+                showAnimeDialog = false
+                onNoExtension()
+            }
         )
     }
 }
