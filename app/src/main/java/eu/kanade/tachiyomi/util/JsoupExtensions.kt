@@ -5,6 +5,6 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 
 fun Response.asJsoup(baseUrl: String? = null): Document {
-    val html = body.string()
+    val html = body.string() ?: ""
     return Jsoup.parse(html, baseUrl ?: request.url.toString())
 }

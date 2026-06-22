@@ -6,6 +6,7 @@ import android.content.pm.ActivityInfo
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
+import android.util.Log
 import android.util.TypedValue
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -387,13 +388,16 @@ fun PlayerScreen(
         val cacheDataSourceFactory = onGetCacheDataSourceFactory(referer)
         
         val upstreamFactory = if (extensionOkHttpClient != null && extensionVideoHeaders.isNotEmpty()) {
+            Log.d("PlayerScreen", "Using extension OkHttpClient with headers: $extensionVideoHeaders")
             val okHttpFactory = androidx.media3.datasource.okhttp.OkHttpDataSource.Factory(extensionOkHttpClient)
             okHttpFactory.setDefaultRequestProperties(extensionVideoHeaders)
             okHttpFactory
         } else if (extensionOkHttpClient != null) {
+            Log.d("PlayerScreen", "Using extension OkHttpClient with Referer: $referer")
             androidx.media3.datasource.okhttp.OkHttpDataSource.Factory(extensionOkHttpClient)
                 .setDefaultRequestProperties(mapOf("Referer" to referer))
         } else {
+            Log.d("PlayerScreen", "Using default DataSource with Referer: $referer")
             DefaultHttpDataSource.Factory()
                 .setConnectTimeoutMs(20000)
                 .setReadTimeoutMs(20000)
@@ -435,6 +439,14 @@ fun PlayerScreen(
                             hasError = true
                             playbackError = "${error.errorCode}: ${error.message ?: "Unknown"}"
                             showControls = true
+                            Log.e("PlayerScreen", "Playback error: code=${error.errorCode} msg=${error.message} videoUrl=${videoUrl.take(120)}")
+                            Log.e("PlayerScreen", "  cause=${error.cause?.message}")
+                            error.cause?.let { cause ->
+                                Log.e("PlayerScreen", "  cause type=${cause::class.simpleName}")
+                                cause.stackTrace?.take(5)?.forEach { frame ->
+                                    Log.e("PlayerScreen", "    at $frame")
+                                }
+                            }
                         }
                     }
 
@@ -505,10 +517,14 @@ fun PlayerScreen(
             emptyList()
         }
         
+        Log.d("PlayerScreen", "Preparing playback: videoUrl=${videoUrl.take(120)} referer=$referer subtitleUrl=${subtitleUrl?.take(80)} extensionOkHttpClient=${extensionOkHttpClient != null} videoHeaders=$extensionVideoHeaders")
         val mimeType = if (videoUrl.contains(".m3u8")) MimeTypes.APPLICATION_M3U8
             else if (videoUrl.contains(".mp4")) MimeTypes.VIDEO_MP4
             else if (videoUrl.contains(".webm")) MimeTypes.VIDEO_WEBM
-            else MimeTypes.APPLICATION_M3U8
+            else {
+                Log.d("PlayerScreen", "Unknown mime type for URL: ${videoUrl.take(100)}, defaulting to MP4")
+                MimeTypes.VIDEO_MP4
+            }
         
         val mediaItem = MediaItem.Builder()
             .setUri(videoUrl)

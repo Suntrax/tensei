@@ -87,15 +87,24 @@ class SourceManager(context: Context) {
 
     suspend fun getHosters(source: AnimeCatalogueSource, episode: SEpisode, anime: SAnime? = null): List<Hoster>? {
         return withContext(Dispatchers.IO) {
+            Log.d("SourceManager", "getHosters: source=${source.name} ep=${episode.url.take(80)}")
             if (anime != null && source is AnimeHttpSource) {
+                Log.d("SourceManager", "  calling prepareNewEpisode")
                 source.prepareNewEpisode(episode, anime)
             }
             try {
-                source.getHosterList(episode)
-            } catch (_: Throwable) {
+                val hosters = source.getHosterList(episode)
+                Log.d("SourceManager", "  got ${hosters.size} hosters: ${hosters.map { "${it.hosterName}: ${it.hosterUrl.take(80)} (lazy=${it.lazy})" }}")
+                hosters
+            } catch (e: Throwable) {
+                Log.d("SourceManager", "  getHosterList failed: ${e.message}", e)
                 try {
                     val videos = source.getVideoList(episode)
+                    Log.d("SourceManager", "  got ${videos.size} videos from fallback getVideoList")
                     if (videos.isNotEmpty()) {
+                        videos.forEach { v ->
+                            Log.d("SourceManager", "    video: \"${v.videoTitle}\" res=${v.resolution}p url=${v.videoUrl.take(100)} headers=${v.headers?.let { h -> (0 until h.size).associate { h.name(it) to h.value(it) } }}")
+                        }
                         val derivedHosters = videos.map { video ->
                             Hoster(
                                 hosterUrl = video.videoUrl,
@@ -106,7 +115,9 @@ class SourceManager(context: Context) {
                         }
                         return@withContext derivedHosters.distinctBy { it.hosterName }
                     }
-                } catch (_: Throwable) {}
+                } catch (e2: Throwable) {
+                    Log.d("SourceManager", "  fallback getVideoList also failed: ${e2.message}")
+                }
                 null
             }
         }
@@ -114,22 +125,36 @@ class SourceManager(context: Context) {
 
     suspend fun getVideosFromHoster(source: AnimeCatalogueSource, hoster: Hoster): List<Video> {
         return withContext(Dispatchers.IO) {
-            if (hoster.lazy) {
+            Log.d("SourceManager", "getVideosFromHoster: source=${source.name} hoster=${hoster.hosterName} url=${hoster.hosterUrl.take(80)} lazy=${hoster.lazy}")
+            val videos = if (hoster.lazy) {
                 source.getVideoList(hoster)
             } else {
                 hoster.videoList ?: source.getVideoList(hoster)
             }
+            Log.d("SourceManager", "  returned ${videos.size} videos")
+            videos.forEach { v ->
+                Log.d("SourceManager", "    video: \"${v.videoTitle}\" res=${v.resolution}p url=${v.videoUrl.take(100)}")
+            }
+            videos
         }
     }
 
     suspend fun getVideosDirect(source: AnimeCatalogueSource, episode: SEpisode, anime: SAnime? = null): List<Video> {
         return withContext(Dispatchers.IO) {
+            Log.d("SourceManager", "getVideosDirect: source=${source.name} ep=${episode.url.take(80)}")
             if (anime != null && source is AnimeHttpSource) {
+                Log.d("SourceManager", "  calling prepareNewEpisode")
                 source.prepareNewEpisode(episode, anime)
             }
             try {
-                source.getVideoList(episode)
-            } catch (_: Throwable) {
+                val videos = source.getVideoList(episode)
+                Log.d("SourceManager", "  got ${videos.size} videos")
+                videos.forEach { v ->
+                    Log.d("SourceManager", "    video: \"${v.videoTitle}\" res=${v.resolution}p url=${v.videoUrl.take(100)} headers=${v.headers?.let { h -> (0 until h.size).associate { h.name(it) to h.value(it) } }}")
+                }
+                videos
+            } catch (e: Throwable) {
+                Log.d("SourceManager", "  getVideoList failed: ${e.message}", e)
                 emptyList()
             }
         }

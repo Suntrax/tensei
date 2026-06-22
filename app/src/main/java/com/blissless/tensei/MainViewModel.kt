@@ -2072,6 +2072,7 @@ class MainViewModel : ViewModel() {
                 Log.i(epTag, "playEpisodeWithExtension: using source ${sw.source.name} for ep $episodeNumber")
 
                 val extensionClient = (source as? eu.kanade.tachiyomi.animesource.online.AnimeHttpSource)?.client
+                Log.d(epTag, "  extensionClient=${extensionClient != null} (source is AnimeHttpSource=${source is eu.kanade.tachiyomi.animesource.online.AnimeHttpSource})")
 
                 var matchedSAnime: SAnime? = null
                 var sEpisodes: List<SEpisode> = emptyList()
@@ -2243,6 +2244,8 @@ class MainViewModel : ViewModel() {
                 val videoHeaders = bestVideo.headers?.let { h ->
                     (0 until h.size).associate { h.name(it) to h.value(it) }
                 } ?: emptyMap()
+                Log.d(epTag, "  referer=${referer.take(60)} videoHeaders=${videoHeaders}")
+                Log.d(epTag, "  subtitle tracks: ${bestVideo.subtitleTracks.size}, audio tracks: ${bestVideo.audioTracks.size}")
 
                 val bestVideoHost = allVideos.find { it.video.videoUrl == bestVideo.videoUrl }
                 val derivedHosters = if (resolvedHosters != null) {

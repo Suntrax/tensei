@@ -1,3 +1,6 @@
 package eu.kanade.tachiyomi
 
-object AppInfo
+object AppInfo {
+    fun getVersionCode(): Int = 0
+    fun getVersionName(): String = ""
+}

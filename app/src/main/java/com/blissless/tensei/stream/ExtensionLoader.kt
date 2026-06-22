@@ -47,16 +47,23 @@ class ExtensionLoader(private val context: Context) {
         return try {
             val loader = loaderCache.getOrPut(apkPath) {
                 val dexOutput = context.codeCacheDir
+                Log.d("ExtensionLoader", "Creating class loader for $apkPath")
                 ParentFirstClassLoader(apkPath, dexOutput.absolutePath, context.classLoader)
             }
             val clazz = loader.loadClass(sourceClassName)
-            when {
+            Log.d("ExtensionLoader", "Loaded class $sourceClassName from ${extension.packageName} (pkg=${extension.packageName}, name=${extension.name})")
+            val sources = when {
                 AnimeSourceFactory::class.java.isAssignableFrom(clazz) -> {
+                    Log.d("ExtensionLoader", "$sourceClassName is an AnimeSourceFactory")
                     val factory = clazz.getDeclaredConstructor().newInstance() as AnimeSourceFactory
-                    factory.createSources().filterIsInstance<AnimeCatalogueSource>()
+                    val created = factory.createSources()
+                    Log.d("ExtensionLoader", "Factory created ${created.size} sources: ${created.map { it.name }}")
+                    created.filterIsInstance<AnimeCatalogueSource>()
                 }
                 AnimeCatalogueSource::class.java.isAssignableFrom(clazz) -> {
+                    Log.d("ExtensionLoader", "$sourceClassName is an AnimeCatalogueSource")
                     val source = clazz.getDeclaredConstructor().newInstance() as AnimeCatalogueSource
+                    Log.d("ExtensionLoader", "Source: id=${source.id}, name=${source.name}, lang=${source.lang}")
                     listOf(source)
                 }
                 else -> {
@@ -64,8 +71,12 @@ class ExtensionLoader(private val context: Context) {
                     emptyList()
                 }
             }
+            if (sources.isNotEmpty()) {
+                Log.i("ExtensionLoader", "Successfully loaded ${sources.size} source(s) from ${extension.name}: ${sources.joinToString { "${it.name} (${it.lang})" }}")
+            }
+            sources
         } catch (e: Exception) {
-            Log.e("ExtensionLoader", "Failed to load source class $sourceClassName from ${extension.packageName}", e)
+            Log.e("ExtensionLoader", "Failed to load source class $sourceClassName from ${extension.packageName} (${extension.name})", e)
             emptyList()
         }
     }

@@ -6,7 +6,7 @@ import okhttp3.Headers
 data class Track(val url: String, val lang: String)
 
 enum class ChapterType {
-    Other,
+    Opening, Ending, Recap, MixedOp, Other,
 }
 
 data class TimeStamp(
