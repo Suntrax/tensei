@@ -725,11 +725,9 @@ fun MainScreen(
             ?: return
         streamError = null
         currentEpisodeTitle = sanitizeEpisodeTitle(result.episode?.name) ?: "Episode $currentEpisode"
-        currentVideoUrl = video.videoUrl
-        currentReferer = video.headers?.let { h ->
-            (0 until h.size).firstOrNull { h.name(it).equals("Referer", ignoreCase = true) }
-                ?.let { h.value(it) }
-        } ?: ""
+        // Use result.url (which may have been resolved from proxy to real URL), fallback to video.videoUrl
+        currentVideoUrl = result.url.ifEmpty { video.videoUrl }
+        currentReferer = result.referer
         val preferredLang = viewModel.defaultSubtitleLang.value
         val sortedTracks = video.subtitleTracks.sortedByDescending { t ->
             when {
@@ -1635,7 +1633,7 @@ fun MainScreen(
                 disableMaterialColors = disableMaterialColors,
                 showBufferIndicator = showBufferIndicator,
                 bufferAheadSeconds = bufferAheadSeconds,
-                onGetCacheDataSourceFactory = { referer -> viewModel.getCacheDataSourceFactory(referer) },
+                onGetCacheDataSourceFactory = { referer -> viewModel.getCacheDataSourceFactory(referer, extensionOkHttpClient, extensionVideoHeaders) },
                 onBackClick = { 
                     showPlayer = false
                     currentVideoUrl = null

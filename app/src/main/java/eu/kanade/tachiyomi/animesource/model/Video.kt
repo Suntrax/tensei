@@ -17,7 +17,7 @@ data class TimeStamp(
 )
 
 data class Video(
-    val videoUrl: String = "",
+    var videoUrl: String = "",
     val videoTitle: String = "",
     val resolution: Int? = null,
     val bitrate: Int? = null,
@@ -32,6 +32,15 @@ data class Video(
     val internalData: String = "",
     val initialized: Boolean = false,
 ) {
+    @Deprecated("Use videoTitle instead", ReplaceWith("videoTitle"))
+    val quality: String
+        get() = videoTitle
+
+    val url: String
+        get() = videoPageUrl
+
+    private var videoPageUrl: String = ""
+
     @Deprecated("Use new Video constructor", level = DeprecationLevel.ERROR)
     constructor(
         url: String,
@@ -46,7 +55,9 @@ data class Video(
         headers = headers,
         subtitleTracks = subtitleTracks,
         audioTracks = audioTracks,
-    )
+    ) {
+        this.videoPageUrl = url
+    }
 
     @Deprecated("Use new Video constructor", level = DeprecationLevel.ERROR)
     constructor(

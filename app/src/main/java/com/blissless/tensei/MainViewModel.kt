@@ -65,6 +65,9 @@ import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Hoster
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.model.Track
+import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
+import eu.kanade.tachiyomi.network.NetworkHelper
+import com.blissless.tensei.stream.LocalProxyServer
 import okhttp3.Headers
 import okhttp3.OkHttpClient
 import kotlin.time.Duration.Companion.milliseconds
@@ -106,12 +109,16 @@ class MainViewModel : ViewModel() {
     fun loadAvailableExtensions() {
         viewModelScope.launch(Dispatchers.IO) {
             val sm = sourceManager ?: return@launch
-            if (sm.getSources().isEmpty()) {
-                sm.loadSources()
-            }
+            sm.loadSources()
             _availableExtensions.value = sm.getSources().map {
                 it.extension.name.removePrefix("Aniyomi: ") to it.extension.packageName
             }.distinctBy { it.second }
+        }
+    }
+
+    private fun preLoadExtensionSources() {
+        viewModelScope.launch(Dispatchers.IO) {
+            sourceManager?.loadSources()
         }
     }
 
@@ -132,11 +139,9 @@ class MainViewModel : ViewModel() {
                 return@launch
             }
 
-            if (sm.getSources().isEmpty()) {
-                try { sm.loadSources() } catch (_: Exception) {
-                    _preFetchedEpisodeNumbers.value += (anime.id to emptySet())
-                    return@launch
-                }
+            try { sm.loadSources() } catch (_: Exception) {
+                _preFetchedEpisodeNumbers.value += (anime.id to emptySet())
+                return@launch
             }
             val allSources = sm.getSources()
             val sw = allSources.find { it.extension.packageName == pkg }
@@ -639,7 +644,8 @@ class MainViewModel : ViewModel() {
     val playbackPositions: StateFlow<Map<String, Long>> get() = cacheManager.playbackPositions
 
     // Get cache data source factory for disk caching
-    fun getCacheDataSourceFactory(referer: String) = cacheManager.getCacheDataSourceFactory(referer)
+    fun getCacheDataSourceFactory(referer: String, extensionClient: OkHttpClient? = null, extensionHeaders: Map<String, String> = emptyMap()) =
+        cacheManager.getCacheDataSourceFactory(referer, extensionClient, extensionHeaders)
 
     // Download cache management
     fun getDownloadCacheSize(): Long = episodeDownloadManager.getDownloadCacheSize()
@@ -746,6 +752,8 @@ class MainViewModel : ViewModel() {
         }
 
         viewModelScope.launch {
+            // Pre-load extension sources so they're available when episode screen opens
+            preLoadExtensionSources()
             // Run home data, explore data, and airing schedule in PARALLEL for faster startup
             val homeDeferred = async {
                 if (hasToken || _loginProvider.value != LoginProvider.NONE) {
@@ -2010,11 +2018,52 @@ class MainViewModel : ViewModel() {
         val epTag = "AnimeDownload"
         val cached = getCachedExtensionStream(anime.id, episodeNumber)
         if (cached != null) {
-            Log.i(epTag, "playEpisodeWithExtension: cache hit for ep $episodeNumber")
+            Log.i(epTag, "playEpisodeWithExtension: cache hit for ep $episodeNumber url=${cached.url.take(100)}")
+            val cachedIsOurProxy = cached.url.contains("127.0.0.1:${LocalProxyServer.PROXY_PORT}") || cached.url.contains("localhost:${LocalProxyServer.PROXY_PORT}")
+            val cacheSource = withContext(Dispatchers.IO) {
+                val smForCache = sourceManager
+                if (smForCache != null) {
+                    if (smForCache.getSources().isEmpty()) { smForCache.loadSources() }
+                    smForCache.getSources().find { it.extension.packageName == defaultPackage }?.source
+                } else null
+            }
+            val cacheSourceHttp = cacheSource as? AnimeHttpSource
+            val cacheClient = (cacheSourceHttp?.client) ?: try { NetworkHelper.getInstance().client } catch (_: Exception) { null }
+            if (cachedIsOurProxy) {
+                LocalProxyServer.start(cacheClient, cacheSource)
+                cached.videos.forEach { cv ->
+                    val headers = cv.headers?.let { map ->
+                        Headers.Builder().apply { map.forEach { (k, v) -> add(k, v) } }.build()
+                    }
+                    LocalProxyServer.registerVideo(
+                        Video(
+                            videoUrl = cv.videoUrl,
+                            videoTitle = cv.videoTitle,
+                            resolution = cv.resolution,
+                            headers = headers,
+                            subtitleTracks = cv.subtitleTracks.map { Track(it.url, it.lang) },
+                            audioTracks = cv.audioTracks.map { Track(it.url, it.lang) },
+                        )
+                    )
+                    Log.d(epTag, "  cache registered video: ${cv.videoUrl.take(80)}")
+                }
+            }
+            val cacheHeaders = if (cached.videoHeaders.isEmpty() && cachedIsOurProxy && cacheSourceHttp != null) {
+                cacheSourceHttp.headers?.let { h ->
+                    (0 until h.size).associate { h.name(it) to h.value(it) }
+                } ?: cached.videoHeaders
+            } else {
+                cached.videoHeaders
+            }
+            val fixedUrl = if (cachedIsOurProxy) {
+                cached.url.replace(Regex("127\\.0\\.0\\.1:\\d+"), "127.0.0.1:${LocalProxyServer.PROXY_PORT}")
+            } else cached.url
             return ExtensionStreamResult(
-                url = cached.url,
-                referer = cached.referer,
-                subtitleUrl = cached.subtitleUrl,
+                url = fixedUrl,
+                referer = cached.referer.ifEmpty {
+                    cacheHeaders.entries.firstOrNull { it.key.equals("Referer", ignoreCase = true) }?.value ?: ""
+                },
+                subtitleUrl = if (cachedIsOurProxy) cached.subtitleUrl?.replace(Regex("127\\.0\\.0\\.1:\\d+"), "127.0.0.1:${LocalProxyServer.PROXY_PORT}") else cached.subtitleUrl,
                 subtitleTrackList = cached.subtitleTracks.map { Track(it.url, it.lang) },
                 videoTitle = cached.videoTitle,
                 videos = cached.videos.map { v ->
@@ -2024,7 +2073,7 @@ class MainViewModel : ViewModel() {
                         }.build()
                     }
                     Video(
-                        videoUrl = v.videoUrl,
+                        videoUrl = if (cachedIsOurProxy) v.videoUrl.replace(Regex("127\\.0\\.0\\.1:\\d+"), "127.0.0.1:${LocalProxyServer.PROXY_PORT}") else v.videoUrl,
                         videoTitle = v.videoTitle,
                         resolution = v.resolution,
                         headers = headers,
@@ -2033,9 +2082,9 @@ class MainViewModel : ViewModel() {
                     )
                 },
                 hosters = cached.hosters?.map { Hoster(hosterUrl = it.hosterUrl, hosterName = it.hosterName) },
-                extensionClient = null,
-                videoHeaders = cached.videoHeaders,
-                source = null,
+                extensionClient = if (cachedIsOurProxy) cacheClient else null,
+                videoHeaders = cacheHeaders,
+                source = if (cachedIsOurProxy) cacheSource else null,
                 episode = null,
             )
         }
@@ -2049,10 +2098,8 @@ class MainViewModel : ViewModel() {
                     return@withContext null
                 }
 
-                if (sm.getSources().isEmpty()) {
-                    Log.d(epTag, "playEpisodeWithExtension: loading sources")
-                    sm.loadSources()
-                }
+                Log.d(epTag, "playEpisodeWithExtension: loading sources")
+                sm.loadSources()
                 val allSources = sm.getSources()
                 var sourceWithExt = allSources.find { it.extension.packageName == defaultPackage }
                 if (sourceWithExt == null) {
@@ -2071,8 +2118,13 @@ class MainViewModel : ViewModel() {
                 val source = sw.source
                 Log.i(epTag, "playEpisodeWithExtension: using source ${sw.source.name} for ep $episodeNumber")
 
-                val extensionClient = (source as? eu.kanade.tachiyomi.animesource.online.AnimeHttpSource)?.client
-                Log.d(epTag, "  extensionClient=${extensionClient != null} (source is AnimeHttpSource=${source is eu.kanade.tachiyomi.animesource.online.AnimeHttpSource})")
+                val sourceHttp = source as? AnimeHttpSource
+                val directClient = sourceHttp?.client
+                val extensionClient = directClient ?: run {
+                    Log.w(epTag, "  AnimeHttpSource.client was null, falling back to NetworkHelper.getInstance().client")
+                    try { NetworkHelper.getInstance().client } catch (_: Exception) { null }
+                }
+                Log.d(epTag, "  extensionClient=${extensionClient != null} (source is AnimeHttpSource=${sourceHttp != null} directClient=${directClient != null})")
 
                 var matchedSAnime: SAnime? = null
                 var sEpisodes: List<SEpisode> = emptyList()
@@ -2174,13 +2226,16 @@ class MainViewModel : ViewModel() {
                     matched
                 }
 
-                if (source is eu.kanade.tachiyomi.animesource.online.AnimeHttpSource) {
+                if (source is AnimeHttpSource) {
                     source.prepareNewEpisode(sEpisode, matchedSAnime)
                 }
 
                 data class VideoWithHoster(val video: Video, val hosterName: String)
                 val allVideos = mutableListOf<VideoWithHoster>()
                 var resolvedHosters: List<Hoster>? = null
+
+                // Start proxy server in case videos return localhost URLs
+                LocalProxyServer.start(extensionClient, source)
 
                 val hosters = try {
                     source.getHosterList(sEpisode)
@@ -2196,11 +2251,17 @@ class MainViewModel : ViewModel() {
                         } catch (_: Throwable) {
                             emptyList()
                         }
-                        hosterVideos.forEach { allVideos.add(VideoWithHoster(it, hoster.hosterName)) }
+                        hosterVideos.forEach {
+                            allVideos.add(VideoWithHoster(it, hoster.hosterName))
+                            LocalProxyServer.registerVideo(it)
+                        }
                     }
                 } else {
                     val directVideos = try { source.getVideoList(sEpisode) } catch (_: Throwable) { emptyList() }
-                    directVideos.forEach { allVideos.add(VideoWithHoster(it, "")) }
+                    directVideos.forEach {
+                        allVideos.add(VideoWithHoster(it, ""))
+                        LocalProxyServer.registerVideo(it)
+                    }
                 }
 
                 if (allVideos.isEmpty()) {
@@ -2210,7 +2271,7 @@ class MainViewModel : ViewModel() {
                 }
                 Log.d(epTag, "playEpisodeWithExtension: found ${allVideos.size} videos for ep $episodeNumber")
                 allVideos.forEach { v ->
-                    Log.d(epTag, "  video: ${v.video.videoTitle} (${v.video.resolution}p) url=${v.video.videoUrl.take(100)} hoster=${v.hosterName}")
+                    Log.d(epTag, "  video: ${v.video.videoTitle} (${v.video.resolution}p) url=${v.video.videoUrl.take(100)} hoster=${v.hosterName} internalData=${v.video.internalData.take(60)} mpvArgs=${v.video.mpvArgs}")
                 }
 
                 val dubVideos = allVideos.filter {
@@ -2235,16 +2296,57 @@ class MainViewModel : ViewModel() {
                     val res = it.video.resolution ?: 0
                     if (res == 0) it.video.videoTitle.filter { c -> c.isDigit() }.toIntOrNull() ?: 0 else res
                 }?.video ?: allVideos.last().video
-                Log.i(epTag, "playEpisodeWithExtension: selected video '${bestVideo.videoTitle}' (${bestVideo.resolution}p) url=${bestVideo.videoUrl.take(100)}")
+                Log.i(epTag, "playEpisodeWithExtension: selected video '${bestVideo.videoTitle}' (${bestVideo.resolution}p) url=${bestVideo.videoUrl.take(120)}")
 
-                val referer = bestVideo.headers?.let { h ->
+                val isOurProxy = bestVideo.videoUrl.contains("127.0.0.1:${LocalProxyServer.PROXY_PORT}") || bestVideo.videoUrl.contains("localhost:${LocalProxyServer.PROXY_PORT}")
+                var effectiveVideoUrl = bestVideo.videoUrl
+                // Try to resolve the video URL via getVideoUrl or resolveVideo
+                if (isOurProxy) {
+                    Log.d(epTag, "  our proxy URL detected, trying getVideoUrl...")
+                    try {
+                        if (source is AnimeHttpSource) {
+                            val result = source.getVideoUrl(bestVideo)
+                            Log.d(epTag, "  getVideoUrl returned: ${result.take(120)}")
+                            if (!result.contains("127.0.0.1") && !result.contains("localhost") && result.isNotBlank()) {
+                                effectiveVideoUrl = result
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.d(epTag, "  getVideoUrl failed: ${e.message}")
+                        try {
+                            if (source is AnimeHttpSource) {
+                                Log.d(epTag, "  trying resolveVideo...")
+                                val resolved = source.resolveVideo(bestVideo)
+                                val rUrl = resolved?.videoUrl
+                                Log.d(epTag, "  resolveVideo returned: ${rUrl?.take(120)}")
+                                if (rUrl != null && !rUrl.contains("127.0.0.1") && !rUrl.contains("localhost")) {
+                                    effectiveVideoUrl = rUrl
+                                }
+                            }
+                        } catch (e2: Exception) {
+                            Log.d(epTag, "  resolveVideo also failed: ${e2.message}")
+                        }
+                    }
+                }
+                Log.d(epTag, "  effectiveVideoUrl=${effectiveVideoUrl.take(120)} (isOurProxy=${isOurProxy})")
+
+                val videoHeadersRaw = bestVideo.headers
+                val sourceHeadersRaw = (source as? AnimeHttpSource)?.headers
+                val referer = videoHeadersRaw?.let { h ->
+                    (0 until h.size).firstOrNull { h.name(it).equals("Referer", ignoreCase = true) }
+                        ?.let { h.value(it) }
+                } ?: sourceHeadersRaw?.let { h ->
                     (0 until h.size).firstOrNull { h.name(it).equals("Referer", ignoreCase = true) }
                         ?.let { h.value(it) }
                 } ?: ""
-                val videoHeaders = bestVideo.headers?.let { h ->
-                    (0 until h.size).associate { h.name(it) to h.value(it) }
-                } ?: emptyMap()
-                Log.d(epTag, "  referer=${referer.take(60)} videoHeaders=${videoHeaders}")
+                val videoHeaders = if (videoHeadersRaw != null) {
+                    (0 until videoHeadersRaw.size).associate { videoHeadersRaw.name(it) to videoHeadersRaw.value(it) }
+                } else if (sourceHeadersRaw != null) {
+                    (0 until sourceHeadersRaw.size).associate { sourceHeadersRaw.name(it) to sourceHeadersRaw.value(it) }
+                } else {
+                    emptyMap()
+                }
+                Log.d(epTag, "  referer=${referer.take(60)} videoHeaders=${videoHeaders} hasVideoHeaders=${videoHeadersRaw != null}")
                 Log.d(epTag, "  subtitle tracks: ${bestVideo.subtitleTracks.size}, audio tracks: ${bestVideo.audioTracks.size}")
 
                 val bestVideoHost = allVideos.find { it.video.videoUrl == bestVideo.videoUrl }
@@ -2279,7 +2381,7 @@ class MainViewModel : ViewModel() {
                 }
 
                 cacheExtensionStream(anime.id, episodeNumber, CachedExtensionStream(
-                    url = bestVideo.videoUrl,
+                    url = effectiveVideoUrl,
                     referer = referer,
                     subtitleUrl = sortedSubs.firstOrNull()?.url,
                     subtitleTracks = sortedSubs.map { CachedTrack(it.url, it.lang) },
@@ -2301,15 +2403,21 @@ class MainViewModel : ViewModel() {
                     videoHeaders = videoHeaders,
                     cachedAt = System.currentTimeMillis(),
                 ))
+                val resultIsOurProxy = effectiveVideoUrl.contains("127.0.0.1:${LocalProxyServer.PROXY_PORT}") || effectiveVideoUrl.contains("localhost:${LocalProxyServer.PROXY_PORT}")
+                val resultClient = if (resultIsOurProxy) {
+                    extensionClient  // our proxy URL needs the client for forwarding
+                } else {
+                    null  // direct or other proxy URL: use DefaultHttpDataSource
+                }
                 ExtensionStreamResult(
-                    url = bestVideo.videoUrl,
+                    url = effectiveVideoUrl,
                     referer = referer,
                     subtitleUrl = sortedSubs.firstOrNull()?.url,
                     subtitleTrackList = sortedSubs,
                     videoTitle = bestVideo.videoTitle,
                     videos = videos,
                     hosters = derivedHosters,
-                    extensionClient = extensionClient,
+                    extensionClient = resultClient,
                     videoHeaders = videoHeaders,
                     source = source,
                     episode = sEpisode,
@@ -2326,29 +2434,77 @@ class MainViewModel : ViewModel() {
         source: AnimeCatalogueSource,
         hoster: Hoster,
     ): ExtensionStreamResult? {
+        val epTag = "AnimeDownload"
         return withContext(Dispatchers.IO) {
             try {
                 val videos = withContext(Dispatchers.IO) {
-                    if (hoster.lazy) {
+                    val result = if (hoster.lazy) {
                         try { source.getVideoList(hoster) } catch (_: Throwable) { emptyList() }
                     } else {
                         hoster.videoList ?: try { source.getVideoList(hoster) } catch (_: Throwable) { emptyList() }
                     }
+                    result
                 }
                 if (videos.isEmpty()) return@withContext null
+                videos.forEach { LocalProxyServer.registerVideo(it) }
 
                 val bestVideo = videos.maxByOrNull {
                     val res = it.resolution ?: 0
                     if (res == 0) it.videoTitle.filter { c -> c.isDigit() }.toIntOrNull() ?: 0 else res
                 } ?: videos.last()
 
-                val referer = bestVideo.headers?.let { h ->
+                var effectiveVideoUrl = bestVideo.videoUrl
+                if (effectiveVideoUrl.contains("127.0.0.1") || effectiveVideoUrl.contains("localhost")) {
+                    Log.d(epTag, "fetchExtensionHosterVideos: proxy URL detected, trying getVideoUrl...")
+                    try {
+                        if (source is AnimeHttpSource) {
+                            val result = source.getVideoUrl(bestVideo)
+                            Log.d(epTag, "  getVideoUrl returned: ${result.take(120)}")
+                            if (!result.contains("127.0.0.1") && !result.contains("localhost") && result.isNotBlank()) {
+                                effectiveVideoUrl = result
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.d(epTag, "  getVideoUrl failed: ${e.message}")
+                        try {
+                            if (source is AnimeHttpSource) {
+                                val resolved = source.resolveVideo(bestVideo)
+                                val rUrl = resolved?.videoUrl
+                                Log.d(epTag, "  resolveVideo returned: ${rUrl?.take(120)}")
+                                if (rUrl != null && !rUrl.contains("127.0.0.1") && !rUrl.contains("localhost")) {
+                                    effectiveVideoUrl = rUrl
+                                }
+                            }
+                        } catch (e2: Exception) {
+                            Log.d(epTag, "  resolveVideo also failed: ${e2.message}")
+                        }
+                    }
+                }
+
+                val videoHeadersRaw = bestVideo.headers
+                val sourceHeadersRaw = (source as? AnimeHttpSource)?.headers
+                val referer = videoHeadersRaw?.let { h ->
+                    (0 until h.size).firstOrNull { h.name(it).equals("Referer", ignoreCase = true) }
+                        ?.let { h.value(it) }
+                } ?: sourceHeadersRaw?.let { h ->
                     (0 until h.size).firstOrNull { h.name(it).equals("Referer", ignoreCase = true) }
                         ?.let { h.value(it) }
                 } ?: ""
-                val videoHeaders = bestVideo.headers?.let { h ->
-                    (0 until h.size).associate { h.name(it) to h.value(it) }
-                } ?: emptyMap()
+                val videoHeaders = if (videoHeadersRaw != null) {
+                    (0 until videoHeadersRaw.size).associate { videoHeadersRaw.name(it) to videoHeadersRaw.value(it) }
+                } else if (sourceHeadersRaw != null) {
+                    (0 until sourceHeadersRaw.size).associate { sourceHeadersRaw.name(it) to sourceHeadersRaw.value(it) }
+                } else {
+                    emptyMap()
+                }
+
+                val sourceHttp = source as? AnimeHttpSource
+                val directClient = sourceHttp?.client
+                val extensionClient = directClient ?: run {
+                    try { NetworkHelper.getInstance().client } catch (_: Exception) { null }
+                }
+                val isOurProxy = effectiveVideoUrl.contains("127.0.0.1:${LocalProxyServer.PROXY_PORT}") || effectiveVideoUrl.contains("localhost:${LocalProxyServer.PROXY_PORT}")
+                val resultClient = if (isOurProxy) extensionClient else null
 
                 val preferredLang = defaultSubtitleLang.value
                 val sortedSubs = bestVideo.subtitleTracks.sortedByDescending { t ->
@@ -2360,14 +2516,14 @@ class MainViewModel : ViewModel() {
                 }
 
                 ExtensionStreamResult(
-                    url = bestVideo.videoUrl,
+                    url = effectiveVideoUrl,
                     referer = referer,
                     subtitleUrl = sortedSubs.firstOrNull()?.url,
                     subtitleTrackList = sortedSubs,
                     videoTitle = bestVideo.videoTitle,
                     videos = videos,
                     hosters = listOf(hoster),
-                    extensionClient = (source as? eu.kanade.tachiyomi.animesource.online.AnimeHttpSource)?.client,
+                    extensionClient = resultClient,
                     videoHeaders = videoHeaders,
                     source = source,
                 )

@@ -518,7 +518,7 @@ fun PlayerScreen(
         }
         
         Log.d("PlayerScreen", "Preparing playback: videoUrl=${videoUrl.take(120)} referer=$referer subtitleUrl=${subtitleUrl?.take(80)} extensionOkHttpClient=${extensionOkHttpClient != null} videoHeaders=$extensionVideoHeaders")
-        val mimeType = if (videoUrl.contains(".m3u8")) MimeTypes.APPLICATION_M3U8
+        val mimeType = if (videoUrl.contains(".m3u8") || videoUrl.contains("/m3u8")) MimeTypes.APPLICATION_M3U8
             else if (videoUrl.contains(".mp4")) MimeTypes.VIDEO_MP4
             else if (videoUrl.contains(".webm")) MimeTypes.VIDEO_WEBM
             else {

@@ -8,6 +8,8 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.cache.CacheDataSource
+import androidx.media3.datasource.okhttp.OkHttpDataSource
+import okhttp3.OkHttpClient
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
 import com.blissless.tensei.data.models.AiringCacheData
@@ -80,18 +82,25 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
     
     // Get a CacheDataSource.Factory that uses the video cache
     @OptIn(UnstableApi::class)
-    fun getCacheDataSourceFactory(referer: String): CacheDataSource.Factory? {
+    fun getCacheDataSourceFactory(referer: String, extensionClient: OkHttpClient? = null, extensionHeaders: Map<String, String> = emptyMap()): CacheDataSource.Factory? {
         val cache = videoCache ?: return null
         
-        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
-            .setConnectTimeoutMs(20000)
-            .setReadTimeoutMs(60000) // Increased timeout for caching
-            .setDefaultRequestProperties(mapOf("Referer" to referer))
+        val httpDataSourceFactory = if (extensionClient != null && extensionHeaders.isNotEmpty()) {
+            OkHttpDataSource.Factory(extensionClient)
+                .setDefaultRequestProperties(extensionHeaders)
+        } else if (extensionClient != null) {
+            OkHttpDataSource.Factory(extensionClient)
+                .setDefaultRequestProperties(mapOf("Referer" to referer))
+        } else {
+            DefaultHttpDataSource.Factory()
+                .setConnectTimeoutMs(20000)
+                .setReadTimeoutMs(60000)
+                .setDefaultRequestProperties(mapOf("Referer" to referer))
+        }
         
         return CacheDataSource.Factory()
             .setCache(cache)
             .setUpstreamDataSourceFactory(httpDataSourceFactory)
-            // Don't use FLAG_IGNORE_CACHE_ON_ERROR - we want to use cache even if there are issues
     }
 
     private fun getContentLength(videoUrl: String, referer: String): Long {
