@@ -47,15 +47,11 @@ class ExtensionDetector(private val context: Context) {
     }
 
     private fun isExtension(pkgInfo: PackageInfo): Boolean {
-        val features = pkgInfo.reqFeatures.orEmpty().map { it.name }
-        val hasFeature = features.any { it in EXTENSION_FEATURES }
-        if (hasFeature) {
-            return true
-        }
-        val metaData = pkgInfo.applicationInfo?.metaData ?: return false
-        return metaData.containsKey(METADATA_SOURCE_CLASS) ||
-                metaData.containsKey(METADATA_ANIME_SOURCE_CLASS) ||
-                metaData.containsKey(METADATA_SOURCE_FACTORY)
+        val features = pkgInfo.reqFeatures.orEmpty().map { it.name }.toSet()
+        val metaData = pkgInfo.applicationInfo?.metaData
+        return ANIME_EXTENSION_FEATURE in features ||
+                metaData?.containsKey(METADATA_ANIME_SOURCE_CLASS) == true ||
+                metaData?.containsKey(METADATA_SOURCE_FACTORY) == true
     }
 
     private fun toExtension(pkgInfo: PackageInfo, pm: PackageManager): Extension {

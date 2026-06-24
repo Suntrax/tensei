@@ -29,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Info
@@ -38,6 +39,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -82,8 +84,10 @@ fun ExtensionsScreen(
     var reposExpanded by remember { mutableStateOf(false) }
     var extensionsExpanded by remember { mutableStateOf(false) }
     val installedPackages = uiState.extensions.map { it.packageName }.toSet()
+    val updatableCount = uiState.updatablePackageNames.size
 
     val context = LocalContext.current
+
     LaunchedEffect(uiState.refreshMessage) {
         uiState.refreshMessage?.let {
             Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
@@ -118,6 +122,7 @@ fun ExtensionsScreen(
         ExtensionBrowserScreen(
             repoState = selectedRepoState,
             installedPackages = installedPackages,
+            updatablePackageNames = uiState.updatablePackageNames,
             onInstall = { viewModel.installExtension(it) },
             onBack = { selectedRepoUrl = null },
             onRemoveRepo = { url -> viewModel.removeRepo(url) }
@@ -236,7 +241,12 @@ fun ExtensionsScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            text = "Installed Extensions (${uiState.extensions.size})",
+                            text = buildString {
+                                append("Installed Extensions (${uiState.extensions.size})")
+                                if (updatableCount > 0) {
+                                    append("  ·  $updatableCount update(s)")
+                                }
+                            },
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
@@ -256,6 +266,8 @@ fun ExtensionsScreen(
                     ) {
                         InstalledExtensionCard(
                             extension = ext,
+                            hasUpdate = ext.packageName in uiState.updatablePackageNames,
+                            onUpdate = { viewModel.updateExtension(ext.packageName) },
                             onSettings = { openAppSettings(context, ext.packageName) },
                         )
                     }
@@ -394,6 +406,8 @@ private fun openAppSettings(context: Context, packageName: String) {
 @Composable
 private fun InstalledExtensionCard(
     extension: Extension,
+    hasUpdate: Boolean = false,
+    onUpdate: () -> Unit = {},
     onSettings: () -> Unit,
 ) {
     Card(
@@ -429,15 +443,11 @@ private fun InstalledExtensionCard(
                     text = extension.name,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = extension.packageName,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
                 )
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -464,6 +474,15 @@ private fun InstalledExtensionCard(
                 }
             }
 
+            if (hasUpdate) {
+                IconButton(onClick = onUpdate) {
+                    Icon(
+                        Icons.Default.Download,
+                        contentDescription = "Update",
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
             IconButton(onClick = onSettings) {
                 Icon(
                     Icons.Default.Info,

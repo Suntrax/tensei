@@ -146,6 +146,9 @@ class MainActivity : ComponentActivity() {
 
         intent.getStringExtra("notification_anime")?.let { if (it.isNotBlank()) mainViewModel.onNotificationAnimeTap(it) }
         intent.getIntExtra("widget_anime_id", 0).let { if (it > 0) _widgetClicks.tryEmit(it) }
+        if (intent.getBooleanExtra("open_extensions", false)) {
+            mainViewModel.requestOpenExtensions()
+        }
         handleAuthCallback(intent)
 
         setContent {
@@ -431,6 +434,9 @@ class MainActivity : ComponentActivity() {
         handleAuthCallback(intent)
         intent.getStringExtra("notification_anime")?.let { if (it.isNotBlank()) mainViewModel.onNotificationAnimeTap(it) }
         intent.getIntExtra("widget_anime_id", 0).let { if (it > 0) _widgetClicks.tryEmit(it) }
+        if (intent.getBooleanExtra("open_extensions", false)) {
+            mainViewModel.requestOpenExtensions()
+        }
     }
 
     override fun onResume() {
@@ -604,6 +610,14 @@ fun MainScreen(
     var showNoExtDialog by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var pendingSettingsGroup by remember { mutableStateOf<String?>(null) }
+    
+    LaunchedEffect(Unit) {
+        viewModel.openExtensionsEvents.collect {
+            showSettings = true
+            pendingSettingsGroup = "extensions"
+        }
+    }
+    
     var extensionVideos by remember { mutableStateOf<List<Video>?>(null) }
     var extensionHosters by remember { mutableStateOf<List<eu.kanade.tachiyomi.animesource.model.Hoster>?>(null) }
     var showExtHosterDialog by remember { mutableStateOf(false) }

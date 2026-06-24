@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.SharedPreferences
 import com.blissless.tensei.data.models.LocalAnimeEntry
 import com.blissless.tensei.data.models.StoredFavorite
+import com.blissless.tensei.data.models.SubtitleProfileData
+import com.blissless.tensei.data.models.SubtitleSettings
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -58,6 +60,9 @@ class UserPreferences(context: Context) {
         private const val KEY_SWIPE_VOLUME = "swipe_volume"
         private const val KEY_SWIPE_BRIGHTNESS = "swipe_brightness"
         private const val KEY_SWIPE_SWAP = "swipe_swap"
+        private const val KEY_AUTO_UPDATE_EXTENSIONS = "auto_update_extensions"
+        private const val KEY_SUBTITLE_ACTIVE_PROFILE = "subtitle_active_profile"
+        private const val KEY_SUBTITLE_PROFILES = "subtitle_profiles"
     }
 
     private val sharedPreferences: SharedPreferences =
@@ -257,6 +262,7 @@ class UserPreferences(context: Context) {
         _swipeVolume.value = sharedPreferences.getBoolean(KEY_SWIPE_VOLUME, false)
         _swipeBrightness.value = sharedPreferences.getBoolean(KEY_SWIPE_BRIGHTNESS, false)
         _swipeSwap.value = sharedPreferences.getBoolean(KEY_SWIPE_SWAP, false)
+        _autoUpdateExtensions.value = sharedPreferences.getBoolean(KEY_AUTO_UPDATE_EXTENSIONS, true)
 
         // Load local favorites
         loadLocalFavorites()
@@ -267,6 +273,8 @@ class UserPreferences(context: Context) {
         // Load local anime status
         loadLocalAnimeStatus()
 
+        // Load subtitle profiles
+        loadSubtitleProfiles()
     }
 
     // ============================================
@@ -628,6 +636,74 @@ class UserPreferences(context: Context) {
     private val _swipeSwap = MutableStateFlow(false)
     val swipeSwap: StateFlow<Boolean> = _swipeSwap.asStateFlow()
 
+    private val _autoUpdateExtensions = MutableStateFlow(true)
+    val autoUpdateExtensions: StateFlow<Boolean> = _autoUpdateExtensions.asStateFlow()
+
+    // Subtitle Profiles
+    private var _subtitleProfileData = MutableStateFlow(SubtitleProfileData())
+    val subtitleProfileData: StateFlow<SubtitleProfileData> = _subtitleProfileData.asStateFlow()
+
+    fun getActiveSubtitleSettings(): SubtitleSettings {
+        val data = _subtitleProfileData.value
+        return data.profiles.getOrElse(data.activeProfileIndex) { SubtitleSettings.DEFAULT }
+    }
+
+    fun setSubtitleProfile(index: Int, settings: SubtitleSettings) {
+        val current = _subtitleProfileData.value
+        if (index in current.profiles.indices) {
+            val updatedProfiles = current.profiles.toMutableList().also { it[index] = settings }
+            _subtitleProfileData.value = current.copy(profiles = updatedProfiles)
+            saveSubtitleProfiles()
+        }
+    }
+
+    fun setActiveSubtitleProfile(index: Int) {
+        val current = _subtitleProfileData.value
+        if (index in current.profiles.indices) {
+            _subtitleProfileData.value = current.copy(activeProfileIndex = index)
+            sharedPreferences.edit { putInt(KEY_SUBTITLE_ACTIVE_PROFILE, index) }
+        }
+    }
+
+    fun resetSubtitleProfile(index: Int) {
+        setSubtitleProfile(index, SubtitleSettings(profileName = "Profile ${index + 1}"))
+    }
+
+    fun renameSubtitleProfile(index: Int, name: String) {
+        val current = _subtitleProfileData.value
+        if (index in current.profiles.indices) {
+            val updated = current.profiles[index].copy(profileName = name)
+            setSubtitleProfile(index, updated)
+        }
+    }
+
+    private fun saveSubtitleProfiles() {
+        val json = kotlinx.serialization.json.Json {
+            ignoreUnknownKeys = true
+            encodeDefaults = true
+        }
+        val encoded = json.encodeToString(SubtitleProfileData.serializer(), _subtitleProfileData.value)
+        sharedPreferences.edit { putString(KEY_SUBTITLE_PROFILES, encoded) }
+    }
+
+    private fun loadSubtitleProfiles() {
+        val saved = sharedPreferences.getString(KEY_SUBTITLE_PROFILES, null)
+        if (saved != null) {
+            try {
+                val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+                val data = json.decodeFromString(SubtitleProfileData.serializer(), saved)
+                _subtitleProfileData.value = data
+            } catch (_: Exception) {
+                _subtitleProfileData.value = SubtitleProfileData()
+            }
+        }
+        val activeIndex = sharedPreferences.getInt(KEY_SUBTITLE_ACTIVE_PROFILE, 0)
+        val current = _subtitleProfileData.value
+        if (activeIndex in current.profiles.indices && activeIndex != current.activeProfileIndex) {
+            _subtitleProfileData.value = current.copy(activeProfileIndex = activeIndex)
+        }
+    }
+
     fun setCheckUpdatesOnStart(enabled: Boolean) {
         _checkUpdatesOnStart.value = enabled
         sharedPreferences.edit { putBoolean(KEY_CHECK_UPDATES_ON_START, enabled) }
@@ -646,6 +722,11 @@ class UserPreferences(context: Context) {
     fun setSwipeSwap(enabled: Boolean) {
         _swipeSwap.value = enabled
         sharedPreferences.edit { putBoolean(KEY_SWIPE_SWAP, enabled) }
+    }
+
+    fun setAutoUpdateExtensions(enabled: Boolean) {
+        _autoUpdateExtensions.value = enabled
+        sharedPreferences.edit { putBoolean(KEY_AUTO_UPDATE_EXTENSIONS, enabled) }
     }
 
     // MAL Favorites

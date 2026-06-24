@@ -33,6 +33,7 @@ import coil.request.ImageRequest
 fun ExtensionBrowserScreen(
     repoState: RepoState,
     installedPackages: Set<String>,
+    updatablePackageNames: Set<String> = emptySet(),
     onInstall: (RepoExtension) -> Unit,
     onBack: () -> Unit,
     onRemoveRepo: (String) -> Unit = {}
@@ -66,7 +67,9 @@ fun ExtensionBrowserScreen(
         )
     }
 
-    val extensions = repoState.repo?.extensions ?: emptyList()
+    val extensions = repoState.repo?.extensions?.filter {
+        it.packageName.contains("animeextension")
+    } ?: emptyList()
     val filteredExtensions = if (searchQuery.isBlank()) {
         extensions
     } else {
@@ -191,6 +194,7 @@ fun ExtensionBrowserScreen(
                             repoExtension = ext,
                             repoUrl = repoState.url,
                             isInstalled = ext.packageName in installedPackages,
+                            hasUpdate = ext.packageName in updatablePackageNames,
                             onInstall = { onInstall(ext) }
                         )
                         if (index < filteredExtensions.lastIndex) {
@@ -208,6 +212,7 @@ private fun ExtensionBrowserItem(
     repoExtension: RepoExtension,
     repoUrl: String,
     isInstalled: Boolean,
+    hasUpdate: Boolean = false,
     onInstall: () -> Unit
 ) {
     val iconUrl = remember(repoUrl, repoExtension) {
@@ -294,7 +299,17 @@ private fun ExtensionBrowserItem(
             }
         }
 
-        if (isInstalled) {
+        if (hasUpdate) {
+            FilledTonalButton(onClick = onInstall) {
+                Icon(
+                    Icons.Default.Download,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Update")
+            }
+        } else if (isInstalled) {
             Text(
                 text = "Installed",
                 style = MaterialTheme.typography.labelMedium,

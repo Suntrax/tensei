@@ -49,12 +49,15 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Calendar
@@ -625,6 +628,7 @@ class MainViewModel : ViewModel() {
     val bufferSizeMb: StateFlow<Int> get() = userPreferences.bufferSizeMb
     val showBufferIndicator: StateFlow<Boolean> get() = userPreferences.showBufferIndicator
     val checkUpdatesOnStart: StateFlow<Boolean> get() = userPreferences.checkUpdatesOnStart
+    val autoUpdateExtensions: StateFlow<Boolean> get() = userPreferences.autoUpdateExtensions
 
     // Notification tap events
     private val _notificationAnimeTaps = MutableSharedFlow<String>(replay = 1, extraBufferCapacity = 1)
@@ -632,6 +636,13 @@ class MainViewModel : ViewModel() {
 
     fun onNotificationAnimeTap(animeName: String) {
         _notificationAnimeTaps.tryEmit(animeName)
+    }
+
+    private val _openExtensionsEvents = Channel<Unit>(Channel.BUFFERED)
+    val openExtensionsEvents: Flow<Unit> = _openExtensionsEvents.receiveAsFlow()
+
+    fun requestOpenExtensions() {
+        _openExtensionsEvents.trySend(Unit)
     }
     val swipeVolume: StateFlow<Boolean> get() = userPreferences.swipeVolume
     val swipeBrightness: StateFlow<Boolean> get() = userPreferences.swipeBrightness
@@ -1564,6 +1575,7 @@ class MainViewModel : ViewModel() {
     fun setBufferSizeMb(sizeMb: Int) = userPreferences.setBufferSizeMb(sizeMb)
     fun setShowBufferIndicator(show: Boolean) = userPreferences.setShowBufferIndicator(show)
     fun setCheckUpdatesOnStart(enabled: Boolean) = userPreferences.setCheckUpdatesOnStart(enabled)
+    fun setAutoUpdateExtensions(enabled: Boolean) = userPreferences.setAutoUpdateExtensions(enabled)
     fun setSwipeVolume(enabled: Boolean) = userPreferences.setSwipeVolume(enabled)
     fun setSwipeBrightness(enabled: Boolean) = userPreferences.setSwipeBrightness(enabled)
     fun setSwipeSwap(enabled: Boolean) = userPreferences.setSwipeSwap(enabled)

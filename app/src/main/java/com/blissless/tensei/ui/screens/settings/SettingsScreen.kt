@@ -1708,6 +1708,16 @@ private fun AboutSettingsPage(
             )
         }
 
+        val autoUpdateExts by viewModel.autoUpdateExtensions.collectAsState()
+        SettingsCard {
+            SettingsToggle(
+                title = "Auto-Update Extensions",
+                description = "On app start, ask permission then automatically install extension updates",
+                checked = autoUpdateExts,
+                onCheckedChange = { viewModel.setAutoUpdateExtensions(it) }
+            )
+        }
+
         SectionHeader("LINKS")
         SettingsCard {
             val githubUrl = "https://github.com/Suntrax/tensei"

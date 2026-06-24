@@ -23,6 +23,8 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -45,6 +47,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.AspectRatio
@@ -129,6 +132,8 @@ import com.blissless.tensei.api.AnimeSkipService
 import com.blissless.tensei.data.models.EpisodeStreams
 import com.blissless.tensei.data.models.EpisodeTimestamps
 import com.blissless.tensei.data.models.ServerInfo
+import com.blissless.tensei.data.models.SubtitleProfileData
+import com.blissless.tensei.data.models.SubtitleSettings
 import com.blissless.tensei.data.models.Timestamp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -259,7 +264,8 @@ fun PlayerScreen(
     var showSubtitleMenu by remember { mutableStateOf(false) }
     var subtitlesEnabled by remember { mutableStateOf(subtitleTracks.isNotEmpty()) }
     var selectedSubtitleIndex by remember { mutableIntStateOf(0) }
-
+    var showSubtitleSettings by remember { mutableStateOf(false) }
+    var subtitleProfileData by remember { mutableStateOf(loadSubtitleProfileData(context)) }
     var accumulatedSkipMs by remember { mutableLongStateOf(0L) }
     var lastTapTime by remember { mutableLongStateOf(0L) }
 
@@ -855,6 +861,24 @@ fun seekBy(milliseconds: Long) {
         exoPlayer.playWhenReady = playWhenReady
     }
 
+    fun getActiveSubtitleSettings(): SubtitleSettings {
+        val data = subtitleProfileData
+        return data.profiles.getOrElse(data.activeProfileIndex) { SubtitleSettings.DEFAULT }
+    }
+
+    fun saveSubtitleProfileData(data: SubtitleProfileData) {
+        subtitleProfileData = data
+        val json = kotlinx.serialization.json.Json {
+            ignoreUnknownKeys = true
+            encodeDefaults = true
+        }
+        val encoded = json.encodeToString(SubtitleProfileData.serializer(), data)
+        context.getSharedPreferences("anilist_prefs", Context.MODE_PRIVATE).edit()
+            .putString("subtitle_profiles", encoded)
+            .putInt("subtitle_active_profile", data.activeProfileIndex)
+            .apply()
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -878,17 +902,9 @@ fun seekBy(milliseconds: Long) {
                         controllerShowTimeoutMs = 3000
                         controllerAutoShow = false
 
-                        val style = CaptionStyleCompat(
-                            android.graphics.Color.WHITE,
-                            android.graphics.Color.TRANSPARENT,
-                            android.graphics.Color.TRANSPARENT,
-                            CaptionStyleCompat.EDGE_TYPE_OUTLINE,
-                            android.graphics.Color.BLACK,
-                            null
-                        )
+                        val activeSubSettings = getActiveSubtitleSettings()
                         subtitleView?.apply {
-                            setStyle(style)
-                            setFixedTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
+                            applySubtitleStyle(this, activeSubSettings)
                         }
                     }
                 },
@@ -897,6 +913,10 @@ fun seekBy(milliseconds: Long) {
                 update = { view -> 
                     view.resizeMode = resizeModes[resizeModeIndex].first
                     view.player = exoPlayer
+                    val activeSubSettings = getActiveSubtitleSettings()
+                    view.subtitleView?.apply {
+                        applySubtitleStyle(this, activeSubSettings)
+                    }
                 }
             )
         }
@@ -1317,11 +1337,11 @@ fun seekBy(milliseconds: Long) {
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.Center
                                         ) {
-                                            Text(
-                                                text = "CC",
-                                                style = MaterialTheme.typography.labelMedium,
-                                                fontWeight = FontWeight.Bold,
-                                                color = if (subtitlesEnabled) Color.White else Color.Gray.copy(alpha = 0.5f)
+                                            Icon(
+                                                Icons.Filled.ClosedCaption,
+                                                contentDescription = "Subtitles",
+                                                tint = if (subtitlesEnabled) Color.White else Color.Gray.copy(alpha = 0.5f),
+                                                modifier = Modifier.size(20.dp)
                                             )
                                         }
                                     }
@@ -1356,6 +1376,26 @@ fun seekBy(milliseconds: Long) {
                                             )
                                         }
                                     }
+                                }
+                            }
+
+                            // Subtitle Settings button (gear icon)
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = Color.Black.copy(alpha = 0.5f),
+                                onClick = { showSubtitleSettings = true }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        Icons.Default.Settings,
+                                        contentDescription = "Subtitle Settings",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(18.dp)
+                                    )
                                 }
                             }
 
@@ -2048,8 +2088,88 @@ fun seekBy(milliseconds: Long) {
                 }
             }
         }
+
+        // Subtitle Settings Dialog overlay
+        if (showSubtitleSettings) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.7f))
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() }
+                    ) { showSubtitleSettings = false }
+                    .padding(16.dp),
+                contentAlignment = Alignment.BottomCenter
+            ) {
+                SubtitleSettingsDialog(
+                    currentSettings = getActiveSubtitleSettings(),
+                    profiles = subtitleProfileData.profiles,
+                    activeProfileIndex = subtitleProfileData.activeProfileIndex,
+                    onSettingsChange = { newSettings ->
+                        val data = subtitleProfileData
+                        val updatedProfiles = data.profiles.toMutableList().also {
+                            it[data.activeProfileIndex] = newSettings
+                        }
+                        saveSubtitleProfileData(data.copy(profiles = updatedProfiles))
+                    },
+                    onProfileSelect = { index ->
+                        val data = subtitleProfileData
+                        saveSubtitleProfileData(data.copy(activeProfileIndex = index))
+                    },
+                    onResetProfile = { index ->
+                        val data = subtitleProfileData
+                        val updatedProfiles = data.profiles.toMutableList().also {
+                            it[index] = SubtitleSettings(profileName = "Profile ${index + 1}")
+                        }
+                        saveSubtitleProfileData(data.copy(profiles = updatedProfiles))
+                    },
+                    onRenameProfile = { index, name ->
+                        val data = subtitleProfileData
+                        val updated = data.profiles[index].copy(profileName = name)
+                        val updatedProfiles = data.profiles.toMutableList().also {
+                            it[index] = updated
+                        }
+                        saveSubtitleProfileData(data.copy(profiles = updatedProfiles))
+                    },
+                    onDismiss = { showSubtitleSettings = false }
+                )
+            }
+        }
     }
 }
 
+private fun loadSubtitleProfileData(context: Context): SubtitleProfileData {
+    val prefs = context.getSharedPreferences("anilist_prefs", Context.MODE_PRIVATE)
+    val saved = prefs.getString("subtitle_profiles", null)
+    val activeIndex = prefs.getInt("subtitle_active_profile", 0)
+    if (saved != null) {
+        try {
+            val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+            val data = json.decodeFromString(SubtitleProfileData.serializer(), saved)
+            return if (activeIndex in data.profiles.indices) data.copy(activeProfileIndex = activeIndex)
+            else data
+        } catch (_: Exception) { }
+    }
+    return SubtitleProfileData()
+}
 
-
+private fun applySubtitleStyle(subtitleView: androidx.media3.ui.SubtitleView, settings: SubtitleSettings) {
+    val edgeType = when {
+        settings.enableOutline && settings.enableShadow -> CaptionStyleCompat.EDGE_TYPE_OUTLINE
+        settings.enableOutline -> CaptionStyleCompat.EDGE_TYPE_OUTLINE
+        settings.enableShadow -> CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW
+        else -> CaptionStyleCompat.EDGE_TYPE_NONE
+    }
+    val style = CaptionStyleCompat(
+        (settings.fontColor and 0xFFFFFFFFL).toInt(),
+        (settings.backgroundColor and 0xFFFFFFFFL).toInt(),
+        android.graphics.Color.TRANSPARENT,
+        edgeType,
+        (settings.outlineColor and 0xFFFFFFFFL).toInt(),
+        null
+    )
+    subtitleView.setStyle(style)
+    subtitleView.setFixedTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, settings.fontSize)
+    subtitleView.setBottomPaddingFraction(1f - settings.verticalPosition)
+}
