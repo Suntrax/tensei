@@ -24,7 +24,6 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -222,9 +221,9 @@ fun PlayerScreen(
         AspectRatioFrameLayout.RESIZE_MODE_FILL to "Stretch",
         AspectRatioFrameLayout.RESIZE_MODE_FIXED_WIDTH to "16:9"
     )
-    
+
     var isFullscreen by remember { mutableStateOf(true) }
-    
+
     // Handle fullscreen toggle
     fun toggleFullscreen() {
         isFullscreen = !isFullscreen
@@ -238,7 +237,7 @@ fun PlayerScreen(
             }
         }
     }
-    
+
     // Exit fullscreen when closing
     fun exitFullscreen() {
         if (isFullscreen) {
@@ -289,7 +288,7 @@ fun PlayerScreen(
     LaunchedEffect(showControls, hasError, showSkipIndicator) {
         controlsVisible = showControls || hasError || showSkipIndicator
     }
-    
+
     // Helper to check if device has internet connection
     fun isNetworkAvailable(): Boolean {
         val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
@@ -391,9 +390,9 @@ fun PlayerScreen(
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(bufferAheadMs, maxBufferMs, 1500, 3000)
             .build()
-        
+
         val cacheDataSourceFactory = onGetCacheDataSourceFactory(referer)
-        
+
         val upstreamFactory = if (extensionOkHttpClient != null && extensionVideoHeaders.isNotEmpty()) {
             Log.d("PlayerScreen", "Using extension OkHttpClient with headers: $extensionVideoHeaders")
             val okHttpFactory = androidx.media3.datasource.okhttp.OkHttpDataSource.Factory(extensionOkHttpClient)
@@ -410,9 +409,9 @@ fun PlayerScreen(
                 .setReadTimeoutMs(20000)
                 .setDefaultRequestProperties(mapOf("Referer" to referer))
         }
-        
+
         val dataSourceFactory = cacheDataSourceFactory ?: upstreamFactory
-        
+
         ExoPlayer.Builder(context)
             .setMediaSourceFactory(
                 DefaultMediaSourceFactory(context).setDataSourceFactory(dataSourceFactory)
@@ -436,7 +435,7 @@ fun PlayerScreen(
                         if (isChangingServer) {
                             return
                         }
-                        
+
                         if (!isNetworkAvailable()) {
                             isOffline = true
                             isBuffering = true
@@ -504,7 +503,7 @@ fun PlayerScreen(
         exoPlayer.clearMediaItems()
 
         val startPositionMs = if (savedPosition > 0) savedPosition else 0L
-        
+
         val subtitleConfigs = if (subtitlesEnabled && subtitleTracks.isNotEmpty()) {
             subtitleTracks.mapIndexed { index, track ->
                 val flags = if (index == selectedSubtitleIndex) C.SELECTION_FLAG_DEFAULT else 0
@@ -523,29 +522,29 @@ fun PlayerScreen(
         } else {
             emptyList()
         }
-        
+
         Log.d("PlayerScreen", "Preparing playback: videoUrl=${videoUrl.take(120)} referer=$referer subtitleUrl=${subtitleUrl?.take(80)} extensionOkHttpClient=${extensionOkHttpClient != null} videoHeaders=$extensionVideoHeaders")
         val mimeType = if (videoUrl.contains(".m3u8") || videoUrl.contains("/m3u8")) MimeTypes.APPLICATION_M3U8
-            else if (videoUrl.contains(".mp4")) MimeTypes.VIDEO_MP4
-            else if (videoUrl.contains(".webm")) MimeTypes.VIDEO_WEBM
-            else {
-                Log.d("PlayerScreen", "Unknown mime type for URL: ${videoUrl.take(100)}, defaulting to MP4")
-                MimeTypes.VIDEO_MP4
-            }
-        
+        else if (videoUrl.contains(".mp4")) MimeTypes.VIDEO_MP4
+        else if (videoUrl.contains(".webm")) MimeTypes.VIDEO_WEBM
+        else {
+            Log.d("PlayerScreen", "Unknown mime type for URL: ${videoUrl.take(100)}, defaulting to MP4")
+            MimeTypes.VIDEO_MP4
+        }
+
         val mediaItem = MediaItem.Builder()
             .setUri(videoUrl)
             .setMimeType(mimeType)
             .setSubtitleConfigurations(subtitleConfigs)
             .build()
-        
+
         exoPlayer.setMediaItem(mediaItem)
         exoPlayer.prepare()
-        
+
         if (savedPosition > 0) {
             exoPlayer.seekTo(savedPosition)
         }
-        
+
         hasPlaybackStarted = true
 
         hasTriggeredProgressUpdate = false
@@ -586,14 +585,14 @@ fun PlayerScreen(
         }
     }
 
-fun seekBy(milliseconds: Long) {
+    fun seekBy(milliseconds: Long) {
         isManuallySeeking = true
-         
+
         // Show skip indicator (separate from player UI)
         skipIndicatorText = if (milliseconds > 0) "+${abs(milliseconds / 1000)}s" else "-${abs(milliseconds / 1000)}s"
         skipIsForward = milliseconds >= 0
         showSkipIndicator = true
-         
+
         // Handle accumulated skips within 300ms window
         val now = System.currentTimeMillis()
         if (now - lastTapTime < 300) {
@@ -602,17 +601,17 @@ fun seekBy(milliseconds: Long) {
             accumulatedSkipMs = milliseconds
         }
         lastTapTime = now
-        
+
         // Always seek by single skip amount, not accumulated
         val newPosition = (exoPlayer.currentPosition + milliseconds).coerceIn(0, exoPlayer.duration)
         exoPlayer.seekTo(newPosition)
         currentPosition = newPosition
         sliderValue = newPosition.toFloat()
-        
+
         // Update text with accumulated skip time
         val totalSeconds = abs(accumulatedSkipMs / 1000)
         skipIndicatorText = if (accumulatedSkipMs > 0) "+${totalSeconds}s" else "-${totalSeconds}s"
-        
+
         // Schedule reset after 500ms of no taps
         skipResetJob?.cancel()
         skipResetJob = scope.launch {
@@ -807,16 +806,16 @@ fun seekBy(milliseconds: Long) {
         hasPlaybackStarted = false
         hasError = false
         playbackError = null
-        
+
         // Save current position BEFORE stopping
         val currentDur = exoPlayer.duration
         onSavePosition?.invoke(exoPlayer.currentPosition, if (currentDur > 0) currentDur else 0L)
         onPositionSaved?.invoke(exoPlayer.currentPosition)
-        
+
         // Stop and clear the current playback to prevent audio overlap
         exoPlayer.stop()
         exoPlayer.clearMediaItems()
-        
+
         // Small delay before triggering server change to ensure error popup disappears
         scope.launch {
             delay(50.milliseconds)
@@ -886,7 +885,7 @@ fun seekBy(milliseconds: Long) {
             .background(Color.Black)
     ) {
         // PlayerView - recreate when server changes
-            key(serverChangeTrigger) {
+        key(serverChangeTrigger) {
             AndroidView(
                 factory = { ctx ->
                     PlayerView(ctx).apply {
@@ -911,7 +910,7 @@ fun seekBy(milliseconds: Long) {
                 },
                 modifier = Modifier
                     .fillMaxSize(),
-                update = { view -> 
+                update = { view ->
                     view.resizeMode = resizeModes[resizeModeIndex].first
                     view.player = exoPlayer
                     val activeSubSettings = getActiveSubtitleSettings()
@@ -970,7 +969,7 @@ fun seekBy(milliseconds: Long) {
                 }
                 .pointerInput(backwardSkipSeconds) {
                     detectTapGestures(
-                        onTap = { 
+                        onTap = {
                             if (!hasError) {
                                 val now = System.currentTimeMillis()
                                 if (now - lastLeftTapTime < 300) {
@@ -1041,7 +1040,7 @@ fun seekBy(milliseconds: Long) {
                 }
                 .pointerInput(forwardSkipSeconds) {
                     detectTapGestures(
-                        onTap = { 
+                        onTap = {
                             if (!hasError) {
                                 val now = System.currentTimeMillis()
                                 if (now - lastRightTapTime < 300) {
@@ -1127,341 +1126,319 @@ fun seekBy(milliseconds: Long) {
                             .statusBarsPadding()
                             .padding(16.dp)
                     ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
                         Row(
+                            modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.weight(1f)
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            IconButton(
-                                onClick = { 
-                                    exitFullscreen()
-                                    onBackClick?.invoke() 
-                                },
-                                modifier = Modifier.size(40.dp).background(Color.Black.copy(alpha = 0.5f), shape = MaterialTheme.shapes.small)
-                            ) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = "Back",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Column {
-                            if (animeName.isNotEmpty()) {
-                                Text(
-                                    text = animeName,
-                                    color = Color.White,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                            if (!episodeTitle.isNullOrEmpty()) {
-                                Text(
-                                    text = episodeTitle,
-                                    color = Color.White.copy(alpha = 0.7f),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                modifier = Modifier.weight(1f)
                             ) {
-                                Text(
-                                    text = "Episode $currentEpisode${if (totalEpisodes > 0) " / $totalEpisodes" else ""}",
-                                    color = Color.White.copy(alpha = 0.8f),
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                                if (isFetchingTimestamps) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(14.dp),
-                                        strokeWidth = 1.5.dp,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                                if (isChangingServer) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(14.dp),
-                                        strokeWidth = 1.5.dp,
-                                        color = if (disableMaterialColors) Color.White else MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                            }
-                        }
-
-                        // Closing Column for text content
-                        }
-
-                        fun catFromName(name: String): String = when {
-                            name.contains("dub", ignoreCase = true) -> "DUB"
-                            name.contains("sub", ignoreCase = true) -> "SUB"
-                            extensionServers.isNotEmpty() -> extensionName.ifEmpty { "EXT" }
-                            else -> "EXT"
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.width(IntrinsicSize.Max)) {
-                            // Server selector
-                            if ((onServerChange != null && (subServers.isNotEmpty() || dubServers.isNotEmpty())) || extensionServers.isNotEmpty()) {
-                                Box {
-                                    Surface(
-                                        shape = RoundedCornerShape(14.dp),
-                                        color = Color.Black.copy(alpha = 0.5f),
-                                        onClick = { showServerMenu = true }
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                        ) {
-                                            Text(
-                                                text = currentServerName.take(12),
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = Color.White,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                            val serverCat = if (extensionServers.isNotEmpty()) catFromName(currentServerName) else currentCategory.uppercase()
-                                            Text(
-                                                text = serverCat,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = Color.Gray
-                                            )
-                                        }
-                                    }
-
-                                    DropdownMenu(
-                                        expanded = showServerMenu,
-                                        onDismissRequest = { showServerMenu = false },
-                                        modifier = Modifier.background(Color(0xFF1A1A1A)).width(180.dp)
-                                    ) {
-                                        val headerCat = if (extensionServers.isNotEmpty()) catFromName(currentServerName) else currentCategory.uppercase()
-                                        Text(
-                                            text = "${currentServerName.uppercase()} ($headerCat)",
-                                            color = MaterialTheme.colorScheme.primary,
-                                            fontWeight = FontWeight.Bold,
-                                            style = MaterialTheme.typography.labelMedium,
-                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                                        )
-                                        if (extensionServers.isNotEmpty()) {
-                                            val extSubServers = extensionServers.filter { it.name.contains("sub", ignoreCase = true) || !it.name.contains("dub", ignoreCase = true) }
-                                            val extDubServers = extensionServers.filter { it.name.contains("dub", ignoreCase = true) && !it.name.contains("sub", ignoreCase = true) }
-                                            if (extSubServers.isNotEmpty()) {
-                                                Text("SUB", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
-                                                extSubServers.forEach { server ->
-                                                    ServerSelectorButton(
-                                                        serverName = server.name,
-                                                        isSelected = server.name == currentServerName,
-                                                        onClick = {
-                                                            showServerMenu = false
-                                                            onExtensionServerChange?.invoke(server.name)
-                                                        }
-                                                    )
-                                                }
-                                                Spacer(modifier = Modifier.height(4.dp))
-                                            }
-                                            if (extDubServers.isNotEmpty()) {
-                                                Text("DUB", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
-                                                extDubServers.forEach { server ->
-                                                    ServerSelectorButton(
-                                                        serverName = server.name,
-                                                        isSelected = server.name == currentServerName,
-                                                        onClick = {
-                                                            showServerMenu = false
-                                                            onExtensionServerChange?.invoke(server.name)
-                                                        }
-                                                    )
-                                                }
-                                                Spacer(modifier = Modifier.height(8.dp))
-                                            }
-                                            if (extSubServers.isEmpty() && extDubServers.isEmpty()) {
-                                                Text(extensionName.ifEmpty { "EXT" }, color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
-                                                extensionServers.forEach { server ->
-                                                    ServerSelectorButton(
-                                                        serverName = server.name,
-                                                        isSelected = server.name == currentServerName,
-                                                        onClick = {
-                                                            showServerMenu = false
-                                                            onExtensionServerChange?.invoke(server.name)
-                                                        }
-                                                    )
-                                                }
-                                                Spacer(modifier = Modifier.height(8.dp))
-                                            }
-                                        }
-                                        if (subServers.isNotEmpty()) {
-                                            Text("SUB", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
-                                            subServers.forEach { server ->
-                                                ServerSelectorButton(
-                                                    serverName = server.name,
-                                                    isSelected = server.name == currentServerName && currentCategory == "sub",
-                                                    onClick = {
-                                                        showServerMenu = false
-                                                        handleServerChange(server.name, "sub")
-                                                    }
-                                                )
-                                            }
-                                        }
-                                        if (dubServers.isNotEmpty()) {
-                                            Spacer(modifier = Modifier.height(8.dp))
-                                            Text("DUB", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
-                                            dubServers.forEach { server ->
-                                                ServerSelectorButton(
-                                                    serverName = server.name,
-                                                    isSelected = server.name == currentServerName && currentCategory == "dub",
-                                                    onClick = {
-                                                        showServerMenu = false
-                                                        handleServerChange(server.name, "dub")
-                                                    }
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            // CC/Subtitles button
-                            if (subtitleTracks.isNotEmpty() || subtitleUrl != null) {
-                                Box {
-                                    Surface(
-                                        shape = RoundedCornerShape(14.dp),
-                                        color = Color.Black.copy(alpha = 0.5f),
-                                        onClick = { showSubtitleMenu = true }
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.Center
-                                        ) {
-                                            Icon(
-                                                Icons.Filled.ClosedCaption,
-                                                contentDescription = "Subtitles",
-                                                tint = if (subtitlesEnabled) Color.White else Color.Gray.copy(alpha = 0.5f),
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                        }
-                                    }
-
-                                    var subtitleSettingsView by remember(showSubtitleMenu) { mutableStateOf(false) }
-
-                                    DropdownMenu(
-                                        expanded = showSubtitleMenu,
-                                        onDismissRequest = { showSubtitleMenu = false },
-                                        modifier = Modifier.background(Color(0xFF1A1A1A)).width(180.dp)
-                                    ) {
-                                        if (subtitleSettingsView) {
-                                            DropdownMenuItem(
-                                                text = {
-                                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                                        Icon(Icons.Default.Settings, null, tint = Color.White, modifier = Modifier.size(16.dp))
-                                                        Spacer(Modifier.width(8.dp))
-                                                        Text("Edit Subtitles", color = Color.White)
-                                                    }
-                                                },
-                                                onClick = {
-                                                    showSubtitleMenu = false
-                                                    subtitleSettingsView = false
-                                                    showSubtitleSettings = true
-                                                }
-                                            )
-                                            HorizontalDivider(color = Color.Gray.copy(alpha = 0.3f))
-                                            Text(
-                                                "Profiles",
-                                                color = Color.Gray,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
-                                            )
-                                            subtitleProfileData.profiles.forEachIndexed { index, profile ->
-                                                val isActive = index == subtitleProfileData.activeProfileIndex
-                                                DropdownMenuItem(
-                                                    text = { Text(profile.profileName, color = if (isActive) MaterialTheme.colorScheme.primary else Color.White) },
-                                                    onClick = {
-                                                        val data = subtitleProfileData
-                                                        saveSubtitleProfileData(data.copy(activeProfileIndex = index))
-                                                        subtitleSettingsView = false
-                                                        showSubtitleMenu = false
-                                                    },
-                                                    leadingIcon = if (isActive) { { Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary) } } else null
-                                                )
-                                            }
-                                            HorizontalDivider(color = Color.Gray.copy(alpha = 0.3f))
-                                            DropdownMenuItem(
-                                                text = { Text("Back", color = Color.Gray, style = MaterialTheme.typography.labelSmall) },
-                                                onClick = { subtitleSettingsView = false }
-                                            )
-                                        } else {
-                                            DropdownMenuItem(
-                                                text = { Text("Off", color = if (!subtitlesEnabled) MaterialTheme.colorScheme.primary else Color.White) },
-                                                onClick = {
-                                                    if (subtitlesEnabled) rebuildWithSubtitles(false)
-                                                    showSubtitleMenu = false
-                                                },
-                                                leadingIcon = if (!subtitlesEnabled) { { Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary) } } else null
-                                            )
-                                            val trackList = subtitleTracks.ifEmpty {
-                                                if (subtitleUrl != null) listOf(eu.kanade.tachiyomi.animesource.model.Track(subtitleUrl, "en"))
-                                                else emptyList()
-                                            }
-                                            trackList.forEachIndexed { index, track ->
-                                                val isSelected = subtitlesEnabled && index == selectedSubtitleIndex
-                                                DropdownMenuItem(
-                                                    text = { Text(track.lang.uppercase(), color = if (isSelected) MaterialTheme.colorScheme.primary else Color.White) },
-                                                    onClick = {
-                                                        selectedSubtitleIndex = index
-                                                        rebuildWithSubtitles(true)
-                                                        showSubtitleMenu = false
-                                                    },
-                                                    leadingIcon = if (isSelected) { { Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary) } } else null
-                                                )
-                                            }
-                                            HorizontalDivider(color = Color.Gray.copy(alpha = 0.3f))
-                                            DropdownMenuItem(
-                                                text = {
-                                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                                        Icon(Icons.Default.Settings, null, tint = Color.Gray, modifier = Modifier.size(14.dp))
-                                                        Spacer(Modifier.width(6.dp))
-                                                        Text("Settings", color = Color.Gray, style = MaterialTheme.typography.labelSmall)
-                                                    }
-                                                },
-                                                onClick = { subtitleSettingsView = true }
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-
-                            // Resize button
-                            Surface(
-                                shape = RoundedCornerShape(14.dp),
-                                color = Color.Black.copy(alpha = 0.5f),
-                                onClick = { resizeModeIndex = (resizeModeIndex + 1) % resizeModes.size }
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center
+                                IconButton(
+                                    onClick = {
+                                        exitFullscreen()
+                                        onBackClick?.invoke()
+                                    },
+                                    modifier = Modifier.size(40.dp).background(Color.Black.copy(alpha = 0.5f), shape = MaterialTheme.shapes.small)
                                 ) {
                                     Icon(
-                                        Icons.Default.AspectRatio,
-                                        "Change aspect ratio",
+                                        Icons.AutoMirrored.Filled.ArrowBack,
+                                        contentDescription = "Back",
                                         tint = Color.White,
-                                        modifier = Modifier.size(18.dp)
+                                        modifier = Modifier.size(24.dp)
                                     )
                                 }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    if (animeName.isNotEmpty()) {
+                                        Text(
+                                            text = animeName,
+                                            color = Color.White,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    if (!episodeTitle.isNullOrEmpty()) {
+                                        Text(
+                                            text = episodeTitle,
+                                            color = Color.White.copy(alpha = 0.7f),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text(
+                                            text = "Episode $currentEpisode${if (totalEpisodes > 0) " / $totalEpisodes" else ""}",
+                                            color = Color.White.copy(alpha = 0.8f),
+                                            style = MaterialTheme.typography.bodyMedium
+                                        )
+                                        if (isFetchingTimestamps) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(14.dp),
+                                                strokeWidth = 1.5.dp,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                        if (isChangingServer) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(14.dp),
+                                                strokeWidth = 1.5.dp,
+                                                color = if (disableMaterialColors) Color.White else MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // Closing Column for text content
                             }
 
-                            // Player settings button
-                            var showPlayerSettings by remember { mutableStateOf(false) }
-                            Box {
+                            fun catFromName(name: String): String = when {
+                                name.contains("dub", ignoreCase = true) -> "DUB"
+                                name.contains("sub", ignoreCase = true) -> "SUB"
+                                extensionServers.isNotEmpty() -> extensionName.ifEmpty { "EXT" }
+                                else -> "EXT"
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.width(IntrinsicSize.Max)) {
+                                // Server selector
+                                if ((onServerChange != null && (subServers.isNotEmpty() || dubServers.isNotEmpty())) || extensionServers.isNotEmpty()) {
+                                    Box {
+                                        Surface(
+                                            shape = RoundedCornerShape(14.dp),
+                                            color = Color.Black.copy(alpha = 0.5f),
+                                            onClick = { showServerMenu = true }
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                Text(
+                                                    text = currentServerName.take(12),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = Color.White,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                                val serverCat = if (extensionServers.isNotEmpty()) catFromName(currentServerName) else currentCategory.uppercase()
+                                                Text(
+                                                    text = serverCat,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = Color.Gray
+                                                )
+                                            }
+                                        }
+
+                                        DropdownMenu(
+                                            expanded = showServerMenu,
+                                            onDismissRequest = { showServerMenu = false },
+                                            modifier = Modifier.background(Color(0xFF1A1A1A)).width(180.dp)
+                                        ) {
+                                            val headerCat = if (extensionServers.isNotEmpty()) catFromName(currentServerName) else currentCategory.uppercase()
+                                            Text(
+                                                text = "${currentServerName.uppercase()} ($headerCat)",
+                                                color = MaterialTheme.colorScheme.primary,
+                                                fontWeight = FontWeight.Bold,
+                                                style = MaterialTheme.typography.labelMedium,
+                                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                            )
+                                            if (extensionServers.isNotEmpty()) {
+                                                val extSubServers = extensionServers.filter { it.name.contains("sub", ignoreCase = true) || !it.name.contains("dub", ignoreCase = true) }
+                                                val extDubServers = extensionServers.filter { it.name.contains("dub", ignoreCase = true) && !it.name.contains("sub", ignoreCase = true) }
+                                                if (extSubServers.isNotEmpty()) {
+                                                    Text("SUB", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+                                                    extSubServers.forEach { server ->
+                                                        ServerSelectorButton(
+                                                            serverName = server.name,
+                                                            isSelected = server.name == currentServerName,
+                                                            onClick = {
+                                                                showServerMenu = false
+                                                                onExtensionServerChange?.invoke(server.name)
+                                                            }
+                                                        )
+                                                    }
+                                                    Spacer(modifier = Modifier.height(4.dp))
+                                                }
+                                                if (extDubServers.isNotEmpty()) {
+                                                    Text("DUB", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+                                                    extDubServers.forEach { server ->
+                                                        ServerSelectorButton(
+                                                            serverName = server.name,
+                                                            isSelected = server.name == currentServerName,
+                                                            onClick = {
+                                                                showServerMenu = false
+                                                                onExtensionServerChange?.invoke(server.name)
+                                                            }
+                                                        )
+                                                    }
+                                                    Spacer(modifier = Modifier.height(8.dp))
+                                                }
+                                                if (extSubServers.isEmpty() && extDubServers.isEmpty()) {
+                                                    Text(extensionName.ifEmpty { "EXT" }, color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+                                                    extensionServers.forEach { server ->
+                                                        ServerSelectorButton(
+                                                            serverName = server.name,
+                                                            isSelected = server.name == currentServerName,
+                                                            onClick = {
+                                                                showServerMenu = false
+                                                                onExtensionServerChange?.invoke(server.name)
+                                                            }
+                                                        )
+                                                    }
+                                                    Spacer(modifier = Modifier.height(8.dp))
+                                                }
+                                            }
+                                            if (subServers.isNotEmpty()) {
+                                                Text("SUB", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+                                                subServers.forEach { server ->
+                                                    ServerSelectorButton(
+                                                        serverName = server.name,
+                                                        isSelected = server.name == currentServerName && currentCategory == "sub",
+                                                        onClick = {
+                                                            showServerMenu = false
+                                                            handleServerChange(server.name, "sub")
+                                                        }
+                                                    )
+                                                }
+                                            }
+                                            if (dubServers.isNotEmpty()) {
+                                                Spacer(modifier = Modifier.height(8.dp))
+                                                Text("DUB", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+                                                dubServers.forEach { server ->
+                                                    ServerSelectorButton(
+                                                        serverName = server.name,
+                                                        isSelected = server.name == currentServerName && currentCategory == "dub",
+                                                        onClick = {
+                                                            showServerMenu = false
+                                                            handleServerChange(server.name, "dub")
+                                                        }
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // CC/Subtitles button
+                                if (subtitleTracks.isNotEmpty() || subtitleUrl != null) {
+                                    Box {
+                                        Surface(
+                                            shape = RoundedCornerShape(14.dp),
+                                            color = Color.Black.copy(alpha = 0.5f),
+                                            onClick = { showSubtitleMenu = true }
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.Center
+                                            ) {
+                                                Icon(
+                                                    Icons.Filled.ClosedCaption,
+                                                    contentDescription = "Subtitles",
+                                                    tint = if (subtitlesEnabled) Color.White else Color.Gray.copy(alpha = 0.5f),
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            }
+                                        }
+
+                                        var subtitleSettingsView by remember(showSubtitleMenu) { mutableStateOf(false) }
+
+                                        DropdownMenu(
+                                            expanded = showSubtitleMenu,
+                                            onDismissRequest = { showSubtitleMenu = false },
+                                            modifier = Modifier.background(Color(0xFF1A1A1A)).width(180.dp)
+                                        ) {
+                                            if (subtitleSettingsView) {
+                                                DropdownMenuItem(
+                                                    text = {
+                                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                                            Icon(Icons.Default.Settings, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                                            Spacer(Modifier.width(8.dp))
+                                                            Text("Edit Subtitles", color = Color.White)
+                                                        }
+                                                    },
+                                                    onClick = {
+                                                        showSubtitleMenu = false
+                                                        subtitleSettingsView = false
+                                                        showSubtitleSettings = true
+                                                    }
+                                                )
+                                                HorizontalDivider(color = Color.Gray.copy(alpha = 0.3f))
+                                                Text(
+                                                    "Profiles",
+                                                    color = Color.Gray,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                                                )
+                                                subtitleProfileData.profiles.forEachIndexed { index, profile ->
+                                                    val isActive = index == subtitleProfileData.activeProfileIndex
+                                                    DropdownMenuItem(
+                                                        text = { Text(profile.profileName, color = if (isActive) MaterialTheme.colorScheme.primary else Color.White) },
+                                                        onClick = {
+                                                            val data = subtitleProfileData
+                                                            saveSubtitleProfileData(data.copy(activeProfileIndex = index))
+                                                            subtitleSettingsView = false
+                                                            showSubtitleMenu = false
+                                                        },
+                                                        leadingIcon = if (isActive) { { Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary) } } else null
+                                                    )
+                                                }
+                                                HorizontalDivider(color = Color.Gray.copy(alpha = 0.3f))
+                                                DropdownMenuItem(
+                                                    text = { Text("Back", color = Color.Gray, style = MaterialTheme.typography.labelSmall) },
+                                                    onClick = { subtitleSettingsView = false }
+                                                )
+                                            } else {
+                                                DropdownMenuItem(
+                                                    text = { Text("Off", color = if (!subtitlesEnabled) MaterialTheme.colorScheme.primary else Color.White) },
+                                                    onClick = {
+                                                        if (subtitlesEnabled) rebuildWithSubtitles(false)
+                                                        showSubtitleMenu = false
+                                                    },
+                                                    leadingIcon = if (!subtitlesEnabled) { { Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary) } } else null
+                                                )
+                                                val trackList = subtitleTracks.ifEmpty {
+                                                    if (subtitleUrl != null) listOf(eu.kanade.tachiyomi.animesource.model.Track(subtitleUrl, "en"))
+                                                    else emptyList()
+                                                }
+                                                trackList.forEachIndexed { index, track ->
+                                                    val isSelected = subtitlesEnabled && index == selectedSubtitleIndex
+                                                    DropdownMenuItem(
+                                                        text = { Text(track.lang.uppercase(), color = if (isSelected) MaterialTheme.colorScheme.primary else Color.White) },
+                                                        onClick = {
+                                                            selectedSubtitleIndex = index
+                                                            rebuildWithSubtitles(true)
+                                                            showSubtitleMenu = false
+                                                        },
+                                                        leadingIcon = if (isSelected) { { Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary) } } else null
+                                                    )
+                                                }
+                                                HorizontalDivider(color = Color.Gray.copy(alpha = 0.3f))
+                                                DropdownMenuItem(
+                                                    text = {
+                                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                                            Icon(Icons.Default.Settings, null, tint = Color.Gray, modifier = Modifier.size(14.dp))
+                                                            Spacer(Modifier.width(6.dp))
+                                                            Text("Settings", color = Color.Gray, style = MaterialTheme.typography.labelSmall)
+                                                        }
+                                                    },
+                                                    onClick = { subtitleSettingsView = true }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Resize button
                                 Surface(
                                     shape = RoundedCornerShape(14.dp),
                                     color = Color.Black.copy(alpha = 0.5f),
-                                    onClick = { showPlayerSettings = true }
+                                    onClick = { resizeModeIndex = (resizeModeIndex + 1) % resizeModes.size }
                                 ) {
                                     Row(
                                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -1469,75 +1446,97 @@ fun seekBy(milliseconds: Long) {
                                         horizontalArrangement = Arrangement.Center
                                     ) {
                                         Icon(
-                                            Icons.Default.Settings,
-                                            "Player Settings",
+                                            Icons.Default.AspectRatio,
+                                            "Change aspect ratio",
                                             tint = Color.White,
                                             modifier = Modifier.size(18.dp)
                                         )
                                     }
                                 }
-                                DropdownMenu(
-                                    expanded = showPlayerSettings,
-                                    onDismissRequest = { showPlayerSettings = false },
-                                    modifier = Modifier.background(Color(0xFF1A1A1A)).width(220.dp)
-                                ) {
-                                    DropdownMenuItem(
-                                        text = {
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Text("Swipe for Volume (${if (swipeSwap) "Right" else "Left"})", color = Color.White)
-                                                Switch(
-                                                    checked = swipeVolume,
-                                                    onCheckedChange = { onSwipeVolumeChange?.invoke(it) },
-                                                    colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary)
-                                                )
-                                            }
-                                        },
-                                        onClick = { onSwipeVolumeChange?.invoke(!swipeVolume) }
-                                    )
-                                    DropdownMenuItem(
-                                        text = {
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Text("Swipe for Brightness (${if (swipeSwap) "Left" else "Right"})", color = Color.White)
-                                                Switch(
-                                                    checked = swipeBrightness,
-                                                    onCheckedChange = { onSwipeBrightnessChange?.invoke(it) },
-                                                    colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary)
-                                                )
-                                            }
-                                        },
-                                        onClick = { onSwipeBrightnessChange?.invoke(!swipeBrightness) }
-                                    )
-                                    DropdownMenuItem(
-                                        text = {
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Text("Swap Sides", color = Color.White)
-                                                Switch(
-                                                    checked = swipeSwap,
-                                                    onCheckedChange = { onSwipeSwapChange?.invoke(it) },
-                                                    colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary)
-                                                )
-                                            }
-                                        },
-                                        onClick = { onSwipeSwapChange?.invoke(!swipeSwap) }
-                                    )
-                                }
-                            }
 
+                                // Player settings button
+                                var showPlayerSettings by remember { mutableStateOf(false) }
+                                Box {
+                                    Surface(
+                                        shape = RoundedCornerShape(14.dp),
+                                        color = Color.Black.copy(alpha = 0.5f),
+                                        onClick = { showPlayerSettings = true }
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.Center
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Settings,
+                                                "Player Settings",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    }
+                                    DropdownMenu(
+                                        expanded = showPlayerSettings,
+                                        onDismissRequest = { showPlayerSettings = false },
+                                        modifier = Modifier.background(Color(0xFF1A1A1A)).width(220.dp)
+                                    ) {
+                                        DropdownMenuItem(
+                                            text = {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text("Swipe for Volume (${if (swipeSwap) "Right" else "Left"})", color = Color.White)
+                                                    Switch(
+                                                        checked = swipeVolume,
+                                                        onCheckedChange = { onSwipeVolumeChange?.invoke(it) },
+                                                        colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary)
+                                                    )
+                                                }
+                                            },
+                                            onClick = { onSwipeVolumeChange?.invoke(!swipeVolume) }
+                                        )
+                                        DropdownMenuItem(
+                                            text = {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text("Swipe for Brightness (${if (swipeSwap) "Left" else "Right"})", color = Color.White)
+                                                    Switch(
+                                                        checked = swipeBrightness,
+                                                        onCheckedChange = { onSwipeBrightnessChange?.invoke(it) },
+                                                        colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary)
+                                                    )
+                                                }
+                                            },
+                                            onClick = { onSwipeBrightnessChange?.invoke(!swipeBrightness) }
+                                        )
+                                        DropdownMenuItem(
+                                            text = {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text("Swap Sides", color = Color.White)
+                                                    Switch(
+                                                        checked = swipeSwap,
+                                                        onCheckedChange = { onSwipeSwapChange?.invoke(it) },
+                                                        colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary)
+                                                    )
+                                                }
+                                            },
+                                            onClick = { onSwipeSwapChange?.invoke(!swipeSwap) }
+                                        )
+                                    }
+                                }
+
+                            }
                         }
                     }
-                }
                 }
 
                 Box(modifier = Modifier.align(Alignment.Center)) {
@@ -1548,45 +1547,45 @@ fun seekBy(milliseconds: Long) {
                         modifier = Modifier.align(Alignment.Center)
                     ) {
                         Row(
-                        modifier = Modifier.align(Alignment.Center),
-                        horizontalArrangement = Arrangement.spacedBy(32.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        IconButton(
-                            onClick = { onPreviousEpisode?.invoke() },
-                            modifier = Modifier.size(56.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape).alpha(if (onPreviousEpisode != null && !isLoadingStream && !isChangingServer) 1f else 0.3f),
-                            enabled = onPreviousEpisode != null && !isLoadingStream && !isChangingServer
+                            modifier = Modifier.align(Alignment.Center),
+                            horizontalArrangement = Arrangement.spacedBy(32.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.Default.SkipPrevious, "Previous Episode", tint = Color.White, modifier = Modifier.size(32.dp))
-                        }
-
-                        IconButton(
-                            onClick = {
-                                if (hasError) {
-                                    handlePlaybackError()
-                                    exoPlayer.prepare()
-                                    exoPlayer.playWhenReady = true
-                                } else {
-                                    if (isPlaying) exoPlayer.pause() else exoPlayer.play()
-                                }
-                            },
-                            modifier = Modifier.size(72.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape)
-                        ) {
-                            if (isBuffering || isOffline) {
-                                CircularProgressIndicator(
-                                    color = Color.White,
-                                    modifier = Modifier.size(42.dp),
-                                    strokeWidth = 3.dp
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = if (hasError) Icons.Default.Refresh else if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                    contentDescription = if (hasError) "Retry" else if (isPlaying) "Pause" else "Play",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(42.dp)
-                                )
+                            IconButton(
+                                onClick = { onPreviousEpisode?.invoke() },
+                                modifier = Modifier.size(56.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape).alpha(if (onPreviousEpisode != null && !isLoadingStream && !isChangingServer) 1f else 0.3f),
+                                enabled = onPreviousEpisode != null && !isLoadingStream && !isChangingServer
+                            ) {
+                                Icon(Icons.Default.SkipPrevious, "Previous Episode", tint = Color.White, modifier = Modifier.size(32.dp))
                             }
-                        }
+
+                            IconButton(
+                                onClick = {
+                                    if (hasError) {
+                                        handlePlaybackError()
+                                        exoPlayer.prepare()
+                                        exoPlayer.playWhenReady = true
+                                    } else {
+                                        if (isPlaying) exoPlayer.pause() else exoPlayer.play()
+                                    }
+                                },
+                                modifier = Modifier.size(72.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                            ) {
+                                if (isBuffering || isOffline) {
+                                    CircularProgressIndicator(
+                                        color = Color.White,
+                                        modifier = Modifier.size(42.dp),
+                                        strokeWidth = 3.dp
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = if (hasError) Icons.Default.Refresh else if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                        contentDescription = if (hasError) "Retry" else if (isPlaying) "Pause" else "Play",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(42.dp)
+                                    )
+                                }
+                            }
 
                             IconButton(
                                 onClick = {
@@ -1635,51 +1634,51 @@ fun seekBy(milliseconds: Long) {
                             Text(skipIndicatorText, color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                         }
                     }
-                    }
+                }
 
-                    // Skip Opening/Ending buttons - outside controls visibility so they don't get darkened
-                    AnimatedVisibility(
-                        visible = showSkipOpeningButton || showSkipEndingButton,
-                        enter = fadeIn() + scaleIn(initialScale = 0.8f),
-                        exit = fadeOut() + scaleOut(targetScale = 0.8f),
-                        modifier = Modifier.align(Alignment.CenterEnd).padding(end = 16.dp)
-                    ) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            if (showSkipOpeningButton) {
-                                SkipIconButton(
-                                    icon = Icons.Default.FastForward,
-                                    label = "Skip\nOpening",
-                                    backgroundColor = Color.Black.copy(alpha = 0.6f),
-                                    iconTint = Color.White,
-                                    onClick = {
-                                        val ts = effectiveTimestamps
-                                        if (ts.introEnd != null) {
-                                            exoPlayer.seekTo(ts.introEnd * 1000L)
-                                            exoPlayer.play()
-                                            hasSkippedIntro = true
-                                        }
+                // Skip Opening/Ending buttons - outside controls visibility so they don't get darkened
+                AnimatedVisibility(
+                    visible = showSkipOpeningButton || showSkipEndingButton,
+                    enter = fadeIn() + scaleIn(initialScale = 0.8f),
+                    exit = fadeOut() + scaleOut(targetScale = 0.8f),
+                    modifier = Modifier.align(Alignment.CenterEnd).padding(end = 16.dp)
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        if (showSkipOpeningButton) {
+                            SkipIconButton(
+                                icon = Icons.Default.FastForward,
+                                label = "Skip\nOpening",
+                                backgroundColor = Color.Black.copy(alpha = 0.6f),
+                                iconTint = Color.White,
+                                onClick = {
+                                    val ts = effectiveTimestamps
+                                    if (ts.introEnd != null) {
+                                        exoPlayer.seekTo(ts.introEnd * 1000L)
+                                        exoPlayer.play()
+                                        hasSkippedIntro = true
                                     }
-                                )
-                            }
-                            if (showSkipEndingButton) {
-                                SkipIconButton(
-                                    icon = Icons.Default.SkipNext,
-                                    label = if (isLatestEpisode || !creditsAtEnd) "Skip\nEnding" else "Next\nEpisode",
-                                    backgroundColor = Color.Black.copy(alpha = 0.6f),
-                                    iconTint = Color.White,
-                                    onClick = {
-                                        if (isLatestEpisode || !creditsAtEnd) {
-                                            if (exoPlayer.duration > 0) {
-                                                exoPlayer.seekTo(exoPlayer.duration)
-                                            }
-                                        } else if (!isChangingServer) {
-                                            onNextEpisode?.invoke()
+                                }
+                            )
+                        }
+                        if (showSkipEndingButton) {
+                            SkipIconButton(
+                                icon = Icons.Default.SkipNext,
+                                label = if (isLatestEpisode || !creditsAtEnd) "Skip\nEnding" else "Next\nEpisode",
+                                backgroundColor = Color.Black.copy(alpha = 0.6f),
+                                iconTint = Color.White,
+                                onClick = {
+                                    if (isLatestEpisode || !creditsAtEnd) {
+                                        if (exoPlayer.duration > 0) {
+                                            exoPlayer.seekTo(exoPlayer.duration)
                                         }
+                                    } else if (!isChangingServer) {
+                                        onNextEpisode?.invoke()
                                     }
-                                )
-                            }
+                                }
+                            )
                         }
                     }
+                }
 
                 if (isLoadingStream || isChangingServer) {
                     CircularProgressIndicator(modifier = Modifier.align(Alignment.Center).offset(y = 64.dp), color = Color.White)
@@ -1732,176 +1731,176 @@ fun seekBy(milliseconds: Long) {
                             .navigationBarsPadding()
                             .padding(16.dp)
                     ) {
-                    // Timer above progress bar
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(formatTime(currentPosition), color = Color.White, style = MaterialTheme.typography.labelMedium)
-                        Text(if (duration > 0) formatTime(duration) else "--:--", color = Color.White, style = MaterialTheme.typography.labelMedium)
-                    }
+                        // Timer above progress bar
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(formatTime(currentPosition), color = Color.White, style = MaterialTheme.typography.labelMedium)
+                            Text(if (duration > 0) formatTime(duration) else "--:--", color = Color.White, style = MaterialTheme.typography.labelMedium)
+                        }
 
-                    Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
 
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(24.dp)
-                            .pointerInput(Unit) {
-                                detectTapGestures(
-                                    onTap = { offset ->
-                                        if (duration > 0) {
-                                            val ratio = (offset.x / size.width).coerceIn(0f, 1f)
-                                            val seekPosition = (ratio * duration).toLong()
-                                            exoPlayer.seekTo(seekPosition)
-                                            currentPosition = seekPosition
-                                            sliderValue = seekPosition.toFloat()
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(24.dp)
+                                .pointerInput(Unit) {
+                                    detectTapGestures(
+                                        onTap = { offset ->
+                                            if (duration > 0) {
+                                                val ratio = (offset.x / size.width).coerceIn(0f, 1f)
+                                                val seekPosition = (ratio * duration).toLong()
+                                                exoPlayer.seekTo(seekPosition)
+                                                currentPosition = seekPosition
+                                                sliderValue = seekPosition.toFloat()
+                                            }
                                         }
-                                    }
-                                )
-                            }
-                            .pointerInput(Unit) {
-                                detectHorizontalDragGestures(
-                                    onDragStart = { offset ->
-                                        isDragging = true
-                                        wasPlayingBeforeScrub = isPlaying
-                                        val ratio = (offset.x / size.width).coerceIn(0f, 1f)
-                                        sliderValue = ratio * (if (duration > 0) duration.toFloat() else 1000f)
-                                        currentPosition = sliderValue.toLong()
-                                    },
-                                    onDragEnd = {
-                                        isDragging = false
-                                        exoPlayer.seekTo(sliderValue.toLong())
-                                        if (wasPlayingBeforeScrub) {
-                                            exoPlayer.play()
-                                        }
-                                    },
-                                    onHorizontalDrag = { _, dragAmount ->
-                                        val currentRatio = sliderValue / (if (duration > 0) duration.toFloat() else 1000f)
-                                        val newRatio = (currentRatio + dragAmount / size.width).coerceIn(0f, 1f)
-                                        sliderValue = newRatio * (if (duration > 0) duration.toFloat() else 1000f)
-                                        currentPosition = sliderValue.toLong()
-                                    }
-                                )
-                            }
-                    ) {
-                        Canvas(modifier = Modifier.fillMaxSize()) {
-                            val sliderWidth = size.width
-                            val trackHeight = 8.dp.toPx()
-                            val trackTop = (size.height - trackHeight) / 2f
-                            val cornerRadius = 4.dp.toPx()
-                            val thumbRadiusPx = 8.dp.toPx()
-
-                            if (duration > 0) {
-                                val progressRatio = currentPosition.toFloat() / duration
-                                val bufferedRatio = maxBufferedPosition.toFloat() / duration
-
-                                // Draw inactive track background
-                                drawRoundRect(
-                                    color = Color.White.copy(alpha = 0.3f),
-                                    topLeft = Offset(0f, trackTop),
-                                    size = Size(sliderWidth, trackHeight),
-                                    cornerRadius = CornerRadius(cornerRadius)
-                                )
-
-                                // Draw buffer indicator
-                                if (showBufferIndicator && maxBufferedPosition > currentPosition) {
-                                    val bufferStartX = progressRatio * sliderWidth
-                                    val bufferEndX = bufferedRatio * sliderWidth
-                                    drawRoundRect(
-                                        color = Color.White.copy(alpha = 0.5f),
-                                        topLeft = Offset(bufferStartX, trackTop),
-                                        size = Size(bufferEndX - bufferStartX, trackHeight),
-                                        cornerRadius = CornerRadius(2.dp.toPx())
                                     )
                                 }
-
-                                // Draw active track (played portion)
-                                val progressX = progressRatio * sliderWidth
-                                drawRoundRect(
-                                    color = Color.White,
-                                    topLeft = Offset(0f, trackTop),
-                                    size = Size(progressX.coerceAtLeast(thumbRadiusPx), trackHeight),
-                                    cornerRadius = CornerRadius(cornerRadius)
-                                )
-
-                                // Draw intro/credits markers with manual color blending
-                                // Colors calculated to match BlendMode.Multiply result:
-                                // - Watched portion: solid orange (multiply with white)
-                                // - Unwatched portion: darker orange (multiply with gray background)
-                                val watchedOrange = Color(0xFFFF9800)
-                                val unwatchedOrange = Color(0xFFA67C00)
-
-                                if (introStartRatio != null && introEndRatio != null) {
-                                    val introStartX = introStartRatio * sliderWidth
-                                    val introEndX = introEndRatio * sliderWidth
-                                    val introWidth = introEndX - introStartX
-                                    if (introWidth > 0) {
-                                        val leftRadius = if (introStartX < 10f) cornerRadius else 2.dp.toPx()
-                                        val rightRadius = if (introEndX > sliderWidth - 10f) cornerRadius else 2.dp.toPx()
-
-                                        // Draw watched part (before progress) with bright orange
-                                        if (introStartX < progressX && introEndX <= progressX) {
-                                            drawRoundRect(
-                                                color = watchedOrange,
-                                                topLeft = Offset(introStartX, trackTop),
-                                                size = Size(introWidth, trackHeight),
-                                                cornerRadius = CornerRadius(cornerRadius, cornerRadius)
-                                            )
+                                .pointerInput(Unit) {
+                                    detectHorizontalDragGestures(
+                                        onDragStart = { offset ->
+                                            isDragging = true
+                                            wasPlayingBeforeScrub = isPlaying
+                                            val ratio = (offset.x / size.width).coerceIn(0f, 1f)
+                                            sliderValue = ratio * (if (duration > 0) duration.toFloat() else 1000f)
+                                            currentPosition = sliderValue.toLong()
+                                        },
+                                        onDragEnd = {
+                                            isDragging = false
+                                            exoPlayer.seekTo(sliderValue.toLong())
+                                            if (wasPlayingBeforeScrub) {
+                                                exoPlayer.play()
+                                            }
+                                        },
+                                        onHorizontalDrag = { _, dragAmount ->
+                                            val currentRatio = sliderValue / (if (duration > 0) duration.toFloat() else 1000f)
+                                            val newRatio = (currentRatio + dragAmount / size.width).coerceIn(0f, 1f)
+                                            sliderValue = newRatio * (if (duration > 0) duration.toFloat() else 1000f)
+                                            currentPosition = sliderValue.toLong()
                                         }
-                                        // Draw unwatched part (after progress) with dark orange
-                                        else if (introStartX >= progressX) {
-                                            drawRoundRect(
-                                                color = unwatchedOrange,
-                                                topLeft = Offset(introStartX.coerceAtLeast(0f), trackTop),
-                                                size = Size(
-                                                    introWidth.coerceAtMost(sliderWidth - introStartX.coerceAtLeast(0f)),
-                                                    trackHeight
-                                                ),
-                                                cornerRadius = CornerRadius(leftRadius, rightRadius)
-                                            )
-                                        }
-                                        // Draw both parts (spans across progress)
-                                        else if (introStartX < progressX && introEndX > progressX) {
-                                            val watchedWidth = progressX - introStartX
-                                            val unwatchedWidth = introEndX - progressX
-                                            drawRoundRect(
-                                                color = watchedOrange,
-                                                topLeft = Offset(introStartX, trackTop),
-                                                size = Size(watchedWidth, trackHeight),
-                                                cornerRadius = CornerRadius(cornerRadius, cornerRadius)
-                                            )
-                                            drawRoundRect(
-                                                color = unwatchedOrange,
-                                                topLeft = Offset(progressX, trackTop),
-                                                size = Size(unwatchedWidth, trackHeight),
-                                                cornerRadius = CornerRadius(cornerRadius, cornerRadius)
-                                            )
-                                        }
-                                    }
+                                    )
                                 }
+                        ) {
+                            Canvas(modifier = Modifier.fillMaxSize()) {
+                                val sliderWidth = size.width
+                                val trackHeight = 8.dp.toPx()
+                                val trackTop = (size.height - trackHeight) / 2f
+                                val cornerRadius = 4.dp.toPx()
+                                val thumbRadiusPx = 8.dp.toPx()
 
-                                if (creditsStartRatio != null) {
-                                    val creditsStartX = creditsStartRatio * sliderWidth
-                                    if (creditsStartX < sliderWidth && creditsStartX > 0) {
-                                        val creditsColor = if (creditsStartX < progressX) watchedOrange else unwatchedOrange
+                                if (duration > 0) {
+                                    val progressRatio = currentPosition.toFloat() / duration
+                                    val bufferedRatio = maxBufferedPosition.toFloat() / duration
+
+                                    // Draw inactive track background
+                                    drawRoundRect(
+                                        color = Color.White.copy(alpha = 0.3f),
+                                        topLeft = Offset(0f, trackTop),
+                                        size = Size(sliderWidth, trackHeight),
+                                        cornerRadius = CornerRadius(cornerRadius)
+                                    )
+
+                                    // Draw buffer indicator
+                                    if (showBufferIndicator && maxBufferedPosition > currentPosition) {
+                                        val bufferStartX = progressRatio * sliderWidth
+                                        val bufferEndX = bufferedRatio * sliderWidth
                                         drawRoundRect(
-                                            color = creditsColor,
-                                            topLeft = Offset(creditsStartX, trackTop),
-                                            size = Size((sliderWidth - creditsStartX).coerceAtLeast(0f), trackHeight),
-                                            cornerRadius = CornerRadius(cornerRadius, cornerRadius)
+                                            color = Color.White.copy(alpha = 0.5f),
+                                            topLeft = Offset(bufferStartX, trackTop),
+                                            size = Size(bufferEndX - bufferStartX, trackHeight),
+                                            cornerRadius = CornerRadius(2.dp.toPx())
                                         )
                                     }
-                                }
 
-                                // Draw the thumb as a circle
-                                drawCircle(
-                                    color = Color.White,
-                                    radius = thumbRadiusPx,
-                                    center = Offset(progressX, size.height / 2)
-                                )
+                                    // Draw active track (played portion)
+                                    val progressX = progressRatio * sliderWidth
+                                    drawRoundRect(
+                                        color = Color.White,
+                                        topLeft = Offset(0f, trackTop),
+                                        size = Size(progressX.coerceAtLeast(thumbRadiusPx), trackHeight),
+                                        cornerRadius = CornerRadius(cornerRadius)
+                                    )
+
+                                    // Draw intro/credits markers with manual color blending
+                                    // Colors calculated to match BlendMode.Multiply result:
+                                    // - Watched portion: solid orange (multiply with white)
+                                    // - Unwatched portion: darker orange (multiply with gray background)
+                                    val watchedOrange = Color(0xFFFF9800)
+                                    val unwatchedOrange = Color(0xFFA67C00)
+
+                                    if (introStartRatio != null && introEndRatio != null) {
+                                        val introStartX = introStartRatio * sliderWidth
+                                        val introEndX = introEndRatio * sliderWidth
+                                        val introWidth = introEndX - introStartX
+                                        if (introWidth > 0) {
+                                            val leftRadius = if (introStartX < 10f) cornerRadius else 2.dp.toPx()
+                                            val rightRadius = if (introEndX > sliderWidth - 10f) cornerRadius else 2.dp.toPx()
+
+                                            // Draw watched part (before progress) with bright orange
+                                            if (introStartX < progressX && introEndX <= progressX) {
+                                                drawRoundRect(
+                                                    color = watchedOrange,
+                                                    topLeft = Offset(introStartX, trackTop),
+                                                    size = Size(introWidth, trackHeight),
+                                                    cornerRadius = CornerRadius(cornerRadius, cornerRadius)
+                                                )
+                                            }
+                                            // Draw unwatched part (after progress) with dark orange
+                                            else if (introStartX >= progressX) {
+                                                drawRoundRect(
+                                                    color = unwatchedOrange,
+                                                    topLeft = Offset(introStartX.coerceAtLeast(0f), trackTop),
+                                                    size = Size(
+                                                        introWidth.coerceAtMost(sliderWidth - introStartX.coerceAtLeast(0f)),
+                                                        trackHeight
+                                                    ),
+                                                    cornerRadius = CornerRadius(leftRadius, rightRadius)
+                                                )
+                                            }
+                                            // Draw both parts (spans across progress)
+                                            else if (introStartX < progressX && introEndX > progressX) {
+                                                val watchedWidth = progressX - introStartX
+                                                val unwatchedWidth = introEndX - progressX
+                                                drawRoundRect(
+                                                    color = watchedOrange,
+                                                    topLeft = Offset(introStartX, trackTop),
+                                                    size = Size(watchedWidth, trackHeight),
+                                                    cornerRadius = CornerRadius(cornerRadius, cornerRadius)
+                                                )
+                                                drawRoundRect(
+                                                    color = unwatchedOrange,
+                                                    topLeft = Offset(progressX, trackTop),
+                                                    size = Size(unwatchedWidth, trackHeight),
+                                                    cornerRadius = CornerRadius(cornerRadius, cornerRadius)
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    if (creditsStartRatio != null) {
+                                        val creditsStartX = creditsStartRatio * sliderWidth
+                                        if (creditsStartX < sliderWidth && creditsStartX > 0) {
+                                            val creditsColor = if (creditsStartX < progressX) watchedOrange else unwatchedOrange
+                                            drawRoundRect(
+                                                color = creditsColor,
+                                                topLeft = Offset(creditsStartX, trackTop),
+                                                size = Size((sliderWidth - creditsStartX).coerceAtLeast(0f), trackHeight),
+                                                cornerRadius = CornerRadius(cornerRadius, cornerRadius)
+                                            )
+                                        }
+                                    }
+
+                                    // Draw the thumb as a circle
+                                    drawCircle(
+                                        color = Color.White,
+                                        radius = thumbRadiusPx,
+                                        center = Offset(progressX, size.height / 2)
+                                    )
+                                }
                             }
-                        }
                         }
 
                         // Remaining time
@@ -1919,119 +1918,119 @@ fun seekBy(milliseconds: Long) {
                         }
 
                         // Bottom row with speed selector on left and time on right
-                    var currentSpeed by rememberSaveable { mutableFloatStateOf(1f) }
-                    val speedOptions = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f)
+                        var currentSpeed by rememberSaveable { mutableFloatStateOf(1f) }
+                        val speedOptions = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f)
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Playback speed selector on the left
-                        Box {
-                            Surface(
-                                shape = RoundedCornerShape(14.dp),
-                                color = Color.Black.copy(alpha = 0.5f),
-                                onClick = { showSpeedMenu = true }
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Speed,
-                                        contentDescription = "Playback speed",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Text(
-                                        text = "${currentSpeed}x",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = Color.White
-                                    )
-                                }
-                            }
-
-                            DropdownMenu(
-                                expanded = showSpeedMenu,
-                                onDismissRequest = { showSpeedMenu = false }
-                            ) {
-                                speedOptions.forEach { speed ->
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                text = "${speed}x",
-                                                color = if (currentSpeed == speed) MaterialTheme.colorScheme.primary else Color.White
-                                            )
-                                        },
-                                        onClick = {
-                                            currentSpeed = speed
-                                            exoPlayer.setPlaybackSpeed(speed)
-                                            showSpeedMenu = false
-                                        },
-                                        leadingIcon = if (currentSpeed == speed) {
-                                            { Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary) }
-                                        } else null
-                                    )
-                                }
-                            }
-                        }
-
-                        // Autoplay + Fullscreen (linked)
                         Row(
-                            modifier = Modifier
-                                .background(Color.Black.copy(alpha = 0.5f), shape = RoundedCornerShape(14.dp)),
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Surface(
-                                onClick = { onAutoPlayNextEpisodeChanged?.invoke(!autoPlayNextEpisode) },
-                                color = Color.Transparent
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(start = 12.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            // Playback speed selector on the left
+                            Box {
+                                Surface(
+                                    shape = RoundedCornerShape(14.dp),
+                                    color = Color.Black.copy(alpha = 0.5f),
+                                    onClick = { showSpeedMenu = true }
                                 ) {
-                                    Text(
-                                        text = "Autoplay",
-                                        color = Color.White,
-                                        style = MaterialTheme.typography.labelSmall
-                                    )
-                                    Box(modifier = Modifier.size(20.dp), contentAlignment = Alignment.Center) {
-                                        Switch(
-                                            checked = autoPlayNextEpisode,
-                                            onCheckedChange = { onAutoPlayNextEpisodeChanged?.invoke(it) },
-                                            modifier = Modifier.scale(0.5f),
-                                            colors = SwitchDefaults.colors(
-                                            checkedTrackColor = Color.White,
-                                            checkedThumbColor = Color.Black,
-                                            uncheckedTrackColor = Color.White.copy(alpha = 0.3f),
-                                            uncheckedThumbColor = Color.White
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Speed,
+                                            contentDescription = "Playback speed",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(18.dp)
                                         )
-                                    )
-                                        }
+                                        Text(
+                                            text = "${currentSpeed}x",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = Color.White
+                                        )
+                                    }
+                                }
+
+                                DropdownMenu(
+                                    expanded = showSpeedMenu,
+                                    onDismissRequest = { showSpeedMenu = false }
+                                ) {
+                                    speedOptions.forEach { speed ->
+                                        DropdownMenuItem(
+                                            text = {
+                                                Text(
+                                                    text = "${speed}x",
+                                                    color = if (currentSpeed == speed) MaterialTheme.colorScheme.primary else Color.White
+                                                )
+                                            },
+                                            onClick = {
+                                                currentSpeed = speed
+                                                exoPlayer.setPlaybackSpeed(speed)
+                                                showSpeedMenu = false
+                                            },
+                                            leadingIcon = if (currentSpeed == speed) {
+                                                { Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary) }
+                                            } else null
+                                        )
+                                    }
                                 }
                             }
-                            Surface(
-                                onClick = { toggleFullscreen() },
-                                color = Color.Transparent
+
+                            // Autoplay + Fullscreen (linked)
+                            Row(
+                                modifier = Modifier
+                                    .background(Color.Black.copy(alpha = 0.5f), shape = RoundedCornerShape(14.dp)),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(start = 6.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                Surface(
+                                    onClick = { onAutoPlayNextEpisodeChanged?.invoke(!autoPlayNextEpisode) },
+                                    color = Color.Transparent
                                 ) {
-                                    Icon(
-                                        imageVector = if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
-                                        contentDescription = if (isFullscreen) "Exit fullscreen" else "Enter fullscreen",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(18.dp)
-                                    )
+                                    Row(
+                                        modifier = Modifier.padding(start = 12.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text(
+                                            text = "Autoplay",
+                                            color = Color.White,
+                                            style = MaterialTheme.typography.labelSmall
+                                        )
+                                        Box(modifier = Modifier.size(20.dp), contentAlignment = Alignment.Center) {
+                                            Switch(
+                                                checked = autoPlayNextEpisode,
+                                                onCheckedChange = { onAutoPlayNextEpisodeChanged?.invoke(it) },
+                                                modifier = Modifier.scale(0.5f),
+                                                colors = SwitchDefaults.colors(
+                                                    checkedTrackColor = Color.White,
+                                                    checkedThumbColor = Color.Black,
+                                                    uncheckedTrackColor = Color.White.copy(alpha = 0.3f),
+                                                    uncheckedThumbColor = Color.White
+                                                )
+                                            )
+                                        }
+                                    }
+                                }
+                                Surface(
+                                    onClick = { toggleFullscreen() },
+                                    color = Color.Transparent
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(start = 6.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                                            contentDescription = if (isFullscreen) "Exit fullscreen" else "Enter fullscreen",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
-                }
                 }
             }
         }
@@ -2125,55 +2124,43 @@ fun seekBy(milliseconds: Long) {
             }
         }
 
-        // Subtitle Settings Dialog overlay
+        // Subtitle Settings full-screen overlay
         if (showSubtitleSettings) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.7f))
-                    .clickable(
-                        indication = null,
-                        interactionSource = remember { MutableInteractionSource() }
-                    ) { showSubtitleSettings = false }
-                    .padding(16.dp),
-                contentAlignment = Alignment.BottomCenter
-            ) {
-                SubtitleSettingsDialog(
-                    currentSettings = getActiveSubtitleSettings(),
-                    profiles = subtitleProfileData.profiles,
-                    activeProfileIndex = subtitleProfileData.activeProfileIndex,
-                    onSettingsChange = { newSettings ->
-                        val data = subtitleProfileData
-                        val updatedProfiles = data.profiles.toMutableList().also {
-                            it[data.activeProfileIndex] = newSettings
-                        }
-                        saveSubtitleProfileData(data.copy(profiles = updatedProfiles))
-                    },
-                    onProfileSelect = { index ->
-                        val data = subtitleProfileData
-                        saveSubtitleProfileData(data.copy(activeProfileIndex = index))
-                    },
-                    onResetProfile = { index ->
-                        val data = subtitleProfileData
-                        val updatedProfiles = data.profiles.toMutableList().also {
-                            it[index] = SubtitleSettings(profileName = "Profile ${index + 1}")
-                        }
-                        saveSubtitleProfileData(data.copy(profiles = updatedProfiles))
-                    },
-                    onRenameProfile = { index, name ->
-                        val data = subtitleProfileData
-                        val updated = data.profiles[index].copy(profileName = name)
-                        val updatedProfiles = data.profiles.toMutableList().also {
-                            it[index] = updated
-                        }
-                        saveSubtitleProfileData(data.copy(profiles = updatedProfiles))
-                    },
-                    onDismiss = { showSubtitleSettings = false },
-                    onSave = {
-                        saveSubtitleProfileData(subtitleProfileData)
+            SubtitleSettingsDialog(
+                currentSettings = getActiveSubtitleSettings(),
+                profiles = subtitleProfileData.profiles,
+                activeProfileIndex = subtitleProfileData.activeProfileIndex,
+                onSettingsChange = { newSettings ->
+                    val data = subtitleProfileData
+                    val updatedProfiles = data.profiles.toMutableList().also {
+                        it[data.activeProfileIndex] = newSettings
                     }
-                )
-            }
+                    saveSubtitleProfileData(data.copy(profiles = updatedProfiles))
+                },
+                onProfileSelect = { index ->
+                    val data = subtitleProfileData
+                    saveSubtitleProfileData(data.copy(activeProfileIndex = index))
+                },
+                onResetProfile = { index ->
+                    val data = subtitleProfileData
+                    val updatedProfiles = data.profiles.toMutableList().also {
+                        it[index] = SubtitleSettings(profileName = "Profile ${index + 1}")
+                    }
+                    saveSubtitleProfileData(data.copy(profiles = updatedProfiles))
+                },
+                onRenameProfile = { index, name ->
+                    val data = subtitleProfileData
+                    val updated = data.profiles[index].copy(profileName = name)
+                    val updatedProfiles = data.profiles.toMutableList().also {
+                        it[index] = updated
+                    }
+                    saveSubtitleProfileData(data.copy(profiles = updatedProfiles))
+                },
+                onDismiss = { showSubtitleSettings = false },
+                onSave = {
+                    saveSubtitleProfileData(subtitleProfileData)
+                }
+            )
         }
     }
 }
