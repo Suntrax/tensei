@@ -1,6 +1,7 @@
 package com.blissless.tensei.ui.screens.player
 
 import android.app.Activity
+import android.content.Context
 import android.content.pm.ActivityInfo
 import android.net.Uri
 import android.view.ViewGroup
@@ -55,6 +56,7 @@ import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -103,6 +105,8 @@ import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
 import com.blissless.tensei.api.AnimeSkipService
 import com.blissless.tensei.data.models.EpisodeTimestamps
+import com.blissless.tensei.data.models.SubtitleProfileData
+import com.blissless.tensei.data.models.SubtitleSettings
 import com.blissless.tensei.data.models.TmdbEpisode
 import com.blissless.tensei.download.EpisodeDownloadManager
 import kotlinx.coroutines.Job
@@ -190,6 +194,26 @@ fun OfflinePlayerScreen(
     var showSubtitleMenu by remember { mutableStateOf(false) }
     var selectedSubtitleIndex by remember { mutableIntStateOf(0) }
     var subtitleTrackList by remember { mutableStateOf<List<EpisodeDownloadManager.SubtitleTrackData>>(emptyList()) }
+    var showSubtitleSettings by remember { mutableStateOf(false) }
+    var subtitleProfileData by remember { mutableStateOf(loadSubtitleProfileData(context)) }
+
+    fun getActiveSubtitleSettings(): SubtitleSettings {
+        val data = subtitleProfileData
+        return data.profiles.getOrElse(data.activeProfileIndex) { SubtitleSettings.DEFAULT }
+    }
+
+    fun saveSubtitleProfileData(data: SubtitleProfileData) {
+        subtitleProfileData = data
+        val json = kotlinx.serialization.json.Json {
+            ignoreUnknownKeys = true
+            encodeDefaults = true
+        }
+        val encoded = json.encodeToString(SubtitleProfileData.serializer(), data)
+        context.getSharedPreferences("anilist_prefs", Context.MODE_PRIVATE).edit()
+            .putString("subtitle_profiles", encoded)
+            .putInt("subtitle_active_profile", data.activeProfileIndex)
+            .apply()
+    }
 
     // Auto-select subtitle based on user preference
     LaunchedEffect(subtitleTrackList) {

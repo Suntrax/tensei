@@ -71,6 +71,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -1346,56 +1347,91 @@ fun seekBy(milliseconds: Long) {
                                         }
                                     }
 
+                                    var subtitleSettingsView by remember(showSubtitleMenu) { mutableStateOf(false) }
+
                                     DropdownMenu(
                                         expanded = showSubtitleMenu,
                                         onDismissRequest = { showSubtitleMenu = false },
-                                        modifier = Modifier.background(Color(0xFF1A1A1A)).width(160.dp)
+                                        modifier = Modifier.background(Color(0xFF1A1A1A)).width(180.dp)
                                     ) {
-                                        DropdownMenuItem(
-                                            text = { Text("Off", color = if (!subtitlesEnabled) MaterialTheme.colorScheme.primary else Color.White) },
-                                            onClick = {
-                                                if (subtitlesEnabled) rebuildWithSubtitles(false)
-                                                showSubtitleMenu = false
-                                            },
-                                            leadingIcon = if (!subtitlesEnabled) { { Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary) } } else null
-                                        )
-                                        val trackList = subtitleTracks.ifEmpty {
-                                            if (subtitleUrl != null) listOf(eu.kanade.tachiyomi.animesource.model.Track(subtitleUrl, "en"))
-                                            else emptyList()
-                                        }
-                                        trackList.forEachIndexed { index, track ->
-                                            val isSelected = subtitlesEnabled && index == selectedSubtitleIndex
+                                        if (subtitleSettingsView) {
                                             DropdownMenuItem(
-                                                text = { Text(track.lang.uppercase(), color = if (isSelected) MaterialTheme.colorScheme.primary else Color.White) },
+                                                text = {
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Icon(Icons.Default.Settings, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                                        Spacer(Modifier.width(8.dp))
+                                                        Text("Edit Subtitles", color = Color.White)
+                                                    }
+                                                },
                                                 onClick = {
-                                                    selectedSubtitleIndex = index
-                                                    rebuildWithSubtitles(true)
+                                                    showSubtitleMenu = false
+                                                    subtitleSettingsView = false
+                                                    showSubtitleSettings = true
+                                                }
+                                            )
+                                            HorizontalDivider(color = Color.Gray.copy(alpha = 0.3f))
+                                            Text(
+                                                "Profiles",
+                                                color = Color.Gray,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                                            )
+                                            subtitleProfileData.profiles.forEachIndexed { index, profile ->
+                                                val isActive = index == subtitleProfileData.activeProfileIndex
+                                                DropdownMenuItem(
+                                                    text = { Text(profile.profileName, color = if (isActive) MaterialTheme.colorScheme.primary else Color.White) },
+                                                    onClick = {
+                                                        val data = subtitleProfileData
+                                                        saveSubtitleProfileData(data.copy(activeProfileIndex = index))
+                                                        subtitleSettingsView = false
+                                                        showSubtitleMenu = false
+                                                    },
+                                                    leadingIcon = if (isActive) { { Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary) } } else null
+                                                )
+                                            }
+                                            HorizontalDivider(color = Color.Gray.copy(alpha = 0.3f))
+                                            DropdownMenuItem(
+                                                text = { Text("Back", color = Color.Gray, style = MaterialTheme.typography.labelSmall) },
+                                                onClick = { subtitleSettingsView = false }
+                                            )
+                                        } else {
+                                            DropdownMenuItem(
+                                                text = { Text("Off", color = if (!subtitlesEnabled) MaterialTheme.colorScheme.primary else Color.White) },
+                                                onClick = {
+                                                    if (subtitlesEnabled) rebuildWithSubtitles(false)
                                                     showSubtitleMenu = false
                                                 },
-                                                leadingIcon = if (isSelected) { { Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary) } } else null
+                                                leadingIcon = if (!subtitlesEnabled) { { Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary) } } else null
+                                            )
+                                            val trackList = subtitleTracks.ifEmpty {
+                                                if (subtitleUrl != null) listOf(eu.kanade.tachiyomi.animesource.model.Track(subtitleUrl, "en"))
+                                                else emptyList()
+                                            }
+                                            trackList.forEachIndexed { index, track ->
+                                                val isSelected = subtitlesEnabled && index == selectedSubtitleIndex
+                                                DropdownMenuItem(
+                                                    text = { Text(track.lang.uppercase(), color = if (isSelected) MaterialTheme.colorScheme.primary else Color.White) },
+                                                    onClick = {
+                                                        selectedSubtitleIndex = index
+                                                        rebuildWithSubtitles(true)
+                                                        showSubtitleMenu = false
+                                                    },
+                                                    leadingIcon = if (isSelected) { { Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary) } } else null
+                                                )
+                                            }
+                                            HorizontalDivider(color = Color.Gray.copy(alpha = 0.3f))
+                                            DropdownMenuItem(
+                                                text = {
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Icon(Icons.Default.Settings, null, tint = Color.Gray, modifier = Modifier.size(14.dp))
+                                                        Spacer(Modifier.width(6.dp))
+                                                        Text("Settings", color = Color.Gray, style = MaterialTheme.typography.labelSmall)
+                                                    }
+                                                },
+                                                onClick = { subtitleSettingsView = true }
                                             )
                                         }
                                     }
-                                }
-                            }
-
-                            // Subtitle Settings button (gear icon)
-                            Surface(
-                                shape = RoundedCornerShape(14.dp),
-                                color = Color.Black.copy(alpha = 0.5f),
-                                onClick = { showSubtitleSettings = true }
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center
-                                ) {
-                                    Icon(
-                                        Icons.Default.Settings,
-                                        contentDescription = "Subtitle Settings",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(18.dp)
-                                    )
                                 }
                             }
 
@@ -2132,14 +2168,17 @@ fun seekBy(milliseconds: Long) {
                         }
                         saveSubtitleProfileData(data.copy(profiles = updatedProfiles))
                     },
-                    onDismiss = { showSubtitleSettings = false }
+                    onDismiss = { showSubtitleSettings = false },
+                    onSave = {
+                        saveSubtitleProfileData(subtitleProfileData)
+                    }
                 )
             }
         }
     }
 }
 
-private fun loadSubtitleProfileData(context: Context): SubtitleProfileData {
+internal fun loadSubtitleProfileData(context: Context): SubtitleProfileData {
     val prefs = context.getSharedPreferences("anilist_prefs", Context.MODE_PRIVATE)
     val saved = prefs.getString("subtitle_profiles", null)
     val activeIndex = prefs.getInt("subtitle_active_profile", 0)
@@ -2154,7 +2193,7 @@ private fun loadSubtitleProfileData(context: Context): SubtitleProfileData {
     return SubtitleProfileData()
 }
 
-private fun applySubtitleStyle(subtitleView: androidx.media3.ui.SubtitleView, settings: SubtitleSettings) {
+internal fun applySubtitleStyle(subtitleView: androidx.media3.ui.SubtitleView, settings: SubtitleSettings) {
     val edgeType = when {
         settings.enableOutline && settings.enableShadow -> CaptionStyleCompat.EDGE_TYPE_OUTLINE
         settings.enableOutline -> CaptionStyleCompat.EDGE_TYPE_OUTLINE
