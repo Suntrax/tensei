@@ -218,6 +218,7 @@ fun PlayerScreen(
     var hasPlaybackStarted by remember { mutableStateOf(false) }
     var isManuallySeeking by remember { mutableStateOf(false) }
     var seekRetryCount by remember { mutableIntStateOf(0) }
+    var isInitialLoading by remember { mutableStateOf(false) }
 
     var resizeModeIndex by remember { mutableIntStateOf(0) }
     val resizeModes = listOf(
@@ -446,30 +447,39 @@ fun PlayerScreen(
                             return
                         }
 
-                        // Always clear caches on any stream error so the next attempt refetches fresh
-                        onInvalidateStreamCache?.invoke()
-
-                        // Auto-retry if the error happened during/after a manual seek
-                        // Player is already in STATE_IDLE after error, media items are still loaded
-                        // seekTo preserves playWhenReady so we don't force play
+                        // Auto-retry for manual seeks: retry up to 2 times with seekPlayerTo.
+                        // After exhaustion, auto-refresh the stream URL (the URL may have expired).
                         if (isManuallySeeking && seekRetryCount < 2) {
                             seekRetryCount++
                             hasError = false
                             playbackError = null
                             isBuffering = true
                             val seekPos = currentPosition
-                            prepare()
                             if (seekPos > 0) {
-                                seekTo(seekPos)
+                                val wasPlaying = playWhenReady
+                                val currentItem = currentMediaItem
+                                if (currentItem != null) {
+                                    stop()
+                                    setMediaItem(currentItem, seekPos)
+                                    prepare()
+                                    playWhenReady = wasPlaying
+                                }
+                            } else {
+                                prepare()
                             }
                             return
                         }
-
-                        // Auto-refresh stream on initial load failure (e.g. stale cached URL)
-                        if (!hasPlaybackStarted && seekRetryCount == 0 && onRefreshStream != null) {
-                            seekRetryCount++
+                        if (isManuallySeeking && onRefreshStream != null) {
+                            onInvalidateStreamCache?.invoke()
                             onRefreshStream.invoke()
                             return
+                        }
+
+                        // Auto-refresh for initial load / re-entry failure (stale cached URL).
+                        // isAutoRefreshing in MainActivity prevents infinite refreshes.
+                        if (isInitialLoading && onRefreshStream != null) {
+                            onInvalidateStreamCache?.invoke()
+                            onRefreshStream.invoke()
                         }
 
                         hasError = true
@@ -493,8 +503,16 @@ fun PlayerScreen(
                             isChangingServer = false
                             isBuffering = false
                             hasPlaybackStarted = true
+                            isInitialLoading = false
                             if (pendingQualityChange != null && savedPositionForQuality > 0) {
-                                seekTo(savedPositionForQuality)
+                                val wasPlaying = playWhenReady
+                                val currentItem = currentMediaItem
+                                if (currentItem != null) {
+                                    stop()
+                                    setMediaItem(currentItem, savedPositionForQuality)
+                                    prepare()
+                                    playWhenReady = wasPlaying
+                                }
                                 pendingQualityChange = null
                                 savedPositionForQuality = 0L
                             }
@@ -527,6 +545,7 @@ fun PlayerScreen(
         maxBufferedPosition = 0L
         isOffline = false
         seekRetryCount = 0
+        isInitialLoading = true
 
         exoPlayer.stop()
         delay(100.milliseconds)
@@ -568,12 +587,12 @@ fun PlayerScreen(
             .setSubtitleConfigurations(subtitleConfigs)
             .build()
 
-        exoPlayer.setMediaItem(mediaItem)
-        exoPlayer.prepare()
-
         if (savedPosition > 0) {
-            exoPlayer.seekTo(savedPosition)
+            exoPlayer.setMediaItem(mediaItem, savedPosition)
+        } else {
+            exoPlayer.setMediaItem(mediaItem)
         }
+        exoPlayer.prepare()
 
         hasPlaybackStarted = true
 
@@ -615,6 +634,17 @@ fun PlayerScreen(
         }
     }
 
+    /** Seek without byte-range requests — rebuilds player with a clip start position.
+     *  Prevents error 2001 on proxy streams that don't support Range headers. */
+    fun seekPlayerTo(position: Long) {
+        val wasPlaying = exoPlayer.playWhenReady
+        val currentItem = exoPlayer.currentMediaItem ?: return
+        exoPlayer.stop()
+        exoPlayer.setMediaItem(currentItem, position)
+        exoPlayer.prepare()
+        exoPlayer.playWhenReady = wasPlaying
+    }
+
     fun seekBy(milliseconds: Long) {
         isManuallySeeking = true
         seekRetryCount = 0
@@ -642,7 +672,7 @@ fun PlayerScreen(
         } else {
             (currentPosition + milliseconds).coerceAtLeast(0)
         }
-        exoPlayer.seekTo(newPosition)
+        seekPlayerTo(newPosition)
         currentPosition = newPosition
         sliderValue = newPosition.toFloat()
 
@@ -663,7 +693,7 @@ fun PlayerScreen(
     fun performManualSeek(position: Long) {
         isManuallySeeking = true
         seekRetryCount = 0
-        exoPlayer.seekTo(position)
+        seekPlayerTo(position)
         currentPosition = position
         sliderValue = position.toFloat()
         skipResetJob?.cancel()
@@ -1816,7 +1846,7 @@ fun PlayerScreen(
                                         },
                                         onDragEnd = {
                                             isDragging = false
-                                            exoPlayer.seekTo(sliderValue.toLong())
+                                            seekPlayerTo(sliderValue.toLong())
                                             skipResetJob?.cancel()
                                             skipResetJob = scope.launch {
                                                 delay(1500.milliseconds)
