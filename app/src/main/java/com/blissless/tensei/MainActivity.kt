@@ -561,6 +561,7 @@ fun MainScreen(
     }
 
     var showPlayer by remember { mutableStateOf(false) }
+    var isAutoRefreshing by remember { mutableStateOf(false) }
     var currentVideoUrl by remember { mutableStateOf<String?>(null) }
     var currentReferer by remember { mutableStateOf("https://megacloud.tv/") }
     var currentSubtitleUrl by remember { mutableStateOf<String?>(null) }
@@ -795,7 +796,8 @@ fun MainScreen(
         }
     }
 
-    fun loadAndPlayEpisode(anime: AnimeMedia, episode: Int) {
+    fun loadAndPlayEpisode(anime: AnimeMedia, episode: Int, isAutoRefresh: Boolean = false) {
+        if (!isAutoRefresh) isAutoRefreshing = false
         currentAnime = anime
         currentEpisode = episode
         totalEpisodes = anime.totalEpisodes
@@ -1065,7 +1067,8 @@ fun MainScreen(
     fun invalidateCurrentStreamCache() {
         currentAnime?.let { anime ->
             viewModel.invalidateStreamCache(anime.id, currentEpisode, currentCategory)
-            viewModel.invalidateExtensionStreamCache(anime.id, currentEpisode)
+            viewModel.clearAnimeExtensionStreamCaches(anime.id)
+            currentVideoUrl?.let { viewModel.removeFromVideoCache(it) }
         }
     }
 
@@ -1634,6 +1637,14 @@ fun MainScreen(
                 isLatestEpisode = released in 1..currentEpisode,
                 onPlaybackError = { onPlaybackError() },
                 onInvalidateStreamCache = { invalidateCurrentStreamCache() },
+                onRefreshStream = {
+                    if (!isAutoRefreshing) {
+                        isAutoRefreshing = true
+                        currentAnime?.let { a ->
+                            loadAndPlayEpisode(a, currentEpisode, isAutoRefresh = true)
+                        }
+                    }
+                },
                 autoSkipOpening = autoSkipOpening,
                 autoSkipEnding = autoSkipEnding,
                 autoPlayNextEpisode = autoPlayNextEpisode,

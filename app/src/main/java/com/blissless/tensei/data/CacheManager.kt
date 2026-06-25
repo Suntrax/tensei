@@ -123,8 +123,7 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
     fun isVideoFullyCached(videoUrl: String): Boolean {
         val cache = videoCache ?: return false
         return try {
-            val key = videoUrl.hashCode().toString()
-            val cachedSpans = cache.getCachedSpans(key)
+            val cachedSpans = cache.getCachedSpans(videoUrl)
             val cachedBytes = cachedSpans.sumOf { it.length }
             val contentLength = getContentLength(videoUrl, "")
             contentLength in 1..cachedBytes
@@ -138,8 +137,7 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
     fun getCacheProgress(videoUrl: String): Pair<Long, Long>? {
         val cache = videoCache ?: return null
         return try {
-            val key = videoUrl.hashCode().toString()
-            val cachedSpans = cache.getCachedSpans(key)
+            val cachedSpans = cache.getCachedSpans(videoUrl)
             val cachedBytes = cachedSpans.sumOf { it.length }
             val contentLength = getContentLength(videoUrl, "")
             if (contentLength > 0) {
@@ -565,6 +563,20 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
         saveExtensionStreamCache()
     }
 
+    fun clearAnimeExtensionStreamCaches(animeId: Int) {
+        val prefix = "${animeId}_"
+        val keysToRemove = _extensionStreamCache.keys.filter { it.startsWith(prefix) }
+        keysToRemove.forEach { _extensionStreamCache.remove(it) }
+        if (keysToRemove.isNotEmpty()) {
+            saveExtensionStreamCache()
+        }
+    }
+
+    fun clearAllExtensionStreamCaches() {
+        _extensionStreamCache.clear()
+        saveExtensionStreamCache()
+    }
+
     fun loadExtensionStreamCache() {
         try {
             val raw = sharedPreferences.getString(CACHE_EXTENSION_STREAMS, null) ?: return
@@ -630,6 +642,12 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
         }
     }
 
+    fun invalidateAllStreamCaches() {
+        _prefetchedStreams.value = emptyMap()
+        _prefetchedEpisodeInfo.value = emptyMap()
+        saveStreamCache()
+    }
+
     fun clearAllCaches() {
         _prefetchedStreams.value = emptyMap()
         _prefetchedEpisodeInfo.value = emptyMap()
@@ -638,6 +656,16 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
         _tmdbCacheTimestamps.clear()
         _persistentTmdbIds.clear()
         sharedPreferences.edit { clear() }
+    }
+
+    // Remove a specific video URL from the ExoPlayer cache
+    // CacheDataSource uses CacheKeyFactory.DEFAULT which keys by uri.toString()
+    @OptIn(UnstableApi::class)
+    fun removeFromVideoCache(videoUrl: String) {
+        val cache = videoCache ?: return
+        try {
+            cache.removeResource(videoUrl)
+        } catch (_: Exception) {}
     }
 
     // ExoPlayer video cache management

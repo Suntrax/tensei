@@ -1565,7 +1565,17 @@ class MainViewModel : ViewModel() {
     fun setAutoSkipOpening(enabled: Boolean) = userPreferences.setAutoSkipOpening(enabled)
     fun setAutoSkipEnding(enabled: Boolean) = userPreferences.setAutoSkipEnding(enabled)
     fun setAutoPlayNextEpisode(enabled: Boolean) = userPreferences.setAutoPlayNextEpisode(enabled)
-    fun setDefaultExtensionPackage(packageName: String) = userPreferences.setDefaultExtensionPackage(packageName)
+    fun setDefaultExtensionPackage(packageName: String) {
+        clearAllExtensionStreamCaches()
+        invalidateAllStreamCaches()
+        cacheManager.clearVideoCache(context)
+        userPreferences.setDefaultExtensionPackage(packageName)
+        cacheManager.initializeVideoCache(context)
+    }
+
+    fun invalidateAllStreamCaches() {
+        cacheManager.invalidateAllStreamCaches()
+    }
     fun setDefaultSubtitleLang(lang: String) = userPreferences.setDefaultSubtitleLang(lang)
     fun setDownloadPreferredCategory(category: String) = userPreferences.setDownloadPreferredCategory(category)
     fun setDownloadSubtitleLang(lang: String) = userPreferences.setDownloadSubtitleLang(lang)
@@ -1617,6 +1627,18 @@ class MainViewModel : ViewModel() {
 
     fun invalidateExtensionStreamCache(animeId: Int, episode: Int) {
         cacheManager.invalidateExtensionStreamCache("${animeId}_$episode")
+    }
+
+    fun clearAnimeExtensionStreamCaches(animeId: Int) {
+        cacheManager.clearAnimeExtensionStreamCaches(animeId)
+    }
+
+    fun clearAllExtensionStreamCaches() {
+        cacheManager.clearAllExtensionStreamCaches()
+    }
+
+    fun removeFromVideoCache(videoUrl: String) {
+        cacheManager.removeFromVideoCache(videoUrl)
     }
 
     // Cache management

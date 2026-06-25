@@ -17,6 +17,8 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -39,6 +41,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.BrightnessHigh
@@ -68,6 +71,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -559,38 +563,34 @@ fun OfflinePlayerScreen(
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        // PlayerView
-        AndroidView(
-            factory = { ctx ->
-                    PlayerView(ctx).apply {
-                        player = exoPlayer
-                        layoutParams = FrameLayout.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.MATCH_PARENT
-                        )
-                        resizeMode = resizeModes[resizeModeIndex].first
-                        useController = false
-                        setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
+        // PlayerView - recreate when subtitle profile changes
+        key(subtitleProfileData) {
+            AndroidView(
+                factory = { ctx ->
+                        PlayerView(ctx).apply {
+                            player = exoPlayer
+                            layoutParams = FrameLayout.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                ViewGroup.LayoutParams.MATCH_PARENT
+                            )
+                            resizeMode = resizeModes[resizeModeIndex].first
+                            useController = false
+                            setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
+                            subtitleView?.apply {
+                                applySubtitleStyle(this, getActiveSubtitleSettings())
+                            }
+                        }
+                },
+                modifier = Modifier.fillMaxSize(),
+                update = { view ->
+                    view.resizeMode = resizeModes[resizeModeIndex].first
+                    view.player = exoPlayer
+                    view.subtitleView?.apply {
+                        applySubtitleStyle(this, getActiveSubtitleSettings())
                     }
-            },
-            modifier = Modifier.fillMaxSize(),
-            update = { view ->
-                view.resizeMode = resizeModes[resizeModeIndex].first
-                view.player = exoPlayer
-                view.subtitleView?.apply {
-                    val style = CaptionStyleCompat(
-                        android.graphics.Color.WHITE,
-                        android.graphics.Color.TRANSPARENT,
-                        android.graphics.Color.TRANSPARENT,
-                        CaptionStyleCompat.EDGE_TYPE_OUTLINE,
-                        android.graphics.Color.BLACK,
-                        null
-                    )
-                    setStyle(style)
-                    setFixedTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 22f)
                 }
-            }
-        )
+            )
+        }
 
         // Gesture zones
         var lastLeftTapTime by remember { mutableLongStateOf(0L) }
@@ -849,42 +849,92 @@ fun OfflinePlayerScreen(
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.Center
                                         ) {
-                                            Text(
-                                                text = "CC",
-                                                color = ccColor,
-                                                fontWeight = FontWeight.Bold,
-                                                style = MaterialTheme.typography.labelMedium
+                                            Icon(
+                                                Icons.Filled.ClosedCaption,
+                                                contentDescription = "Subtitles",
+                                                tint = ccColor,
+                                                modifier = Modifier.size(20.dp)
                                             )
                                         }
                                     }
 
+                                    var subtitleSettingsView by remember(showSubtitleMenu) { mutableStateOf(false) }
+
                                     DropdownMenu(
                                         expanded = showSubtitleMenu,
                                         onDismissRequest = { showSubtitleMenu = false },
-                                        modifier = Modifier.background(Color(0xFF1A1A1A)).width(160.dp)
+                                        modifier = Modifier.background(Color(0xFF1A1A1A)).width(180.dp)
                                     ) {
-                                        DropdownMenuItem(
-                                            text = { Text("Off", color = if (!subtitlesEnabled) MaterialTheme.colorScheme.primary else Color.White) },
-                                            onClick = {
-                                                if (subtitlesEnabled) rebuildWithSubtitles(false)
-                                                showSubtitleMenu = false
-                                            },
-                                            leadingIcon = if (!subtitlesEnabled) {
-                                                { Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary) }
-                                            } else null
-                                        )
-                                        subtitleTrackList.forEachIndexed { index, track ->
-                                            val isSelected = subtitlesEnabled && index == selectedSubtitleIndex
-                                            val trackLang = track.lang.ifEmpty { "en" }
+                                        if (subtitleSettingsView) {
+                                            Text(
+                                                "Profiles",
+                                                color = Color.Gray,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                                            )
+                                            subtitleProfileData.profiles.forEachIndexed { index, profile ->
+                                                val isActive = index == subtitleProfileData.activeProfileIndex
+                                                DropdownMenuItem(
+                                                    text = { Text(profile.profileName, color = if (isActive) MaterialTheme.colorScheme.primary else Color.White) },
+                                                    onClick = {
+                                                        val data = subtitleProfileData
+                                                        saveSubtitleProfileData(data.copy(activeProfileIndex = index))
+                                                        subtitleSettingsView = false
+                                                        showSubtitleMenu = false
+                                                    },
+                                                    leadingIcon = if (isActive) { { Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary) } } else null
+                                                )
+                                            }
+                                            HorizontalDivider(color = Color.Gray.copy(alpha = 0.3f))
                                             DropdownMenuItem(
-                                                text = { Text(trackLang.uppercase(), color = if (isSelected) MaterialTheme.colorScheme.primary else Color.White) },
+                                                text = {
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Icon(Icons.Default.Settings, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                                        Spacer(Modifier.width(8.dp))
+                                                        Text("Edit Subtitles", color = Color.White)
+                                                    }
+                                                },
                                                 onClick = {
-                                                    rebuildWithSubtitles(true, index)
+                                                    showSubtitleMenu = false
+                                                    subtitleSettingsView = false
+                                                    showSubtitleSettings = true
+                                                }
+                                            )
+                                        } else {
+                                            DropdownMenuItem(
+                                                text = { Text("Off", color = if (!subtitlesEnabled) MaterialTheme.colorScheme.primary else Color.White) },
+                                                onClick = {
+                                                    if (subtitlesEnabled) rebuildWithSubtitles(false)
                                                     showSubtitleMenu = false
                                                 },
-                                                leadingIcon = if (isSelected) {
+                                                leadingIcon = if (!subtitlesEnabled) {
                                                     { Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary) }
                                                 } else null
+                                            )
+                                            subtitleTrackList.forEachIndexed { index, track ->
+                                                val isSelected = subtitlesEnabled && index == selectedSubtitleIndex
+                                                val trackLang = track.lang.ifEmpty { "en" }
+                                                DropdownMenuItem(
+                                                    text = { Text(trackLang.uppercase(), color = if (isSelected) MaterialTheme.colorScheme.primary else Color.White) },
+                                                    onClick = {
+                                                        rebuildWithSubtitles(true, index)
+                                                        showSubtitleMenu = false
+                                                    },
+                                                    leadingIcon = if (isSelected) {
+                                                        { Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary) }
+                                                    } else null
+                                                )
+                                            }
+                                            HorizontalDivider(color = Color.Gray.copy(alpha = 0.3f))
+                                            DropdownMenuItem(
+                                                text = {
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Icon(Icons.Default.Settings, null, tint = Color.Gray, modifier = Modifier.size(14.dp))
+                                                        Spacer(Modifier.width(6.dp))
+                                                        Text("Settings", color = Color.Gray, style = MaterialTheme.typography.labelSmall)
+                                                    }
+                                                },
+                                                onClick = { subtitleSettingsView = true }
                                             )
                                         }
                                     }
@@ -1658,6 +1708,57 @@ fun OfflinePlayerScreen(
                             )
                         }
                     }
+                }
+            }
+
+            // Subtitle Settings Dialog overlay
+            if (showSubtitleSettings) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.7f))
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() }
+                        ) { showSubtitleSettings = false }
+                        .padding(16.dp),
+                    contentAlignment = Alignment.BottomCenter
+                ) {
+                    SubtitleSettingsDialog(
+                        currentSettings = getActiveSubtitleSettings(),
+                        profiles = subtitleProfileData.profiles,
+                        activeProfileIndex = subtitleProfileData.activeProfileIndex,
+                        onSettingsChange = { newSettings ->
+                            val data = subtitleProfileData
+                            val updatedProfiles = data.profiles.toMutableList().also {
+                                it[data.activeProfileIndex] = newSettings
+                            }
+                            saveSubtitleProfileData(data.copy(profiles = updatedProfiles))
+                        },
+                        onProfileSelect = { index ->
+                            val data = subtitleProfileData
+                            saveSubtitleProfileData(data.copy(activeProfileIndex = index))
+                        },
+                        onResetProfile = { index ->
+                            val data = subtitleProfileData
+                            val updatedProfiles = data.profiles.toMutableList().also {
+                                it[index] = SubtitleSettings(profileName = "Profile ${index + 1}")
+                            }
+                            saveSubtitleProfileData(data.copy(profiles = updatedProfiles))
+                        },
+                        onRenameProfile = { index, name ->
+                            val data = subtitleProfileData
+                            val updated = data.profiles[index].copy(profileName = name)
+                            val updatedProfiles = data.profiles.toMutableList().also {
+                                it[index] = updated
+                            }
+                            saveSubtitleProfileData(data.copy(profiles = updatedProfiles))
+                        },
+                        onDismiss = { showSubtitleSettings = false },
+                        onSave = {
+                            saveSubtitleProfileData(subtitleProfileData)
+                        }
+                    )
                 }
             }
         }

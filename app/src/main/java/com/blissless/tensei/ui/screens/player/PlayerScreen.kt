@@ -7,12 +7,12 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
 import android.util.Log
-import android.util.TypedValue
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.annotation.OptIn
+import androidx.annotation.RequiresApi
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -23,7 +23,6 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -43,15 +42,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.BrightnessHigh
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.Fullscreen
@@ -143,7 +143,9 @@ import kotlinx.coroutines.withContext
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.time.Duration.Companion.milliseconds
+import androidx.core.content.edit
 
+@RequiresApi(Build.VERSION_CODES.R)
 @OptIn(UnstableApi::class)
 @Composable
 fun PlayerScreen(
@@ -194,6 +196,7 @@ fun PlayerScreen(
     onServerChange: ((serverName: String, category: String) -> Unit)? = null,
     onPlaybackError: (() -> Unit)? = null,
     onInvalidateStreamCache: (() -> Unit)? = null,
+    onRefreshStream: (() -> Unit)? = null,
     onPrefetchAdjacent: (() -> Unit)? = null,
     onGetCacheDataSourceFactory: (String) -> CacheDataSource.Factory? = { null },
     onBackClick: (() -> Unit)? = null,
@@ -214,6 +217,7 @@ fun PlayerScreen(
     var serverChangeTrigger by remember { mutableIntStateOf(0) }
     var hasPlaybackStarted by remember { mutableStateOf(false) }
     var isManuallySeeking by remember { mutableStateOf(false) }
+    var seekRetryCount by remember { mutableIntStateOf(0) }
 
     var resizeModeIndex by remember { mutableIntStateOf(0) }
     val resizeModes = listOf(
@@ -362,10 +366,8 @@ fun PlayerScreen(
             val controller = WindowCompat.getInsetsController(window, window.decorView)
             controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             controller.hide(WindowInsetsCompat.Type.systemBars())
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                window.attributes.layoutInDisplayCutoutMode =
-                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
-            }
+            window.attributes.layoutInDisplayCutoutMode =
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
             WindowCompat.setDecorFitsSystemWindows(window, false)
         }
         activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
@@ -441,17 +443,44 @@ fun PlayerScreen(
                             isBuffering = true
                             hasError = false
                             playbackError = null
-                        } else {
-                            hasError = true
-                            playbackError = "${error.errorCode}: ${error.message ?: "Unknown"}"
-                            showControls = true
-                            Log.e("PlayerScreen", "Playback error: code=${error.errorCode} msg=${error.message} videoUrl=${videoUrl.take(120)}")
-                            Log.e("PlayerScreen", "  cause=${error.cause?.message}")
-                            error.cause?.let { cause ->
-                                Log.e("PlayerScreen", "  cause type=${cause::class.simpleName}")
-                                cause.stackTrace?.take(5)?.forEach { frame ->
-                                    Log.e("PlayerScreen", "    at $frame")
-                                }
+                            return
+                        }
+
+                        // Always clear caches on any stream error so the next attempt refetches fresh
+                        onInvalidateStreamCache?.invoke()
+
+                        // Auto-retry if the error happened during/after a manual seek
+                        // Player is already in STATE_IDLE after error, media items are still loaded
+                        // seekTo preserves playWhenReady so we don't force play
+                        if (isManuallySeeking && seekRetryCount < 2) {
+                            seekRetryCount++
+                            hasError = false
+                            playbackError = null
+                            isBuffering = true
+                            val seekPos = currentPosition
+                            prepare()
+                            if (seekPos > 0) {
+                                seekTo(seekPos)
+                            }
+                            return
+                        }
+
+                        // Auto-refresh stream on initial load failure (e.g. stale cached URL)
+                        if (!hasPlaybackStarted && seekRetryCount == 0 && onRefreshStream != null) {
+                            seekRetryCount++
+                            onRefreshStream.invoke()
+                            return
+                        }
+
+                        hasError = true
+                        playbackError = "${error.errorCode}: ${error.message ?: "Unknown"}"
+                        showControls = true
+                        Log.e("PlayerScreen", "Playback error: code=${error.errorCode} msg=${error.message} videoUrl=${videoUrl.take(120)}")
+                        Log.e("PlayerScreen", "  cause=${error.cause?.message}")
+                        error.cause?.let { cause ->
+                            Log.e("PlayerScreen", "  cause type=${cause::class.simpleName}")
+                            cause.stackTrace.take(5).forEach { frame ->
+                                Log.e("PlayerScreen", "    at $frame")
                             }
                         }
                     }
@@ -497,6 +526,7 @@ fun PlayerScreen(
         bufferedPosition = 0L
         maxBufferedPosition = 0L
         isOffline = false
+        seekRetryCount = 0
 
         exoPlayer.stop()
         delay(100.milliseconds)
@@ -587,6 +617,7 @@ fun PlayerScreen(
 
     fun seekBy(milliseconds: Long) {
         isManuallySeeking = true
+        seekRetryCount = 0
 
         // Show skip indicator (separate from player UI)
         skipIndicatorText = if (milliseconds > 0) "+${abs(milliseconds / 1000)}s" else "-${abs(milliseconds / 1000)}s"
@@ -603,7 +634,14 @@ fun PlayerScreen(
         lastTapTime = now
 
         // Always seek by single skip amount, not accumulated
-        val newPosition = (exoPlayer.currentPosition + milliseconds).coerceIn(0, exoPlayer.duration)
+        // Use currentPosition (displayed position) instead of exoPlayer.currentPosition
+        // because exoPlayer may still be seeking from a previous scrub and return stale value
+        val duration = exoPlayer.duration
+        val newPosition = if (duration > 0) {
+            (currentPosition + milliseconds).coerceIn(0, duration)
+        } else {
+            (currentPosition + milliseconds).coerceAtLeast(0)
+        }
         exoPlayer.seekTo(newPosition)
         currentPosition = newPosition
         sliderValue = newPosition.toFloat()
@@ -622,10 +660,23 @@ fun PlayerScreen(
         }
     }
 
+    fun performManualSeek(position: Long) {
+        isManuallySeeking = true
+        seekRetryCount = 0
+        exoPlayer.seekTo(position)
+        currentPosition = position
+        sliderValue = position.toFloat()
+        skipResetJob?.cancel()
+        skipResetJob = scope.launch {
+            delay(1500.milliseconds)
+            isManuallySeeking = false
+        }
+    }
+
     LaunchedEffect(exoPlayer, videoUrl) {
         while (true) {
             delay(500.milliseconds)
-            if (!isDragging) {
+            if (!isDragging && !isManuallySeeking) {
                 currentPosition = exoPlayer.currentPosition
                 duration = exoPlayer.duration
                 // Get buffered position from ExoPlayer
@@ -694,8 +745,8 @@ fun PlayerScreen(
         hasFetchedTimestamps = true
     }
 
-    LaunchedEffect(currentPosition, effectiveTimestamps, hasError, isManuallySeeking, isChangingServer) {
-        if (hasError || isChangingServer) return@LaunchedEffect
+    LaunchedEffect(currentPosition, effectiveTimestamps, hasError, isManuallySeeking, isChangingServer, isDragging) {
+        if (hasError || isChangingServer || isDragging) return@LaunchedEffect
 
         val ts = effectiveTimestamps
         val posSeconds = currentPosition / 1000
@@ -705,7 +756,6 @@ fun PlayerScreen(
             if (isInIntro) {
                 if (autoSkipOpening && !hasSkippedIntro && !isManuallySeeking) {
                     exoPlayer.seekTo(ts.introEnd * 1000L)
-                    exoPlayer.play()
                     hasSkippedIntro = true
                 }
                 showSkipOpeningButton = !autoSkipOpening
@@ -873,10 +923,10 @@ fun PlayerScreen(
             encodeDefaults = true
         }
         val encoded = json.encodeToString(SubtitleProfileData.serializer(), data)
-        context.getSharedPreferences("anilist_prefs", Context.MODE_PRIVATE).edit()
-            .putString("subtitle_profiles", encoded)
-            .putInt("subtitle_active_profile", data.activeProfileIndex)
-            .apply()
+        context.getSharedPreferences("anilist_prefs", Context.MODE_PRIVATE).edit {
+                putString("subtitle_profiles", encoded)
+                .putInt("subtitle_active_profile", data.activeProfileIndex)
+            }
     }
 
     Box(
@@ -884,8 +934,8 @@ fun PlayerScreen(
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        // PlayerView - recreate when server changes
-        key(serverChangeTrigger) {
+        // PlayerView - recreate when server or subtitle profile changes
+            key(serverChangeTrigger, subtitleProfileData) {
             AndroidView(
                 factory = { ctx ->
                     PlayerView(ctx).apply {
@@ -1213,10 +1263,12 @@ fun PlayerScreen(
                                             color = Color.Black.copy(alpha = 0.5f),
                                             onClick = { showServerMenu = true }
                                         ) {
-                                            Row(
-                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        Row(
+                                            modifier = Modifier
+                                                .defaultMinSize(minWidth = 44.dp)
+                                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
                                             ) {
                                                 Text(
                                                     text = currentServerName.take(12),
@@ -1354,21 +1406,6 @@ fun PlayerScreen(
                                             modifier = Modifier.background(Color(0xFF1A1A1A)).width(180.dp)
                                         ) {
                                             if (subtitleSettingsView) {
-                                                DropdownMenuItem(
-                                                    text = {
-                                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                                            Icon(Icons.Default.Settings, null, tint = Color.White, modifier = Modifier.size(16.dp))
-                                                            Spacer(Modifier.width(8.dp))
-                                                            Text("Edit Subtitles", color = Color.White)
-                                                        }
-                                                    },
-                                                    onClick = {
-                                                        showSubtitleMenu = false
-                                                        subtitleSettingsView = false
-                                                        showSubtitleSettings = true
-                                                    }
-                                                )
-                                                HorizontalDivider(color = Color.Gray.copy(alpha = 0.3f))
                                                 Text(
                                                     "Profiles",
                                                     color = Color.Gray,
@@ -1390,8 +1427,18 @@ fun PlayerScreen(
                                                 }
                                                 HorizontalDivider(color = Color.Gray.copy(alpha = 0.3f))
                                                 DropdownMenuItem(
-                                                    text = { Text("Back", color = Color.Gray, style = MaterialTheme.typography.labelSmall) },
-                                                    onClick = { subtitleSettingsView = false }
+                                                    text = {
+                                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                                            Icon(Icons.Default.Settings, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                                            Spacer(Modifier.width(8.dp))
+                                                            Text("Edit Subtitles", color = Color.White)
+                                                        }
+                                                    },
+                                                    onClick = {
+                                                        showSubtitleMenu = false
+                                                        subtitleSettingsView = false
+                                                        showSubtitleSettings = true
+                                                    }
                                                 )
                                             } else {
                                                 DropdownMenuItem(
@@ -1752,9 +1799,7 @@ fun PlayerScreen(
                                             if (duration > 0) {
                                                 val ratio = (offset.x / size.width).coerceIn(0f, 1f)
                                                 val seekPosition = (ratio * duration).toLong()
-                                                exoPlayer.seekTo(seekPosition)
-                                                currentPosition = seekPosition
-                                                sliderValue = seekPosition.toFloat()
+                                                performManualSeek(seekPosition)
                                             }
                                         }
                                     )
@@ -1763,6 +1808,7 @@ fun PlayerScreen(
                                     detectHorizontalDragGestures(
                                         onDragStart = { offset ->
                                             isDragging = true
+                                            isManuallySeeking = true
                                             wasPlayingBeforeScrub = isPlaying
                                             val ratio = (offset.x / size.width).coerceIn(0f, 1f)
                                             sliderValue = ratio * (if (duration > 0) duration.toFloat() else 1000f)
@@ -1771,8 +1817,10 @@ fun PlayerScreen(
                                         onDragEnd = {
                                             isDragging = false
                                             exoPlayer.seekTo(sliderValue.toLong())
-                                            if (wasPlayingBeforeScrub) {
-                                                exoPlayer.play()
+                                            skipResetJob?.cancel()
+                                            skipResetJob = scope.launch {
+                                                delay(1500.milliseconds)
+                                                isManuallySeeking = false
                                             }
                                         },
                                         onHorizontalDrag = { _, dragAmount ->
@@ -2180,6 +2228,7 @@ internal fun loadSubtitleProfileData(context: Context): SubtitleProfileData {
     return SubtitleProfileData()
 }
 
+@OptIn(UnstableApi::class)
 internal fun applySubtitleStyle(subtitleView: androidx.media3.ui.SubtitleView, settings: SubtitleSettings) {
     val edgeType = when {
         settings.enableOutline && settings.enableShadow -> CaptionStyleCompat.EDGE_TYPE_OUTLINE

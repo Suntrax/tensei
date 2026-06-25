@@ -1,27 +1,83 @@
 package com.blissless.tensei.ui.screens.player
 
 import android.app.Activity
-import android.view.View
+import android.os.Build
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.*
-import androidx.compose.foundation.*
+import androidx.annotation.RequiresApi
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.automirrored.filled.RotateRight
+import androidx.compose.material.icons.filled.AspectRatio
+import androidx.compose.material.icons.filled.BlurOn
+import androidx.compose.material.icons.filled.BorderColor
+import androidx.compose.material.icons.filled.FitScreen
+import androidx.compose.material.icons.filled.FormatColorFill
+import androidx.compose.material.icons.filled.FormatColorText
+import androidx.compose.material.icons.filled.FormatSize
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalView
@@ -29,13 +85,17 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.*
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.blissless.tensei.data.models.SubtitleSettings
-import kotlinx.coroutines.delay
-import kotlin.math.*
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.roundToInt
+import kotlin.math.sin
 
 private const val LOREM_IPSUM = "The quick brown fox jumps over the lazy dog.\nThis is a second line for testing."
 
@@ -83,7 +143,8 @@ data class SubtitleFullSettings(
     val verticalPosition: Float = 0.85f,
     val horizontalPosition: Float = 0.5f,
     val maxWidthRatio: Float = 0.8f,
-    val delayMs: Int = 0
+    val delayMs: Int = 0,
+    val profileName: String = "Default"
 ) {
     fun toLegacy(): SubtitleSettings = SubtitleSettings(
         fontSize = fontSize,
@@ -96,7 +157,8 @@ data class SubtitleFullSettings(
         verticalPosition = verticalPosition,
         horizontalPosition = horizontalPosition,
         maxWidthRatio = maxWidthRatio,
-        delayMs = delayMs
+        delayMs = delayMs,
+        profileName = profileName
     )
 }
 
@@ -105,6 +167,7 @@ private object Defaults {
 }
 
 // Main entry point
+@RequiresApi(Build.VERSION_CODES.R)
 @Composable
 fun SubtitleSettingsDialog(
     currentSettings: SubtitleSettings,
@@ -138,6 +201,7 @@ fun SubtitleSettingsDialog(
     }
 }
 
+@RequiresApi(Build.VERSION_CODES.R)
 @Composable
 private fun SubtitleSettingsContent(
     currentSettings: SubtitleSettings,
@@ -167,15 +231,10 @@ private fun SubtitleSettingsContent(
             verticalPosition = currentSettings.verticalPosition,
             horizontalPosition = currentSettings.horizontalPosition,
             maxWidthRatio = currentSettings.maxWidthRatio,
-            delayMs = currentSettings.delayMs
+            delayMs = currentSettings.delayMs,
+            profileName = currentSettings.profileName
         )
     ) }
-
-    // Propagate changes both ways
-    LaunchedEffect(fullSettings) {
-        onSettingsChange(fullSettings.toLegacy())
-        onSave()
-    }
 
     var selectedTemplateIndex by remember { mutableIntStateOf(0) }
     var dragOffsetX by remember { mutableFloatStateOf(0f) }
@@ -185,6 +244,36 @@ private fun SubtitleSettingsContent(
     var showRotationWheel by remember { mutableStateOf(false) }
     var showSidePanel by remember { mutableStateOf(false) }
     var showResetConfirm by remember { mutableStateOf(false) }
+    var showCloseConfirm by remember { mutableStateOf(false) }
+    var showRenameDialog by remember { mutableStateOf(false) }
+    var renameText by remember { mutableStateOf("") }
+
+    // Track whether any changes have been made (for close confirmation)
+    var hasChanges by remember { mutableStateOf(false) }
+
+    // Mark changes whenever settings/drag/rotation change
+    LaunchedEffect(fullSettings, dragOffsetX, dragOffsetY, rotation) {
+        hasChanges = true
+    }
+
+    var actualWidth by remember { mutableIntStateOf(1080) }
+    var actualHeight by remember { mutableIntStateOf(1920) }
+
+    // Update ExoPlayer preview in real time, but don't auto-save to disk
+    LaunchedEffect(fullSettings) {
+        onSettingsChange(fullSettings.toLegacy())
+    }
+
+    // Commit drag offset into fullSettings when drag ends
+    fun commitDrag() {
+        if (dragOffsetX != 0f || dragOffsetY != 0f) {
+            val newV = ((fullSettings.verticalPosition * actualHeight + dragOffsetY) / actualHeight).coerceIn(0.05f, 0.95f)
+            val newH = ((fullSettings.horizontalPosition * actualWidth + dragOffsetX) / actualWidth).coerceIn(0.05f, 0.95f)
+            fullSettings = fullSettings.copy(verticalPosition = newV, horizontalPosition = newH)
+            dragOffsetX = 0f
+            dragOffsetY = 0f
+        }
+    }
 
     // Quick action dialogs (non‑modal)
     var showTemplateDialog by remember { mutableStateOf(false) }
@@ -194,26 +283,14 @@ private fun SubtitleSettingsContent(
     var showBgDialog by remember { mutableStateOf(false) }
     var showFontColorPicker by remember { mutableStateOf(false) }
 
-    var actualWidth by remember { mutableIntStateOf(1080) }
-    var actualHeight by remember { mutableIntStateOf(1920) }
-
     // Immersive mode
     val view = LocalView.current
     val window = (view.context as Activity).window
     LaunchedEffect(Unit) {
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        window.insetsController?.apply {
-            hide(WindowInsetsCompat.Type.statusBars())
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            hide(WindowInsetsCompat.Type.systemBars())
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        }
-        while (true) {
-            window.decorView.systemUiVisibility = (
-                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                            or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                            or View.SYSTEM_UI_FLAG_FULLSCREEN
-                    )
-            window.insetsController?.hide(WindowInsetsCompat.Type.statusBars())
-            delay(500)
         }
     }
 
@@ -270,111 +347,160 @@ private fun SubtitleSettingsContent(
                 dragOffsetX += dx
                 dragOffsetY += dy
             },
+            onDragEnd = ::commitDrag,
             onTap = { showRotationWheel = !showRotationWheel },
             showRotateWheel = showRotationWheel,
             onRotate = { rotation = it },
             modifier = Modifier.fillMaxSize()
         )
 
-        // Top-left profile button (opens side panel)
-        Row(
+        // Top-left: profile selector, rename, save, close (stacked)
+        var showProfileDropdown by remember { mutableStateOf(false) }
+        Column(
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .padding(12.dp)
-                .statusBarsPadding()
+                .systemBarsPadding()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Box(
-                Modifier
-                    .background(Color.Black.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
-                    .clickable { showSidePanel = true }
-                    .padding(horizontal = 10.dp, vertical = 4.dp)
+            // Profile selector
+            Box {
+                Button(
+                    onClick = { showProfileDropdown = true },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2A2A2A)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        text = profiles.getOrNull(activeProfileIndex)?.profileName ?: "Profile",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1
+                    )
+                }
+                DropdownMenu(
+                    expanded = showProfileDropdown,
+                    onDismissRequest = { showProfileDropdown = false }
+                ) {
+                    profiles.forEachIndexed { idx, p ->
+                        DropdownMenuItem(
+                            text = { Text(p.profileName) },
+                            onClick = {
+                                commitDrag()
+                                onProfileSelect(idx)
+                                showProfileDropdown = false
+                            }
+                        )
+                    }
+                }
+            }
+            // Rename
+            Button(
+                onClick = {
+                    renameText = profiles.getOrNull(activeProfileIndex)?.profileName ?: ""
+                    showRenameDialog = true
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF444444)),
+                shape = RoundedCornerShape(8.dp)
             ) {
-                Text(
-                    text = profiles.getOrNull(activeProfileIndex)?.profileName ?: "Profile",
-                    color = Color.White.copy(alpha = 0.9f),
-                    fontWeight = FontWeight.Bold
-                )
+                Text("Rename", color = Color.White, fontWeight = FontWeight.Bold)
+            }
+            // Save
+            Button(
+                onClick = {
+                    commitDrag()
+                    onSave()
+                    hasChanges = false
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2)),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("Save", color = Color.White, fontWeight = FontWeight.Bold)
+            }
+            // Close
+            Button(
+                onClick = {
+                    if (hasChanges) {
+                        showCloseConfirm = true
+                    } else {
+                        onDismiss()
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF555555)),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("Close", color = Color.White, fontWeight = FontWeight.Bold)
             }
         }
 
-        // Top-right quick actions
+        // Top-right quick actions (scrollable to prevent overlap)
+        val btnBg = Color.White.copy(alpha = 0.18f)
+        val btnTint = Color.White
         Column(
             modifier = Modifier
                 .align(Alignment.TopEnd)
+                .systemBarsPadding()
                 .padding(12.dp)
-                .statusBarsPadding(),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Template
             IconButton(
                 onClick = { showTemplateDialog = true },
                 modifier = Modifier
-                    .size(40.dp)
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f), CircleShape)
-            ) { Icon(Icons.Default.Palette, "Templates") }
+                    .size(36.dp)
+                    .background(btnBg, CircleShape)
+            ) { Icon(Icons.Default.Palette, "Templates", tint = btnTint, modifier = Modifier.size(18.dp)) }
             // Resize
             IconButton(
                 onClick = {
                     resizeMode = if (resizeMode == ResizeMode.Fit16x9) ResizeMode.Stretch else ResizeMode.Fit16x9
                 },
                 modifier = Modifier
-                    .size(40.dp)
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f), CircleShape)
+                    .size(36.dp)
+                    .background(btnBg, CircleShape)
             ) {
                 Icon(
                     if (resizeMode == ResizeMode.Fit16x9) Icons.Default.FitScreen else Icons.Default.AspectRatio,
-                    "Resize"
+                    "Resize",
+                    tint = btnTint,
+                    modifier = Modifier.size(18.dp)
                 )
             }
             // Text size
             IconButton(
                 onClick = { showTextSizeDialog = true },
                 modifier = Modifier
-                    .size(40.dp)
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f), CircleShape)
-            ) { Icon(Icons.Default.FormatSize, "Size") }
+                    .size(36.dp)
+                    .background(btnBg, CircleShape)
+            ) { Icon(Icons.Default.FormatSize, "Size", tint = btnTint, modifier = Modifier.size(18.dp)) }
             // Outline
             IconButton(
                 onClick = { showOutlineDialog = true },
                 modifier = Modifier
-                    .size(40.dp)
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f), CircleShape)
-            ) { Icon(Icons.Default.BorderColor, "Outline") }
+                    .size(36.dp)
+                    .background(btnBg, CircleShape)
+            ) { Icon(Icons.Default.BorderColor, "Outline", tint = btnTint, modifier = Modifier.size(18.dp)) }
             // Shadow
             IconButton(
                 onClick = { showShadowDialog = true },
                 modifier = Modifier
-                    .size(40.dp)
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f), CircleShape)
-            ) { Icon(Icons.Default.BlurOn, "Shadow") }
+                    .size(36.dp)
+                    .background(btnBg, CircleShape)
+            ) { Icon(Icons.Default.BlurOn, "Shadow", tint = btnTint, modifier = Modifier.size(18.dp)) }
             // Subtitle background
             IconButton(
                 onClick = { showBgDialog = true },
                 modifier = Modifier
-                    .size(40.dp)
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f), CircleShape)
-            ) { Icon(Icons.Default.FormatColorFill, "BG") }
+                    .size(36.dp)
+                    .background(btnBg, CircleShape)
+            ) { Icon(Icons.Default.FormatColorFill, "BG", tint = btnTint, modifier = Modifier.size(18.dp)) }
             // Text colour
             IconButton(
                 onClick = { showFontColorPicker = true },
                 modifier = Modifier
-                    .size(40.dp)
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f), CircleShape)
-            ) { Icon(Icons.Default.FormatColorText, "Color") }
-            // Settings panel
-            IconButton(
-                onClick = { showSidePanel = true },
-                modifier = Modifier
-                    .size(40.dp)
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f), CircleShape)
-            ) { Icon(Icons.Default.Tune, "More") }
-            // Close
-            IconButton(
-                onClick = onDismiss,
-                modifier = Modifier
-                    .size(40.dp)
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f), CircleShape)
-            ) { Icon(Icons.Default.Close, "Close") }
+                    .size(36.dp)
+                    .background(btnBg, CircleShape)
+            ) { Icon(Icons.Default.FormatColorText, "Color", tint = btnTint, modifier = Modifier.size(18.dp)) }
         }
     }
 
@@ -712,6 +838,62 @@ private fun SubtitleSettingsContent(
         }
     }
 
+    // Close confirmation (unsaved changes)
+    if (showCloseConfirm) {
+        AlertDialog(
+            onDismissRequest = { showCloseConfirm = false },
+            title = { Text("Unsaved changes") },
+            text = { Text("You have unsaved changes. What would you like to do?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    commitDrag()
+                    onSave()
+                    hasChanges = false
+                    showCloseConfirm = false
+                    onDismiss()
+                }) { Text("Save and close") }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = {
+                        showCloseConfirm = false
+                        onDismiss()
+                    }) { Text("Discard") }
+                    Spacer(Modifier.width(8.dp))
+                    TextButton(onClick = { showCloseConfirm = false }) { Text("Cancel") }
+                }
+            }
+        )
+    }
+
+    // Rename dialog
+    if (showRenameDialog) {
+        AlertDialog(
+            onDismissRequest = { showRenameDialog = false },
+            title = { Text("Rename Profile") },
+            text = {
+                OutlinedTextField(
+                    value = renameText,
+                    onValueChange = { renameText = it },
+                    label = { Text("Profile name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (renameText.isNotBlank()) {
+                        onRenameProfile(activeProfileIndex, renameText.trim())
+                    }
+                    showRenameDialog = false
+                }) { Text("Rename") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRenameDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
     // Reset confirmation
     if (showResetConfirm) {
         AlertDialog(
@@ -740,6 +922,7 @@ private fun SubtitlePreview(
     offsetX: Float,
     offsetY: Float,
     onDrag: (Float, Float) -> Unit,
+    onDragEnd: () -> Unit = {},
     onTap: () -> Unit,
     showRotateWheel: Boolean,
     onRotate: (Float) -> Unit,
@@ -758,11 +941,19 @@ private fun SubtitlePreview(
     } else null
 
     val outlineBlur = if (settings.enableOutline) settings.outlineWidth * 1.5f else 0f
+    var boxWidth by remember { mutableIntStateOf(0) }
+    var boxHeight by remember { mutableIntStateOf(0) }
 
     Box(modifier = modifier.fillMaxSize()) {
         Box(
             modifier = Modifier
-                .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
+                .offset {
+                    IntOffset(
+                        (offsetX - boxWidth / 2f).roundToInt(),
+                        (offsetY - boxHeight / 2f).roundToInt()
+                    )
+                }
+                .onSizeChanged { boxWidth = it.width; boxHeight = it.height }
                 .background(
                     bgColor.copy(alpha = if (settings.backgroundColor == 0x00000000L) 0f else 1f),
                     RoundedCornerShape(4.dp)
@@ -771,10 +962,14 @@ private fun SubtitlePreview(
         ) {
             Box(
                 modifier = Modifier.pointerInput(Unit) {
-                    detectDragGestures { change, dragAmount ->
-                        change.consume()
-                        onDrag(dragAmount.x, dragAmount.y)
-                    }
+                    detectDragGestures(
+                        onDragEnd = onDragEnd,
+                        onDragCancel = onDragEnd,
+                        onDrag = { change, dragAmount ->
+                            change.consume()
+                            onDrag(dragAmount.x, dragAmount.y)
+                        }
+                    )
                 }
             ) {
                 // Rotated content
@@ -873,7 +1068,7 @@ private fun RotationWheel(
             )
         }
         Icon(
-            Icons.Default.RotateRight,
+            Icons.AutoMirrored.Filled.RotateRight,
             contentDescription = "Rotate",
             modifier = Modifier.size(16.dp),
             tint = Color.DarkGray
@@ -948,9 +1143,32 @@ private fun ImmediateColorPickerContent(
 
         Spacer(Modifier.height(8.dp))
 
-        // Alpha slider
-        Text("Alpha")
-        Slider(value = alpha, onValueChange = { alpha = it }, valueRange = 0f..1f)
+        // Alpha slider with preview
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier
+                    .size(24.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(currentColor)
+                    .border(1.dp, Color.Gray, RoundedCornerShape(4.dp))
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                "Alpha: ${(alpha * 100).toInt()}%",
+                color = Color.White,
+                fontWeight = FontWeight.Medium
+            )
+        }
+        Slider(
+            value = alpha,
+            onValueChange = { alpha = it },
+            valueRange = 0f..1f,
+            colors = androidx.compose.material3.SliderDefaults.colors(
+                thumbColor = Color.White,
+                activeTrackColor = currentColor.copy(alpha = 0.7f),
+                inactiveTrackColor = Color.Gray.copy(alpha = 0.3f)
+            )
+        )
 
         // Hex input
         var hex by remember {
