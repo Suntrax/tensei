@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.pm.ActivityInfo
 import android.net.Uri
+import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
@@ -107,6 +108,7 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
+import androidx.media3.ui.SubtitleView
 import com.blissless.tensei.api.AnimeSkipService
 import com.blissless.tensei.data.models.EpisodeTimestamps
 import com.blissless.tensei.data.models.SubtitleProfileData
@@ -200,6 +202,7 @@ fun OfflinePlayerScreen(
     var subtitleTrackList by remember { mutableStateOf<List<EpisodeDownloadManager.SubtitleTrackData>>(emptyList()) }
     var showSubtitleSettings by remember { mutableStateOf(false) }
     var subtitleProfileData by remember { mutableStateOf(loadSubtitleProfileData(context)) }
+    var subtitleViewRef by remember { mutableStateOf<SubtitleView?>(null) }
 
     fun getActiveSubtitleSettings(): SubtitleSettings {
         val data = subtitleProfileData
@@ -563,33 +566,37 @@ fun OfflinePlayerScreen(
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        // PlayerView - recreate when subtitle profile changes
-        key(subtitleProfileData) {
-            AndroidView(
-                factory = { ctx ->
-                        PlayerView(ctx).apply {
-                            player = exoPlayer
-                            layoutParams = FrameLayout.LayoutParams(
-                                ViewGroup.LayoutParams.MATCH_PARENT,
-                                ViewGroup.LayoutParams.MATCH_PARENT
-                            )
-                            resizeMode = resizeModes[resizeModeIndex].first
-                            useController = false
-                            setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
-                            subtitleView?.apply {
-                                applySubtitleStyle(this, getActiveSubtitleSettings())
-                            }
+        AndroidView(
+            factory = { ctx ->
+                    PlayerView(ctx).apply {
+                        player = exoPlayer
+                        layoutParams = FrameLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT
+                        )
+                        resizeMode = resizeModes[resizeModeIndex].first
+                        useController = false
+                        setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
+                        subtitleView?.apply {
+                            applySubtitleStyle(this, getActiveSubtitleSettings())
                         }
-                },
-                modifier = Modifier.fillMaxSize(),
-                update = { view ->
-                    view.resizeMode = resizeModes[resizeModeIndex].first
-                    view.player = exoPlayer
-                    view.subtitleView?.apply {
-                        applySubtitleStyle(this, getActiveSubtitleSettings())
                     }
+            },
+            modifier = Modifier.fillMaxSize(),
+            update = { view ->
+                view.resizeMode = resizeModes[resizeModeIndex].first
+                view.player = exoPlayer
+                subtitleViewRef = view.subtitleView
+                view.subtitleView?.apply {
+                    applySubtitleStyle(this, getActiveSubtitleSettings())
                 }
-            )
+            }
+        )
+
+        LaunchedEffect(subtitleProfileData) {
+            subtitleViewRef?.let { view ->
+                applySubtitleStyle(view, getActiveSubtitleSettings())
+            }
         }
 
         // Gesture zones

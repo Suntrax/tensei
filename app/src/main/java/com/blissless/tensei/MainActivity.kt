@@ -562,6 +562,7 @@ fun MainScreen(
 
     var showPlayer by remember { mutableStateOf(false) }
     var isAutoRefreshing by remember { mutableStateOf(false) }
+    var pendingSeekPosition by remember { mutableStateOf<Long?>(null) }
     var currentVideoUrl by remember { mutableStateOf<String?>(null) }
     var currentReferer by remember { mutableStateOf("https://megacloud.tv/") }
     var currentSubtitleUrl by remember { mutableStateOf<String?>(null) }
@@ -797,13 +798,20 @@ fun MainScreen(
     }
 
     fun loadAndPlayEpisode(anime: AnimeMedia, episode: Int, isAutoRefresh: Boolean = false) {
-        if (!isAutoRefresh) isAutoRefreshing = false
+        if (!isAutoRefresh) {
+            isAutoRefreshing = false
+            pendingSeekPosition = null
+        }
         currentAnime = anime
         currentEpisode = episode
         totalEpisodes = anime.totalEpisodes
         streamError = null
         savedPlaybackPosition = viewModel.getPlaybackPosition(anime.id, episode)
-        showPlayer = false
+        // For auto-refresh, update the player in-place (no unmount/remount).
+        // For initial load, unmount so PlayerScreen reinitializes fresh.
+        if (!isAutoRefresh) {
+            showPlayer = false
+        }
 
         val extPackage = viewModel.defaultExtensionPackage.value
         if (extPackage.isNotEmpty()) {
@@ -831,6 +839,7 @@ fun MainScreen(
                     streamError = "Extension stream not found: Ep $episode"
                     Toast.makeText(context, "Extension failed for Ep $episode", Toast.LENGTH_SHORT).show()
                 }
+                if (isAutoRefresh) isAutoRefreshing = false
                 isLoadingStream = false
             }
             return
@@ -1607,6 +1616,11 @@ fun MainScreen(
                 forwardSkipSeconds = forwardSkipSeconds,
                 backwardSkipSeconds = backwardSkipSeconds,
                 savedPosition = savedPlaybackPosition,
+                pendingSeekPosition = pendingSeekPosition,
+                onSetPendingSeekPosition = {
+                    pendingSeekPosition = it
+                    if (it != null) isAutoRefreshing = false  // Allow new refresh on consecutive seeks
+                },
                 currentQuality = currentQuality,
                 // Animekai timestamps (PRIMARY source)
                 animekaiIntroStart = animekaiIntroStart,
@@ -1662,6 +1676,7 @@ fun MainScreen(
                 onBackClick = { 
                     showPlayer = false
                     currentVideoUrl = null
+                    pendingSeekPosition = null
                     extensionOkHttpClient = null
                     extensionVideoHeaders = emptyMap()
                     extensionHosters = null

@@ -7,6 +7,7 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
 import android.util.Log
+import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
@@ -128,6 +129,7 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
+import androidx.media3.ui.SubtitleView
 import com.blissless.tensei.api.AnimeSkipService
 import com.blissless.tensei.data.models.EpisodeStreams
 import com.blissless.tensei.data.models.EpisodeTimestamps
@@ -172,6 +174,8 @@ fun PlayerScreen(
     autoSkipEnding: Boolean = false,
     autoPlayNextEpisode: Boolean = false,
     savedPosition: Long = 0L,
+    pendingSeekPosition: Long? = null,
+    onSetPendingSeekPosition: ((Long?) -> Unit)? = null,
     currentQuality: String = "Auto",
     isLatestEpisode: Boolean = false,
     disableMaterialColors: Boolean = false,
@@ -271,6 +275,7 @@ fun PlayerScreen(
     var selectedSubtitleIndex by remember { mutableIntStateOf(0) }
     var showSubtitleSettings by remember { mutableStateOf(false) }
     var subtitleProfileData by remember { mutableStateOf(loadSubtitleProfileData(context)) }
+    var subtitleViewRef by remember { mutableStateOf<SubtitleView?>(null) }
     var accumulatedSkipMs by remember { mutableLongStateOf(0L) }
     var lastTapTime by remember { mutableLongStateOf(0L) }
 
@@ -447,9 +452,9 @@ fun PlayerScreen(
                             return
                         }
 
-                        // Auto-retry for manual seeks: retry up to 2 times with seekPlayerTo.
-                        // After exhaustion, auto-refresh the stream URL (the URL may have expired).
-                        if (isManuallySeeking && seekRetryCount < 2) {
+                        // Auto-retry for manual seeks: retry once with seekPlayerTo (catches rare
+                        // transient failures for in-buffer seeks). After that, auto-refresh the URL.
+                        if (isManuallySeeking && seekRetryCount < 1) {
                             seekRetryCount++
                             hasError = false
                             playbackError = null
@@ -551,7 +556,11 @@ fun PlayerScreen(
         delay(100.milliseconds)
         exoPlayer.clearMediaItems()
 
-        val startPositionMs = if (savedPosition > 0) savedPosition else 0L
+        // Use pendingSeekPosition for refresh-based seeks, otherwise restore savedPosition.
+        // pendingSeekPosition is cleared externally (onBackClick / new episode load) to
+        // avoid races when multiple consecutive seeks trigger overlapping refreshes.
+        val restorePosition = pendingSeekPosition ?: savedPosition
+        val startPositionMs = if (restorePosition > 0) restorePosition else 0L
 
         val subtitleConfigs = if (subtitlesEnabled && subtitleTracks.isNotEmpty()) {
             subtitleTracks.mapIndexed { index, track ->
@@ -587,8 +596,8 @@ fun PlayerScreen(
             .setSubtitleConfigurations(subtitleConfigs)
             .build()
 
-        if (savedPosition > 0) {
-            exoPlayer.setMediaItem(mediaItem, savedPosition)
+        if (startPositionMs > 0) {
+            exoPlayer.setMediaItem(mediaItem, startPositionMs)
         } else {
             exoPlayer.setMediaItem(mediaItem)
         }
@@ -672,7 +681,16 @@ fun PlayerScreen(
         } else {
             (currentPosition + milliseconds).coerceAtLeast(0)
         }
-        seekPlayerTo(newPosition)
+        // If seeking forward outside the buffered range, refresh the stream URL
+        // proactively to avoid byte-range request errors on proxy streams.
+        val outsideBuffer = milliseconds > 0 && newPosition > bufferedPosition && onRefreshStream != null
+        if (outsideBuffer) {
+            onSetPendingSeekPosition?.invoke(newPosition)
+            onInvalidateStreamCache?.invoke()
+            onRefreshStream.invoke()
+        } else {
+            seekPlayerTo(newPosition)
+        }
         currentPosition = newPosition
         sliderValue = newPosition.toFloat()
 
@@ -693,7 +711,15 @@ fun PlayerScreen(
     fun performManualSeek(position: Long) {
         isManuallySeeking = true
         seekRetryCount = 0
-        seekPlayerTo(position)
+        // If seeking outside the buffered range, refresh the stream URL proactively.
+        val outsideBuffer = position > bufferedPosition && onRefreshStream != null
+        if (outsideBuffer) {
+            onSetPendingSeekPosition?.invoke(position)
+            onInvalidateStreamCache?.invoke()
+            onRefreshStream.invoke()
+        } else {
+            seekPlayerTo(position)
+        }
         currentPosition = position
         sliderValue = position.toFloat()
         skipResetJob?.cancel()
@@ -964,8 +990,8 @@ fun PlayerScreen(
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        // PlayerView - recreate when server or subtitle profile changes
-            key(serverChangeTrigger, subtitleProfileData) {
+        // PlayerView - recreate when server changes
+            key(serverChangeTrigger) {
             AndroidView(
                 factory = { ctx ->
                     PlayerView(ctx).apply {
@@ -993,12 +1019,19 @@ fun PlayerScreen(
                 update = { view ->
                     view.resizeMode = resizeModes[resizeModeIndex].first
                     view.player = exoPlayer
+                    subtitleViewRef = view.subtitleView
                     val activeSubSettings = getActiveSubtitleSettings()
                     view.subtitleView?.apply {
                         applySubtitleStyle(this, activeSubSettings)
                     }
                 }
             )
+        }
+
+        LaunchedEffect(subtitleProfileData) {
+            subtitleViewRef?.let { view ->
+                applySubtitleStyle(view, getActiveSubtitleSettings())
+            }
         }
 
         // 2. Active Gesture Zones (Middle Layer)
@@ -1846,7 +1879,15 @@ fun PlayerScreen(
                                         },
                                         onDragEnd = {
                                             isDragging = false
-                                            seekPlayerTo(sliderValue.toLong())
+                                            val seekPos = sliderValue.toLong()
+                                            val outsideBuffer = seekPos > bufferedPosition && onRefreshStream != null
+                                            if (outsideBuffer) {
+                                                onSetPendingSeekPosition?.invoke(seekPos)
+                                                onInvalidateStreamCache?.invoke()
+                                                onRefreshStream.invoke()
+                                            } else {
+                                                seekPlayerTo(seekPos)
+                                            }
                                             skipResetJob?.cancel()
                                             skipResetJob = scope.launch {
                                                 delay(1500.milliseconds)
@@ -2266,15 +2307,35 @@ internal fun applySubtitleStyle(subtitleView: androidx.media3.ui.SubtitleView, s
         settings.enableShadow -> CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW
         else -> CaptionStyleCompat.EDGE_TYPE_NONE
     }
+    val edgeColor = when (edgeType) {
+        CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW -> (settings.shadowColor and 0xFFFFFFFFL).toInt()
+        else -> (settings.outlineColor and 0xFFFFFFFFL).toInt()
+    }
     val style = CaptionStyleCompat(
         (settings.fontColor and 0xFFFFFFFFL).toInt(),
         (settings.backgroundColor and 0xFFFFFFFFL).toInt(),
         android.graphics.Color.TRANSPARENT,
         edgeType,
-        (settings.outlineColor and 0xFFFFFFFFL).toInt(),
+        edgeColor,
         null
     )
     subtitleView.setStyle(style)
     subtitleView.setFixedTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, settings.fontSize)
-    subtitleView.setBottomPaddingFraction(1f - settings.verticalPosition)
+    subtitleView.rotation = settings.rotation
+
+    val parent = subtitleView.parent as? View
+    val pw = parent?.width?.toFloat() ?: 0f
+    val ph = parent?.height?.toFloat() ?: 0f
+    if (pw > 0 && ph > 0) {
+        subtitleView.translationX = (settings.horizontalPosition - 0.5f) * pw
+        subtitleView.translationY = (settings.verticalPosition - 0.9f) * ph
+    } else {
+        subtitleView.post {
+            val p = subtitleView.parent as? View ?: return@post
+            val w = p.width.toFloat().coerceAtLeast(1f)
+            val h = p.height.toFloat().coerceAtLeast(1f)
+            subtitleView.translationX = (settings.horizontalPosition - 0.5f) * w
+            subtitleView.translationY = (settings.verticalPosition - 0.9f) * h
+        }
+    }
 }
