@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.FormatColorFill
 import androidx.compose.material.icons.filled.FormatColorText
 import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -131,9 +132,9 @@ enum class ResizeMode { Fit16x9, Stretch }
 
 // Unified full settings including shadow and position
 data class SubtitleFullSettings(
-    val fontSize: Float = 16f,
+    val fontSize: Float = 22f,
     val fontColor: Long = 0xFFFFFFFFL,
-    val enableOutline: Boolean = false,
+    val enableOutline: Boolean = true,
     val outlineWidth: Float = 2f,
     val outlineColor: Long = 0xFF000000L,
     val enableShadow: Boolean = false,
@@ -142,9 +143,9 @@ data class SubtitleFullSettings(
     val shadowOffsetY: Float = 2f,
     val shadowColor: Long = 0xFF000000L,
     val backgroundColor: Long = 0x00000000L,
-    val verticalPosition: Float = 0.85f,
+    val verticalPosition: Float = 0.9f,
     val horizontalPosition: Float = 0.5f,
-    val maxWidthRatio: Float = 0.8f,
+    val maxWidthRatio: Float = 0.95f,
     val delayMs: Int = 0,
     val rotation: Float = 0f,
     val profileName: String = "Default"
@@ -428,7 +429,8 @@ private fun SubtitleSettingsContent(
                     }
                 }
             }
-            // Action row: Rename, Save, Close inline
+            // Action row: Rename, Save, Close, Reset inline
+            var resetReady by remember { mutableStateOf(false) }
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 TextButton(
                     onClick = {
@@ -464,6 +466,28 @@ private fun SubtitleSettingsContent(
                     shape = tonalShape
                 ) {
                     Text("Close", fontWeight = FontWeight.Medium)
+                }
+                // Reset with double verification
+                if (resetReady) {
+                    TextButton(
+                        onClick = {
+                            fullSettings = Defaults.FULL_SETTINGS
+                            resetReady = false
+                        },
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error
+                        ),
+                        shape = tonalShape
+                    ) {
+                        Text("Confirm?", fontWeight = FontWeight.Bold)
+                    }
+                } else {
+                    TextButton(
+                        onClick = { resetReady = true },
+                        shape = tonalShape
+                    ) {
+                        Text("Reset", fontWeight = FontWeight.Medium)
+                    }
                 }
             }
         }
@@ -528,6 +552,11 @@ private fun SubtitleSettingsContent(
                 onClick = { showFontColorPicker = true },
                 modifier = iconMod
             ) { Icon(Icons.Default.FormatColorText, "Color", tint = iconColor, modifier = Modifier.size(20.dp)) }
+            // Reset all
+            IconButton(
+                onClick = { showResetConfirm = true },
+                modifier = iconMod
+            ) { Icon(Icons.Default.Refresh, "Reset", tint = iconColor, modifier = Modifier.size(20.dp)) }
         }
     }
 
@@ -576,10 +605,17 @@ private fun SubtitleSettingsContent(
             title = { Text("Text Size") },
             text = {
                 Column {
-                    Text(
-                        "${fullSettings.fontSize.toInt()} sp",
-                        style = MaterialTheme.typography.titleMedium
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "${fullSettings.fontSize.toInt()} sp",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Spacer(Modifier.weight(1f))
+                        IconButton(
+                            onClick = { fullSettings = fullSettings.copy(fontSize = Defaults.FULL_SETTINGS.fontSize) },
+                            modifier = Modifier.size(28.dp)
+                        ) { Icon(Icons.Default.Refresh, "Reset", modifier = Modifier.size(16.dp)) }
+                    }
                     Spacer(Modifier.height(8.dp))
                     Slider(
                         value = fullSettings.fontSize,
@@ -610,14 +646,28 @@ private fun SubtitleSettingsContent(
                     }
                     if (fullSettings.enableOutline) {
                         Spacer(Modifier.height(8.dp))
-                        Text("Width: ${fullSettings.outlineWidth.toInt()} px")
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Width: ${fullSettings.outlineWidth.toInt()} px")
+                            Spacer(Modifier.weight(1f))
+                            IconButton(
+                                onClick = { fullSettings = fullSettings.copy(outlineWidth = Defaults.FULL_SETTINGS.outlineWidth) },
+                                modifier = Modifier.size(28.dp)
+                            ) { Icon(Icons.Default.Refresh, "Reset", modifier = Modifier.size(16.dp)) }
+                        }
                         Slider(
                             value = fullSettings.outlineWidth,
                             onValueChange = { fullSettings = fullSettings.copy(outlineWidth = it) },
                             valueRange = 1f..6f
                         )
                         Spacer(Modifier.height(8.dp))
-                        Text("Color")
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Color")
+                            Spacer(Modifier.weight(1f))
+                            IconButton(
+                                onClick = { fullSettings = fullSettings.copy(outlineColor = Defaults.FULL_SETTINGS.outlineColor) },
+                                modifier = Modifier.size(28.dp)
+                            ) { Icon(Icons.Default.Refresh, "Reset", modifier = Modifier.size(16.dp)) }
+                        }
                         Row(Modifier.horizontalScroll(rememberScrollState())) {
                             OUTLINE_PRESETS.forEach { c ->
                                 Box(
@@ -664,26 +714,54 @@ private fun SubtitleSettingsContent(
                     }
                     if (fullSettings.enableShadow) {
                         Spacer(Modifier.height(8.dp))
-                        Text("Blur: ${fullSettings.shadowBlur.toInt()} px")
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Blur: ${fullSettings.shadowBlur.toInt()} px")
+                            Spacer(Modifier.weight(1f))
+                            IconButton(
+                                onClick = { fullSettings = fullSettings.copy(shadowBlur = Defaults.FULL_SETTINGS.shadowBlur) },
+                                modifier = Modifier.size(28.dp)
+                            ) { Icon(Icons.Default.Refresh, "Reset", modifier = Modifier.size(16.dp)) }
+                        }
                         Slider(
                             value = fullSettings.shadowBlur,
                             onValueChange = { fullSettings = fullSettings.copy(shadowBlur = it) },
                             valueRange = 1f..10f
                         )
-                        Text("Offset X: ${fullSettings.shadowOffsetX.toInt()} px")
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Offset X: ${fullSettings.shadowOffsetX.toInt()} px")
+                            Spacer(Modifier.weight(1f))
+                            IconButton(
+                                onClick = { fullSettings = fullSettings.copy(shadowOffsetX = Defaults.FULL_SETTINGS.shadowOffsetX) },
+                                modifier = Modifier.size(28.dp)
+                            ) { Icon(Icons.Default.Refresh, "Reset", modifier = Modifier.size(16.dp)) }
+                        }
                         Slider(
                             value = fullSettings.shadowOffsetX,
                             onValueChange = { fullSettings = fullSettings.copy(shadowOffsetX = it) },
                             valueRange = -10f..10f
                         )
-                        Text("Offset Y: ${fullSettings.shadowOffsetY.toInt()} px")
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Offset Y: ${fullSettings.shadowOffsetY.toInt()} px")
+                            Spacer(Modifier.weight(1f))
+                            IconButton(
+                                onClick = { fullSettings = fullSettings.copy(shadowOffsetY = Defaults.FULL_SETTINGS.shadowOffsetY) },
+                                modifier = Modifier.size(28.dp)
+                            ) { Icon(Icons.Default.Refresh, "Reset", modifier = Modifier.size(16.dp)) }
+                        }
                         Slider(
                             value = fullSettings.shadowOffsetY,
                             onValueChange = { fullSettings = fullSettings.copy(shadowOffsetY = it) },
                             valueRange = -10f..10f
                         )
                         Spacer(Modifier.height(8.dp))
-                        Text("Color")
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Color")
+                            Spacer(Modifier.weight(1f))
+                            IconButton(
+                                onClick = { fullSettings = fullSettings.copy(shadowColor = Defaults.FULL_SETTINGS.shadowColor) },
+                                modifier = Modifier.size(28.dp)
+                            ) { Icon(Icons.Default.Refresh, "Reset", modifier = Modifier.size(16.dp)) }
+                        }
                         Row(Modifier.horizontalScroll(rememberScrollState())) {
                             SHADOW_PRESETS.forEach { c ->
                                 Box(
@@ -721,7 +799,14 @@ private fun SubtitleSettingsContent(
             title = { Text("Subtitle Background") },
             text = {
                 Column {
-                    Text("Color & Opacity")
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Color & Opacity")
+                        Spacer(Modifier.weight(1f))
+                        IconButton(
+                            onClick = { fullSettings = fullSettings.copy(backgroundColor = Defaults.FULL_SETTINGS.backgroundColor) },
+                            modifier = Modifier.size(28.dp)
+                        ) { Icon(Icons.Default.Refresh, "Reset", modifier = Modifier.size(16.dp)) }
+                    }
                     Row(Modifier.horizontalScroll(rememberScrollState())) {
                         BG_SUB_PRESETS.forEach { colorLong ->
                             val color = Color(colorLong)
@@ -820,20 +905,41 @@ private fun SubtitleSettingsContent(
                         }
                         Spacer(Modifier.height(8.dp))
 
-                        // Position sliders
-                        Text("Vertical: ${(fullSettings.verticalPosition * 100).toInt()}%")
+                        // Position sliders with individual reset
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Vertical: ${(fullSettings.verticalPosition * 100).toInt()}%")
+                            Spacer(Modifier.weight(1f))
+                            IconButton(
+                                onClick = { fullSettings = fullSettings.copy(verticalPosition = Defaults.FULL_SETTINGS.verticalPosition) },
+                                modifier = Modifier.size(28.dp)
+                            ) { Icon(Icons.Default.Refresh, "Reset", modifier = Modifier.size(16.dp)) }
+                        }
                         Slider(
                             value = fullSettings.verticalPosition,
                             onValueChange = { fullSettings = fullSettings.copy(verticalPosition = it) },
                             valueRange = 0.05f..0.95f
                         )
-                        Text("Horizontal: ${(fullSettings.horizontalPosition * 100).toInt()}%")
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Horizontal: ${(fullSettings.horizontalPosition * 100).toInt()}%")
+                            Spacer(Modifier.weight(1f))
+                            IconButton(
+                                onClick = { fullSettings = fullSettings.copy(horizontalPosition = Defaults.FULL_SETTINGS.horizontalPosition) },
+                                modifier = Modifier.size(28.dp)
+                            ) { Icon(Icons.Default.Refresh, "Reset", modifier = Modifier.size(16.dp)) }
+                        }
                         Slider(
                             value = fullSettings.horizontalPosition,
                             onValueChange = { fullSettings = fullSettings.copy(horizontalPosition = it) },
                             valueRange = 0.05f..0.95f
                         )
-                        Text("Max Width: ${(fullSettings.maxWidthRatio * 100).toInt()}%")
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Max Width: ${(fullSettings.maxWidthRatio * 100).toInt()}%")
+                            Spacer(Modifier.weight(1f))
+                            IconButton(
+                                onClick = { fullSettings = fullSettings.copy(maxWidthRatio = Defaults.FULL_SETTINGS.maxWidthRatio) },
+                                modifier = Modifier.size(28.dp)
+                            ) { Icon(Icons.Default.Refresh, "Reset", modifier = Modifier.size(16.dp)) }
+                        }
                         Slider(
                             value = fullSettings.maxWidthRatio,
                             onValueChange = { fullSettings = fullSettings.copy(maxWidthRatio = it) },
@@ -841,7 +947,14 @@ private fun SubtitleSettingsContent(
                         )
 
                         // Delay
-                        Text("Delay: ${fullSettings.delayMs} ms")
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Delay: ${fullSettings.delayMs} ms")
+                            Spacer(Modifier.weight(1f))
+                            IconButton(
+                                onClick = { fullSettings = fullSettings.copy(delayMs = Defaults.FULL_SETTINGS.delayMs) },
+                                modifier = Modifier.size(28.dp)
+                            ) { Icon(Icons.Default.Refresh, "Reset", modifier = Modifier.size(16.dp)) }
+                        }
                         Slider(
                             value = (fullSettings.delayMs / 1000f).coerceIn(-10f, 10f),
                             onValueChange = {
@@ -851,7 +964,14 @@ private fun SubtitleSettingsContent(
                         )
 
                         // Rotation presets
-                        Text("Rotation: ${fullSettings.rotation.toInt()}°")
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Rotation: ${fullSettings.rotation.toInt()}°")
+                            Spacer(Modifier.weight(1f))
+                            IconButton(
+                                onClick = { fullSettings = fullSettings.copy(rotation = Defaults.FULL_SETTINGS.rotation) },
+                                modifier = Modifier.size(28.dp)
+                            ) { Icon(Icons.Default.Refresh, "Reset", modifier = Modifier.size(16.dp)) }
+                        }
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             listOf(0f, 90f, 180f, 270f).forEach { ang ->
                                 FilterChip(
@@ -991,52 +1111,59 @@ private fun SubtitlePreview(
                     )
                 }
                 .onSizeChanged { boxWidth = it.width; boxHeight = it.height }
-                .graphicsLayer { rotationZ = rotation }
-                .background(
-                    if (settings.backgroundColor == 0x00000000L) Color.Transparent else bgColor,
-                    RoundedCornerShape(4.dp)
-                )
-                .pointerInput(Unit) { detectTapGestures { onTap() } }
         ) {
+            // Drag area (not affected by rotation)
             Box(
-                modifier = Modifier.pointerInput(Unit) {
-                    detectDragGestures(
-                        onDragEnd = onDragEnd,
-                        onDragCancel = onDragEnd,
-                        onDrag = { change, dragAmount ->
-                            change.consume()
-                            onDrag(dragAmount.x, dragAmount.y, boxWidth, boxHeight)
-                        }
-                    )
-                }
+                modifier = Modifier
+                    .pointerInput(Unit) {
+                        detectTapGestures { onTap() }
+                    }
+                    .pointerInput(Unit) {
+                        detectDragGestures(
+                            onDragEnd = onDragEnd,
+                            onDragCancel = onDragEnd,
+                            onDrag = { change, dragAmount ->
+                                change.consume()
+                                onDrag(dragAmount.x, dragAmount.y, boxWidth, boxHeight)
+                            }
+                        )
+                    }
             ) {
+                // Rotated content (background + text together)
                 Box(
                     modifier = Modifier
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                        .graphicsLayer { rotationZ = rotation }
+                        .background(
+                            if (settings.backgroundColor == 0x00000000L) Color.Transparent else bgColor,
+                            RoundedCornerShape(4.dp)
+                        )
                 ) {
-                    // Outline layer
-                    if (settings.enableOutline) {
+                    Box(
+                        modifier = Modifier
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        if (settings.enableOutline) {
+                            Text(
+                                text = LOREM_IPSUM,
+                                color = outlineColor,
+                                fontSize = settings.fontSize.sp,
+                                textAlign = TextAlign.Center,
+                                maxLines = 2,
+                                style = TextStyle(shadow = Shadow(color = outlineColor, offset = Offset.Zero, blurRadius = settings.outlineWidth))
+                            )
+                        }
                         Text(
                             text = LOREM_IPSUM,
-                            color = outlineColor,
+                            color = textColor,
                             fontSize = settings.fontSize.sp,
                             textAlign = TextAlign.Center,
                             maxLines = 2,
-                            style = TextStyle(shadow = Shadow(color = outlineColor, offset = Offset.Zero, blurRadius = settings.outlineWidth))
+                            style = TextStyle(shadow = dropShadow)
                         )
                     }
-                    // Main text
-                    Text(
-                        text = LOREM_IPSUM,
-                        color = textColor,
-                        fontSize = settings.fontSize.sp,
-                        textAlign = TextAlign.Center,
-                        maxLines = 2,
-                        style = TextStyle(shadow = dropShadow)
-                    )
                 }
 
-                // Rotation wheel at top-right of the subtitle
+                // Rotation wheel (not affected by rotation)
                 if (showRotateWheel) {
                     RotationWheel(
                         currentAngle = rotation,
@@ -1123,7 +1250,8 @@ private fun ImmediateColorPickerContent(
     var lightness by remember { mutableFloatStateOf(0.5f) }
     var alpha by remember { mutableFloatStateOf(initialColor.alpha) }
 
-    LaunchedEffect(initialColor) {
+    // Initialize from initialColor only once on first composition
+    LaunchedEffect(Unit) {
         val hsl = rgbToHsl(initialColor)
         hue = hsl[0]
         saturation = hsl[1]
@@ -1134,8 +1262,6 @@ private fun ImmediateColorPickerContent(
     val currentColor = remember(hue, saturation, lightness, alpha) {
         Color.hsl(hue, saturation, lightness, alpha)
     }
-
-    LaunchedEffect(currentColor) { onColorChange(currentColor) }
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         // Palette
@@ -1148,9 +1274,13 @@ private fun ImmediateColorPickerContent(
                     detectTapGestures { offset ->
                         val xFraction = (offset.x / size.width).coerceIn(0f, 1f)
                         val yFraction = (offset.y / size.height).coerceIn(0f, 1f)
-                        hue = xFraction * 360f
-                        saturation = 1f
-                        lightness = 1f - yFraction
+                        val newHue = xFraction * 360f
+                        val newSat = 1f
+                        val newLight = 1f - yFraction
+                        hue = newHue
+                        saturation = newSat
+                        lightness = newLight
+                        onColorChange(Color.hsl(newHue, newSat, newLight, alpha))
                     }
                 }
         ) {
@@ -1191,7 +1321,7 @@ private fun ImmediateColorPickerContent(
             Spacer(Modifier.width(8.dp))
             Slider(
                 value = alpha,
-                onValueChange = { alpha = it },
+                onValueChange = { alpha = it; onColorChange(Color.hsl(hue, saturation, lightness, it)) },
                 valueRange = 0f..1f,
                 modifier = Modifier.weight(1f),
                 colors = androidx.compose.material3.SliderDefaults.colors(
@@ -1235,6 +1365,7 @@ private fun ImmediateColorPickerContent(
                     hue = hsl[0]
                     saturation = hsl[1]
                     lightness = hsl[2]
+                    onColorChange(newColor)
                 }
             },
             label = { Text("RGB Hex") },

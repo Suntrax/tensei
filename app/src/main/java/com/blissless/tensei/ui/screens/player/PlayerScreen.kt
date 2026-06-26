@@ -2328,14 +2328,14 @@ internal fun applySubtitleStyle(subtitleView: androidx.media3.ui.SubtitleView, s
     val ph = parent?.height?.toFloat() ?: 0f
     if (pw > 0 && ph > 0) {
         subtitleView.translationX = (settings.horizontalPosition - 0.5f) * pw
-        subtitleView.translationY = (settings.verticalPosition - 0.9f) * ph
+        subtitleView.translationY = (settings.verticalPosition - 0.95f) * ph
     } else {
         subtitleView.post {
             val p = subtitleView.parent as? View ?: return@post
             val w = p.width.toFloat().coerceAtLeast(1f)
             val h = p.height.toFloat().coerceAtLeast(1f)
             subtitleView.translationX = (settings.horizontalPosition - 0.5f) * w
-            subtitleView.translationY = (settings.verticalPosition - 0.9f) * h
+            subtitleView.translationY = (settings.verticalPosition - 0.95f) * h
         }
     }
 }
