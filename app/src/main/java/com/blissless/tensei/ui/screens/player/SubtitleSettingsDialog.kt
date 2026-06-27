@@ -5,8 +5,9 @@ import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -19,7 +20,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -27,7 +27,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -39,27 +38,31 @@ import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.BlurOn
 import androidx.compose.material.icons.filled.BorderColor
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FitScreen
 import androidx.compose.material.icons.filled.FormatColorFill
 import androidx.compose.material.icons.filled.FormatColorText
 import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -81,6 +84,7 @@ import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalView
@@ -102,7 +106,6 @@ import kotlin.math.sin
 
 private const val LOREM_IPSUM = "The quick brown fox jumps over the lazy dog.\nThis is a second line for testing."
 
-// ----- Data classes -----
 data class TemplateBg(val name: String, val colors: List<Color>)
 
 private val TEMPLATES = listOf(
@@ -120,9 +123,11 @@ private val OUTLINE_PRESETS = listOf(
     Color.Black, Color.White, Color.Red, Color(0xFFFF8C00),
     Color.Yellow, Color.Green, Color.Blue, Color.Magenta
 )
+
 private val SHADOW_PRESETS = listOf(
     Color.Black, Color.White, Color(0xFF333333), Color(0xFF555555), Color(0xFF777777)
 )
+
 private val BG_SUB_PRESETS = listOf(
     0x00000000L, 0x40000000L, 0x80000000L, 0xC0000000L,
     0x40FFFFFFL, 0x80FFFFFFL, 0xFF000000L, 0xFFFFFFFFL
@@ -130,7 +135,6 @@ private val BG_SUB_PRESETS = listOf(
 
 enum class ResizeMode { Fit16x9, Stretch }
 
-// Unified full settings including shadow and position
 data class SubtitleFullSettings(
     val fontSize: Float = 22f,
     val fontColor: Long = 0xFFFFFFFFL,
@@ -175,7 +179,21 @@ private object Defaults {
     val FULL_SETTINGS = SubtitleFullSettings()
 }
 
-// Main entry point
+private object SubColors {
+    val surfacePanel = Color(0xFF121220)
+    val divider = Color(0xFF2A2A40)
+    val accent = Color(0xFF42A5F5)
+    val accentGlow = Color(0x2042A5F5)
+}
+
+private val panelShape = RoundedCornerShape(20.dp, 20.dp, 0.dp, 0.dp)
+private val cardShape = RoundedCornerShape(14.dp)
+private val chipShape = RoundedCornerShape(10.dp)
+private val toolbarShape = RoundedCornerShape(16.dp)
+
+// ---------------------------------------------------------------------------
+// Entry point
+// ---------------------------------------------------------------------------
 @RequiresApi(Build.VERSION_CODES.R)
 @Composable
 fun SubtitleSettingsDialog(
@@ -192,9 +210,7 @@ fun SubtitleSettingsDialog(
 ) {
     BackHandler(onBack = onDismiss)
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black)
+        modifier = modifier.fillMaxSize().background(Color.Black)
     ) {
         SubtitleSettingsContent(
             currentSettings = currentSettings,
@@ -223,7 +239,6 @@ private fun SubtitleSettingsContent(
     onDismiss: () -> Unit,
     onSave: () -> Unit,
 ) {
-    // Merge current settings into full settings with defaults
     var fullSettings by remember { mutableStateOf(
         SubtitleFullSettings(
             fontSize = currentSettings.fontSize,
@@ -251,16 +266,39 @@ private fun SubtitleSettingsContent(
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
     var resizeMode by remember { mutableStateOf(ResizeMode.Fit16x9) }
     var showRotationWheel by remember { mutableStateOf(false) }
-    var showSidePanel by remember { mutableStateOf(false) }
     var showResetConfirm by remember { mutableStateOf(false) }
     var showCloseConfirm by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf(false) }
     var renameText by remember { mutableStateOf("") }
-
-    // Track whether any changes have been made (for close confirmation)
     var hasChanges by remember { mutableStateOf(false) }
+    var activePanel by remember { mutableStateOf<Panel?>(null) }
 
-    // Mark changes whenever settings/drag/rotation change
+    // Sync fullSettings when the external profile changes
+    LaunchedEffect(activeProfileIndex) {
+        val p = currentSettings
+        fullSettings = SubtitleFullSettings(
+            fontSize = p.fontSize,
+            fontColor = p.fontColor,
+            enableOutline = p.enableOutline,
+            outlineWidth = p.outlineWidth,
+            outlineColor = p.outlineColor,
+            enableShadow = p.enableShadow,
+            shadowBlur = Defaults.FULL_SETTINGS.shadowBlur,
+            shadowOffsetX = Defaults.FULL_SETTINGS.shadowOffsetX,
+            shadowOffsetY = Defaults.FULL_SETTINGS.shadowOffsetY,
+            shadowColor = p.shadowColor,
+            backgroundColor = p.backgroundColor,
+            verticalPosition = p.verticalPosition,
+            horizontalPosition = p.horizontalPosition,
+            maxWidthRatio = p.maxWidthRatio,
+            delayMs = p.delayMs,
+            rotation = p.rotation,
+            profileName = p.profileName
+        )
+        dragOffsetX = 0f
+        dragOffsetY = 0f
+    }
+
     LaunchedEffect(fullSettings, dragOffsetX, dragOffsetY) {
         hasChanges = true
     }
@@ -268,12 +306,10 @@ private fun SubtitleSettingsContent(
     var actualWidth by remember { mutableIntStateOf(1080) }
     var actualHeight by remember { mutableIntStateOf(1920) }
 
-    // Update ExoPlayer preview in real time, but don't auto-save to disk
     LaunchedEffect(fullSettings) {
         onSettingsChange(fullSettings.toLegacy())
     }
 
-    // Commit drag offset into fullSettings when drag ends
     fun commitDrag() {
         if (dragOffsetX != 0f || dragOffsetY != 0f) {
             val newV = ((fullSettings.verticalPosition * actualHeight + dragOffsetY) / actualHeight).coerceIn(0.05f, 0.95f)
@@ -284,15 +320,6 @@ private fun SubtitleSettingsContent(
         }
     }
 
-    // Quick action dialogs (non‑modal)
-    var showTemplateDialog by remember { mutableStateOf(false) }
-    var showTextSizeDialog by remember { mutableStateOf(false) }
-    var showOutlineDialog by remember { mutableStateOf(false) }
-    var showShadowDialog by remember { mutableStateOf(false) }
-    var showBgDialog by remember { mutableStateOf(false) }
-    var showFontColorPicker by remember { mutableStateOf(false) }
-
-    // Immersive mode
     val view = LocalView.current
     val window = (view.context as Activity).window
     LaunchedEffect(Unit) {
@@ -318,7 +345,7 @@ private fun SubtitleSettingsContent(
                 actualHeight = size.height
             }
     ) {
-        // Background
+        // Background canvas
         Canvas(modifier = Modifier.fillMaxSize()) {
             val cw = size.width
             val ch = size.height
@@ -336,7 +363,6 @@ private fun SubtitleSettingsContent(
                 }
                 ResizeMode.Stretch -> RectF(0f, 0f, cw, ch)
             }
-            // Corrected drawRect call: brush, topLeft, size
             drawRect(
                 brush = gradient,
                 topLeft = Offset(dest.left, dest.top),
@@ -344,7 +370,6 @@ private fun SubtitleSettingsContent(
             )
         }
 
-        // 16:9 destination rect for clamping
         val destRect = remember(actualWidth, actualHeight, resizeMode) {
             val cw = actualWidth.toFloat()
             val ch = actualHeight.toFloat()
@@ -364,7 +389,138 @@ private fun SubtitleSettingsContent(
             }
         }
 
-        // Subtitle preview with rotation wheel
+        // ── Top bar ─────────────────────────────────────────────────────────
+        var showProfileDropdown by remember { mutableStateOf(false) }
+        Surface(
+            color = Color.Black.copy(alpha = 0.5f),
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .statusBarsPadding()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box {
+                    Box(
+                        modifier = Modifier
+                            .clip(chipShape)
+                            .background(Color.White.copy(alpha = 0.08f))
+                            .clickable { showProfileDropdown = true }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = profiles.getOrNull(activeProfileIndex)?.profileName ?: "Profile",
+                                color = Color.White.copy(alpha = 0.9f),
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 13.sp
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = "▾",
+                                color = Color.White.copy(alpha = 0.5f),
+                                fontSize = 10.sp
+                            )
+                        }
+                    }
+                    DropdownMenu(
+                        expanded = showProfileDropdown,
+                        onDismissRequest = { showProfileDropdown = false },
+                        shape = cardShape
+                    ) {
+                        profiles.forEachIndexed { idx, p ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        p.profileName,
+                                        fontWeight = if (idx == activeProfileIndex) FontWeight.SemiBold else FontWeight.Normal
+                                    )
+                                },
+                                onClick = {
+                                    commitDrag()
+                                    onProfileSelect(idx)
+                                    showProfileDropdown = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.weight(1f))
+
+                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                    ToolbarIconButton(Icons.Default.Edit, "Rename") {
+                        renameText = profiles.getOrNull(activeProfileIndex)?.profileName ?: ""
+                        showRenameDialog = true
+                    }
+                    ToolbarIconButton(Icons.Default.Save, "Save") {
+                        commitDrag()
+                        onSave()
+                        hasChanges = false
+                    }
+                    ToolbarIconButton(Icons.Default.Close, "Close") {
+                        if (hasChanges) showCloseConfirm = true
+                        else onDismiss()
+                    }
+                    ToolbarIconButton(Icons.Default.RestartAlt, "Reset") {
+                        showResetConfirm = true
+                    }
+                }
+            }
+        }
+
+        // ── Bottom toolbar (floating pill) ──────────────────────────────────
+        Surface(
+            color = Color.Black.copy(alpha = 0.65f),
+            shape = toolbarShape,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 24.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                BottomToolbarButton(Icons.Default.Palette, "Template", activePanel == Panel.Template) {
+                    activePanel = if (activePanel == Panel.Template) null else Panel.Template
+                }
+                BottomToolbarButton(
+                    if (resizeMode == ResizeMode.Fit16x9) Icons.Default.FitScreen else Icons.Default.AspectRatio,
+                    "Resize"
+                ) {
+                    resizeMode = if (resizeMode == ResizeMode.Fit16x9) ResizeMode.Stretch else ResizeMode.Fit16x9
+                }
+                BottomToolbarButton(Icons.Default.FormatSize, "Size", activePanel == Panel.TextSize) {
+                    activePanel = if (activePanel == Panel.TextSize) null else Panel.TextSize
+                }
+                BottomToolbarButton(Icons.Default.BorderColor, "Outline", activePanel == Panel.Outline) {
+                    activePanel = if (activePanel == Panel.Outline) null else Panel.Outline
+                }
+                BottomToolbarButton(Icons.Default.BlurOn, "Shadow", activePanel == Panel.Shadow) {
+                    activePanel = if (activePanel == Panel.Shadow) null else Panel.Shadow
+                }
+                BottomToolbarButton(Icons.Default.FormatColorFill, "BG", activePanel == Panel.Bg) {
+                    activePanel = if (activePanel == Panel.Bg) null else Panel.Bg
+                }
+                BottomToolbarButton(Icons.Default.FormatColorText, "Color", activePanel == Panel.FontColor) {
+                    activePanel = if (activePanel == Panel.FontColor) null else Panel.FontColor
+                }
+                BottomToolbarButton(Icons.Default.Tune, "Advanced", activePanel == Panel.Advanced) {
+                    activePanel = if (activePanel == Panel.Advanced) null else Panel.Advanced
+                }
+            }
+        }
+
+        // ── Subtitle preview (rendered AFTER UI so it's on top visually) ────
         val baseX = fullSettings.horizontalPosition * actualWidth
         val baseY = fullSettings.verticalPosition * actualHeight
         SubtitlePreview(
@@ -387,693 +543,997 @@ private fun SubtitleSettingsContent(
             modifier = Modifier.fillMaxSize()
         )
 
-        // Top-left: profile selector, rename, save, close (stacked)
-        var showProfileDropdown by remember { mutableStateOf(false) }
-        val tonalShape = RoundedCornerShape(12.dp)
-        Column(
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .systemBarsPadding()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            // Profile selector
-            Box {
-                Button(
-                    onClick = { showProfileDropdown = true },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    ),
-                    shape = tonalShape,
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+        // ── Bottom panels (slide up) ────────────────────────────────────────
+        activePanel?.let { panel ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                    ) { activePanel = null }
+            ) {
+                AnimatedVisibility(
+                    visible = true,
+                    enter = slideInVertically(initialOffsetY = { it }, animationSpec = tween(300)),
+                    exit = slideOutVertically(targetOffsetY = { it }, animationSpec = tween(250)),
+                    modifier = Modifier.align(Alignment.BottomCenter)
                 ) {
-                    Text(
-                        text = profiles.getOrNull(activeProfileIndex)?.profileName ?: "Profile",
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1
-                    )
-                }
-                DropdownMenu(
-                    expanded = showProfileDropdown,
-                    onDismissRequest = { showProfileDropdown = false }
-                ) {
-                    profiles.forEachIndexed { idx, p ->
-                        DropdownMenuItem(
-                            text = { Text(p.profileName) },
-                            onClick = {
-                                commitDrag()
-                                onProfileSelect(idx)
-                                showProfileDropdown = false
-                            }
-                        )
-                    }
-                }
-            }
-            // Action row: Rename, Save, Close, Reset inline
-            var resetReady by remember { mutableStateOf(false) }
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(
-                    onClick = {
-                        renameText = profiles.getOrNull(activeProfileIndex)?.profileName ?: ""
-                        showRenameDialog = true
-                    },
-                    shape = tonalShape
-                ) {
-                    Text("Rename", fontWeight = FontWeight.Medium)
-                }
-                Button(
-                    onClick = {
-                        commitDrag()
-                        onSave()
-                        hasChanges = false
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary
-                    ),
-                    shape = tonalShape,
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
-                ) {
-                    Text("Save", fontWeight = FontWeight.Medium)
-                }
-                TextButton(
-                    onClick = {
-                        if (hasChanges) {
-                            showCloseConfirm = true
-                        } else {
-                            onDismiss()
+                    Surface(
+                        color = SubColors.surfacePanel,
+                        shape = panelShape,
+                        shadowElevation = 24.dp
+                    ) {
+                        when (panel) {
+                            Panel.Template -> TemplatePanel(
+                                selectedIndex = selectedTemplateIndex,
+                                onSelect = { idx ->
+                                    selectedTemplateIndex = idx
+                                    activePanel = null
+                                },
+                                onDismiss = { activePanel = null }
+                            )
+                            Panel.TextSize -> TextSizePanel(
+                                currentSize = fullSettings.fontSize,
+                                onSizeChange = { fullSettings = fullSettings.copy(fontSize = it) },
+                                onReset = { fullSettings = fullSettings.copy(fontSize = Defaults.FULL_SETTINGS.fontSize) },
+                                onDismiss = { activePanel = null }
+                            )
+                            Panel.Outline -> OutlinePanel(
+                                enabled = fullSettings.enableOutline,
+                                onToggle = { fullSettings = fullSettings.copy(enableOutline = it) },
+                                width = fullSettings.outlineWidth,
+                                onWidthChange = { fullSettings = fullSettings.copy(outlineWidth = it) },
+                                color = fullSettings.outlineColor,
+                                onColorChange = { fullSettings = fullSettings.copy(outlineColor = it) },
+                                onResetWidth = { fullSettings = fullSettings.copy(outlineWidth = Defaults.FULL_SETTINGS.outlineWidth) },
+                                onResetColor = { fullSettings = fullSettings.copy(outlineColor = Defaults.FULL_SETTINGS.outlineColor) },
+                                onDismiss = { activePanel = null }
+                            )
+                            Panel.Shadow -> ShadowPanel(
+                                enabled = fullSettings.enableShadow,
+                                onToggle = { fullSettings = fullSettings.copy(enableShadow = it) },
+                                blur = fullSettings.shadowBlur,
+                                onBlurChange = { fullSettings = fullSettings.copy(shadowBlur = it) },
+                                offsetX = fullSettings.shadowOffsetX,
+                                onOffsetXChange = { fullSettings = fullSettings.copy(shadowOffsetX = it) },
+                                offsetY = fullSettings.shadowOffsetY,
+                                onOffsetYChange = { fullSettings = fullSettings.copy(shadowOffsetY = it) },
+                                color = fullSettings.shadowColor,
+                                onColorChange = { fullSettings = fullSettings.copy(shadowColor = it) },
+                                onResetBlur = { fullSettings = fullSettings.copy(shadowBlur = Defaults.FULL_SETTINGS.shadowBlur) },
+                                onResetOffsetX = { fullSettings = fullSettings.copy(shadowOffsetX = Defaults.FULL_SETTINGS.shadowOffsetX) },
+                                onResetOffsetY = { fullSettings = fullSettings.copy(shadowOffsetY = Defaults.FULL_SETTINGS.shadowOffsetY) },
+                                onResetColor = { fullSettings = fullSettings.copy(shadowColor = Defaults.FULL_SETTINGS.shadowColor) },
+                                onDismiss = { activePanel = null }
+                            )
+                            Panel.Bg -> BgPanel(
+                                bgColor = fullSettings.backgroundColor,
+                                onColorChange = { fullSettings = fullSettings.copy(backgroundColor = it) },
+                                onReset = { fullSettings = fullSettings.copy(backgroundColor = Defaults.FULL_SETTINGS.backgroundColor) },
+                                onDismiss = { activePanel = null }
+                            )
+                            Panel.FontColor -> FontColorPanel(
+                                currentColor = fullSettings.fontColor,
+                                onColorChange = { fullSettings = fullSettings.copy(fontColor = it) },
+                                onReset = { fullSettings = fullSettings.copy(fontColor = Defaults.FULL_SETTINGS.fontColor) },
+                                onDismiss = { activePanel = null }
+                            )
+                            Panel.Advanced -> AdvancedPanel(
+                                verticalPosition = fullSettings.verticalPosition,
+                                onVerticalChange = { fullSettings = fullSettings.copy(verticalPosition = it) },
+                                horizontalPosition = fullSettings.horizontalPosition,
+                                onHorizontalChange = { fullSettings = fullSettings.copy(horizontalPosition = it) },
+                                maxWidthRatio = fullSettings.maxWidthRatio,
+                                onMaxWidthChange = { fullSettings = fullSettings.copy(maxWidthRatio = it) },
+                                delayMs = fullSettings.delayMs,
+                                onDelayChange = { fullSettings = fullSettings.copy(delayMs = it) },
+                                rotation = fullSettings.rotation,
+                                onRotationChange = { fullSettings = fullSettings.copy(rotation = it) },
+                                onResetVertical = { fullSettings = fullSettings.copy(verticalPosition = Defaults.FULL_SETTINGS.verticalPosition) },
+                                onResetHorizontal = { fullSettings = fullSettings.copy(horizontalPosition = Defaults.FULL_SETTINGS.horizontalPosition) },
+                                onResetMaxWidth = { fullSettings = fullSettings.copy(maxWidthRatio = Defaults.FULL_SETTINGS.maxWidthRatio) },
+                                onResetDelay = { fullSettings = fullSettings.copy(delayMs = Defaults.FULL_SETTINGS.delayMs) },
+                                onResetRotation = { fullSettings = fullSettings.copy(rotation = Defaults.FULL_SETTINGS.rotation) },
+                                onDismiss = { activePanel = null }
+                            )
                         }
-                    },
-                    shape = tonalShape
-                ) {
-                    Text("Close", fontWeight = FontWeight.Medium)
-                }
-                // Reset with double verification
-                if (resetReady) {
-                    TextButton(
-                        onClick = {
-                            fullSettings = Defaults.FULL_SETTINGS
-                            resetReady = false
-                        },
-                        colors = ButtonDefaults.textButtonColors(
-                            contentColor = MaterialTheme.colorScheme.error
-                        ),
-                        shape = tonalShape
-                    ) {
-                        Text("Confirm?", fontWeight = FontWeight.Bold)
-                    }
-                } else {
-                    TextButton(
-                        onClick = { resetReady = true },
-                        shape = tonalShape
-                    ) {
-                        Text("Reset", fontWeight = FontWeight.Medium)
                     }
                 }
             }
         }
+    }
 
-        // Top-right quick actions (scrollable to prevent overlap)
-        Column(
+    // Confirmation dialogs
+    if (showCloseConfirm) {
+        ConfirmationOverlay(
+            title = "Unsaved changes",
+            message = "You have unsaved changes. What would you like to do?",
+            confirmLabel = "Save & close",
+            onConfirm = {
+                commitDrag(); onSave(); hasChanges = false; showCloseConfirm = false; onDismiss()
+            },
+            dismissLabel = "Discard",
+            onDismiss = { showCloseConfirm = false; onDismiss() },
+            cancelLabel = "Cancel",
+            onCancel = { showCloseConfirm = false }
+        )
+    }
+
+    if (showResetConfirm) {
+        ConfirmationOverlay(
+            title = "Reset settings?",
+            message = "Restore all subtitle settings to default?",
+            confirmLabel = "Reset",
+            onConfirm = {
+                fullSettings = Defaults.FULL_SETTINGS; showResetConfirm = false
+            },
+            onDismiss = { showResetConfirm = false }
+        )
+    }
+
+    if (showRenameDialog) {
+        RenameOverlay(
+            currentName = renameText,
+            onNameChange = { renameText = it },
+            onConfirm = {
+                if (renameText.isNotBlank()) onRenameProfile(activeProfileIndex, renameText.trim())
+                showRenameDialog = false
+            },
+            onDismiss = { showRenameDialog = false }
+        )
+    }
+}
+
+private enum class Panel {
+    Template, TextSize, Outline, Shadow, Bg, FontColor, Advanced
+}
+
+// ===========================================================================
+// Reusable UI components
+// ===========================================================================
+
+@Composable
+private fun PanelHeader(
+    title: String,
+    onDismiss: () -> Unit,
+    onReset: (() -> Unit)? = null
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = title,
+            color = Color.White,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+        Spacer(Modifier.weight(1f))
+        onReset?.let {
+            ResetTextButton(onClick = it)
+        }
+        Spacer(Modifier.width(4.dp))
+        IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
+            Icon(
+                Icons.Default.Close,
+                contentDescription = "Close",
+                tint = Color.White.copy(alpha = 0.6f),
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun ResetTextButton(onClick: () -> Unit) {
+    TextButton(onClick = onClick) {
+        Icon(
+            Icons.Default.Refresh,
+            contentDescription = "Reset",
+            modifier = Modifier.size(14.dp),
+            tint = Color.White.copy(alpha = 0.5f)
+        )
+        Spacer(Modifier.width(4.dp))
+        Text("Reset", color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp)
+    }
+}
+
+@Composable
+private fun SectionDivider() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
+            .height(1.dp)
+            .background(SubColors.divider)
+    )
+}
+
+@Composable
+private fun ToggleRow(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            color = Color.White.copy(alpha = 0.8f),
+            fontSize = 14.sp
+        )
+        Spacer(Modifier.weight(1f))
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = SubColors.accent,
+                checkedTrackColor = SubColors.accentGlow,
+                uncheckedThumbColor = Color.White.copy(alpha = 0.3f),
+                uncheckedTrackColor = Color.White.copy(alpha = 0.08f)
+            )
+        )
+    }
+}
+
+@Composable
+private fun SliderRow(
+    label: String,
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    valueRange: ClosedFloatingPointRange<Float>,
+    displayValue: String
+) {
+    Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                color = Color.White.copy(alpha = 0.7f),
+                fontSize = 13.sp
+            )
+            Spacer(Modifier.weight(1f))
+            Text(
+                text = displayValue,
+                color = SubColors.accent,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            valueRange = valueRange,
+            colors = SliderDefaults.colors(
+                thumbColor = SubColors.accent,
+                activeTrackColor = SubColors.accent,
+                inactiveTrackColor = Color.White.copy(alpha = 0.08f)
+            )
+        )
+    }
+}
+
+@Composable
+private fun ToolbarIconButton(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit
+) {
+    IconButton(onClick = onClick, modifier = Modifier.size(36.dp)) {
+        Icon(
+            icon,
+            contentDescription = label,
+            tint = Color.White.copy(alpha = 0.7f),
+            modifier = Modifier.size(18.dp)
+        )
+    }
+}
+
+@Composable
+private fun BottomToolbarButton(
+    icon: ImageVector,
+    label: String,
+    isActive: Boolean = false,
+    onClick: () -> Unit
+) {
+    val bgColor = if (isActive) SubColors.accent.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.04f)
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(bgColor, RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                icon,
+                contentDescription = label,
+                tint = if (isActive) SubColors.accent else Color.White.copy(alpha = 0.6f),
+                modifier = Modifier.size(20.dp)
+            )
+            Text(
+                text = label,
+                color = if (isActive) SubColors.accent else Color.White.copy(alpha = 0.5f),
+                fontSize = 9.sp,
+                fontWeight = if (isActive) FontWeight.Medium else FontWeight.Normal
+            )
+        }
+    }
+}
+
+@Composable
+private fun ColorSwatchRow(
+    colors: List<Color>,
+    selectedColor: Long,
+    onColorSelect: (Long) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier.horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        colors.forEach { c ->
+            val isSelected = selectedColor == c.toArgb().toLong()
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(c)
+                    .then(
+                        if (isSelected) Modifier.border(2.dp, SubColors.accent, CircleShape)
+                        else Modifier.border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
+                    )
+                    .clickable { onColorSelect(c.toArgb().toLong()) },
+                contentAlignment = Alignment.Center
+            ) {
+                if (isSelected) {
+                    Icon(
+                        Icons.Default.Check,
+                        contentDescription = null,
+                        tint = if (c == Color.Black || c == Color(0xFF333333) || c == Color(0xFF555555)) Color.White else Color.Black,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ThemeColorItem(
+    name: String,
+    colors: List<Color>,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        val bgBrush = if (colors.size == 1) Brush.verticalGradient(listOf(colors[0], colors[0]))
+                      else Brush.verticalGradient(colors)
+        val borderMod = if (isSelected) Modifier.border(2.dp, SubColors.accent, RoundedCornerShape(12.dp))
+                        else Modifier.border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
+        Box(
             modifier = Modifier
-                .align(Alignment.TopEnd)
-                .systemBarsPadding()
-                .padding(12.dp)
-                .verticalScroll(rememberScrollState()),
+                .size(44.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(bgBrush)
+                .then(borderMod)
+                .clickable(onClick = onClick)
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = name,
+            color = if (isSelected) Color.White.copy(alpha = 0.9f) else Color.White.copy(alpha = 0.45f),
+            fontSize = 10.sp,
+            maxLines = 1
+        )
+    }
+}
+
+// ===========================================================================
+// PANELS
+// ===========================================================================
+
+@Composable
+private fun TemplatePanel(
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)
+    ) {
+        PanelHeader(title = "Background Templates", onDismiss = onDismiss)
+        SectionDivider()
+        Spacer(Modifier.height(12.dp))
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            val iconMod = Modifier
-                .size(40.dp)
-                .background(
-                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
-                    CircleShape
-                )
-            val iconColor = MaterialTheme.colorScheme.onSurfaceVariant
-            // Template
-            IconButton(
-                onClick = { showTemplateDialog = true },
-                modifier = iconMod
-            ) { Icon(Icons.Default.Palette, "Templates", tint = iconColor, modifier = Modifier.size(20.dp)) }
-            // Resize
-            IconButton(
-                onClick = {
-                    resizeMode = if (resizeMode == ResizeMode.Fit16x9) ResizeMode.Stretch else ResizeMode.Fit16x9
-                },
-                modifier = iconMod
-            ) {
-                Icon(
-                    if (resizeMode == ResizeMode.Fit16x9) Icons.Default.FitScreen else Icons.Default.AspectRatio,
-                    "Resize",
-                    tint = iconColor,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-            // Text size
-            IconButton(
-                onClick = { showTextSizeDialog = true },
-                modifier = iconMod
-            ) { Icon(Icons.Default.FormatSize, "Size", tint = iconColor, modifier = Modifier.size(20.dp)) }
-            // Outline
-            IconButton(
-                onClick = { showOutlineDialog = true },
-                modifier = iconMod
-            ) { Icon(Icons.Default.BorderColor, "Outline", tint = iconColor, modifier = Modifier.size(20.dp)) }
-            // Shadow
-            IconButton(
-                onClick = { showShadowDialog = true },
-                modifier = iconMod
-            ) { Icon(Icons.Default.BlurOn, "Shadow", tint = iconColor, modifier = Modifier.size(20.dp)) }
-            // Subtitle background
-            IconButton(
-                onClick = { showBgDialog = true },
-                modifier = iconMod
-            ) { Icon(Icons.Default.FormatColorFill, "BG", tint = iconColor, modifier = Modifier.size(20.dp)) }
-            // Text colour
-            IconButton(
-                onClick = { showFontColorPicker = true },
-                modifier = iconMod
-            ) { Icon(Icons.Default.FormatColorText, "Color", tint = iconColor, modifier = Modifier.size(20.dp)) }
-            // Reset all
-            IconButton(
-                onClick = { showResetConfirm = true },
-                modifier = iconMod
-            ) { Icon(Icons.Default.Refresh, "Reset", tint = iconColor, modifier = Modifier.size(20.dp)) }
-        }
-    }
-
-    // ----- Quick Dialogs (non‑modal) -----
-    if (showTemplateDialog) {
-        AlertDialog(
-            onDismissRequest = { showTemplateDialog = false },
-            title = { Text("Background Templates") },
-            text = {
-                Column(Modifier.verticalScroll(rememberScrollState())) {
-                    TEMPLATES.chunked(4).forEach { row ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            row.forEach { tmpl ->
-                                val idx = TEMPLATES.indexOf(tmpl)
-                                val bg = if (tmpl.colors.size == 1) Modifier.background(tmpl.colors[0]) else Modifier.background(
-                                    Brush.verticalGradient(tmpl.colors)
-                                )
-                                Box(
-                                    Modifier
-                                        .size(48.dp)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .then(bg)
-                                        .border(
-                                            if (idx == selectedTemplateIndex) 2.dp else 0.dp,
-                                            MaterialTheme.colorScheme.primary,
-                                            RoundedCornerShape(8.dp)
-                                        )
-                                        .clickable {
-                                            selectedTemplateIndex = idx
-                                            showTemplateDialog = false
-                                        }
-                                )
-                            }
-                        }
-                        Spacer(Modifier.height(4.dp))
-                    }
-                }
-            },
-            confirmButton = {}
-        )
-    }
-
-    if (showTextSizeDialog) {
-        AlertDialog(
-            onDismissRequest = { showTextSizeDialog = false },
-            title = { Text("Text Size") },
-            text = {
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "${fullSettings.fontSize.toInt()} sp",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        Spacer(Modifier.weight(1f))
-                        IconButton(
-                            onClick = { fullSettings = fullSettings.copy(fontSize = Defaults.FULL_SETTINGS.fontSize) },
-                            modifier = Modifier.size(28.dp)
-                        ) { Icon(Icons.Default.Refresh, "Reset", modifier = Modifier.size(16.dp)) }
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Slider(
-                        value = fullSettings.fontSize,
-                        onValueChange = { fullSettings = fullSettings.copy(fontSize = it) },
-                        valueRange = 10f..48f
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showTextSizeDialog = false }) { Text("Done") }
-            }
-        )
-    }
-
-    if (showOutlineDialog) {
-        AlertDialog(
-            onDismissRequest = { showOutlineDialog = false },
-            title = { Text("Outline") },
-            text = {
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Enable")
-                        Spacer(Modifier.weight(1f))
-                        Switch(
-                            checked = fullSettings.enableOutline,
-                            onCheckedChange = { fullSettings = fullSettings.copy(enableOutline = it) }
-                        )
-                    }
-                    if (fullSettings.enableOutline) {
-                        Spacer(Modifier.height(8.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Width: ${fullSettings.outlineWidth.toInt()} px")
-                            Spacer(Modifier.weight(1f))
-                            IconButton(
-                                onClick = { fullSettings = fullSettings.copy(outlineWidth = Defaults.FULL_SETTINGS.outlineWidth) },
-                                modifier = Modifier.size(28.dp)
-                            ) { Icon(Icons.Default.Refresh, "Reset", modifier = Modifier.size(16.dp)) }
-                        }
-                        Slider(
-                            value = fullSettings.outlineWidth,
-                            onValueChange = { fullSettings = fullSettings.copy(outlineWidth = it) },
-                            valueRange = 1f..6f
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Color")
-                            Spacer(Modifier.weight(1f))
-                            IconButton(
-                                onClick = { fullSettings = fullSettings.copy(outlineColor = Defaults.FULL_SETTINGS.outlineColor) },
-                                modifier = Modifier.size(28.dp)
-                            ) { Icon(Icons.Default.Refresh, "Reset", modifier = Modifier.size(16.dp)) }
-                        }
-                        Row(Modifier.horizontalScroll(rememberScrollState())) {
-                            OUTLINE_PRESETS.forEach { c ->
-                                Box(
-                                    Modifier
-                                        .size(28.dp)
-                                        .clip(CircleShape)
-                                        .background(c)
-                                        .border(
-                                            if (fullSettings.outlineColor == c.toArgb()
-                                                    .toLong()
-                                            ) 2.dp else 1.dp,
-                                            MaterialTheme.colorScheme.primary,
-                                            CircleShape
-                                        )
-                                        .clickable {
-                                            fullSettings = fullSettings.copy(outlineColor = c.toArgb().toLong())
-                                        }
-                                )
-                                Spacer(Modifier.width(4.dp))
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showOutlineDialog = false }) { Text("Done") }
-            }
-        )
-    }
-
-    if (showShadowDialog) {
-        AlertDialog(
-            onDismissRequest = { showShadowDialog = false },
-            title = { Text("Shadow") },
-            text = {
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Enable")
-                        Spacer(Modifier.weight(1f))
-                        Switch(
-                            checked = fullSettings.enableShadow,
-                            onCheckedChange = { fullSettings = fullSettings.copy(enableShadow = it) }
-                        )
-                    }
-                    if (fullSettings.enableShadow) {
-                        Spacer(Modifier.height(8.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Blur: ${fullSettings.shadowBlur.toInt()} px")
-                            Spacer(Modifier.weight(1f))
-                            IconButton(
-                                onClick = { fullSettings = fullSettings.copy(shadowBlur = Defaults.FULL_SETTINGS.shadowBlur) },
-                                modifier = Modifier.size(28.dp)
-                            ) { Icon(Icons.Default.Refresh, "Reset", modifier = Modifier.size(16.dp)) }
-                        }
-                        Slider(
-                            value = fullSettings.shadowBlur,
-                            onValueChange = { fullSettings = fullSettings.copy(shadowBlur = it) },
-                            valueRange = 1f..10f
-                        )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Offset X: ${fullSettings.shadowOffsetX.toInt()} px")
-                            Spacer(Modifier.weight(1f))
-                            IconButton(
-                                onClick = { fullSettings = fullSettings.copy(shadowOffsetX = Defaults.FULL_SETTINGS.shadowOffsetX) },
-                                modifier = Modifier.size(28.dp)
-                            ) { Icon(Icons.Default.Refresh, "Reset", modifier = Modifier.size(16.dp)) }
-                        }
-                        Slider(
-                            value = fullSettings.shadowOffsetX,
-                            onValueChange = { fullSettings = fullSettings.copy(shadowOffsetX = it) },
-                            valueRange = -10f..10f
-                        )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Offset Y: ${fullSettings.shadowOffsetY.toInt()} px")
-                            Spacer(Modifier.weight(1f))
-                            IconButton(
-                                onClick = { fullSettings = fullSettings.copy(shadowOffsetY = Defaults.FULL_SETTINGS.shadowOffsetY) },
-                                modifier = Modifier.size(28.dp)
-                            ) { Icon(Icons.Default.Refresh, "Reset", modifier = Modifier.size(16.dp)) }
-                        }
-                        Slider(
-                            value = fullSettings.shadowOffsetY,
-                            onValueChange = { fullSettings = fullSettings.copy(shadowOffsetY = it) },
-                            valueRange = -10f..10f
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Color")
-                            Spacer(Modifier.weight(1f))
-                            IconButton(
-                                onClick = { fullSettings = fullSettings.copy(shadowColor = Defaults.FULL_SETTINGS.shadowColor) },
-                                modifier = Modifier.size(28.dp)
-                            ) { Icon(Icons.Default.Refresh, "Reset", modifier = Modifier.size(16.dp)) }
-                        }
-                        Row(Modifier.horizontalScroll(rememberScrollState())) {
-                            SHADOW_PRESETS.forEach { c ->
-                                Box(
-                                    Modifier
-                                        .size(28.dp)
-                                        .clip(CircleShape)
-                                        .background(c)
-                                        .border(
-                                            if (fullSettings.shadowColor == c.toArgb()
-                                                    .toLong()
-                                            ) 2.dp else 1.dp,
-                                            MaterialTheme.colorScheme.primary,
-                                            CircleShape
-                                        )
-                                        .clickable {
-                                            fullSettings = fullSettings.copy(shadowColor = c.toArgb().toLong())
-                                        }
-                                )
-                                Spacer(Modifier.width(4.dp))
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showShadowDialog = false }) { Text("Done") }
-            }
-        )
-    }
-
-    if (showBgDialog) {
-        val bgAlpha = ((fullSettings.backgroundColor shr 24) and 0xFF).toFloat() / 255f
-        AlertDialog(
-            onDismissRequest = { showBgDialog = false },
-            title = { Text("Subtitle Background") },
-            text = {
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Color & Opacity")
-                        Spacer(Modifier.weight(1f))
-                        IconButton(
-                            onClick = { fullSettings = fullSettings.copy(backgroundColor = Defaults.FULL_SETTINGS.backgroundColor) },
-                            modifier = Modifier.size(28.dp)
-                        ) { Icon(Icons.Default.Refresh, "Reset", modifier = Modifier.size(16.dp)) }
-                    }
-                    Row(Modifier.horizontalScroll(rememberScrollState())) {
-                        BG_SUB_PRESETS.forEach { colorLong ->
-                            val color = Color(colorLong)
-                            Box(
-                                Modifier
-                                    .size(28.dp)
-                                    .clip(CircleShape)
-                                    .background(color)
-                                    .border(
-                                        if (fullSettings.backgroundColor and 0x00FFFFFFL == colorLong and 0x00FFFFFFL
-                                        ) 2.dp else 1.dp,
-                                        MaterialTheme.colorScheme.primary,
-                                        CircleShape
-                                    )
-                                    .clickable {
-                                        fullSettings = fullSettings.copy(backgroundColor = colorLong)
-                                    }
-                            )
-                            Spacer(Modifier.width(4.dp))
-                        }
-                    }
-                    Spacer(Modifier.height(12.dp))
-                    Text("Opacity: ${(bgAlpha * 100).toInt()}%")
-                    Slider(
-                        value = bgAlpha,
-                        onValueChange = { newAlpha ->
-                            val alphaBits = (newAlpha * 255).toInt().coerceIn(0, 255)
-                            val newColor = (fullSettings.backgroundColor and 0x00FFFFFFL) or (alphaBits.toLong() shl 24)
-                            fullSettings = fullSettings.copy(backgroundColor = newColor)
-                        },
-                        valueRange = 0f..1f
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showBgDialog = false }) { Text("Done") }
-            }
-        )
-    }
-
-    if (showFontColorPicker) {
-        var editingColor by remember { mutableStateOf(Color(fullSettings.fontColor)) }
-        AlertDialog(
-            onDismissRequest = { showFontColorPicker = false },
-            title = { Text("Font Color") },
-            text = {
-                Column {
-                    ImmediateColorPickerContent(
-                        initialColor = editingColor,
-                        onColorChange = { newColor ->
-                            editingColor = newColor
-                            fullSettings = fullSettings.copy(fontColor = newColor.toArgb().toLong())
-                        }
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showFontColorPicker = false }) { Text("Done") }
-            }
-        )
-    }
-
-    // Side panel overlay (sliding from right)
-    if (showSidePanel) {
-        // Transparent background to close on tap
-        Box(Modifier.fillMaxSize().clickable { showSidePanel = false }) {
-            AnimatedVisibility(
-                visible = showSidePanel,
-                enter = slideInHorizontally(initialOffsetX = { it }),
-                exit = slideOutHorizontally(targetOffsetX = { it }),
-                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(280.dp)
-            ) {
-                Surface(
-                    color = MaterialTheme.colorScheme.surface,
-                    shape = RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp),
-                    modifier = Modifier.fillMaxSize()
+            TEMPLATES.chunked(4).forEach { row ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .verticalScroll(rememberScrollState())
-                            .padding(16.dp)
-                    ) {
-                        Text("Settings", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                        Spacer(Modifier.height(12.dp))
-
-                        // Profiles
-                        Text("Profiles", style = MaterialTheme.typography.labelMedium)
-                        Row(Modifier.horizontalScroll(rememberScrollState())) {
-                            profiles.forEachIndexed { idx, p ->
-                                FilterChip(
-                                    selected = idx == activeProfileIndex,
-                                    onClick = { onProfileSelect(idx) },
-                                    label = { Text(p.profileName) }
-                                )
-                            }
-                        }
-                        Spacer(Modifier.height(8.dp))
-
-                        // Position sliders with individual reset
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Vertical: ${(fullSettings.verticalPosition * 100).toInt()}%")
-                            Spacer(Modifier.weight(1f))
-                            IconButton(
-                                onClick = { fullSettings = fullSettings.copy(verticalPosition = Defaults.FULL_SETTINGS.verticalPosition) },
-                                modifier = Modifier.size(28.dp)
-                            ) { Icon(Icons.Default.Refresh, "Reset", modifier = Modifier.size(16.dp)) }
-                        }
-                        Slider(
-                            value = fullSettings.verticalPosition,
-                            onValueChange = { fullSettings = fullSettings.copy(verticalPosition = it) },
-                            valueRange = 0.05f..0.95f
+                    row.forEach { tmpl ->
+                        val idx = TEMPLATES.indexOf(tmpl)
+                        ThemeColorItem(
+                            name = tmpl.name,
+                            colors = tmpl.colors,
+                            isSelected = idx == selectedIndex,
+                            onClick = { onSelect(idx) }
                         )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Horizontal: ${(fullSettings.horizontalPosition * 100).toInt()}%")
-                            Spacer(Modifier.weight(1f))
-                            IconButton(
-                                onClick = { fullSettings = fullSettings.copy(horizontalPosition = Defaults.FULL_SETTINGS.horizontalPosition) },
-                                modifier = Modifier.size(28.dp)
-                            ) { Icon(Icons.Default.Refresh, "Reset", modifier = Modifier.size(16.dp)) }
-                        }
-                        Slider(
-                            value = fullSettings.horizontalPosition,
-                            onValueChange = { fullSettings = fullSettings.copy(horizontalPosition = it) },
-                            valueRange = 0.05f..0.95f
-                        )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Max Width: ${(fullSettings.maxWidthRatio * 100).toInt()}%")
-                            Spacer(Modifier.weight(1f))
-                            IconButton(
-                                onClick = { fullSettings = fullSettings.copy(maxWidthRatio = Defaults.FULL_SETTINGS.maxWidthRatio) },
-                                modifier = Modifier.size(28.dp)
-                            ) { Icon(Icons.Default.Refresh, "Reset", modifier = Modifier.size(16.dp)) }
-                        }
-                        Slider(
-                            value = fullSettings.maxWidthRatio,
-                            onValueChange = { fullSettings = fullSettings.copy(maxWidthRatio = it) },
-                            valueRange = 0.3f..1f
-                        )
-
-                        // Delay
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Delay: ${fullSettings.delayMs} ms")
-                            Spacer(Modifier.weight(1f))
-                            IconButton(
-                                onClick = { fullSettings = fullSettings.copy(delayMs = Defaults.FULL_SETTINGS.delayMs) },
-                                modifier = Modifier.size(28.dp)
-                            ) { Icon(Icons.Default.Refresh, "Reset", modifier = Modifier.size(16.dp)) }
-                        }
-                        Slider(
-                            value = (fullSettings.delayMs / 1000f).coerceIn(-10f, 10f),
-                            onValueChange = {
-                                fullSettings = fullSettings.copy(delayMs = (it * 1000).roundToInt())
-                            },
-                            valueRange = -10f..10f
-                        )
-
-                        // Rotation presets
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Rotation: ${fullSettings.rotation.toInt()}°")
-                            Spacer(Modifier.weight(1f))
-                            IconButton(
-                                onClick = { fullSettings = fullSettings.copy(rotation = Defaults.FULL_SETTINGS.rotation) },
-                                modifier = Modifier.size(28.dp)
-                            ) { Icon(Icons.Default.Refresh, "Reset", modifier = Modifier.size(16.dp)) }
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            listOf(0f, 90f, 180f, 270f).forEach { ang ->
-                                FilterChip(
-                                    selected = fullSettings.rotation == ang,
-                                    onClick = { fullSettings = fullSettings.copy(rotation = ang) },
-                                    label = { Text("${ang.toInt()}°") }
-                                )
-                            }
-                        }
-
-                        Spacer(Modifier.height(8.dp))
-
-                        // Reset all
-                        Button(
-                            onClick = { showResetConfirm = true },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.errorContainer)
-                        ) {
-                            Text("Reset all to default")
-                        }
                     }
                 }
             }
         }
+        Spacer(Modifier.height(8.dp))
     }
+}
 
-    // Close confirmation (unsaved changes)
-    if (showCloseConfirm) {
-        AlertDialog(
-            onDismissRequest = { showCloseConfirm = false },
-            title = { Text("Unsaved changes") },
-            text = { Text("You have unsaved changes. What would you like to do?") },
-            confirmButton = {
-                TextButton(onClick = {
-                    commitDrag()
-                    onSave()
-                    hasChanges = false
-                    showCloseConfirm = false
-                    onDismiss()
-                }) { Text("Save and close") }
-            },
-            dismissButton = {
-                Row {
-                    TextButton(onClick = {
-                        showCloseConfirm = false
-                        onDismiss()
-                    }) { Text("Discard") }
-                    Spacer(Modifier.width(8.dp))
-                    TextButton(onClick = { showCloseConfirm = false }) { Text("Cancel") }
+@Composable
+private fun TextSizePanel(
+    currentSize: Float,
+    onSizeChange: (Float) -> Unit,
+    onReset: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)
+    ) {
+        PanelHeader(title = "Text Size", onDismiss = onDismiss, onReset = onReset)
+        SectionDivider()
+        Spacer(Modifier.height(12.dp))
+        SliderRow(
+            label = "Font Size",
+            value = currentSize,
+            onValueChange = onSizeChange,
+            valueRange = 10f..48f,
+            displayValue = "${currentSize.toInt()} sp"
+        )
+    }
+}
+
+@Composable
+private fun OutlinePanel(
+    enabled: Boolean,
+    onToggle: (Boolean) -> Unit,
+    width: Float,
+    onWidthChange: (Float) -> Unit,
+    color: Long,
+    onColorChange: (Long) -> Unit,
+    onResetWidth: () -> Unit,
+    onResetColor: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)
+    ) {
+        PanelHeader(title = "Outline", onDismiss = onDismiss)
+        SectionDivider()
+        Spacer(Modifier.height(8.dp))
+        ToggleRow(label = "Enable Outline", checked = enabled, onCheckedChange = onToggle)
+        if (enabled) {
+            Spacer(Modifier.height(8.dp))
+            SliderRow(
+                label = "Width",
+                value = width,
+                onValueChange = onWidthChange,
+                valueRange = 1f..6f,
+                displayValue = "${width.toInt()} px"
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Color", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+                Spacer(Modifier.weight(1f))
+                ResetTextButton(onClick = onResetColor)
+            }
+            ColorSwatchRow(
+                colors = OUTLINE_PRESETS,
+                selectedColor = color,
+                onColorSelect = onColorChange,
+                modifier = Modifier.padding(horizontal = 20.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun ShadowPanel(
+    enabled: Boolean,
+    onToggle: (Boolean) -> Unit,
+    blur: Float,
+    onBlurChange: (Float) -> Unit,
+    offsetX: Float,
+    onOffsetXChange: (Float) -> Unit,
+    offsetY: Float,
+    onOffsetYChange: (Float) -> Unit,
+    color: Long,
+    onColorChange: (Long) -> Unit,
+    onResetBlur: () -> Unit,
+    onResetOffsetX: () -> Unit,
+    onResetOffsetY: () -> Unit,
+    onResetColor: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 24.dp)
+            .verticalScroll(rememberScrollState())
+    ) {
+        PanelHeader(title = "Shadow", onDismiss = onDismiss)
+        SectionDivider()
+        Spacer(Modifier.height(8.dp))
+        ToggleRow(label = "Enable Shadow", checked = enabled, onCheckedChange = onToggle)
+        if (enabled) {
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Blur", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+                Spacer(Modifier.weight(1f))
+                ResetTextButton(onClick = onResetBlur)
+            }
+            SliderRow(
+                label = "",
+                value = blur,
+                onValueChange = onBlurChange,
+                valueRange = 1f..10f,
+                displayValue = "${blur.toInt()} px"
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Offset X", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+                Spacer(Modifier.weight(1f))
+                ResetTextButton(onClick = onResetOffsetX)
+            }
+            SliderRow(
+                label = "",
+                value = offsetX,
+                onValueChange = onOffsetXChange,
+                valueRange = -10f..10f,
+                displayValue = "${offsetX.toInt()} px"
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Offset Y", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+                Spacer(Modifier.weight(1f))
+                ResetTextButton(onClick = onResetOffsetY)
+            }
+            SliderRow(
+                label = "",
+                value = offsetY,
+                onValueChange = onOffsetYChange,
+                valueRange = -10f..10f,
+                displayValue = "${offsetY.toInt()} px"
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Color", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+                Spacer(Modifier.weight(1f))
+                ResetTextButton(onClick = onResetColor)
+            }
+            ColorSwatchRow(
+                colors = SHADOW_PRESETS,
+                selectedColor = color,
+                onColorSelect = onColorChange,
+                modifier = Modifier.padding(horizontal = 20.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun BgPanel(
+    bgColor: Long,
+    onColorChange: (Long) -> Unit,
+    onReset: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val bgAlpha = ((bgColor shr 24) and 0xFF).toFloat() / 255f
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)
+    ) {
+        PanelHeader(title = "Subtitle Background", onDismiss = onDismiss, onReset = onReset)
+        SectionDivider()
+        Spacer(Modifier.height(12.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Presets", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            BG_SUB_PRESETS.forEach { colorLong ->
+                val color = Color(colorLong)
+                val isSelected = (bgColor and 0x00FFFFFFL) == (colorLong and 0x00FFFFFFL)
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(color)
+                        .then(
+                            if (isSelected) Modifier.border(2.dp, SubColors.accent, CircleShape)
+                            else Modifier.border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
+                        )
+                        .clickable { onColorChange(colorLong) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isSelected) {
+                        Icon(
+                            Icons.Default.Check,
+                            contentDescription = null,
+                            tint = if (Color(colorLong) == Color.Black) Color.White else Color.Black,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
                 }
             }
+        }
+        Spacer(Modifier.height(12.dp))
+        SliderRow(
+            label = "Opacity",
+            value = bgAlpha,
+            onValueChange = { newAlpha ->
+                val alphaBits = (newAlpha * 255).toInt().coerceIn(0, 255)
+                val newColor = (bgColor and 0x00FFFFFFL) or (alphaBits.toLong() shl 24)
+                onColorChange(newColor)
+            },
+            valueRange = 0f..1f,
+            displayValue = "${(bgAlpha * 100).toInt()}%"
         )
     }
+}
 
-    // Rename dialog
-    if (showRenameDialog) {
-        AlertDialog(
-            onDismissRequest = { showRenameDialog = false },
-            title = { Text("Rename Profile") },
-            text = {
-                OutlinedTextField(
-                    value = renameText,
-                    onValueChange = { renameText = it },
-                    label = { Text("Profile name") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    if (renameText.isNotBlank()) {
-                        onRenameProfile(activeProfileIndex, renameText.trim())
-                    }
-                    showRenameDialog = false
-                }) { Text("Rename") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showRenameDialog = false }) { Text("Cancel") }
-            }
-        )
-    }
-
-    // Reset confirmation
-    if (showResetConfirm) {
-        AlertDialog(
-            onDismissRequest = { showResetConfirm = false },
-            title = { Text("Reset settings?") },
-            text = { Text("Restore all subtitle settings to default?") },
-            confirmButton = {
-                TextButton(onClick = {
-                    fullSettings = Defaults.FULL_SETTINGS
-                    showResetConfirm = false
-                }) { Text("Reset") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showResetConfirm = false }) { Text("Cancel") }
+@Composable
+private fun FontColorPanel(
+    currentColor: Long,
+    onColorChange: (Long) -> Unit,
+    onReset: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)
+    ) {
+        PanelHeader(title = "Font Color", onDismiss = onDismiss, onReset = onReset)
+        SectionDivider()
+        Spacer(Modifier.height(8.dp))
+        ImmediateColorPickerContent(
+            initialColor = Color(currentColor),
+            onColorChange = { newColor ->
+                onColorChange(newColor.toArgb().toLong())
             }
         )
     }
 }
 
-// ---------- Subtitle Preview with draggable rotation wheel ----------
+@Composable
+private fun AdvancedPanel(
+    verticalPosition: Float,
+    onVerticalChange: (Float) -> Unit,
+    horizontalPosition: Float,
+    onHorizontalChange: (Float) -> Unit,
+    maxWidthRatio: Float,
+    onMaxWidthChange: (Float) -> Unit,
+    delayMs: Int,
+    onDelayChange: (Int) -> Unit,
+    rotation: Float,
+    onRotationChange: (Float) -> Unit,
+    onResetVertical: () -> Unit,
+    onResetHorizontal: () -> Unit,
+    onResetMaxWidth: () -> Unit,
+    onResetDelay: () -> Unit,
+    onResetRotation: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 24.dp)
+            .verticalScroll(rememberScrollState())
+    ) {
+        PanelHeader(title = "Advanced Settings", onDismiss = onDismiss)
+        SectionDivider()
+        Spacer(Modifier.height(8.dp))
+
+        Text(
+            text = "Position",
+            color = Color.White.copy(alpha = 0.5f),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 1.sp,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Vertical", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+            Spacer(Modifier.weight(1f))
+            ResetTextButton(onClick = onResetVertical)
+        }
+        SliderRow(
+            label = "",
+            value = verticalPosition,
+            onValueChange = onVerticalChange,
+            valueRange = 0.05f..0.95f,
+            displayValue = "${(verticalPosition * 100).toInt()}%"
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Horizontal", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+            Spacer(Modifier.weight(1f))
+            ResetTextButton(onClick = onResetHorizontal)
+        }
+        SliderRow(
+            label = "",
+            value = horizontalPosition,
+            onValueChange = onHorizontalChange,
+            valueRange = 0.05f..0.95f,
+            displayValue = "${(horizontalPosition * 100).toInt()}%"
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Max Width", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+            Spacer(Modifier.weight(1f))
+            ResetTextButton(onClick = onResetMaxWidth)
+        }
+        SliderRow(
+            label = "",
+            value = maxWidthRatio,
+            onValueChange = onMaxWidthChange,
+            valueRange = 0.3f..1f,
+            displayValue = "${(maxWidthRatio * 100).toInt()}%"
+        )
+
+        Spacer(Modifier.height(8.dp))
+        SectionDivider()
+        Spacer(Modifier.height(8.dp))
+
+        Text(
+            text = "Timing",
+            color = Color.White.copy(alpha = 0.5f),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 1.sp,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Delay", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+            Spacer(Modifier.weight(1f))
+            ResetTextButton(onClick = onResetDelay)
+        }
+        SliderRow(
+            label = "",
+            value = (delayMs / 1000f).coerceIn(-10f, 10f),
+            onValueChange = { onDelayChange((it * 1000).roundToInt()) },
+            valueRange = -10f..10f,
+            displayValue = "${delayMs} ms"
+        )
+
+        Spacer(Modifier.height(8.dp))
+        SectionDivider()
+        Spacer(Modifier.height(8.dp))
+
+        Text(
+            text = "Rotation",
+            color = Color.White.copy(alpha = 0.5f),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 1.sp,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Angle: ${rotation.toInt()}°", color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp)
+            Spacer(Modifier.weight(1f))
+            ResetTextButton(onClick = onResetRotation)
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf(0f, 45f, 90f, 135f, 180f, 270f).forEach { ang ->
+                Surface(
+                    onClick = { onRotationChange(ang) },
+                    shape = chipShape,
+                    color = if (rotation == ang) SubColors.accent.copy(alpha = 0.25f)
+                    else Color.White.copy(alpha = 0.06f)
+                ) {
+                    Text(
+                        text = "${ang.toInt()}°",
+                        color = if (rotation == ang) SubColors.accent else Color.White.copy(alpha = 0.6f),
+                        fontSize = 13.sp,
+                        fontWeight = if (rotation == ang) FontWeight.SemiBold else FontWeight.Normal,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ===========================================================================
+// CONFIRMATION / RENAME OVERLAYS
+// ===========================================================================
+@Composable
+private fun ConfirmationOverlay(
+    title: String,
+    message: String,
+    confirmLabel: String = "Confirm",
+    onConfirm: () -> Unit,
+    dismissLabel: String? = "Cancel",
+    onDismiss: () -> Unit,
+    cancelLabel: String? = null,
+    onCancel: (() -> Unit)? = null
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.6f))
+            .clickable(
+                indication = null,
+                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+            ) { onDismiss() },
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            color = SubColors.surfacePanel,
+            shape = cardShape,
+            shadowElevation = 32.dp,
+            modifier = Modifier.padding(32.dp).width(320.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = title,
+                    color = Color.White,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = message,
+                    color = Color.White.copy(alpha = 0.6f),
+                    fontSize = 14.sp,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(Modifier.height(24.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (dismissLabel != null) {
+                        TextButton(onClick = onDismiss, modifier = Modifier.weight(1f)) {
+                            Text(dismissLabel, color = Color.White.copy(alpha = 0.6f))
+                        }
+                    }
+                    if (cancelLabel != null && onCancel != null) {
+                        TextButton(onClick = onCancel, modifier = Modifier.weight(1f)) {
+                            Text(cancelLabel, color = Color.White.copy(alpha = 0.6f))
+                        }
+                    }
+                    Button(
+                        onClick = onConfirm,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = SubColors.accent),
+                        shape = chipShape
+                    ) {
+                        Text(confirmLabel, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RenameOverlay(
+    currentName: String,
+    onNameChange: (String) -> Unit,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.6f))
+            .clickable(
+                indication = null,
+                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+            ) { onDismiss() },
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            color = SubColors.surfacePanel,
+            shape = cardShape,
+            shadowElevation = 32.dp,
+            modifier = Modifier.padding(32.dp).width(320.dp)
+        ) {
+            Column(modifier = Modifier.padding(24.dp)) {
+                Text(
+                    text = "Rename Profile",
+                    color = Color.White,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = currentName,
+                    onValueChange = onNameChange,
+                    label = { Text("Profile name", color = Color.White.copy(alpha = 0.5f)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    textStyle = TextStyle(color = Color.White),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = SubColors.accent,
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                        cursorColor = SubColors.accent,
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    )
+                )
+                Spacer(Modifier.height(24.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    TextButton(onClick = onDismiss, modifier = Modifier.weight(1f)) {
+                        Text("Cancel", color = Color.White.copy(alpha = 0.6f))
+                    }
+                    Button(
+                        onClick = onConfirm,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = SubColors.accent),
+                        shape = chipShape
+                    ) {
+                        Text("Rename", fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ===========================================================================
+// Subtitle Preview
+// ===========================================================================
 @Composable
 private fun SubtitlePreview(
     settings: SubtitleFullSettings,
@@ -1112,7 +1572,6 @@ private fun SubtitlePreview(
                 }
                 .onSizeChanged { boxWidth = it.width; boxHeight = it.height }
         ) {
-            // Drag area (not affected by rotation)
             Box(
                 modifier = Modifier
                     .pointerInput(Unit) {
@@ -1129,7 +1588,6 @@ private fun SubtitlePreview(
                         )
                     }
             ) {
-                // Rotated content (background + text together)
                 Box(
                     modifier = Modifier
                         .graphicsLayer { rotationZ = rotation }
@@ -1139,8 +1597,7 @@ private fun SubtitlePreview(
                         )
                 ) {
                     Box(
-                        modifier = Modifier
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         if (settings.enableOutline) {
                             Text(
@@ -1163,7 +1620,6 @@ private fun SubtitlePreview(
                     }
                 }
 
-                // Rotation wheel (not affected by rotation)
                 if (showRotateWheel) {
                     RotationWheel(
                         currentAngle = rotation,
@@ -1179,7 +1635,9 @@ private fun SubtitlePreview(
     }
 }
 
-// ---------- Rotation wheel (draggable circle with line indicator) ----------
+// ===========================================================================
+// Rotation Wheel
+// ===========================================================================
 @Composable
 private fun RotationWheel(
     currentAngle: Float,
@@ -1189,18 +1647,16 @@ private fun RotationWheel(
     var center by remember { mutableStateOf(Offset.Zero) }
     Box(
         modifier = modifier
-            .background(Color.White.copy(alpha = 0.7f), CircleShape)
+            .background(Color.White.copy(alpha = 0.15f), CircleShape)
+            .border(1.dp, Color.White.copy(alpha = 0.2f), CircleShape)
             .pointerInput(Unit) {
                 detectDragGestures(
-                    onDragStart = { offset ->
-                        center = Offset(size.width / 2f, size.height / 2f)
-                    },
-                    onDrag = { change, dragAmount ->
+                    onDragStart = { offset -> center = Offset(size.width / 2f, size.height / 2f) },
+                    onDrag = { change, _ ->
                         change.consume()
                         val touchPos = change.position
                         val delta = touchPos - center
                         val angle = Math.toDegrees(atan2(delta.y.toDouble(), delta.x.toDouble())).toFloat()
-                        // Convert to 0-360, then to -180..180
                         var normalized = (angle + 90) % 360
                         if (normalized < 0) normalized += 360
                         val displayAngle = if (normalized <= 180) normalized else normalized - 360
@@ -1218,13 +1674,13 @@ private fun RotationWheel(
             val lineEndX = cx + (radius * cos(angleRad)).toFloat()
             val lineEndY = cy + (radius * sin(angleRad)).toFloat()
             drawCircle(
-                color = Color.DarkGray,
+                color = Color.White.copy(alpha = 0.4f),
                 radius = radius,
                 center = Offset(cx, cy),
                 style = Stroke(width = 2.dp.toPx())
             )
             drawLine(
-                color = Color.Red,
+                color = SubColors.accent,
                 start = Offset(cx, cy),
                 end = Offset(lineEndX, lineEndY),
                 strokeWidth = 2.dp.toPx()
@@ -1234,12 +1690,14 @@ private fun RotationWheel(
             Icons.AutoMirrored.Filled.RotateRight,
             contentDescription = "Rotate",
             modifier = Modifier.size(16.dp),
-            tint = Color.DarkGray
+            tint = Color.White.copy(alpha = 0.6f)
         )
     }
 }
 
-// ---------- Immediate color picker content (used inside dialogs) ----------
+// ===========================================================================
+// Color Picker
+// ===========================================================================
 @Composable
 private fun ImmediateColorPickerContent(
     initialColor: Color,
@@ -1250,37 +1708,32 @@ private fun ImmediateColorPickerContent(
     var lightness by remember { mutableFloatStateOf(0.5f) }
     var alpha by remember { mutableFloatStateOf(initialColor.alpha) }
 
-    // Initialize from initialColor only once on first composition
     LaunchedEffect(Unit) {
         val hsl = rgbToHsl(initialColor)
-        hue = hsl[0]
-        saturation = hsl[1]
-        lightness = hsl[2]
-        alpha = hsl[3]
+        hue = hsl[0]; saturation = hsl[1]; lightness = hsl[2]; alpha = hsl[3]
     }
 
     val currentColor = remember(hue, saturation, lightness, alpha) {
         Color.hsl(hue, saturation, lightness, alpha)
     }
 
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        // Palette
-        val paletteSize = 200.dp
+    Column(
+        modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        val paletteSize = 220.dp
         Box(
             modifier = Modifier
                 .size(paletteSize)
-                .clip(RoundedCornerShape(4.dp))
+                .clip(RoundedCornerShape(12.dp))
                 .pointerInput(Unit) {
                     detectTapGestures { offset ->
                         val xFraction = (offset.x / size.width).coerceIn(0f, 1f)
                         val yFraction = (offset.y / size.height).coerceIn(0f, 1f)
                         val newHue = xFraction * 360f
-                        val newSat = 1f
                         val newLight = 1f - yFraction
-                        hue = newHue
-                        saturation = newSat
-                        lightness = newLight
-                        onColorChange(Color.hsl(newHue, newSat, newLight, alpha))
+                        hue = newHue; saturation = 1f; lightness = newLight
+                        onColorChange(Color.hsl(newHue, 1f, newLight, alpha))
                     }
                 }
         ) {
@@ -1307,40 +1760,41 @@ private fun ImmediateColorPickerContent(
             }
         }
 
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(12.dp))
 
-        // Alpha slider with preview
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 Modifier
-                    .size(24.dp)
-                    .clip(RoundedCornerShape(4.dp))
+                    .size(28.dp)
+                    .clip(RoundedCornerShape(8.dp))
                     .background(currentColor)
-                    .border(1.dp, Color.Gray, RoundedCornerShape(4.dp))
+                    .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
             )
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(12.dp))
             Slider(
                 value = alpha,
                 onValueChange = { alpha = it; onColorChange(Color.hsl(hue, saturation, lightness, it)) },
                 valueRange = 0f..1f,
                 modifier = Modifier.weight(1f),
-                colors = androidx.compose.material3.SliderDefaults.colors(
-                    thumbColor = Color.White,
-                    activeTrackColor = currentColor.copy(alpha = 0.7f),
-                    inactiveTrackColor = Color.Gray.copy(alpha = 0.3f)
+                colors = SliderDefaults.colors(
+                    thumbColor = SubColors.accent,
+                    activeTrackColor = SubColors.accent.copy(alpha = 0.7f),
+                    inactiveTrackColor = Color.White.copy(alpha = 0.08f)
                 )
             )
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(12.dp))
             Text(
                 "${(alpha * 100).toInt()}%",
-                color = Color.White,
+                color = Color.White.copy(alpha = 0.7f),
+                fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
-                modifier = Modifier.width(32.dp),
+                modifier = Modifier.width(36.dp),
                 textAlign = TextAlign.End
             )
         }
 
-        // Hex input
+        Spacer(Modifier.height(8.dp))
+
         var hex by remember {
             mutableStateOf(
                 String.format(
@@ -1362,21 +1816,32 @@ private fun ImmediateColorPickerContent(
                     val b = filtered.substring(4, 6).toInt(16) / 255f
                     val newColor = Color(r, g, b, alpha)
                     val hsl = rgbToHsl(newColor)
-                    hue = hsl[0]
-                    saturation = hsl[1]
-                    lightness = hsl[2]
+                    hue = hsl[0]; saturation = hsl[1]; lightness = hsl[2]
                     onColorChange(newColor)
                 }
             },
-            label = { Text("RGB Hex") },
+            label = { Text("Hex", color = Color.White.copy(alpha = 0.5f)) },
+            placeholder = { Text("RRGGBB", color = Color.White.copy(alpha = 0.2f)) },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true
+            singleLine = true,
+            textStyle = TextStyle(color = Color.White, fontSize = 16.sp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = SubColors.accent,
+                unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                cursorColor = SubColors.accent,
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White,
+                focusedLabelColor = SubColors.accent,
+                unfocusedLabelColor = Color.White.copy(alpha = 0.4f)
+            )
         )
     }
 }
 
-// Utility: RGB to HSL
+// ===========================================================================
+// Utility: RGB → HSL
+// ===========================================================================
 private fun rgbToHsl(color: Color): FloatArray {
     val r = color.red
     val g = color.green
@@ -1395,7 +1860,6 @@ private fun rgbToHsl(color: Color): FloatArray {
     return floatArrayOf(hue.coerceAtLeast(0f), saturation, lightness, color.alpha)
 }
 
-// Helper RectF for Canvas
 private data class RectF(val left: Float, val top: Float, val right: Float, val bottom: Float) {
     fun width() = right - left
     fun height() = bottom - top
