@@ -63,6 +63,7 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -179,12 +180,9 @@ private object Defaults {
     val FULL_SETTINGS = SubtitleFullSettings()
 }
 
-private object SubColors {
-    val surfacePanel = Color(0xFF121220)
-    val divider = Color(0xFF2A2A40)
-    val accent = Color(0xFF42A5F5)
-    val accentGlow = Color(0x2042A5F5)
-}
+// Dark surface for video overlay panels (always dark regardless of theme)
+private val PanelSurface = Color(0xFF121220)
+private val PanelDivider = Color(0xFF2A2A40)
 
 private val panelShape = RoundedCornerShape(20.dp, 20.dp, 0.dp, 0.dp)
 private val cardShape = RoundedCornerShape(14.dp)
@@ -247,9 +245,9 @@ private fun SubtitleSettingsContent(
             outlineWidth = currentSettings.outlineWidth,
             outlineColor = currentSettings.outlineColor,
             enableShadow = currentSettings.enableShadow,
-            shadowBlur = Defaults.FULL_SETTINGS.shadowBlur,
-            shadowOffsetX = Defaults.FULL_SETTINGS.shadowOffsetX,
-            shadowOffsetY = Defaults.FULL_SETTINGS.shadowOffsetY,
+            shadowBlur = currentSettings.shadowBlur,
+            shadowOffsetX = currentSettings.shadowOffsetX,
+            shadowOffsetY = currentSettings.shadowOffsetY,
             shadowColor = currentSettings.shadowColor,
             backgroundColor = currentSettings.backgroundColor,
             verticalPosition = currentSettings.verticalPosition,
@@ -283,9 +281,9 @@ private fun SubtitleSettingsContent(
             outlineWidth = p.outlineWidth,
             outlineColor = p.outlineColor,
             enableShadow = p.enableShadow,
-            shadowBlur = Defaults.FULL_SETTINGS.shadowBlur,
-            shadowOffsetX = Defaults.FULL_SETTINGS.shadowOffsetX,
-            shadowOffsetY = Defaults.FULL_SETTINGS.shadowOffsetY,
+            shadowBlur = p.shadowBlur,
+            shadowOffsetX = p.shadowOffsetX,
+            shadowOffsetY = p.shadowOffsetY,
             shadowColor = p.shadowColor,
             backgroundColor = p.backgroundColor,
             verticalPosition = p.verticalPosition,
@@ -297,9 +295,12 @@ private fun SubtitleSettingsContent(
         )
         dragOffsetX = 0f
         dragOffsetY = 0f
+        hasChanges = false
     }
 
-    LaunchedEffect(fullSettings, dragOffsetX, dragOffsetY) {
+    // Helper: mark state as user-changed
+    fun uiChange(block: () -> Unit) {
+        block()
         hasChanges = true
     }
 
@@ -317,6 +318,7 @@ private fun SubtitleSettingsContent(
             fullSettings = fullSettings.copy(verticalPosition = newV, horizontalPosition = newH)
             dragOffsetX = 0f
             dragOffsetY = 0f
+            hasChanges = true
         }
     }
 
@@ -539,20 +541,13 @@ private fun SubtitleSettingsContent(
             onDragEnd = ::commitDrag,
             onTap = { showRotationWheel = !showRotationWheel },
             showRotateWheel = showRotationWheel,
-            onRotate = { fullSettings = fullSettings.copy(rotation = it) },
+            onRotate = { uiChange { fullSettings = fullSettings.copy(rotation = it) } },
             modifier = Modifier.fillMaxSize()
         )
 
         // ── Bottom panels (slide up) ────────────────────────────────────────
         activePanel?.let { panel ->
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clickable(
-                        indication = null,
-                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-                    ) { activePanel = null }
-            ) {
+            Box(modifier = Modifier.fillMaxSize()) {
                 AnimatedVisibility(
                     visible = true,
                     enter = slideInVertically(initialOffsetY = { it }, animationSpec = tween(300)),
@@ -560,7 +555,7 @@ private fun SubtitleSettingsContent(
                     modifier = Modifier.align(Alignment.BottomCenter)
                 ) {
                     Surface(
-                        color = SubColors.surfacePanel,
+                        color = PanelSurface,
                         shape = panelShape,
                         shadowElevation = 24.dp
                     ) {
@@ -575,66 +570,69 @@ private fun SubtitleSettingsContent(
                             )
                             Panel.TextSize -> TextSizePanel(
                                 currentSize = fullSettings.fontSize,
-                                onSizeChange = { fullSettings = fullSettings.copy(fontSize = it) },
-                                onReset = { fullSettings = fullSettings.copy(fontSize = Defaults.FULL_SETTINGS.fontSize) },
+                                onSizeChange = { uiChange { fullSettings = fullSettings.copy(fontSize = it) } },
+                                onReset = { uiChange { fullSettings = fullSettings.copy(fontSize = Defaults.FULL_SETTINGS.fontSize) } },
                                 onDismiss = { activePanel = null }
                             )
                             Panel.Outline -> OutlinePanel(
                                 enabled = fullSettings.enableOutline,
-                                onToggle = { fullSettings = fullSettings.copy(enableOutline = it) },
+                                onToggle = { uiChange { fullSettings = fullSettings.copy(enableOutline = it) } },
                                 width = fullSettings.outlineWidth,
-                                onWidthChange = { fullSettings = fullSettings.copy(outlineWidth = it) },
+                                onWidthChange = { uiChange { fullSettings = fullSettings.copy(outlineWidth = it) } },
                                 color = fullSettings.outlineColor,
-                                onColorChange = { fullSettings = fullSettings.copy(outlineColor = it) },
-                                onResetWidth = { fullSettings = fullSettings.copy(outlineWidth = Defaults.FULL_SETTINGS.outlineWidth) },
-                                onResetColor = { fullSettings = fullSettings.copy(outlineColor = Defaults.FULL_SETTINGS.outlineColor) },
+                                onColorChange = { uiChange { fullSettings = fullSettings.copy(outlineColor = it) } },
+                                onResetAll = { uiChange { fullSettings = fullSettings.copy(enableOutline = true, outlineWidth = Defaults.FULL_SETTINGS.outlineWidth, outlineColor = Defaults.FULL_SETTINGS.outlineColor) } },
+                                onResetWidth = { uiChange { fullSettings = fullSettings.copy(outlineWidth = Defaults.FULL_SETTINGS.outlineWidth) } },
+                                onResetColor = { uiChange { fullSettings = fullSettings.copy(outlineColor = Defaults.FULL_SETTINGS.outlineColor) } },
                                 onDismiss = { activePanel = null }
                             )
                             Panel.Shadow -> ShadowPanel(
                                 enabled = fullSettings.enableShadow,
-                                onToggle = { fullSettings = fullSettings.copy(enableShadow = it) },
+                                onToggle = { uiChange { fullSettings = fullSettings.copy(enableShadow = it) } },
                                 blur = fullSettings.shadowBlur,
-                                onBlurChange = { fullSettings = fullSettings.copy(shadowBlur = it) },
+                                onBlurChange = { uiChange { fullSettings = fullSettings.copy(shadowBlur = it) } },
                                 offsetX = fullSettings.shadowOffsetX,
-                                onOffsetXChange = { fullSettings = fullSettings.copy(shadowOffsetX = it) },
+                                onOffsetXChange = { uiChange { fullSettings = fullSettings.copy(shadowOffsetX = it) } },
                                 offsetY = fullSettings.shadowOffsetY,
-                                onOffsetYChange = { fullSettings = fullSettings.copy(shadowOffsetY = it) },
+                                onOffsetYChange = { uiChange { fullSettings = fullSettings.copy(shadowOffsetY = it) } },
                                 color = fullSettings.shadowColor,
-                                onColorChange = { fullSettings = fullSettings.copy(shadowColor = it) },
-                                onResetBlur = { fullSettings = fullSettings.copy(shadowBlur = Defaults.FULL_SETTINGS.shadowBlur) },
-                                onResetOffsetX = { fullSettings = fullSettings.copy(shadowOffsetX = Defaults.FULL_SETTINGS.shadowOffsetX) },
-                                onResetOffsetY = { fullSettings = fullSettings.copy(shadowOffsetY = Defaults.FULL_SETTINGS.shadowOffsetY) },
-                                onResetColor = { fullSettings = fullSettings.copy(shadowColor = Defaults.FULL_SETTINGS.shadowColor) },
+                                onColorChange = { uiChange { fullSettings = fullSettings.copy(shadowColor = it) } },
+                                onResetAll = { uiChange { fullSettings = fullSettings.copy(enableShadow = false, shadowBlur = Defaults.FULL_SETTINGS.shadowBlur, shadowOffsetX = Defaults.FULL_SETTINGS.shadowOffsetX, shadowOffsetY = Defaults.FULL_SETTINGS.shadowOffsetY, shadowColor = Defaults.FULL_SETTINGS.shadowColor) } },
+                                onResetBlur = { uiChange { fullSettings = fullSettings.copy(shadowBlur = Defaults.FULL_SETTINGS.shadowBlur) } },
+                                onResetOffsetX = { uiChange { fullSettings = fullSettings.copy(shadowOffsetX = Defaults.FULL_SETTINGS.shadowOffsetX) } },
+                                onResetOffsetY = { uiChange { fullSettings = fullSettings.copy(shadowOffsetY = Defaults.FULL_SETTINGS.shadowOffsetY) } },
+                                onResetColor = { uiChange { fullSettings = fullSettings.copy(shadowColor = Defaults.FULL_SETTINGS.shadowColor) } },
                                 onDismiss = { activePanel = null }
                             )
                             Panel.Bg -> BgPanel(
                                 bgColor = fullSettings.backgroundColor,
-                                onColorChange = { fullSettings = fullSettings.copy(backgroundColor = it) },
-                                onReset = { fullSettings = fullSettings.copy(backgroundColor = Defaults.FULL_SETTINGS.backgroundColor) },
+                                onColorChange = { uiChange { fullSettings = fullSettings.copy(backgroundColor = it) } },
+                                onReset = { uiChange { fullSettings = fullSettings.copy(backgroundColor = Defaults.FULL_SETTINGS.backgroundColor) } },
                                 onDismiss = { activePanel = null }
                             )
                             Panel.FontColor -> FontColorPanel(
                                 currentColor = fullSettings.fontColor,
-                                onColorChange = { fullSettings = fullSettings.copy(fontColor = it) },
-                                onReset = { fullSettings = fullSettings.copy(fontColor = Defaults.FULL_SETTINGS.fontColor) },
+                                onColorChange = { uiChange { fullSettings = fullSettings.copy(fontColor = it) } },
+                                onReset = { uiChange { fullSettings = fullSettings.copy(fontColor = Defaults.FULL_SETTINGS.fontColor) } },
                                 onDismiss = { activePanel = null }
                             )
                             Panel.Advanced -> AdvancedPanel(
                                 verticalPosition = fullSettings.verticalPosition,
-                                onVerticalChange = { fullSettings = fullSettings.copy(verticalPosition = it) },
+                                onVerticalChange = { uiChange { fullSettings = fullSettings.copy(verticalPosition = it) } },
                                 horizontalPosition = fullSettings.horizontalPosition,
-                                onHorizontalChange = { fullSettings = fullSettings.copy(horizontalPosition = it) },
+                                onHorizontalChange = { uiChange { fullSettings = fullSettings.copy(horizontalPosition = it) } },
                                 maxWidthRatio = fullSettings.maxWidthRatio,
-                                onMaxWidthChange = { fullSettings = fullSettings.copy(maxWidthRatio = it) },
+                                onMaxWidthChange = { uiChange { fullSettings = fullSettings.copy(maxWidthRatio = it) } },
                                 delayMs = fullSettings.delayMs,
-                                onDelayChange = { fullSettings = fullSettings.copy(delayMs = it) },
+                                onDelayChange = { uiChange { fullSettings = fullSettings.copy(delayMs = it) } },
                                 rotation = fullSettings.rotation,
-                                onRotationChange = { fullSettings = fullSettings.copy(rotation = it) },
-                                onResetVertical = { fullSettings = fullSettings.copy(verticalPosition = Defaults.FULL_SETTINGS.verticalPosition) },
-                                onResetHorizontal = { fullSettings = fullSettings.copy(horizontalPosition = Defaults.FULL_SETTINGS.horizontalPosition) },
-                                onResetMaxWidth = { fullSettings = fullSettings.copy(maxWidthRatio = Defaults.FULL_SETTINGS.maxWidthRatio) },
-                                onResetDelay = { fullSettings = fullSettings.copy(delayMs = Defaults.FULL_SETTINGS.delayMs) },
-                                onResetRotation = { fullSettings = fullSettings.copy(rotation = Defaults.FULL_SETTINGS.rotation) },
+                                onRotationChange = { uiChange { fullSettings = fullSettings.copy(rotation = it) } },
+                                onResetAll = { uiChange { fullSettings = fullSettings.copy(verticalPosition = Defaults.FULL_SETTINGS.verticalPosition, horizontalPosition = Defaults.FULL_SETTINGS.horizontalPosition, maxWidthRatio = Defaults.FULL_SETTINGS.maxWidthRatio, delayMs = Defaults.FULL_SETTINGS.delayMs, rotation = Defaults.FULL_SETTINGS.rotation) } },
+                                onResetVertical = { uiChange { fullSettings = fullSettings.copy(verticalPosition = Defaults.FULL_SETTINGS.verticalPosition) } },
+                                onResetHorizontal = { uiChange { fullSettings = fullSettings.copy(horizontalPosition = Defaults.FULL_SETTINGS.horizontalPosition) } },
+                                onResetMaxWidth = { uiChange { fullSettings = fullSettings.copy(maxWidthRatio = Defaults.FULL_SETTINGS.maxWidthRatio) } },
+                                onResetDelay = { uiChange { fullSettings = fullSettings.copy(delayMs = Defaults.FULL_SETTINGS.delayMs) } },
+                                onResetRotation = { uiChange { fullSettings = fullSettings.copy(rotation = Defaults.FULL_SETTINGS.rotation) } },
                                 onDismiss = { activePanel = null }
                             )
                         }
@@ -748,7 +746,7 @@ private fun SectionDivider() {
             .fillMaxWidth()
             .padding(horizontal = 20.dp)
             .height(1.dp)
-            .background(SubColors.divider)
+            .background(PanelDivider)
     )
 }
 
@@ -774,8 +772,8 @@ private fun ToggleRow(
             checked = checked,
             onCheckedChange = onCheckedChange,
             colors = SwitchDefaults.colors(
-                checkedThumbColor = SubColors.accent,
-                checkedTrackColor = SubColors.accentGlow,
+                checkedThumbColor = MaterialTheme.colorScheme.primary,
+                checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
                 uncheckedThumbColor = Color.White.copy(alpha = 0.3f),
                 uncheckedTrackColor = Color.White.copy(alpha = 0.08f)
             )
@@ -804,7 +802,7 @@ private fun SliderRow(
             Spacer(Modifier.weight(1f))
             Text(
                 text = displayValue,
-                color = SubColors.accent,
+                color = MaterialTheme.colorScheme.primary,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium
             )
@@ -814,8 +812,8 @@ private fun SliderRow(
             onValueChange = onValueChange,
             valueRange = valueRange,
             colors = SliderDefaults.colors(
-                thumbColor = SubColors.accent,
-                activeTrackColor = SubColors.accent,
+                thumbColor = MaterialTheme.colorScheme.primary,
+                activeTrackColor = MaterialTheme.colorScheme.primary,
                 inactiveTrackColor = Color.White.copy(alpha = 0.08f)
             )
         )
@@ -845,7 +843,7 @@ private fun BottomToolbarButton(
     isActive: Boolean = false,
     onClick: () -> Unit
 ) {
-    val bgColor = if (isActive) SubColors.accent.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.04f)
+    val bgColor = if (isActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.04f)
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(12.dp))
@@ -857,12 +855,12 @@ private fun BottomToolbarButton(
             Icon(
                 icon,
                 contentDescription = label,
-                tint = if (isActive) SubColors.accent else Color.White.copy(alpha = 0.6f),
+                tint = if (isActive) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.6f),
                 modifier = Modifier.size(20.dp)
             )
             Text(
                 text = label,
-                color = if (isActive) SubColors.accent else Color.White.copy(alpha = 0.5f),
+                color = if (isActive) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.5f),
                 fontSize = 9.sp,
                 fontWeight = if (isActive) FontWeight.Medium else FontWeight.Normal
             )
@@ -889,7 +887,7 @@ private fun ColorSwatchRow(
                     .clip(CircleShape)
                     .background(c)
                     .then(
-                        if (isSelected) Modifier.border(2.dp, SubColors.accent, CircleShape)
+                        if (isSelected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
                         else Modifier.border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
                     )
                     .clickable { onColorSelect(c.toArgb().toLong()) },
@@ -918,7 +916,7 @@ private fun ThemeColorItem(
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         val bgBrush = if (colors.size == 1) Brush.verticalGradient(listOf(colors[0], colors[0]))
                       else Brush.verticalGradient(colors)
-        val borderMod = if (isSelected) Modifier.border(2.dp, SubColors.accent, RoundedCornerShape(12.dp))
+        val borderMod = if (isSelected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))
                         else Modifier.border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
         Box(
             modifier = Modifier
@@ -1010,6 +1008,7 @@ private fun OutlinePanel(
     onWidthChange: (Float) -> Unit,
     color: Long,
     onColorChange: (Long) -> Unit,
+    onResetAll: () -> Unit,
     onResetWidth: () -> Unit,
     onResetColor: () -> Unit,
     onDismiss: () -> Unit
@@ -1017,7 +1016,7 @@ private fun OutlinePanel(
     Column(
         modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)
     ) {
-        PanelHeader(title = "Outline", onDismiss = onDismiss)
+        PanelHeader(title = "Outline", onDismiss = onDismiss, onReset = onResetAll)
         SectionDivider()
         Spacer(Modifier.height(8.dp))
         ToggleRow(label = "Enable Outline", checked = enabled, onCheckedChange = onToggle)
@@ -1061,6 +1060,7 @@ private fun ShadowPanel(
     onOffsetYChange: (Float) -> Unit,
     color: Long,
     onColorChange: (Long) -> Unit,
+    onResetAll: () -> Unit,
     onResetBlur: () -> Unit,
     onResetOffsetX: () -> Unit,
     onResetOffsetY: () -> Unit,
@@ -1073,7 +1073,7 @@ private fun ShadowPanel(
             .padding(bottom = 24.dp)
             .verticalScroll(rememberScrollState())
     ) {
-        PanelHeader(title = "Shadow", onDismiss = onDismiss)
+        PanelHeader(title = "Shadow", onDismiss = onDismiss, onReset = onResetAll)
         SectionDivider()
         Spacer(Modifier.height(8.dp))
         ToggleRow(label = "Enable Shadow", checked = enabled, onCheckedChange = onToggle)
@@ -1177,7 +1177,7 @@ private fun BgPanel(
                         .clip(CircleShape)
                         .background(color)
                         .then(
-                            if (isSelected) Modifier.border(2.dp, SubColors.accent, CircleShape)
+                            if (isSelected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
                             else Modifier.border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
                         )
                         .clickable { onColorChange(colorLong) },
@@ -1243,6 +1243,7 @@ private fun AdvancedPanel(
     onDelayChange: (Int) -> Unit,
     rotation: Float,
     onRotationChange: (Float) -> Unit,
+    onResetAll: () -> Unit,
     onResetVertical: () -> Unit,
     onResetHorizontal: () -> Unit,
     onResetMaxWidth: () -> Unit,
@@ -1256,7 +1257,7 @@ private fun AdvancedPanel(
             .padding(bottom = 24.dp)
             .verticalScroll(rememberScrollState())
     ) {
-        PanelHeader(title = "Advanced Settings", onDismiss = onDismiss)
+        PanelHeader(title = "Advanced Settings", onDismiss = onDismiss, onReset = onResetAll)
         SectionDivider()
         Spacer(Modifier.height(8.dp))
 
@@ -1371,12 +1372,12 @@ private fun AdvancedPanel(
                 Surface(
                     onClick = { onRotationChange(ang) },
                     shape = chipShape,
-                    color = if (rotation == ang) SubColors.accent.copy(alpha = 0.25f)
+                    color = if (rotation == ang) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
                     else Color.White.copy(alpha = 0.06f)
                 ) {
                     Text(
                         text = "${ang.toInt()}°",
-                        color = if (rotation == ang) SubColors.accent else Color.White.copy(alpha = 0.6f),
+                        color = if (rotation == ang) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.6f),
                         fontSize = 13.sp,
                         fontWeight = if (rotation == ang) FontWeight.SemiBold else FontWeight.Normal,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -1412,7 +1413,7 @@ private fun ConfirmationOverlay(
         contentAlignment = Alignment.Center
     ) {
         Surface(
-            color = SubColors.surfacePanel,
+            color = PanelSurface,
             shape = cardShape,
             shadowElevation = 32.dp,
             modifier = Modifier.padding(32.dp).width(320.dp)
@@ -1452,7 +1453,7 @@ private fun ConfirmationOverlay(
                     Button(
                         onClick = onConfirm,
                         modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = SubColors.accent),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                         shape = chipShape
                     ) {
                         Text(confirmLabel, fontWeight = FontWeight.SemiBold)
@@ -1481,7 +1482,7 @@ private fun RenameOverlay(
         contentAlignment = Alignment.Center
     ) {
         Surface(
-            color = SubColors.surfacePanel,
+            color = PanelSurface,
             shape = cardShape,
             shadowElevation = 32.dp,
             modifier = Modifier.padding(32.dp).width(320.dp)
@@ -1502,9 +1503,9 @@ private fun RenameOverlay(
                     modifier = Modifier.fillMaxWidth(),
                     textStyle = TextStyle(color = Color.White),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = SubColors.accent,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
                         unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
-                        cursorColor = SubColors.accent,
+                        cursorColor = MaterialTheme.colorScheme.primary,
                         focusedTextColor = Color.White,
                         unfocusedTextColor = Color.White
                     )
@@ -1520,7 +1521,7 @@ private fun RenameOverlay(
                     Button(
                         onClick = onConfirm,
                         modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = SubColors.accent),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                         shape = chipShape
                     ) {
                         Text("Rename", fontWeight = FontWeight.SemiBold)
@@ -1644,6 +1645,7 @@ private fun RotationWheel(
     onAngleChange: (Float) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val primaryColor = MaterialTheme.colorScheme.primary
     var center by remember { mutableStateOf(Offset.Zero) }
     Box(
         modifier = modifier
@@ -1680,7 +1682,7 @@ private fun RotationWheel(
                 style = Stroke(width = 2.dp.toPx())
             )
             drawLine(
-                color = SubColors.accent,
+                color = primaryColor,
                 start = Offset(cx, cy),
                 end = Offset(lineEndX, lineEndY),
                 strokeWidth = 2.dp.toPx()
@@ -1777,8 +1779,8 @@ private fun ImmediateColorPickerContent(
                 valueRange = 0f..1f,
                 modifier = Modifier.weight(1f),
                 colors = SliderDefaults.colors(
-                    thumbColor = SubColors.accent,
-                    activeTrackColor = SubColors.accent.copy(alpha = 0.7f),
+                    thumbColor = MaterialTheme.colorScheme.primary,
+                    activeTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
                     inactiveTrackColor = Color.White.copy(alpha = 0.08f)
                 )
             )
@@ -1827,12 +1829,12 @@ private fun ImmediateColorPickerContent(
             singleLine = true,
             textStyle = TextStyle(color = Color.White, fontSize = 16.sp),
             colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = SubColors.accent,
+                focusedBorderColor = MaterialTheme.colorScheme.primary,
                 unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
-                cursorColor = SubColors.accent,
+                cursorColor = MaterialTheme.colorScheme.primary,
                 focusedTextColor = Color.White,
                 unfocusedTextColor = Color.White,
-                focusedLabelColor = SubColors.accent,
+                focusedLabelColor = MaterialTheme.colorScheme.primary,
                 unfocusedLabelColor = Color.White.copy(alpha = 0.4f)
             )
         )

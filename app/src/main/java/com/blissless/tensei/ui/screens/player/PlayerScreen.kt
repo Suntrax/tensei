@@ -2302,9 +2302,8 @@ internal fun loadSubtitleProfileData(context: Context): SubtitleProfileData {
 @OptIn(UnstableApi::class)
 internal fun applySubtitleStyle(subtitleView: androidx.media3.ui.SubtitleView, settings: SubtitleSettings) {
     val edgeType = when {
-        settings.enableOutline && settings.enableShadow -> CaptionStyleCompat.EDGE_TYPE_OUTLINE
-        settings.enableOutline -> CaptionStyleCompat.EDGE_TYPE_OUTLINE
         settings.enableShadow -> CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW
+        settings.enableOutline -> CaptionStyleCompat.EDGE_TYPE_OUTLINE
         else -> CaptionStyleCompat.EDGE_TYPE_NONE
     }
     val edgeColor = when (edgeType) {
