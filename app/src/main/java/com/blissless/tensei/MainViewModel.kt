@@ -26,8 +26,10 @@ import com.blissless.tensei.data.models.CachedExtensionStream
 import com.blissless.tensei.data.models.CachedHoster
 import com.blissless.tensei.data.models.CachedTrack
 import com.blissless.tensei.data.models.CachedVideo
+import com.blissless.tensei.data.models.CharacterData
 import com.blissless.tensei.data.models.DetailedAnimeData
 import com.blissless.tensei.data.models.ExploreAnime
+import com.blissless.tensei.data.models.StaffData
 import com.blissless.tensei.data.models.ExploreCacheData
 import com.blissless.tensei.data.models.ExploreMedia
 import com.blissless.tensei.data.models.HomeCacheData
@@ -1727,10 +1729,33 @@ class MainViewModel : ViewModel() {
         return fetchDetailedAnimeData(media.id)
     }
 
-    suspend fun fetchCharacter(characterId: Int) = repository.fetchCharacter(characterId)
-    suspend fun fetchStaff(staffId: Int) = repository.fetchStaff(staffId)
-    suspend fun fetchAllCharacters(animeId: Int) = repository.fetchAllCharacters(animeId)
-    suspend fun fetchAllStaff(animeId: Int) = repository.fetchAllStaff(animeId)
+    suspend fun fetchCharacter(characterId: Int): CharacterData? {
+        cacheManager.getCachedCharacter(characterId)?.let { return it }
+        val data = repository.fetchCharacter(characterId)
+        if (data != null) cacheManager.cacheCharacter(characterId, data)
+        return data
+    }
+
+    suspend fun fetchStaff(staffId: Int): StaffData? {
+        cacheManager.getCachedStaff(staffId)?.let { return it }
+        val data = repository.fetchStaff(staffId)
+        if (data != null) cacheManager.cacheStaff(staffId, data)
+        return data
+    }
+
+    suspend fun fetchAllCharacters(animeId: Int): List<CharacterData>? {
+        cacheManager.getCachedAllCharacters(animeId)?.let { return it }
+        val data = repository.fetchAllCharacters(animeId)
+        if (data != null) cacheManager.cacheAllCharacters(animeId, data)
+        return data
+    }
+
+    suspend fun fetchAllStaff(animeId: Int): List<StaffData>? {
+        cacheManager.getCachedAllStaff(animeId)?.let { return it }
+        val data = repository.fetchAllStaff(animeId)
+        if (data != null) cacheManager.cacheAllStaff(animeId, data)
+        return data
+    }
 
     suspend fun searchAnimeAdvanced(
         search: String? = null,

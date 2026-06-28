@@ -1397,7 +1397,10 @@ fun MainScreen(
                             year = detailedData.year,
                             format = detailedData.format
                         )
-                        overlayState = OverlayState.ExploreAnimeDialog(anime = newAnime, firstAnime = newAnime, isFirstOpen = false)
+                        overlayState = OverlayState.ExploreAnimeDialog(
+                            anime = newAnime, firstAnime = newAnime, isFirstOpen = false,
+                            previousStates = characterDialog.previousStates + characterDialog
+                        )
                     } else {
                         Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
                     }
@@ -1447,7 +1450,10 @@ fun MainScreen(
                             year = detailedData.year,
                             format = detailedData.format
                         )
-                        overlayState = OverlayState.ExploreAnimeDialog(anime = newAnime, firstAnime = newAnime, isFirstOpen = false)
+                        overlayState = OverlayState.ExploreAnimeDialog(
+                            anime = newAnime, firstAnime = newAnime, isFirstOpen = false,
+                            previousStates = staffDialog.previousStates + staffDialog
+                        )
                     } else {
                         Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
                     }
