@@ -73,6 +73,9 @@ import eu.kanade.tachiyomi.animesource.model.Track
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import eu.kanade.tachiyomi.network.NetworkHelper
 import com.blissless.tensei.stream.LocalProxyServer
+import com.blissless.tensei.torrent.MagnetData
+import com.blissless.tensei.torrent.MagnetEpisode
+import com.blissless.tensei.torrent.MagnetExtensionClient
 import okhttp3.Headers
 import okhttp3.OkHttpClient
 import kotlin.time.Duration.Companion.milliseconds
@@ -187,6 +190,76 @@ class MainViewModel : ViewModel() {
             _preFetchedExtensionData[anime.id] = PreFetchedExtensionData(source, sAnime, sEpisodes)
             _preFetchedEpisodeNumbers.value += (anime.id to sEpisodes.map { it.episode_number.toInt() }.toSet())
         }
+    }
+
+    // ─── Magnet Extension Support ────────────────────────────────────────
+    private var magnetExtensionClient: MagnetExtensionClient? = null
+
+    private val _availableMagnetExtensions = MutableStateFlow<List<Pair<String, String>>>(emptyList())
+    val availableMagnetExtensions: StateFlow<List<Pair<String, String>>> = _availableMagnetExtensions.asStateFlow()
+
+    val defaultMagnetExtension: StateFlow<String?> get() = userPreferences.defaultMagnetExtension
+
+    private val _magnetEpisodes = MutableStateFlow<Map<Int, MagnetData>>(emptyMap())
+    val magnetEpisodes: StateFlow<Map<Int, MagnetData>> = _magnetEpisodes.asStateFlow()
+
+    fun loadAvailableMagnetExtensions() {
+        if (magnetExtensionClient == null) {
+            magnetExtensionClient = MagnetExtensionClient(context)
+        }
+        val client = magnetExtensionClient ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            val detected = client.detectExtensions()
+            _availableMagnetExtensions.value = detected.map { it.name to it.authority }
+        }
+    }
+
+    fun fetchMagnetEpisodes(anime: AnimeMedia, authority: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            fetchMagnetEpisodesSync(anime, authority)
+        }
+    }
+
+    private suspend fun fetchMagnetEpisodesSync(anime: AnimeMedia, authority: String): MagnetData? {
+        val client = magnetExtensionClient ?: return null
+        val searchTerms = listOfNotNull(anime.titleEnglish, anime.title).distinct()
+        var result: MagnetData? = null
+        for (query in searchTerms) {
+            result = client.fetchMagnets(authority, anime.id, query)
+            if (result != null && result.episodes.isNotEmpty()) break
+        }
+        if (result != null) {
+            _magnetEpisodes.value += (anime.id to result)
+        } else {
+            _magnetEpisodes.value -= anime.id
+        }
+        return result
+    }
+
+    fun getMagnetEpisodeNumbers(animeId: Int): Set<Int> {
+        val data = _magnetEpisodes.value[animeId] ?: return emptySet()
+        if (data.isSingleTorrent && data.episodes.size == 1) return emptySet()
+        return data.episodes.map { it.episode }.toSet()
+    }
+
+    fun getMagnetForEpisode(animeId: Int, episode: Int): String? {
+        val data = _magnetEpisodes.value[animeId] ?: return null
+        if (data.isSingleTorrent) return data.episodes.firstOrNull()?.magnet
+        return data.episodes.find { it.episode == episode }?.magnet
+    }
+
+    suspend fun fetchMagnetForEpisode(anime: AnimeMedia, episode: Int): String? {
+        val client = magnetExtensionClient ?: return null
+        val authority = defaultMagnetExtension.value
+            ?: _availableMagnetExtensions.value.firstOrNull()?.second
+            ?: return null
+        if (authority.isBlank()) return null
+        val data = withContext(Dispatchers.IO) {
+            fetchMagnetEpisodesSync(anime, authority)
+        }
+        // Check for single-torrent data
+        if (data != null && data.isSingleTorrent) return data.episodes.firstOrNull()?.magnet
+        return getMagnetForEpisode(anime.id, episode)
     }
 
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
@@ -631,6 +704,7 @@ class MainViewModel : ViewModel() {
     val showBufferIndicator: StateFlow<Boolean> get() = userPreferences.showBufferIndicator
     val checkUpdatesOnStart: StateFlow<Boolean> get() = userPreferences.checkUpdatesOnStart
     val autoUpdateExtensions: StateFlow<Boolean> get() = userPreferences.autoUpdateExtensions
+    val streamMethod: StateFlow<String> get() = userPreferences.streamMethod
 
     // Notification tap events
     private val _notificationAnimeTaps = MutableSharedFlow<String>(replay = 1, extraBufferCapacity = 1)
@@ -1591,6 +1665,9 @@ class MainViewModel : ViewModel() {
     fun setSwipeVolume(enabled: Boolean) = userPreferences.setSwipeVolume(enabled)
     fun setSwipeBrightness(enabled: Boolean) = userPreferences.setSwipeBrightness(enabled)
     fun setSwipeSwap(enabled: Boolean) = userPreferences.setSwipeSwap(enabled)
+    fun setStreamMethod(method: String) = userPreferences.setStreamMethod(method)
+
+    fun setDefaultMagnetExtension(authority: String) = userPreferences.setDefaultMagnetExtension(authority)
 
     // Favorites
     fun toggleLocalFavorite(mediaId: Int) {

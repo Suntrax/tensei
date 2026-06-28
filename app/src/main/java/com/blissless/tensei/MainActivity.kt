@@ -73,7 +73,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.withContext
 import androidx.compose.runtime.rememberCoroutineScope
@@ -100,6 +99,9 @@ import com.blissless.tensei.data.models.QualityOption
 import com.blissless.tensei.data.models.ServerInfo
 import com.blissless.tensei.stream.PlayerData
 import com.blissless.tensei.data.models.toDetailedAnimeData
+import com.blissless.tensei.torrent.TorrentStreamServer
+import com.blissless.tensei.torrent.TorrentEngine
+import com.blissless.tensei.torrent.TorrentStatus
 import com.blissless.tensei.ui.screens.cast.AllCastScreen
 import com.blissless.tensei.ui.screens.cast.AllStaffScreen
 import com.blissless.tensei.ui.screens.character.CharacterScreen
@@ -119,9 +121,13 @@ import com.blissless.tensei.ui.screens.relations.AllRelationsScreen
 import com.blissless.tensei.ui.theme.AppTheme
 import com.blissless.tensei.ui.theme.ThemeMode
 import com.blissless.tensei.update.UpdateViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.time.Duration.Companion.milliseconds
+import java.io.File
+import com.blissless.tensei.torrent.TorrentMeta
 
 class MainActivity : ComponentActivity() {
 
@@ -488,6 +494,7 @@ fun MainScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val extViewModel: ExtensionsViewModel = viewModel()
+    val torrentStreamServer = remember { mutableStateOf<TorrentStreamServer?>(null) }
     val extUiState by extViewModel.uiState.collectAsState()
 
     val startupScreen by viewModel.startupScreen.collectAsState()
@@ -797,6 +804,64 @@ fun MainScreen(
         }
     }
 
+    private var currentTorrentListener: TorrentEngine.EngineListener? = null
+
+    fun playTorrent(magnetUri: String, anime: AnimeMedia, episode: Int) {
+        isLoadingStream = true
+        streamError = null
+        torrentStreamServer.value?.stop()
+        torrentStreamServer.value = null
+
+        val engine = (context.applicationContext as TenseiApplication).torrentEngine
+        if (!engine.isRunning.get()) engine.start()
+        engine.removeCurrentTorrent()
+
+        val server = TorrentStreamServer(engine.saveDir)
+        torrentStreamServer.value = server
+
+        currentTorrentListener?.let { engine.removeListener(it) }
+        val listener = object : TorrentEngine.EngineListener {
+            override fun onMetadataReceived(meta: com.blissless.tensei.torrent.TorrentMeta) {
+                scope.launch {
+                    val fileIndex = engine.getLargestVideoFileIndex()
+                    engine.startDownload(fileIndex)
+                    val port = server.start()
+                    val filePath = engine.getFileSavePath(fileIndex) ?: return@launch
+                    val fileName = filePath.substringAfterLast(File.separator)
+                    server.setTotalFileSize(engine.getFileSize(fileIndex))
+                    server.setPieceSize(engine.getPieceSize())
+                    server.setPieceChecker { i -> engine.havePiece(i) }
+                    server.setSafeBytesProvider { engine.getContiguousDownloadedBytes() }
+
+                    currentVideoUrl = "http://127.0.0.1:$port/$fileName"
+                    currentReferer = ""
+                    currentEpisodeTitle = sanitizeEpisodeTitle(anime.title) ?: "Episode $episode"
+                    currentSubtitleTracks = emptyList()
+                    currentSubtitleUrl = null
+                    currentQualityOptions = emptyList()
+                    currentQuality = "Auto"
+                    currentServerName = "Torrent"
+                    currentServerIndex = 0
+                    isExtensionFlow = false
+                    showPlayer = true
+                    isLoadingStream = false
+                }
+            }
+            override fun onProgress(downloaded: Long, total: Long) {}
+            override fun onFinished() {}
+            override fun onError(message: String) {
+                scope.launch {
+                    streamError = message
+                    isLoadingStream = false
+                }
+            }
+        }
+        engine.addListener(listener)
+        currentTorrentListener = listener
+
+        engine.addTorrentFromMagnet(magnetUri)
+    }
+
     fun loadAndPlayEpisode(anime: AnimeMedia, episode: Int, isAutoRefresh: Boolean = false) {
         if (!isAutoRefresh) {
             isAutoRefreshing = false
@@ -807,10 +872,28 @@ fun MainScreen(
         totalEpisodes = anime.totalEpisodes
         streamError = null
         savedPlaybackPosition = viewModel.getPlaybackPosition(anime.id, episode)
-        // For auto-refresh, update the player in-place (no unmount/remount).
-        // For initial load, unmount so PlayerScreen reinitializes fresh.
         if (!isAutoRefresh) {
             showPlayer = false
+        }
+
+        val streamMethod = viewModel.streamMethod.value
+        if (streamMethod == "magnet") {
+            isExtensionFlow = false
+            isLoadingStream = true
+            scope.launch {
+                val magnetUri = withContext(Dispatchers.IO) {
+                    viewModel.getMagnetForEpisode(anime.id, episode)
+                        ?: viewModel.fetchMagnetForEpisode(anime, episode)
+                }
+                if (magnetUri != null) {
+                    playTorrent(magnetUri, anime, episode)
+                } else {
+                    streamError = "No magnet link found for Ep $episode"
+                    Toast.makeText(context, "No magnet available for Ep $episode", Toast.LENGTH_SHORT).show()
+                }
+                isLoadingStream = false
+            }
+            return
         }
 
         val extPackage = viewModel.defaultExtensionPackage.value

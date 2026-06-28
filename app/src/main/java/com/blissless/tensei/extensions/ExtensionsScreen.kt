@@ -11,8 +11,10 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -39,7 +41,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -76,13 +77,15 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 @Composable
 fun ExtensionsScreen(
     viewModel: ExtensionsViewModel = viewModel(),
-    onBrowseChanged: ((Boolean) -> Unit)? = null
+    onBrowseChanged: ((Boolean) -> Unit)? = null,
+    magnetExtensions: List<Pair<String, String>> = emptyList()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var repoUrl by remember { mutableStateOf("") }
     var selectedRepoUrl by remember { mutableStateOf<String?>(null) }
     var reposExpanded by remember { mutableStateOf(false) }
     var extensionsExpanded by remember { mutableStateOf(false) }
+    var magnetExtensionsExpanded by remember { mutableStateOf(false) }
     val installedPackages = uiState.extensions.map { it.packageName }.toSet()
     val updatableCount = uiState.updatablePackageNames.size
 
@@ -274,6 +277,42 @@ fun ExtensionsScreen(
                 }
             }
 
+            if (magnetExtensions.isNotEmpty()) {
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { magnetExtensionsExpanded = !magnetExtensionsExpanded }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "Magnet Extensions (${magnetExtensions.size})",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Icon(
+                            if (magnetExtensionsExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = if (magnetExtensionsExpanded) "Collapse" else "Expand",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                items(magnetExtensions, key = { it.second }) { (name, authority) ->
+                    AnimatedVisibility(
+                        visible = magnetExtensionsExpanded,
+                        enter = expandVertically(),
+                        exit = shrinkVertically()
+                    ) {
+                        MagnetExtensionCard(
+                            name = name,
+                            authority = authority
+                        )
+                    }
+                }
+            }
+
             if (uiState.extensions.isEmpty() && uiState.repos.isEmpty() && uiState.error == null && !uiState.isLoading) {
                 item {
                     Text(
@@ -401,6 +440,77 @@ private fun openAppSettings(context: Context, packageName: String) {
     }
     Toast.makeText(context, "Opening app settings...", Toast.LENGTH_SHORT).show()
     context.startActivity(intent)
+}
+
+@Composable
+private fun MagnetExtensionCard(
+    name: String,
+    authority: String
+) {
+    val context = LocalContext.current
+    val packageName = authority.removeSuffix(".provider")
+    val appIcon = remember(packageName) {
+        try {
+            context.packageManager.getApplicationIcon(packageName)
+        } catch (_: Exception) {
+            null
+        }
+    }
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.4f)
+        ),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            if (appIcon != null) {
+                Image(
+                    painter = BitmapPainter(appIcon.toBitmap(64, 64).asImageBitmap()),
+                    contentDescription = name,
+                    modifier = Modifier.size(48.dp)
+                )
+            } else {
+                Box(
+                    modifier = Modifier.size(48.dp).background(
+                        MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f),
+                        RoundedCornerShape(12.dp)
+                    ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "M",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.tertiary
+                    )
+                }
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = name,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = authority,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            IconButton(onClick = { openAppSettings(context, packageName) }) {
+                Icon(
+                    Icons.Default.Info,
+                    contentDescription = "App info",
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+    }
 }
 
 @Composable

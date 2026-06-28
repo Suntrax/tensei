@@ -158,4 +158,9 @@ dependencies {
     implementation(libs.kotlinx.serialization.json.okio)
     implementation(libs.jsoup.v1181)
     implementation(libs.androidx.preference.ktx)
+    implementation(libs.libtorrent4j.core)
+    implementation(libs.libtorrent4j.android.arm64)
+    implementation(libs.libtorrent4j.android.arm)
+    implementation(libs.libtorrent4j.android.x86)
+    implementation(libs.libtorrent4j.android.x8664)
 }

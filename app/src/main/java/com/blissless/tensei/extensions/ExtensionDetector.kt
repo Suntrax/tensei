@@ -1,12 +1,34 @@
 package com.blissless.tensei.extensions
 
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
 
 class ExtensionDetector(private val context: Context) {
+
+    companion object {
+        const val MAGNET_BEACON_ACTION = "com.blissless.animeclient.EXTENSION_BEACON"
+        const val MAGNET_PROVIDER_SUFFIX = ".provider"
+    }
+
+    fun detectMagnetExtensions(): List<Pair<String, String>> {
+        val beaconIntent = Intent(MAGNET_BEACON_ACTION)
+        val resolveInfoList = try {
+            context.packageManager.queryBroadcastReceivers(beaconIntent, 0)
+        } catch (_: Exception) { emptyList() }
+        return resolveInfoList.mapNotNull { info ->
+            val pkg = info.activityInfo.packageName
+            val label = try { info.loadLabel(context.packageManager).toString() } catch (_: Exception) { pkg }
+            if (label.startsWith("Tensei: ", ignoreCase = true)) {
+                pkg to label
+            } else null
+        }
+    }
+
+    fun getMagnetAuthority(packageName: String): String = "$packageName$MAGNET_PROVIDER_SUFFIX"
 
     @Suppress("DEPRECATION")
     private val packageFlags = PackageManager.GET_CONFIGURATIONS or

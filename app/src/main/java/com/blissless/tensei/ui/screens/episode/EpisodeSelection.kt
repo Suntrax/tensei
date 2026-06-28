@@ -268,6 +268,14 @@ fun RichEpisodeScreen(
     var hasExtensionData by remember { mutableStateOf(false) }
     var isLoadingExtensionEpisodes by remember { mutableStateOf(false) }
 
+    // Magnet extension state
+    val availableMagnetExtensions by viewModel.availableMagnetExtensions.collectAsState()
+    val magnetEpisodesData by viewModel.magnetEpisodes.collectAsState()
+    val defaultMagnetExtension by viewModel.defaultMagnetExtension.collectAsState()
+    val currentStreamMethod by viewModel.streamMethod.collectAsState()
+    var selectedMagnetAuthority by remember { mutableStateOf<String?>(null) }
+    var isMagnetActive by remember { mutableStateOf(false) }
+
     val sortedExtensions = remember(availableExtensions, selectedExtensionPkg) {
         val selected = selectedExtensionPkg
         availableExtensions.sortedWith(compareBy<Pair<String, String>> { if (it.second == selected) 0 else 1 }.thenBy { it.first })
@@ -277,6 +285,19 @@ fun RichEpisodeScreen(
     LaunchedEffect(defaultPkg) {
         if (defaultPkg.isNotEmpty() && selectedExtensionPkg == null) {
             selectedExtensionPkg = defaultPkg
+        }
+    }
+
+    // Auto-select magnet extension when stream method is magnet
+    var hasAutoSelectedMagnet by remember { mutableStateOf(false) }
+    LaunchedEffect(defaultMagnetExtension, currentStreamMethod) {
+        val ext = defaultMagnetExtension
+        if (!hasAutoSelectedMagnet && currentStreamMethod == "magnet" && ext != null) {
+            hasAutoSelectedMagnet = true
+            selectedMagnetAuthority = ext
+            isMagnetActive = true
+            selectedExtensionPkg = null
+            viewModel.fetchMagnetEpisodes(anime, ext)
         }
     }
 
@@ -313,21 +334,31 @@ fun RichEpisodeScreen(
         isVisible = true
     }
 
-    // Filter episodes to match the AniList progress count and extension availability
-    val displayEpisodes = remember(tmdbEpisodes, episodeCount, extensionEpisodesNumbers, hasExtensionData) {
+    val magnetEpisodeNumbers = remember(magnetEpisodesData, anime.id) {
+        val data = magnetEpisodesData[anime.id] ?: return@remember emptySet()
+        if (data.isSingleTorrent) return@remember emptySet()
+        data.episodes.map { it.episode }.toSet()
+    }
+
+    val hasMagnetData = remember(magnetEpisodeNumbers, selectedMagnetAuthority) {
+        selectedMagnetAuthority != null && magnetEpisodeNumbers.isNotEmpty()
+    }
+
+    // Filter episodes based on active source
+    val displayEpisodes = remember(tmdbEpisodes, episodeCount, extensionEpisodesNumbers, hasExtensionData, magnetEpisodeNumbers, hasMagnetData) {
         val base = tmdbEpisodes.filter { it.episode <= episodeCount }
-        if (hasExtensionData) {
-            base.filter { it.episode in extensionEpisodesNumbers }
-        } else {
-            base
+        when {
+            hasMagnetData -> base.filter { it.episode in magnetEpisodeNumbers }
+            hasExtensionData -> base.filter { it.episode in extensionEpisodesNumbers }
+            else -> base
         }
     }
 
-    val availableEpisodeNumbers = remember(episodeCount, extensionEpisodesNumbers, hasExtensionData) {
-        if (hasExtensionData) {
-            (1..episodeCount).filter { it in extensionEpisodesNumbers }
-        } else {
-            (1..episodeCount).toList()
+    val availableEpisodeNumbers = remember(episodeCount, extensionEpisodesNumbers, hasExtensionData, magnetEpisodeNumbers, hasMagnetData) {
+        when {
+            hasMagnetData -> (1..episodeCount).filter { it in magnetEpisodeNumbers }
+            hasExtensionData -> (1..episodeCount).filter { it in extensionEpisodesNumbers }
+            else -> (1..episodeCount).toList()
         }
     }
 
@@ -421,9 +452,10 @@ fun RichEpisodeScreen(
         }
     }
 
-    // Load available extensions and pre-fetch extension episodes for faster playback
+    // Load available extensions and magnet extensions
     LaunchedEffect(anime.id) {
         viewModel.loadAvailableExtensions()
+        viewModel.loadAvailableMagnetExtensions()
     }
 
     // Scroll to current episode (next to watch or last watched) with smooth animation
@@ -573,22 +605,54 @@ fun RichEpisodeScreen(
                 item {
                     Column {
                         Spacer(modifier = Modifier.height(8.dp))
-                        // Extension selector
-                        if (availableExtensions.isNotEmpty()) {
+                        // Extension selector - show only the active category
+                        if (currentStreamMethod == "direct" && availableExtensions.isNotEmpty()) {
                             Row(
                                 modifier = Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                Text("Source:", style = MaterialTheme.typography.labelSmall, color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("Direct:", style = MaterialTheme.typography.labelSmall, color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant)
                                 sortedExtensions.forEach { (extName, extPkg) ->
                                     FilterChip(
-                                        selected = extPkg == selectedExtensionPkg,
-                                        onClick = { if (extPkg != selectedExtensionPkg) selectedExtensionPkg = extPkg },
+                                        selected = extPkg == selectedExtensionPkg && !isMagnetActive,
+                                        onClick = {
+                                            selectedExtensionPkg = extPkg
+                                            isMagnetActive = false
+                                            selectedMagnetAuthority = null
+                                        },
                                         label = { Text(extName, maxLines = 1, style = MaterialTheme.typography.labelSmall) },
                                         colors = FilterChipDefaults.filterChipColors(
                                             selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                                             selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                            containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surface,
+                                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                        }
+                        if (currentStreamMethod == "magnet" && availableMagnetExtensions.isNotEmpty()) {
+                            Row(
+                                modifier = Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text("Magnet:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.tertiary)
+                                availableMagnetExtensions.forEach { (extName, authority) ->
+                                    FilterChip(
+                                        selected = authority == selectedMagnetAuthority && isMagnetActive,
+                                        onClick = {
+                                            selectedMagnetAuthority = authority
+                                            isMagnetActive = true
+                                            selectedExtensionPkg = null
+                                            viewModel.fetchMagnetEpisodes(anime, authority)
+                                        },
+                                        label = { Text(extName, maxLines = 1, style = MaterialTheme.typography.labelSmall) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                            selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer,
                                             containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surface,
                                             labelColor = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -669,6 +733,10 @@ fun RichEpisodeScreen(
                             onPlay = {
                                 if (hasAired) {
                                     val title = if (ep.title.isNotEmpty() && !ep.title.startsWith("Episode", ignoreCase = true)) ep.title else "Episode $episodeNum"
+                                    if (isMagnetActive && selectedMagnetAuthority != null) {
+                                        viewModel.setStreamMethod("magnet")
+                                        viewModel.setDefaultMagnetExtension(selectedMagnetAuthority!!)
+                                    }
                                     onEpisodeSelect(episodeNum, title)
                                 } else {
                                     Toast.makeText(context, "Episode not aired yet", Toast.LENGTH_SHORT).show()
@@ -695,6 +763,10 @@ fun RichEpisodeScreen(
                             onSelect = { selectedEpisode = episodeNum },
                             onPlay = {
                                 if (hasAired) {
+                                    if (isMagnetActive && selectedMagnetAuthority != null) {
+                                        viewModel.setStreamMethod("magnet")
+                                        viewModel.setDefaultMagnetExtension(selectedMagnetAuthority!!)
+                                    }
                                     onEpisodeSelect(episodeNum, "Episode $episodeNum")
                                 } else {
                                     Toast.makeText(context, "Episode not aired yet", Toast.LENGTH_SHORT).show()

@@ -6,15 +6,20 @@ import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
+import com.blissless.tensei.torrent.TorrentEngine
 import kotlinx.serialization.json.Json
 
 class TenseiApplication : Application(), ImageLoaderFactory {
+
+    lateinit var torrentEngine: TorrentEngine
+        private set
 
     override fun onCreate() {
         super.onCreate()
         uy.kohesive.injekt.Injekt.register(Application::class.java, this)
         uy.kohesive.injekt.Injekt.register(Context::class.java, this)
         uy.kohesive.injekt.Injekt.register(Json::class.java, Json { ignoreUnknownKeys = true; explicitNulls = false })
+        torrentEngine = TorrentEngine(this)
     }
 
     override fun newImageLoader(): ImageLoader {

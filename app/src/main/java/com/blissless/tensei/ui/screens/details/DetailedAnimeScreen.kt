@@ -200,6 +200,7 @@ fun DetailedAnimeScreen(
     var showStatusDialog by remember { mutableStateOf(false) }
 
     val defaultExtPkg by viewModel.defaultExtensionPackage.collectAsState()
+    val magnetExtensions by viewModel.availableMagnetExtensions.collectAsState()
     val localFavorites by viewModel.localFavorites.collectAsState()
     val aniListFavorites by viewModel.aniListFavorites.collectAsState()
     val localAnimeStatus by viewModel.localAnimeStatus.collectAsState()
@@ -245,6 +246,10 @@ fun DetailedAnimeScreen(
     val dismissSlideOffset = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
     
+    LaunchedEffect(Unit) {
+        viewModel.loadAvailableMagnetExtensions()
+    }
+
     LaunchedEffect(Unit) {
         slideOffset.animateTo(
             targetValue = 0f,
@@ -802,7 +807,7 @@ fun DetailedAnimeScreen(
 
                             Button(
                                 onClick = {
-                                    if (defaultExtPkg.isEmpty()) {
+                                    if (defaultExtPkg.isEmpty() && magnetExtensions.isEmpty()) {
                                         showNoDefaultExtDialog = true
                                     } else {
                                         showEpisodeSelection = true

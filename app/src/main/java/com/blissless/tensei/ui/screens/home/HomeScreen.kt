@@ -159,9 +159,15 @@ fun HomeScreen(
     var showDetailedAnimeScreen by remember { mutableStateOf(false) }
     var showNoExtensionDialog by remember { mutableStateOf(false) }
     val defaultPkg by viewModel.defaultExtensionPackage.collectAsState()
+    val magnetExtensions by viewModel.availableMagnetExtensions.collectAsState()
 
     // Status list screen state
     var showStatusListScreen by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        viewModel.loadAvailableMagnetExtensions()
+    }
+
     LaunchedEffect(showStatusListScreen) {
         onOverlayOpenChange(showStatusListScreen)
     }
@@ -724,7 +730,7 @@ fun HomeScreen(
                     showEpisodeSheet = false
                 }
             )
-        } else if (defaultPkg.isNotEmpty()) {
+        } else if (defaultPkg.isNotEmpty() || magnetExtensions.isNotEmpty()) {
             RichEpisodeScreen(
                 anime = selectedAnime!!,
                 viewModel = viewModel,
@@ -742,7 +748,7 @@ fun HomeScreen(
     }
 
     LaunchedEffect(showEpisodeSheet, selectedAnime) {
-        if (showEpisodeSheet && selectedAnime != null && defaultPkg.isEmpty()) {
+        if (showEpisodeSheet && selectedAnime != null && defaultPkg.isEmpty() && magnetExtensions.isEmpty()) {
             showEpisodeSheet = false
             showNoExtensionDialog = true
         }

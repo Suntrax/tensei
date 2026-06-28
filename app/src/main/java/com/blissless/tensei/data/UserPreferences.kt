@@ -63,6 +63,8 @@ class UserPreferences(context: Context) {
         private const val KEY_AUTO_UPDATE_EXTENSIONS = "auto_update_extensions"
         private const val KEY_SUBTITLE_ACTIVE_PROFILE = "subtitle_active_profile"
         private const val KEY_SUBTITLE_PROFILES = "subtitle_profiles"
+        private const val KEY_STREAM_METHOD = "stream_method"
+        private const val KEY_DEFAULT_MAGNET_EXTENSION = "default_magnet_extension"
     }
 
     private val sharedPreferences: SharedPreferences =
@@ -153,6 +155,14 @@ class UserPreferences(context: Context) {
     // Stream Provider (1 = Miruro, 2 = Animekai)
     private val _streamProvider = MutableStateFlow(1)
     val streamProvider: StateFlow<Int> = _streamProvider.asStateFlow()
+
+    // Stream Method (direct or magnet)
+    private val _streamMethod = MutableStateFlow("direct")
+    val streamMethod: StateFlow<String> = _streamMethod.asStateFlow()
+
+    // Default Magnet Extension
+    private val _defaultMagnetExtension = MutableStateFlow<String?>(null)
+    val defaultMagnetExtension: StateFlow<String?> = _defaultMagnetExtension.asStateFlow()
 
     // Startup Screen
     private val _startupScreen = MutableStateFlow(2)
@@ -254,6 +264,9 @@ class UserPreferences(context: Context) {
         _downloadSubtitleLang.value = sharedPreferences.getString(KEY_DOWNLOAD_SUBTITLE_LANG, "same_as_stream") ?: "same_as_stream"
         _hideAdultContent.value = sharedPreferences.getBoolean(KEY_HIDE_ADULT_CONTENT, true)
         _streamProvider.value = sharedPreferences.getInt(KEY_STREAM_PROVIDER, 1)
+        _streamMethod.value = sharedPreferences.getString(KEY_STREAM_METHOD, "direct") ?: "direct"
+        val savedMagnetExt = sharedPreferences.getString(KEY_DEFAULT_MAGNET_EXTENSION, null)
+        _defaultMagnetExtension.value = savedMagnetExt
         _startupScreen.value = sharedPreferences.getInt(KEY_STARTUP_SCREEN, 2)
         _bufferAheadSeconds.value = sharedPreferences.getInt(KEY_BUFFER_AHEAD_SECONDS, 60)
         _bufferSizeMb.value = sharedPreferences.getInt(KEY_BUFFER_SIZE_MB, 200)
@@ -421,6 +434,16 @@ class UserPreferences(context: Context) {
     fun setStreamProvider(provider: Int) {
         _streamProvider.value = provider
         sharedPreferences.edit { putInt(KEY_STREAM_PROVIDER, provider) }
+    }
+
+    fun setStreamMethod(method: String) {
+        _streamMethod.value = method
+        sharedPreferences.edit { putString(KEY_STREAM_METHOD, method) }
+    }
+
+    fun setDefaultMagnetExtension(authority: String?) {
+        _defaultMagnetExtension.value = authority
+        sharedPreferences.edit { putString(KEY_DEFAULT_MAGNET_EXTENSION, authority) }
     }
 
     fun setStartupScreen(screen: Int) {

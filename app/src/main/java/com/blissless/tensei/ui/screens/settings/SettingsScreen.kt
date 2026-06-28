@@ -176,7 +176,7 @@ fun SettingsScreen(
                     preferredCategory = preferredCategory, onNavigateToExtensions = { selectedGroup = "extensions" }, onBack = { selectedGroup = null })
                 "player" -> PlayerSettingsPage(viewModel = viewModel, autoSkipOpening = autoSkipOpening, autoSkipEnding = autoSkipEnding, autoPlayNextEpisode = autoPlayNextEpisode, onBack = { selectedGroup = null })
                 "cache" -> CacheSettingsPage(viewModel = viewModel, context = LocalContext.current, onBack = { selectedGroup = null })
-                "extensions" -> ExtensionsSettingsPage(onBack = { selectedGroup = null })
+                "extensions" -> ExtensionsSettingsPage(viewModel = viewModel, onBack = { selectedGroup = null })
                 "about" -> AboutSettingsPage(viewModel = viewModel, onBack = { selectedGroup = null })
             }
         }
@@ -926,13 +926,37 @@ private fun StreamSettingsPage(
     val showBufferIndicator by viewModel.showBufferIndicator.collectAsState(initial = true)
     val defaultExtPackage by viewModel.defaultExtensionPackage.collectAsState()
     val defaultSubtitleLang by viewModel.defaultSubtitleLang.collectAsState()
+    val streamMethod by viewModel.streamMethod.collectAsState()
     val extViewModel: ExtensionsViewModel = viewModel()
     val extUiState by extViewModel.uiState.collectAsState()
+    val magnetExtensions by viewModel.availableMagnetExtensions.collectAsState()
+    val defaultMagnetExtension by viewModel.defaultMagnetExtension.collectAsState()
     var showExtPicker by remember { mutableStateOf(false) }
     var showSubtitleLangPicker by remember { mutableStateOf(false) }
     val subtitleLanguages = listOf("English", "Arabic", "French", "German", "Italian", "Portuguese", "Russian", "Spanish", "Japanese", "Chinese", "Korean")
 
+    LaunchedEffect(Unit) {
+        viewModel.loadAvailableMagnetExtensions()
+    }
+
     SettingsPageScaffold(title = "Stream Settings", onBack = onBack) {
+        SectionHeader("STREAM METHOD")
+        SettingsCard {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                SettingsChoiceChip(label = "Direct", isSelected = streamMethod == "direct", onClick = { viewModel.setStreamMethod("direct") })
+                SettingsChoiceChip(label = "Torrent", isSelected = streamMethod == "magnet", onClick = { viewModel.setStreamMethod("magnet") })
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                "Stream via direct HTTP extensions or BitTorrent magnets",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+            )
+        }
+
         SectionHeader("AUDIO")
         SettingsCard {
             Row(
@@ -960,17 +984,26 @@ private fun StreamSettingsPage(
         SettingsCard {
             ClickableSettingsRow(
                 onClick = {
-                    if (defaultExtPackage.isEmpty() && extUiState.extensions.isEmpty()) {
-                        onNavigateToExtensions()
+                    if (streamMethod == "direct") {
+                        if (defaultExtPackage.isEmpty() && extUiState.extensions.isEmpty()) {
+                            onNavigateToExtensions()
+                        } else {
+                            showExtPicker = true
+                        }
                     } else {
                         showExtPicker = true
                     }
                 },
                 icon = Icons.Default.Extension,
                 title = "Default Extension",
-                subtitle = if (defaultExtPackage.isNotEmpty())
-                    extUiState.extensions.find { it.packageName == defaultExtPackage }?.name ?: defaultExtPackage
-                else "None"
+                subtitle = if (streamMethod == "direct") {
+                    if (defaultExtPackage.isNotEmpty())
+                        extUiState.extensions.find { it.packageName == defaultExtPackage }?.name ?: defaultExtPackage
+                    else "None"
+                } else {
+                    val name = magnetExtensions.find { it.second == defaultMagnetExtension }?.first
+                    name ?: defaultMagnetExtension ?: "None"
+                }
             )
         }
         SettingsCard {
@@ -1025,35 +1058,71 @@ private fun StreamSettingsPage(
             title = { Text("Default Extension") },
             text = {
                 Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                    extUiState.extensions.forEach { ext ->
-                        val isSelected = ext.packageName == defaultExtPackage
-                        TextButton(
-                            onClick = { viewModel.setDefaultExtensionPackage(ext.packageName); showExtPicker = false },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    if (streamMethod == "direct") {
+                        extUiState.extensions.forEach { ext ->
+                            val isSelected = ext.packageName == defaultExtPackage
+                            TextButton(
+                                onClick = { viewModel.setDefaultExtensionPackage(ext.packageName); showExtPicker = false },
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                RadioButton(
-                                    selected = isSelected,
-                                    onClick = null,
-                                    colors = RadioButtonDefaults.colors(
-                                        selectedColor = MaterialTheme.colorScheme.primary
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    RadioButton(
+                                        selected = isSelected,
+                                        onClick = null,
+                                        colors = RadioButtonDefaults.colors(
+                                            selectedColor = MaterialTheme.colorScheme.primary
+                                        )
                                     )
-                                )
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        ext.name,
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            ext.name,
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                                        )
+                                        Text(
+                                            ext.packageName,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        magnetExtensions.forEach { (name, authority) ->
+                            val isSelected = authority == defaultMagnetExtension
+                            TextButton(
+                                onClick = { viewModel.setDefaultMagnetExtension(authority); showExtPicker = false },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    RadioButton(
+                                        selected = isSelected,
+                                        onClick = null,
+                                        colors = RadioButtonDefaults.colors(
+                                            selectedColor = MaterialTheme.colorScheme.primary
+                                        )
                                     )
-                                    Text(
-                                        ext.packageName,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            name,
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                                        )
+                                        Text(
+                                            authority,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -1551,16 +1620,25 @@ private fun CacheRow(
 
 @Composable
 private fun ExtensionsSettingsPage(
+    viewModel: MainViewModel,
     onBack: () -> Unit
 ) {
     val extViewModel: ExtensionsViewModel = viewModel()
+    val magnetExtensions by viewModel.availableMagnetExtensions.collectAsState()
+
+    LaunchedEffect(Unit) {
+        viewModel.loadAvailableMagnetExtensions()
+    }
 
     SettingsPageScaffold(title = "Extensions", onBack = onBack, scrollable = false, actions = {
         IconButton(onClick = { extViewModel.loadExtensions(true) }) {
             Icon(Icons.Default.Refresh, contentDescription = "Refresh")
         }
     }) {
-        ExtensionsScreen(viewModel = extViewModel)
+        ExtensionsScreen(
+            viewModel = extViewModel,
+            magnetExtensions = magnetExtensions
+        )
     }
 }
 
