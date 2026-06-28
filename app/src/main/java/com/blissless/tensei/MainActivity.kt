@@ -5,28 +5,27 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.annotation.OptIn
+import androidx.annotation.RequiresApi
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,28 +41,26 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.animation.Crossfade
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.FileDownload
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -73,62 +70,67 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.withContext
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.media3.common.util.UnstableApi
 import com.blissless.tensei.api.myanimelist.LoginProvider
 import com.blissless.tensei.data.models.AnimeMedia
 import com.blissless.tensei.data.models.DetailedAnimeData
 import com.blissless.tensei.data.models.EpisodeStreams
 import com.blissless.tensei.data.models.ExploreAnime
 import com.blissless.tensei.data.models.LocalAnimeEntry
-import eu.kanade.tachiyomi.animesource.model.Video
 import com.blissless.tensei.data.models.QualityOption
 import com.blissless.tensei.data.models.ServerInfo
-import com.blissless.tensei.stream.PlayerData
 import com.blissless.tensei.data.models.toDetailedAnimeData
-import com.blissless.tensei.torrent.TorrentStreamServer
+import com.blissless.tensei.extensions.ExtensionsViewModel
+import com.blissless.tensei.stream.PlayerData
 import com.blissless.tensei.torrent.TorrentEngine
-import com.blissless.tensei.torrent.TorrentStatus
+import com.blissless.tensei.torrent.TorrentMeta
+import com.blissless.tensei.torrent.TorrentStreamServer
+import com.blissless.tensei.ui.screens.airing.ScheduleScreen
 import com.blissless.tensei.ui.screens.cast.AllCastScreen
 import com.blissless.tensei.ui.screens.cast.AllStaffScreen
 import com.blissless.tensei.ui.screens.character.CharacterScreen
+import com.blissless.tensei.ui.screens.character.StaffScreen
 import com.blissless.tensei.ui.screens.details.DetailedAnimeScreen
+import com.blissless.tensei.ui.screens.downloads.DownloadsScreen
+import com.blissless.tensei.ui.screens.downloads.EpisodeDownloadDialog
 import com.blissless.tensei.ui.screens.explore.ExploreScreen
 import com.blissless.tensei.ui.screens.home.HomeScreen
 import com.blissless.tensei.ui.screens.player.PlayerScreen
-import com.blissless.tensei.ui.screens.airing.ScheduleScreen
-import com.blissless.tensei.ui.screens.settings.SettingsScreen
-import com.blissless.tensei.ui.screens.downloads.DownloadsScreen
-import com.blissless.tensei.ui.screens.search.SearchScreen
-import com.blissless.tensei.ui.screens.downloads.EpisodeDownloadDialog
-import com.blissless.tensei.extensions.ExtensionsViewModel
-import com.blissless.tensei.ui.screens.status.StatusListScreen
-import com.blissless.tensei.ui.screens.character.StaffScreen
 import com.blissless.tensei.ui.screens.relations.AllRelationsScreen
+import com.blissless.tensei.ui.screens.search.SearchScreen
+import com.blissless.tensei.ui.screens.settings.SettingsScreen
+import com.blissless.tensei.ui.screens.status.StatusListScreen
 import com.blissless.tensei.ui.theme.AppTheme
 import com.blissless.tensei.ui.theme.ThemeMode
 import com.blissless.tensei.update.UpdateViewModel
+import eu.kanade.tachiyomi.animesource.model.Video
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.time.Duration.Companion.milliseconds
 import java.io.File
-import com.blissless.tensei.torrent.TorrentMeta
+import kotlin.time.Duration.Companion.milliseconds
 
+@UnstableApi
 class MainActivity : ComponentActivity() {
 
     private val mainViewModel: MainViewModel by viewModels()
@@ -138,6 +140,7 @@ class MainActivity : ComponentActivity() {
     companion object {
         const val PREFS_NAME = "anilist_prefs"
         const val TOKEN_KEY = "auth_token"
+        private const val TAG_TORRENT = "MainActivity.Torrent"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -479,6 +482,8 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@RequiresApi(Build.VERSION_CODES.R)
+@OptIn(UnstableApi::class)
 @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
 @Composable
 fun MainScreen(
@@ -490,6 +495,8 @@ fun MainScreen(
     preventScheduleSync: Boolean,
     isLoggedIn: Boolean
 ) {
+    val TAG_TORRENT = "MainActivity.Torrent"
+
     val hideNavbar by viewModel.hideNavbar.collectAsState()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -804,36 +811,62 @@ fun MainScreen(
         }
     }
 
-    private var currentTorrentListener: TorrentEngine.EngineListener? = null
+    var currentTorrentListener by remember { mutableStateOf<TorrentEngine.EngineListener?>(null) }
 
     fun playTorrent(magnetUri: String, anime: AnimeMedia, episode: Int) {
+        Log.d(TAG_TORRENT, "playTorrent: starting for anime=${anime.id} ep=$episode")
+        Log.d(TAG_TORRENT, "playTorrent: magnetUri=${magnetUri.take(120)}...")
         isLoadingStream = true
         streamError = null
         torrentStreamServer.value?.stop()
         torrentStreamServer.value = null
 
         val engine = (context.applicationContext as TenseiApplication).torrentEngine
-        if (!engine.isRunning.get()) engine.start()
+        if (!engine.isRunning.get()) {
+            Log.d(TAG_TORRENT, "playTorrent: engine not running, starting")
+            engine.start()
+        } else {
+            Log.d(TAG_TORRENT, "playTorrent: engine already running")
+        }
+        Log.d(TAG_TORRENT, "playTorrent: removing current torrent")
         engine.removeCurrentTorrent()
 
         val server = TorrentStreamServer(engine.saveDir)
         torrentStreamServer.value = server
+        Log.d(TAG_TORRENT, "playTorrent: created TorrentStreamServer with saveDir=${engine.saveDir.absolutePath}")
 
         currentTorrentListener?.let { engine.removeListener(it) }
         val listener = object : TorrentEngine.EngineListener {
             override fun onMetadataReceived(meta: com.blissless.tensei.torrent.TorrentMeta) {
+                Log.d(TAG_TORRENT, "playTorrent: onMetadataReceived: name=${meta.name}, ${meta.files.size} files")
+                meta.files.forEach { f ->
+                    Log.d(TAG_TORRENT, "playTorrent:   file[${f.index}]: ${f.name} (${f.size} bytes)")
+                }
                 scope.launch {
+                    Log.d(TAG_TORRENT, "playTorrent: finding largest video file...")
                     val fileIndex = engine.getLargestVideoFileIndex()
+                    Log.d(TAG_TORRENT, "playTorrent: selected fileIndex=$fileIndex, starting download")
                     engine.startDownload(fileIndex)
+                    Log.d(TAG_TORRENT, "playTorrent: starting stream server...")
                     val port = server.start()
-                    val filePath = engine.getFileSavePath(fileIndex) ?: return@launch
+                    Log.d(TAG_TORRENT, "playTorrent: server started on port $port")
+                    val filePath = engine.getFileSavePath(fileIndex)
+                    if (filePath == null) {
+                        Log.e(TAG_TORRENT, "playTorrent: getFileSavePath returned null!")
+                        return@launch
+                    }
                     val fileName = filePath.substringAfterLast(File.separator)
-                    server.setTotalFileSize(engine.getFileSize(fileIndex))
-                    server.setPieceSize(engine.getPieceSize())
+                    Log.d(TAG_TORRENT, "playTorrent: filePath=$filePath fileName=$fileName")
+                    val fileSize = engine.getFileSize(fileIndex)
+                    val pieceSize = engine.getPieceSize()
+                    Log.d(TAG_TORRENT, "playTorrent: fileSize=$fileSize pieceSize=$pieceSize numPieces=${engine.getNumPieces()}")
+                    server.setTotalFileSize(fileSize)
+                    server.setPieceSize(pieceSize)
                     server.setPieceChecker { i -> engine.havePiece(i) }
                     server.setSafeBytesProvider { engine.getContiguousDownloadedBytes() }
 
                     currentVideoUrl = "http://127.0.0.1:$port/$fileName"
+                    Log.d(TAG_TORRENT, "playTorrent: video URL set to ${currentVideoUrl}")
                     currentReferer = ""
                     currentEpisodeTitle = sanitizeEpisodeTitle(anime.title) ?: "Episode $episode"
                     currentSubtitleTracks = emptyList()
@@ -845,11 +878,15 @@ fun MainScreen(
                     isExtensionFlow = false
                     showPlayer = true
                     isLoadingStream = false
+                    Log.d(TAG_TORRENT, "playTorrent: player shown, loading complete")
                 }
             }
             override fun onProgress(downloaded: Long, total: Long) {}
-            override fun onFinished() {}
+            override fun onFinished() {
+                Log.d(TAG_TORRENT, "playTorrent: torrent finished")
+            }
             override fun onError(message: String) {
+                Log.e(TAG_TORRENT, "playTorrent: engine error: $message")
                 scope.launch {
                     streamError = message
                     isLoadingStream = false
@@ -859,10 +896,13 @@ fun MainScreen(
         engine.addListener(listener)
         currentTorrentListener = listener
 
+        Log.d(TAG_TORRENT, "playTorrent: adding magnet to engine")
         engine.addTorrentFromMagnet(magnetUri)
+        Log.d(TAG_TORRENT, "playTorrent: magnet added, waiting for metadata...")
     }
 
     fun loadAndPlayEpisode(anime: AnimeMedia, episode: Int, isAutoRefresh: Boolean = false) {
+        Log.d(TAG_TORRENT, "loadAndPlayEpisode: anime=${anime.id} ep=$episode autoRefresh=$isAutoRefresh")
         if (!isAutoRefresh) {
             isAutoRefreshing = false
             pendingSeekPosition = null
@@ -877,21 +917,32 @@ fun MainScreen(
         }
 
         val streamMethod = viewModel.streamMethod.value
+        Log.d(TAG_TORRENT, "loadAndPlayEpisode: streamMethod=$streamMethod")
         if (streamMethod == "magnet") {
             isExtensionFlow = false
             isLoadingStream = true
             scope.launch {
-                val magnetUri = withContext(Dispatchers.IO) {
+                Log.d(TAG_TORRENT, "loadAndPlayEpisode: checking cached magnet...")
+                var magnetUri = withContext(Dispatchers.IO) {
                     viewModel.getMagnetForEpisode(anime.id, episode)
-                        ?: viewModel.fetchMagnetForEpisode(anime, episode)
+                }
+                Log.d(TAG_TORRENT, "loadAndPlayEpisode: cached magnet=${magnetUri != null}")
+                if (magnetUri == null) {
+                    Log.d(TAG_TORRENT, "loadAndPlayEpisode: fetching magnet from extension...")
+                    magnetUri = withContext(Dispatchers.IO) {
+                        viewModel.fetchMagnetForEpisode(anime, episode)
+                    }
+                    Log.d(TAG_TORRENT, "loadAndPlayEpisode: fetch result=${magnetUri != null}")
                 }
                 if (magnetUri != null) {
+                    Log.d(TAG_TORRENT, "loadAndPlayEpisode: got magnet URI, calling playTorrent")
                     playTorrent(magnetUri, anime, episode)
                 } else {
+                    Log.e(TAG_TORRENT, "loadAndPlayEpisode: no magnet link found for Ep $episode")
                     streamError = "No magnet link found for Ep $episode"
                     Toast.makeText(context, "No magnet available for Ep $episode", Toast.LENGTH_SHORT).show()
+                    isLoadingStream = false
                 }
-                isLoadingStream = false
             }
             return
         }
