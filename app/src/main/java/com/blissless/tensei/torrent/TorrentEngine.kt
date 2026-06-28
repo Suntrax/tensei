@@ -4,9 +4,9 @@ import android.content.Context
 import android.util.Log
 import org.libtorrent4j.*
 import org.libtorrent4j.alerts.*
-import org.libtorrent4j.swig.torrent_flags_t
+import org.libtorrent4j.swig.error_code
+import org.libtorrent4j.swig.settings_pack
 import java.io.File
-import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicBoolean
 
 class TorrentEngine(private val context: Context) {
@@ -19,6 +19,7 @@ class TorrentEngine(private val context: Context) {
     }
 
     private val sessionManager = SessionManager()
+    private var rawHandle: org.libtorrent4j.swig.torrent_handle? = null
     private var handle: TorrentHandle? = null
     private var pendingStreamFileIndex = -1
 
@@ -30,17 +31,23 @@ class TorrentEngine(private val context: Context) {
     private var streamingPrioritiesSet = false
 
     private val listeners = mutableListOf<EngineListener>()
-    private val alertQueue = ConcurrentLinkedQueue<Alert<*>>()
     private var pollThread: Thread? = null
     val isRunning = AtomicBoolean(false)
 
     val saveDir: File
         get() = File(context.cacheDir, "torrent_stream").also { it.mkdirs() }
 
+    // CRITICAL: Alert objects in libtorrent4j reference native data that may be
+    // freed/reused AFTER this callback returns.  We MUST process alerts inline
+    // here — never queue them for later, or we get use-after-free → native crash.
     private val sessionListener = object : AlertListener {
         override fun types(): IntArray? = null
         override fun alert(alert: Alert<*>) {
-            alertQueue.offer(alert)
+            try {
+                handleAlert(alert)
+            } catch (t: Throwable) {
+                Log.e(TAG, "alert callback error: ${t.javaClass.simpleName}: ${t.message}")
+            }
         }
     }
 
@@ -49,14 +56,27 @@ class TorrentEngine(private val context: Context) {
             Log.d(TAG, "start: already running, skipping")
             return
         }
-        Log.d(TAG, "start: starting torrent engine, saveDir=${saveDir.absolutePath}")
+        Log.i(TAG, "start: initializing torrent engine (libtorrent4j 2.1.0-39)")
+        Log.d(TAG, "start: saveDir=${saveDir.absolutePath}")
         try {
             sessionManager.addListener(sessionListener)
-            sessionManager.start()
-            Log.d(TAG, "start: SessionManager started successfully")
+            // CRITICAL: enable DHT/LSD/UPnP/NAT-PMP. Magnet links carry only an
+            // infohash; without DHT libtorrent cannot discover peers, so metadata
+            // never arrives and streaming never starts. Mirrors toram's config.
+            Log.d(TAG, "start: configuring SettingsPack (DHT+LSD+UPnP+NAT-PMP)")
+            val sp = SettingsPack()
+            sp.setEnableDht(true)
+            sp.setEnableLsd(true)
+            sp.setBoolean(settings_pack.bool_types.enable_upnp.swigValue(), true)
+            sp.setBoolean(settings_pack.bool_types.enable_natpmp.swigValue(), true)
+            sessionManager.start(SessionParams(sp))
+            Log.d(TAG, "start: session started, starting DHT")
+            sessionManager.startDht()
+            Log.d(TAG, "start: DHT started, starting poll loop")
             startPollLoop()
+            Log.i(TAG, "start: engine ready")
         } catch (e: Exception) {
-            Log.e(TAG, "start: failed to start session", e)
+            Log.e(TAG, "start: FAILED to start session", e)
             listeners.forEach { it.onError("Failed to start torrent engine: ${e.message}") }
         }
     }
@@ -64,18 +84,19 @@ class TorrentEngine(private val context: Context) {
     private fun startPollLoop() {
         pollThread?.interrupt()
         pollThread = Thread {
-            Log.d(TAG, "Poll loop started")
+            Log.d(TAG, "poll: loop started")
             while (isRunning.get()) {
                 try {
-                    drainAlerts()
                     processProgress()
                     Thread.sleep(500)
-                } catch (e: InterruptedException) { break }
-                catch (e: Exception) {
-                    if (isRunning.get()) Log.e(TAG, "Poll loop error", e)
+                } catch (e: InterruptedException) {
+                    Log.d(TAG, "poll: interrupted, exiting")
+                    break
+                } catch (t: Throwable) {
+                    if (isRunning.get()) Log.e(TAG, "poll: loop error", t)
                 }
             }
-            Log.d(TAG, "Poll loop exiting")
+            Log.d(TAG, "poll: loop exiting")
         }.apply {
             isDaemon = true
             name = "torrent-engine"
@@ -83,39 +104,44 @@ class TorrentEngine(private val context: Context) {
         }
     }
 
-    private fun drainAlerts() {
-        while (true) {
-            val alert = alertQueue.poll() ?: break
-            handleAlert(alert)
-        }
-    }
-
     private var lastProgressTime = 0L
+    private var lastLoggedState = -1
 
     private fun processProgress() {
         val h = handle ?: return
+        // Guard: calling status() on an invalid handle causes a native crash
+        // (SIGSEGV) that Java try/catch CANNOT intercept.
+        if (!h.isValid()) {
+            Log.w(TAG, "processProgress: handle is invalid, skipping")
+            return
+        }
         try {
             val st = h.status()
             val now = System.currentTimeMillis()
-            if (now - lastProgressTime > 500) {
+            // Throttle progress logs to once per 2s, but always log state changes
+            val state = st.state()
+            if (state.ordinal != lastLoggedState) {
+                lastLoggedState = state.ordinal
+                Log.i(TAG, "state: ${state.name} | downloaded=${st.totalWantedDone()}/${st.totalWanted()}" +
+                        " | peers=${st.numPeers()} seeds=${st.numSeeds()} | dl=${st.downloadRate() / 1024}KB/s" +
+                        " | hasMetadata=${st.hasMetadata()}")
+            }
+            if (now - lastProgressTime > 2000) {
                 lastProgressTime = now
-                val downloaded = st.totalWantedDone()
-                val total = st.totalWanted()
-                val progress = if (total > 0) (downloaded * 100 / total) else 0
-                val dlRate = st.downloadRate() / 1024
-                val peers = st.numPeers()
-                Log.d(TAG, "progress: ${downloaded}/${total} (${progress}%), ${dlRate}KB/s, ${peers} peers, state=${st.state().name}")
-                listeners.forEach { it.onProgress(downloaded, total) }
+                listeners.forEach { it.onProgress(st.totalWantedDone(), st.totalWanted()) }
+                if (st.totalWanted() > 0) {
+                    Log.d(TAG, "progress: ${st.totalWantedDone()}/${st.totalWanted()}" +
+                            " (${(st.totalWantedDone() * 100 / st.totalWanted())}%)" +
+                            " peers=${st.numPeers()} dl=${st.downloadRate() / 1024}KB/s")
+                }
                 if (st.isFinished() || st.isSeeding()) {
-                    Log.d(TAG, "processProgress: torrent finished/seeding")
+                    Log.i(TAG, "progress: torrent finished/seeding")
                     listeners.forEach { it.onFinished() }
                 }
-                if (now % 2000 < 500) {
-                    advanceStreamingWindow()
-                }
+                advanceStreamingWindow()
             }
-        } catch (e: Exception) {
-            Log.w(TAG, "processProgress: exception", e)
+        } catch (t: Throwable) {
+            Log.w(TAG, "processProgress: ${t.javaClass.simpleName}: ${t.message}")
         }
     }
 
@@ -123,58 +149,76 @@ class TorrentEngine(private val context: Context) {
         try {
             when (alert) {
                 is AddTorrentAlert -> {
-                    val th = alert.handle()
-                    Log.d(TAG, "handleAlert: AddTorrentAlert, handle valid=${th.isValid()}, error=${alert.message()}")
-                    if (th.isValid()) {
-                        handle = th
-                        Log.d(TAG, "handleAlert: torrent added, name=${th.name}, infoHash=${th.infoHash()?.toString() ?: "unknown"}")
-                        Log.d(TAG, "handleAlert: torrent flags=${th.flags}, savePath=${th.savePath()}")
-                    } else {
-                        Log.e(TAG, "handleAlert: AddTorrentAlert with invalid handle")
-                    }
+                    // Do NOT overwrite `handle` from the alert.
+                    // The handle was already set in addTorrentFromMagnet() and is a
+                    // stable reference.  The alert's handle() may reference native
+                    // data that becomes invalid after this callback returns,
+                    // causing a SIGSEGV on the next status() call.
+                    Log.i(TAG, "alert: AddTorrent — torrent added to session" +
+                            " (handle already set, isValid=${handle?.isValid() ?: false})")
                 }
                 is MetadataReceivedAlert -> {
-                    Log.d(TAG, "handleAlert: MetadataReceivedAlert")
-                    val h = handle ?: run { Log.w(TAG, "handleAlert: no handle for metadata"); return }
-                    if (!h.isValid()) { Log.w(TAG, "handleAlert: invalid handle for metadata"); return }
-                    val ti = try { h.torrentFile() } catch (e: Exception) { Log.e(TAG, "handleAlert: failed to get torrentFile", e); null }
+                    Log.i(TAG, "alert: MetadataReceived — metadata downloaded successfully!")
+                    val h = handle ?: run {
+                        Log.e(TAG, "alert: MetadataReceived but handle is null")
+                        return
+                    }
+                    if (!h.isValid()) {
+                        Log.e(TAG, "alert: MetadataReceived but handle invalid")
+                        return
+                    }
+                    val ti = try { h.torrentFile() } catch (e: Exception) {
+                        Log.e(TAG, "alert: MetadataReceived but torrentFile() threw", e); null
+                    }
                     if (ti != null) {
-                        Log.d(TAG, "handleAlert: metadata received, torrent name=${ti.name()}, total size=${ti.totalSize()}, num pieces=${ti.numPieces()}, piece length=${ti.pieceLength()}")
-                        val fs = ti.files()
-                        if (fs != null) {
-                            Log.d(TAG, "handleAlert: ${fs.numFiles()} files in torrent:")
-                            for (i in 0 until minOf(fs.numFiles(), 20)) {
-                                Log.d(TAG, "handleAlert:   file[$i]: ${fs.fileName(i)} (${fs.fileSize(i)} bytes)")
-                            }
-                            if (fs.numFiles() > 20) Log.d(TAG, "handleAlert:   ... and ${fs.numFiles() - 20} more files")
-                        }
+                        Log.d(TAG, "alert: MetadataReceived — name='${ti.name()}'" +
+                                " files=${ti.numFiles()} pieces=${ti.numPieces()} pieceLen=${ti.pieceLength()}" +
+                                " totalSize=${ti.totalSize()}")
                         val meta = buildMeta(ti)
-                        Log.d(TAG, "handleAlert: notifying listeners of metadata")
                         listeners.forEach { it.onMetadataReceived(meta) }
                         if (!streamingPrioritiesSet && pendingStreamFileIndex >= 0) {
-                            Log.d(TAG, "handleAlert: setting streaming priorities for pending file $pendingStreamFileIndex")
-                            try { setupStreamingPriorities(h, pendingStreamFileIndex) } catch (e: Exception) { Log.e(TAG, "handleAlert: failed to set streaming priorities", e) }
-                        } else {
-                            Log.d(TAG, "handleAlert: streamingPrioritiesSet=$streamingPrioritiesSet, pendingStreamFileIndex=$pendingStreamFileIndex")
+                            Log.d(TAG, "alert: setting up streaming priorities for pending file $pendingStreamFileIndex")
+                            try { setupStreamingPriorities(h, pendingStreamFileIndex) }
+                            catch (e: Exception) { Log.e(TAG, "setupStreamingPriorities (pending) failed", e) }
                         }
                     } else {
-                        Log.w(TAG, "handleAlert: MetadataReceivedAlert but torrentFile() returned null")
+                        Log.e(TAG, "alert: MetadataReceived but torrentFile() returned null")
                     }
                 }
                 is MetadataFailedAlert -> {
-                    Log.e(TAG, "handleAlert: MetadataFailedAlert, error=${alert.message()}")
-                    listeners.forEach { it.onError("Failed to download torrent metadata: ${alert.message()}") }
+                    Log.e(TAG, "alert: MetadataFailed — could not download torrent metadata." +
+                            " Magnet may have no peers, or DHT is not reachable.")
+                    listeners.forEach { it.onError("Failed to download torrent metadata (no peers?)") }
                 }
                 is TorrentFinishedAlert -> {
-                    Log.d(TAG, "handleAlert: TorrentFinishedAlert, handle valid=${alert.handle()?.isValid()}")
+                    Log.i(TAG, "alert: TorrentFinished")
                     listeners.forEach { it.onFinished() }
                 }
+                is TorrentErrorAlert -> {
+                    Log.e(TAG, "alert: TorrentError — ${alert.javaClass.simpleName}")
+                    listeners.forEach { it.onError("Torrent error alert received") }
+                }
+                is PeerConnectAlert -> Log.d(TAG, "alert: PeerConnect — a peer connected")
+                is PeerDisconnectedAlert -> Log.d(TAG, "alert: PeerDisconnect — a peer disconnected")
+                is DhtBootstrapAlert -> Log.d(TAG, "alert: DhtBootstrap — DHT is initializing")
+                is DhtReplyAlert -> Log.v(TAG, "alert: DhtReply — DHT responded")
+                is ExternalIpAlert -> Log.d(TAG, "alert: ExternalIp — external IP reported")
+                is ListenSucceededAlert -> Log.d(TAG, "alert: ListenSucceeded — listening on a socket")
+                is ListenFailedAlert -> Log.e(TAG, "alert: ListenFailed — could not listen on a socket")
+                is PortmapErrorAlert -> Log.w(TAG, "alert: PortmapError — UPnP/NAT-PMP mapping failed")
+                is PortmapAlert -> Log.d(TAG, "alert: Portmap — UPnP/NAT-PMP mapping succeeded")
+                is StateChangedAlert -> Log.d(TAG, "alert: StateChanged — torrent state changed")
+                is FastresumeRejectedAlert -> Log.d(TAG, "alert: FastresumeRejected")
+                is PieceFinishedAlert -> Log.v(TAG, "alert: PieceFinished — a piece completed")
+                is BlockFinishedAlert -> Log.v(TAG, "alert: BlockFinished — a block completed")
+                is ReadPieceAlert -> Log.v(TAG, "alert: ReadPiece — a piece was read")
                 else -> {
-                    Log.v(TAG, "handleAlert: unhandled alert type=${alert.type()?.name ?: alert.javaClass.simpleName}")
+                    // Log alert type name for any unhandled alerts (verbose only)
+                    Log.v(TAG, "alert: ${alert.javaClass.simpleName}")
                 }
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "handleAlert: error handling alert", e)
+        } catch (t: Throwable) {
+            Log.e(TAG, "handleAlert: error processing ${alert.javaClass.simpleName}", t)
         }
     }
 
@@ -182,51 +226,96 @@ class TorrentEngine(private val context: Context) {
     fun removeListener(l: EngineListener) = listeners.remove(l)
 
     fun addTorrentFromMagnet(magnetUri: String) {
-        val truncated = magnetUri.take(120)
-        Log.d(TAG, "addTorrentFromMagnet: adding magnet: $truncated...")
-        Log.d(TAG, "addTorrentFromMagnet: saveDir=${saveDir.absolutePath}, saveDir exists=${saveDir.exists()}")
+        Log.i(TAG, "addTorrentFromMagnet: ${magnetUri.take(80)}...")
+        if (!isRunning.get()) {
+            Log.w(TAG, "addTorrentFromMagnet: engine not running, starting it now")
+            start()
+        }
         try {
-            val startTime = System.currentTimeMillis()
-            sessionManager.download(magnetUri, saveDir, torrent_flags_t())
-            val elapsed = System.currentTimeMillis() - startTime
-            Log.d(TAG, "addTorrentFromMagnet: sessionManager.download() returned in ${elapsed}ms")
-            Log.d(TAG, "addTorrentFromMagnet: stats=${sessionManager.stats()}")
+            // Use the low-level swig().add_torrent() (like toram) instead of
+            // sessionManager.download(), which is a blocking convenience call
+            // that waits for the whole download — useless for streaming.
+            // add_torrent returns a handle immediately so we can configure
+            // streaming priorities before metadata arrives.
+            Log.d(TAG, "addTorrentFromMagnet: parsing magnet URI")
+            val atp = AddTorrentParams.parseMagnetUri(magnetUri)
+            atp.setSavePath(saveDir.absolutePath)
+            Log.d(TAG, "addTorrentFromMagnet: savePath=${saveDir.absolutePath}")
+            val ec = error_code()
+            Log.d(TAG, "addTorrentFromMagnet: calling swig().add_torrent()")
+            val raw = sessionManager.swig().add_torrent(atp.swig(), ec)
+            if (ec.failed()) {
+                val msg = "Magnet add failed: ${ec.message()}"
+                Log.e(TAG, "addTorrentFromMagnet: $msg")
+                listeners.forEach { it.onError(msg) }
+                return
+            }
+            rawHandle = raw
+            handle = TorrentHandle(raw)
+            Log.i(TAG, "addTorrentFromMagnet: magnet added, handle valid=${raw.is_valid()}")
+
+            // Enable sequential mode IMMEDIATELY when the handle is created.
+            // Prevents libtorrent requesting random pieces before
+            // setupStreamingPriorities() runs (after metadata arrives).
+            rawHandle?.set_sequential_range(0, Int.MAX_VALUE)
+            Log.d(TAG, "addTorrentFromMagnet: sequential mode enabled on magnet handle (0..MAX)")
         } catch (e: Exception) {
-            Log.e(TAG, "addTorrentFromMagnet: failed", e)
+            Log.e(TAG, "addTorrentFromMagnet: FAILED", e)
             listeners.forEach { it.onError("Failed to add magnet: ${e.message}") }
         }
     }
 
     fun startDownload(fileIndex: Int) {
-        Log.d(TAG, "startDownload: fileIndex=$fileIndex")
-        val h = handle ?: run { Log.e(TAG, "startDownload: handle is null"); return }
+        Log.i(TAG, "startDownload: fileIndex=$fileIndex")
+        val h = handle ?: run {
+            Log.e(TAG, "startDownload: handle is null, aborting")
+            return
+        }
+        if (!h.isValid()) {
+            Log.e(TAG, "startDownload: handle is invalid, aborting")
+            return
+        }
 
+        Log.d(TAG, "startDownload: applying file priorities")
         applyFilePriorities(h, fileIndex)
 
-        val ti = try { h.torrentFile() } catch (e: Exception) { Log.e(TAG, "startDownload: error getting torrentFile", e); null }
+        val ti = try { h.torrentFile() } catch (_: Exception) { null }
         if (ti != null) {
-            Log.d(TAG, "startDownload: metadata available, setting up streaming priorities immediately")
+            Log.d(TAG, "startDownload: metadata available, setting up streaming priorities")
             setupStreamingPriorities(h, fileIndex)
         } else {
             pendingStreamFileIndex = fileIndex
-            Log.d(TAG, "startDownload: metadata not yet available, deferred (pendingStreamFileIndex=$fileIndex)")
+            Log.d(TAG, "startDownload: metadata not yet available, will set streaming priorities on MetadataReceived")
         }
     }
 
     private fun setupStreamingPriorities(h: TorrentHandle, fileIndex: Int) {
+        if (!h.isValid()) {
+            Log.w(TAG, "setupStreamingPriorities: handle invalid, deferring")
+            pendingStreamFileIndex = fileIndex
+            return
+        }
         Log.d(TAG, "setupStreamingPriorities: fileIndex=$fileIndex")
-        val ti = try { h.torrentFile() } catch (e: Exception) { Log.e(TAG, "setupStreamingPriorities: error getting torrentFile", e); null } ?: run {
+        val ti = try { h.torrentFile() } catch (_: Exception) { null } ?: run {
             Log.w(TAG, "setupStreamingPriorities: no torrent info yet, deferring")
             pendingStreamFileIndex = fileIndex
             return
         }
 
         val totalPieces = ti.numPieces()
-        if (totalPieces == 0) { Log.w(TAG, "setupStreamingPriorities: no pieces in torrent"); return }
+        if (totalPieces == 0) {
+            Log.w(TAG, "setupStreamingPriorities: no pieces in torrent")
+            return
+        }
 
         val fs = ti.files()
-        if (fs == null) { Log.w(TAG, "setupStreamingPriorities: no file storage"); return }
+        if (fs == null) {
+            Log.w(TAG, "setupStreamingPriorities: no file storage")
+            return
+        }
 
+        val fileName = try { fs.fileName(fileIndex) } catch (_: Exception) { "<unknown>" }
+        val fileSize = fs.fileSize(fileIndex)
         streamingFirstPiece = fs.pieceIndexAtFile(fileIndex)
         streamingLastPiece = fs.lastPieceIndexAtFile(fileIndex)
 
@@ -235,39 +324,57 @@ class TorrentEngine(private val context: Context) {
         streamingWindowEnd = minOf(streamingFirstPiece + STREAMING_WINDOW_SIZE, streamingLastPiece + 1)
         lastAdvancedPiece = streamingFirstPiece - 1
 
-        Log.d(TAG, "setupStreamingPriorities: file=$fileIndex pieceRange=[${streamingFirstPiece}-${streamingLastPiece}] totalPieces=$totalFilePieces")
-        Log.d(TAG, "setupStreamingPriorities: window=[${streamingWindowStart}-${streamingWindowEnd}) windowSize=$STREAMING_WINDOW_SIZE deadlineSize=$STREAMING_DEADLINE_SIZE")
-        Log.d(TAG, "setupStreamingPriorities: torrent totalPieces=$totalPieces, pieceLength=${ti.pieceLength()}")
+        Log.i(TAG, "setupStreamingPriorities: file '$fileName' (idx=$fileIndex, size=$fileSize bytes)" +
+                " piece range ${streamingFirstPiece}-${streamingLastPiece} ($totalFilePieces pieces)" +
+                " pieceLen=${ti.pieceLength()} window=$streamingFirstPiece-${streamingWindowEnd - 1}")
 
+        // Tell libtorrent to download the file's pieces in sequential order.
+        // Piece priorities + deadlines below refine this further.
+        rawHandle?.set_sequential_range(streamingFirstPiece, streamingLastPiece)
+        Log.d(TAG, "setupStreamingPriorities: set_sequential_range($streamingFirstPiece, $streamingLastPiece)")
+
+        var prioSet = 0
         for (i in streamingFirstPiece..streamingLastPiece) {
             val priority = if (i < streamingWindowEnd) Priority.TOP_PRIORITY else Priority.DEFAULT
-            try { h.piecePriority(i, priority) } catch (e: Exception) { Log.w(TAG, "setupStreamingPriorities: failed to set priority for piece $i", e) }
+            try {
+                h.piecePriority(i, priority)
+                prioSet++
+            } catch (e: Exception) {
+                Log.w(TAG, "setupStreamingPriorities: piecePriority($i) failed: ${e.message}")
+            }
         }
+        Log.d(TAG, "setupStreamingPriorities: set $prioSet piece priorities (window TOP_PRIORITY, rest DEFAULT)")
 
         val headDeadlineCount = minOf(STREAMING_DEADLINE_SIZE, totalFilePieces)
+        var deadlineSet = 0
         for (i in 0 until headDeadlineCount) {
             val piece = streamingFirstPiece + i
-            try { h.setPieceDeadline(piece, i + 1) } catch (e: Exception) { Log.w(TAG, "setupStreamingPriorities: failed to set deadline for piece $piece", e) }
+            try {
+                h.setPieceDeadline(piece, i + 1)
+                deadlineSet++
+            } catch (e: Exception) {
+                Log.w(TAG, "setupStreamingPriorities: setPieceDeadline($piece) failed: ${e.message}")
+            }
         }
+        Log.d(TAG, "setupStreamingPriorities: set $deadlineSet head deadlines (pieces $streamingFirstPiece-${streamingFirstPiece + headDeadlineCount - 1})")
 
         if (totalFilePieces > headDeadlineCount + 2) {
-            Log.d(TAG, "setupStreamingPriorities: setting late-piece deadlines for pieces ${maxOf(streamingFirstPiece, streamingLastPiece - 1)} to $streamingLastPiece")
             for (i in maxOf(streamingFirstPiece, streamingLastPiece - 1)..streamingLastPiece) {
-                try { h.setPieceDeadline(i, headDeadlineCount + 50) } catch (e: Exception) { Log.w(TAG, "setupStreamingPriorities: failed to set late deadline for piece $i", e) }
+                try { h.setPieceDeadline(i, headDeadlineCount + 50) }
+                catch (e: Exception) { Log.w(TAG, "setupStreamingPriorities: tail deadline($i) failed: ${e.message}") }
             }
+            Log.d(TAG, "setupStreamingPriorities: set tail deadlines for MKV cue data")
         }
 
         streamingPrioritiesSet = true
         pendingStreamFileIndex = -1
-        Log.d(TAG, "setupStreamingPriorities: completed successfully")
+        Log.i(TAG, "setupStreamingPriorities: complete — ready for streaming")
     }
 
     fun advanceStreamingWindow() {
-        if (!streamingPrioritiesSet) {
-            Log.v(TAG, "advanceStreamingWindow: streamingPrioritiesSet=false, skipping")
-            return
-        }
-        val h = handle ?: run { Log.v(TAG, "advanceStreamingWindow: no handle, skipping"); return }
+        if (!streamingPrioritiesSet) return
+        val h = handle ?: return
+        if (!h.isValid()) return
 
         var lastConsecutive = streamingWindowStart - 1
         while (lastConsecutive < streamingLastPiece) {
@@ -277,39 +384,38 @@ class TorrentEngine(private val context: Context) {
         }
 
         if (lastConsecutive > lastAdvancedPiece) {
-            Log.d(TAG, "advanceStreamingWindow: advancing from piece $lastAdvancedPiece to $lastConsecutive")
             lastAdvancedPiece = lastConsecutive
             streamingWindowStart = lastConsecutive + 1
             val newWindowEnd = minOf(streamingWindowStart + STREAMING_WINDOW_SIZE, streamingLastPiece + 1)
+            Log.d(TAG, "advanceWindow: completed up to piece $lastConsecutive, window -> $streamingWindowStart-${newWindowEnd - 1}")
             if (newWindowEnd > streamingWindowEnd) {
-                val newPieces = newWindowEnd - streamingWindowEnd
-                Log.d(TAG, "advanceStreamingWindow: expanding window to $streamingWindowStart-$newWindowEnd ($newPieces new pieces)")
                 for (i in streamingWindowEnd until newWindowEnd) {
-                    try { h.piecePriority(i, Priority.TOP_PRIORITY) } catch (e: Exception) { Log.w(TAG, "advanceStreamingWindow: failed to set priority for piece $i", e) }
+                    try { h.piecePriority(i, Priority.TOP_PRIORITY) }
+                    catch (e: Exception) { Log.w(TAG, "advanceWindow: piecePriority($i) failed: ${e.message}") }
                 }
                 streamingWindowEnd = newWindowEnd
             }
             val deadlineStart = streamingWindowStart
             val deadlineEnd = minOf(streamingWindowStart + STREAMING_DEADLINE_SIZE, streamingWindowEnd)
-            Log.d(TAG, "advanceStreamingWindow: setting deadlines for pieces $deadlineStart to ${deadlineEnd - 1}")
             for (i in deadlineStart until deadlineEnd) {
-                try { h.setPieceDeadline(i, (i - streamingWindowStart) + 1) } catch (e: Exception) { Log.w(TAG, "advanceStreamingWindow: failed to set deadline for piece $i", e) }
+                try { h.setPieceDeadline(i, (i - streamingWindowStart) + 1) }
+                catch (e: Exception) { Log.w(TAG, "advanceWindow: deadline($i) failed: ${e.message}") }
             }
-        } else {
-            Log.v(TAG, "advanceStreamingWindow: no advancement needed (lastConsecutive=$lastConsecutive, lastAdvancedPiece=$lastAdvancedPiece)")
         }
     }
 
     fun getFileSize(fileIndex: Int): Long {
-        val h = handle ?: run { Log.w(TAG, "getFileSize: no handle"); return 0L }
-        val size = try { h.torrentFile()?.files()?.fileSize(fileIndex) ?: 0L } catch (e: Exception) { Log.e(TAG, "getFileSize: error", e); 0L }
-        Log.d(TAG, "getFileSize: fileIndex=$fileIndex -> ${size} bytes")
-        return size
+        val h = handle ?: return 0L
+        return try {
+            val size = h.torrentFile()?.files()?.fileSize(fileIndex) ?: 0L
+            Log.d(TAG, "getFileSize: fileIndex=$fileIndex size=$size")
+            size
+        } catch (_: Exception) { 0L }
     }
 
     fun getContiguousDownloadedBytes(): Long {
-        val h = handle ?: run { Log.v(TAG, "getContiguousDownloadedBytes: no handle"); return 0L }
-        val ti = try { h.torrentFile() } catch (e: Exception) { Log.v(TAG, "getContiguousDownloadedBytes: no torrentFile", e); return 0L } ?: return 0L
+        val h = handle ?: return 0L
+        val ti = try { h.torrentFile() } catch (_: Exception) { null } ?: return 0L
         val fs = ti.files() ?: return 0L
         val fileIndex = findSelectedFileIndex(h, fs) ?: return 0L
         val fileSize = fs.fileSize(fileIndex)
@@ -321,18 +427,12 @@ class TorrentEngine(private val context: Context) {
         for (i in firstPiece..lastPiece) {
             if (havePiece(i)) contiguousPieces++ else break
         }
-        if (contiguousPieces == 0) {
-            Log.v(TAG, "getContiguousDownloadedBytes: 0 contiguous pieces from $firstPiece")
-            return 0L
-        }
+        if (contiguousPieces == 0) return 0L
         val totalFilePieces = lastPiece - firstPiece + 1
-        if (contiguousPieces >= totalFilePieces) {
-            Log.v(TAG, "getContiguousDownloadedBytes: complete file ($fileSize bytes)")
-            return fileSize
-        }
-        val result = contiguousPieces.toLong() * pieceLength
-        Log.v(TAG, "getContiguousDownloadedBytes: $contiguousPieces/$totalFilePieces pieces = ${result} bytes")
-        return result
+        if (contiguousPieces >= totalFilePieces) return fileSize
+        val contiguousBytes = contiguousPieces.toLong() * pieceLength
+        Log.d(TAG, "getContiguousDownloadedBytes: $contiguousPieces/$totalFilePieces pieces = $contiguousBytes bytes (of $fileSize)")
+        return contiguousBytes
     }
 
     private fun findSelectedFileIndex(h: TorrentHandle, fs: FileStorage): Int? {
@@ -348,13 +448,13 @@ class TorrentEngine(private val context: Context) {
     }
 
     fun getFileSavePath(fileIndex: Int): String? {
-        val h = handle ?: run { Log.w(TAG, "getFileSavePath: no handle"); return null }
+        val h = handle ?: return null
         return try {
-            val ti = h.torrentFile() ?: run { Log.w(TAG, "getFileSavePath: no torrentFile"); return null }
+            val ti = h.torrentFile() ?: return null
             val path = ti.files()?.filePath(fileIndex, saveDir.absolutePath)
-            Log.d(TAG, "getFileSavePath: fileIndex=$fileIndex -> $path")
+            Log.d(TAG, "getFileSavePath: fileIndex=$fileIndex path=$path")
             path
-        } catch (e: Exception) { Log.e(TAG, "getFileSavePath: error", e); null }
+        } catch (_: Exception) { null }
     }
 
     fun getNumPieces(): Int = try { handle?.torrentFile()?.numPieces() ?: 1 } catch (_: Exception) { 1 }
@@ -366,36 +466,34 @@ class TorrentEngine(private val context: Context) {
 
     fun havePiece(pieceIndex: Int): Boolean {
         return try {
-            handle?.havePiece(pieceIndex) ?: false
+            rawHandle?.have_piece(pieceIndex) ?: false
         } catch (_: Exception) { false }
     }
 
     fun removeCurrentTorrent() {
-        Log.d(TAG, "removeCurrentTorrent: handle=${handle != null}")
-        handle?.let {
-            try {
-                sessionManager.remove(it)
-                Log.d(TAG, "removeCurrentTorrent: removed from session")
-            } catch (e: Exception) { Log.e(TAG, "removeCurrentTorrent: error removing", e) }
+        Log.d(TAG, "removeCurrentTorrent: cleaning up previous torrent")
+        rawHandle?.let {
+            try { sessionManager.swig().remove_torrent(it) }
+            catch (e: Exception) { Log.w(TAG, "removeCurrentTorrent: remove_torrent failed: ${e.message}") }
         }
         handle = null
+        rawHandle = null
         resetStreamingState()
         Log.d(TAG, "removeCurrentTorrent: done")
     }
 
     fun clearCache() {
+        Log.d(TAG, "clearCache: deleting ${saveDir.absolutePath}")
         try { saveDir.listFiles()?.forEach { it.deleteRecursively() } } catch (_: Exception) {}
     }
 
     fun stop() {
-        Log.d(TAG, "stop: shutting down torrent engine")
+        Log.i(TAG, "stop: shutting down engine")
         isRunning.set(false)
         pollThread?.interrupt()
-        handle?.let {
-            try {
-                sessionManager.remove(it)
-                Log.d(TAG, "stop: removed torrent handle")
-            } catch (e: Exception) { Log.e(TAG, "stop: error removing handle", e) }
+        rawHandle?.let {
+            try { sessionManager.swig().remove_torrent(it) }
+            catch (e: Exception) { Log.w(TAG, "stop: remove_torrent failed: ${e.message}") }
         }
         sessionManager.removeListener(sessionListener)
         sessionManager.stop()
@@ -409,66 +507,63 @@ class TorrentEngine(private val context: Context) {
     }
 
     private fun applyFilePriorities(h: TorrentHandle, selectedIndex: Int) {
-        Log.d(TAG, "applyFilePriorities: selectedIndex=$selectedIndex")
+        Log.d(TAG, "applyFilePriorities: selectedIndex=$selectedIndex, others=IGNORE")
         try {
             val ti = h.torrentFile()
             if (ti != null) {
                 val fs = ti.files()
                 if (fs != null) {
                     val nf = fs.numFiles()
-                    Log.d(TAG, "applyFilePriorities: $nf total files, setting selected=$selectedIndex to DEFAULT, others to IGNORE")
+                    Log.d(TAG, "applyFilePriorities: $nf files total")
                     for (i in 0 until nf) {
                         val prio = if (i == selectedIndex) Priority.DEFAULT else Priority.IGNORE
                         h.filePriority(i, prio)
+                        if (i == selectedIndex) {
+                            Log.d(TAG, "applyFilePriorities: file $i '${fs.fileName(i)}' -> DEFAULT")
+                        }
                     }
-                    Log.d(TAG, "applyFilePriorities: done")
                     return
-                } else {
-                    Log.w(TAG, "applyFilePriorities: no file storage")
                 }
-            } else {
-                Log.w(TAG, "applyFilePriorities: no torrentFile, falling back to single file priority")
             }
-        } catch (e: Exception) { Log.e(TAG, "applyFilePriorities: error", e) }
+        } catch (e: Exception) {
+            Log.w(TAG, "applyFilePriorities: error, falling back to single: ${e.message}")
+        }
         h.filePriority(selectedIndex, Priority.DEFAULT)
     }
 
     fun getLargestVideoFileIndex(): Int {
         return try {
-            val ti = handle?.torrentFile() ?: run { Log.w(TAG, "getLargestVideoFileIndex: no torrentFile"); return 0 }
-            val fs = ti.files() ?: run { Log.w(TAG, "getLargestVideoFileIndex: no files"); return 0 }
+            val ti = handle?.torrentFile() ?: return 0
+            val fs = ti.files() ?: return 0
             var bestIdx = 0; var bestSize = 0L
             val videoExts = setOf("mkv", "mp4", "webm", "avi", "mov", "m4v")
+            Log.d(TAG, "getLargestVideoFileIndex: scanning ${fs.numFiles()} files for video")
             for (i in 0 until fs.numFiles()) {
                 val name = fs.fileName(i)
                 val ext = name.substringAfterLast('.', "").lowercase()
                 if (ext in videoExts) {
                     val size = fs.fileSize(i)
-                    Log.v(TAG, "getLargestVideoFileIndex: file[$i] name=$name ext=$ext size=$size")
+                    Log.d(TAG, "getLargestVideoFileIndex: file $i '$name' ($size bytes, .$ext)")
                     if (size > bestSize) { bestSize = size; bestIdx = i }
+                } else {
+                    Log.d(TAG, "getLargestVideoFileIndex: file $i '$name' — skipped (not video)")
                 }
             }
-            Log.d(TAG, "getLargestVideoFileIndex: selected file[$bestIdx] with size=$bestSize")
+            Log.i(TAG, "getLargestVideoFileIndex: selected=$bestIdx '${fs.fileName(bestIdx)}' ($bestSize bytes)")
             bestIdx
-        } catch (e: Exception) { Log.e(TAG, "getLargestVideoFileIndex: error", e); 0 }
+        } catch (_: Exception) { 0 }
     }
 
     fun findVideoFileIndex(fileNameHint: String): Int {
-        Log.d(TAG, "findVideoFileIndex: hint=$fileNameHint")
         return try {
-            val ti = handle?.torrentFile() ?: run { Log.w(TAG, "findVideoFileIndex: no torrentFile"); return 0 }
-            val fs = ti.files() ?: run { Log.w(TAG, "findVideoFileIndex: no files"); return 0 }
+            val ti = handle?.torrentFile() ?: return 0
+            val fs = ti.files() ?: return 0
             for (i in 0 until fs.numFiles()) {
                 val name = fs.fileName(i)
-                Log.v(TAG, "findVideoFileIndex: checking file[$i] name=$name")
-                if (name.contains(fileNameHint, ignoreCase = true)) {
-                    Log.d(TAG, "findVideoFileIndex: found matching file[$i]: $name")
-                    return i
-                }
+                if (name.contains(fileNameHint, ignoreCase = true)) return i
             }
-            Log.d(TAG, "findVideoFileIndex: no match, falling back to largest video file")
             getLargestVideoFileIndex()
-        } catch (e: Exception) { Log.e(TAG, "findVideoFileIndex: error", e); 0 }
+        } catch (_: Exception) { 0 }
     }
 
     private fun buildMeta(ti: TorrentInfo): TorrentMeta {

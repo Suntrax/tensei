@@ -814,79 +814,80 @@ fun MainScreen(
     var currentTorrentListener by remember { mutableStateOf<TorrentEngine.EngineListener?>(null) }
 
     fun playTorrent(magnetUri: String, anime: AnimeMedia, episode: Int) {
-        Log.d(TAG_TORRENT, "playTorrent: starting for anime=${anime.id} ep=$episode")
-        Log.d(TAG_TORRENT, "playTorrent: magnetUri=${magnetUri.take(120)}...")
+        android.util.Log.i("MainActivity.Torrent", "playTorrent: START anime='${anime.title}' ep=$episode magnet=${magnetUri.take(60)}...")
         isLoadingStream = true
         streamError = null
         torrentStreamServer.value?.stop()
         torrentStreamServer.value = null
 
         val engine = (context.applicationContext as TenseiApplication).torrentEngine
+        android.util.Log.d("MainActivity.Torrent", "playTorrent: engine.isRunning=${engine.isRunning.get()}")
         if (!engine.isRunning.get()) {
-            Log.d(TAG_TORRENT, "playTorrent: engine not running, starting")
+            android.util.Log.d("MainActivity.Torrent", "playTorrent: starting engine")
             engine.start()
-        } else {
-            Log.d(TAG_TORRENT, "playTorrent: engine already running")
         }
-        Log.d(TAG_TORRENT, "playTorrent: removing current torrent")
+        android.util.Log.d("MainActivity.Torrent", "playTorrent: removing any previous torrent")
         engine.removeCurrentTorrent()
 
         val server = TorrentStreamServer(engine.saveDir)
         torrentStreamServer.value = server
-        Log.d(TAG_TORRENT, "playTorrent: created TorrentStreamServer with saveDir=${engine.saveDir.absolutePath}")
+        android.util.Log.d("MainActivity.Torrent", "playTorrent: created TorrentStreamServer (saveDir=${engine.saveDir.absolutePath})")
 
         currentTorrentListener?.let { engine.removeListener(it) }
         val listener = object : TorrentEngine.EngineListener {
             override fun onMetadataReceived(meta: com.blissless.tensei.torrent.TorrentMeta) {
-                Log.d(TAG_TORRENT, "playTorrent: onMetadataReceived: name=${meta.name}, ${meta.files.size} files")
-                meta.files.forEach { f ->
-                    Log.d(TAG_TORRENT, "playTorrent:   file[${f.index}]: ${f.name} (${f.size} bytes)")
-                }
+                android.util.Log.i("MainActivity.Torrent", "onMetadataReceived: name='${meta.name}' files=${meta.files.size}")
                 scope.launch {
-                    Log.d(TAG_TORRENT, "playTorrent: finding largest video file...")
-                    val fileIndex = engine.getLargestVideoFileIndex()
-                    Log.d(TAG_TORRENT, "playTorrent: selected fileIndex=$fileIndex, starting download")
-                    engine.startDownload(fileIndex)
-                    Log.d(TAG_TORRENT, "playTorrent: starting stream server...")
-                    val port = server.start()
-                    Log.d(TAG_TORRENT, "playTorrent: server started on port $port")
-                    val filePath = engine.getFileSavePath(fileIndex)
-                    if (filePath == null) {
-                        Log.e(TAG_TORRENT, "playTorrent: getFileSavePath returned null!")
-                        return@launch
-                    }
-                    val fileName = filePath.substringAfterLast(File.separator)
-                    Log.d(TAG_TORRENT, "playTorrent: filePath=$filePath fileName=$fileName")
-                    val fileSize = engine.getFileSize(fileIndex)
-                    val pieceSize = engine.getPieceSize()
-                    Log.d(TAG_TORRENT, "playTorrent: fileSize=$fileSize pieceSize=$pieceSize numPieces=${engine.getNumPieces()}")
-                    server.setTotalFileSize(fileSize)
-                    server.setPieceSize(pieceSize)
-                    server.setPieceChecker { i -> engine.havePiece(i) }
-                    server.setSafeBytesProvider { engine.getContiguousDownloadedBytes() }
+                    try {
+                        val fileIndex = engine.getLargestVideoFileIndex()
+                        android.util.Log.d("MainActivity.Torrent", "onMetadataReceived: selected fileIndex=$fileIndex")
+                        engine.startDownload(fileIndex)
+                        val port = server.start()
+                        android.util.Log.d("MainActivity.Torrent", "onMetadataReceived: stream server started on port $port")
+                        val filePath = engine.getFileSavePath(fileIndex)
+                        if (filePath == null) {
+                            android.util.Log.e("MainActivity.Torrent", "onMetadataReceived: getFileSavePath returned null, aborting")
+                            streamError = "Could not resolve torrent file path"
+                            isLoadingStream = false
+                            return@launch
+                        }
+                        val fileName = filePath.substringAfterLast(File.separator)
+                        android.util.Log.d("MainActivity.Torrent", "onMetadataReceived: filePath='$filePath' fileName='$fileName'")
+                        server.setTotalFileSize(engine.getFileSize(fileIndex))
+                        server.setPieceSize(engine.getPieceSize())
+                        server.setPieceChecker { i -> engine.havePiece(i) }
+                        server.setSafeBytesProvider { engine.getContiguousDownloadedBytes() }
 
-                    currentVideoUrl = "http://127.0.0.1:$port/$fileName"
-                    Log.d(TAG_TORRENT, "playTorrent: video URL set to ${currentVideoUrl}")
-                    currentReferer = ""
-                    currentEpisodeTitle = sanitizeEpisodeTitle(anime.title) ?: "Episode $episode"
-                    currentSubtitleTracks = emptyList()
-                    currentSubtitleUrl = null
-                    currentQualityOptions = emptyList()
-                    currentQuality = "Auto"
-                    currentServerName = "Torrent"
-                    currentServerIndex = 0
-                    isExtensionFlow = false
-                    showPlayer = true
-                    isLoadingStream = false
-                    Log.d(TAG_TORRENT, "playTorrent: player shown, loading complete")
+                        currentVideoUrl = "http://127.0.0.1:$port/$fileName"
+                        currentReferer = ""
+                        currentEpisodeTitle = sanitizeEpisodeTitle(anime.title) ?: "Episode $episode"
+                        currentSubtitleTracks = emptyList()
+                        currentSubtitleUrl = null
+                        currentQualityOptions = emptyList()
+                        currentQuality = "Auto"
+                        currentServerName = "Torrent"
+                        currentServerIndex = 0
+                        isExtensionFlow = false
+                        showPlayer = true
+                        isLoadingStream = false
+                        android.util.Log.i("MainActivity.Torrent", "onMetadataReceived: player URL=$currentVideoUrl — handing off to player")
+                    } catch (e: Exception) {
+                        android.util.Log.e("MainActivity.Torrent", "onMetadataReceived: FAILED", e)
+                        streamError = "Failed to start streaming: ${e.message}"
+                        isLoadingStream = false
+                    }
                 }
             }
-            override fun onProgress(downloaded: Long, total: Long) {}
+            override fun onProgress(downloaded: Long, total: Long) {
+                if (total > 0) {
+                    android.util.Log.v("MainActivity.Torrent", "onProgress: $downloaded/$total (${(downloaded * 100 / total)}%)")
+                }
+            }
             override fun onFinished() {
-                Log.d(TAG_TORRENT, "playTorrent: torrent finished")
+                android.util.Log.i("MainActivity.Torrent", "onFinished: torrent download complete")
             }
             override fun onError(message: String) {
-                Log.e(TAG_TORRENT, "playTorrent: engine error: $message")
+                android.util.Log.e("MainActivity.Torrent", "onError: $message")
                 scope.launch {
                     streamError = message
                     isLoadingStream = false
@@ -896,9 +897,9 @@ fun MainScreen(
         engine.addListener(listener)
         currentTorrentListener = listener
 
-        Log.d(TAG_TORRENT, "playTorrent: adding magnet to engine")
+        android.util.Log.d("MainActivity.Torrent", "playTorrent: calling engine.addTorrentFromMagnet()")
         engine.addTorrentFromMagnet(magnetUri)
-        Log.d(TAG_TORRENT, "playTorrent: magnet added, waiting for metadata...")
+        android.util.Log.d("MainActivity.Torrent", "playTorrent: magnet submitted, waiting for metadata...")
     }
 
     fun loadAndPlayEpisode(anime: AnimeMedia, episode: Int, isAutoRefresh: Boolean = false) {
@@ -917,32 +918,28 @@ fun MainScreen(
         }
 
         val streamMethod = viewModel.streamMethod.value
-        Log.d(TAG_TORRENT, "loadAndPlayEpisode: streamMethod=$streamMethod")
+        android.util.Log.d("MainActivity.Torrent", "loadAndPlayEpisode: anime='${anime.title}' ep=$episode streamMethod='$streamMethod'")
         if (streamMethod == "magnet") {
+            android.util.Log.i("MainActivity.Torrent", "loadAndPlayEpisode: using magnet stream method")
             isExtensionFlow = false
             isLoadingStream = true
             scope.launch {
-                Log.d(TAG_TORRENT, "loadAndPlayEpisode: checking cached magnet...")
-                var magnetUri = withContext(Dispatchers.IO) {
-                    viewModel.getMagnetForEpisode(anime.id, episode)
+                android.util.Log.d("MainActivity.Torrent", "loadAndPlayEpisode: checking cache for magnet (animeId=${anime.id})")
+                val cached = viewModel.getMagnetForEpisode(anime.id, episode)
+                android.util.Log.d("MainActivity.Torrent", "loadAndPlayEpisode: cache lookup result=${cached != null}")
+                val magnetUri = withContext(Dispatchers.IO) {
+                    cached ?: viewModel.fetchMagnetForEpisode(anime, episode)
                 }
-                Log.d(TAG_TORRENT, "loadAndPlayEpisode: cached magnet=${magnetUri != null}")
-                if (magnetUri == null) {
-                    Log.d(TAG_TORRENT, "loadAndPlayEpisode: fetching magnet from extension...")
-                    magnetUri = withContext(Dispatchers.IO) {
-                        viewModel.fetchMagnetForEpisode(anime, episode)
-                    }
-                    Log.d(TAG_TORRENT, "loadAndPlayEpisode: fetch result=${magnetUri != null}")
-                }
+                android.util.Log.i("MainActivity.Torrent", "loadAndPlayEpisode: fetch result=${magnetUri != null}")
                 if (magnetUri != null) {
-                    Log.d(TAG_TORRENT, "loadAndPlayEpisode: got magnet URI, calling playTorrent")
+                    android.util.Log.d("MainActivity.Torrent", "loadAndPlayEpisode: magnet found, calling playTorrent")
                     playTorrent(magnetUri, anime, episode)
                 } else {
-                    Log.e(TAG_TORRENT, "loadAndPlayEpisode: no magnet link found for Ep $episode")
+                    android.util.Log.e("MainActivity.Torrent", "loadAndPlayEpisode: no magnet link found for Ep $episode")
                     streamError = "No magnet link found for Ep $episode"
                     Toast.makeText(context, "No magnet available for Ep $episode", Toast.LENGTH_SHORT).show()
-                    isLoadingStream = false
                 }
+                isLoadingStream = false
             }
             return
         }
