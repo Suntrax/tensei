@@ -390,19 +390,25 @@ class EpisodeDownloadManager(private val context: Context) {
                             }
 
                             Download.STATE_QUEUED -> {
-                                TODO()
+                                val meta = metadataStore[id]
+                                if (meta != null) {
+                                    val batchId = "batch_${meta.animeName.hashCode()}"
+                                    if (batchId !in batchResults) {
+                                        sendNotification(id, "Queued", "${meta.animeName} - Ep ${meta.episode} waiting...", showProgress = false, icon = android.R.drawable.stat_sys_download)
+                                    }
+                                }
                             }
 
                             Download.STATE_REMOVING -> {
-                                TODO()
+                                Log.d(TAG, "onDownloadChanged: $id REMOVING")
                             }
 
                             Download.STATE_RESTARTING -> {
-                                TODO()
+                                Log.d(TAG, "onDownloadChanged: $id RESTARTING")
                             }
 
                             Download.STATE_STOPPED -> {
-                                TODO()
+                                Log.d(TAG, "onDownloadChanged: $id STOPPED")
                             }
                         }
                         updateDownloadInfo(download)

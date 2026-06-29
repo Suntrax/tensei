@@ -2256,7 +2256,13 @@ class MainViewModel : ViewModel() {
         val cached = getCachedExtensionStream(anime.id, episodeNumber)
         if (cached != null) {
             Log.i(epTag, "playEpisodeWithExtension: cache hit for ep $episodeNumber url=${cached.url.take(100)}")
-            val cachedIsOurProxy = cached.url.contains("127.0.0.1:${LocalProxyServer.PROXY_PORT}") || cached.url.contains("localhost:${LocalProxyServer.PROXY_PORT}")
+            val isOurPort = "127.0.0.1:${LocalProxyServer.PROXY_PORT}"
+            val cachedIsOurProxy = cached.url.contains(isOurPort) || cached.url.contains("localhost:${LocalProxyServer.PROXY_PORT}")
+            val staleProxy = !cachedIsOurProxy && (cached.url.contains("127.0.0.1:") || cached.url.contains("localhost:"))
+            if (staleProxy) {
+                Log.w(epTag, "playEpisodeWithExtension: stale proxy cache for ep $episodeNumber, refetching")
+                invalidateExtensionStreamCache(anime.id, episodeNumber)
+            } else {
             val cacheSource = withContext(Dispatchers.IO) {
                 val smForCache = sourceManager
                 if (smForCache != null) {
@@ -2268,18 +2274,20 @@ class MainViewModel : ViewModel() {
             val cacheClient = (cacheSourceHttp?.client) ?: try { NetworkHelper.getInstance().client } catch (_: Exception) { null }
             if (cachedIsOurProxy) {
                 LocalProxyServer.start(cacheClient, cacheSource)
+                val portFix = Regex("127\\.0\\.0\\.1:\\d+")
+                val ourPort = "127.0.0.1:${LocalProxyServer.PROXY_PORT}"
                 cached.videos.forEach { cv ->
                     val headers = cv.headers?.let { map ->
                         Headers.Builder().apply { map.forEach { (k, v) -> add(k, v) } }.build()
                     }
                     LocalProxyServer.registerVideo(
                         Video(
-                            videoUrl = cv.videoUrl,
+                            videoUrl = cv.videoUrl.replace(portFix, ourPort),
                             videoTitle = cv.videoTitle,
                             resolution = cv.resolution,
                             headers = headers,
-                            subtitleTracks = cv.subtitleTracks.map { Track(it.url, it.lang) },
-                            audioTracks = cv.audioTracks.map { Track(it.url, it.lang) },
+                            subtitleTracks = cv.subtitleTracks.map { Track(it.url.replace(portFix, ourPort), it.lang) },
+                            audioTracks = cv.audioTracks.map { Track(it.url.replace(portFix, ourPort), it.lang) },
                         )
                     )
                     Log.d(epTag, "  cache registered video: ${cv.videoUrl.take(80)}")
@@ -2324,6 +2332,7 @@ class MainViewModel : ViewModel() {
                 source = if (cachedIsOurProxy) cacheSource else null,
                 episode = null,
             )
+            }
         }
         Log.i(epTag, "playEpisodeWithExtension: anime=${anime.id} ep=$episodeNumber pkg=$defaultPackage")
         return withContext(Dispatchers.IO) {
