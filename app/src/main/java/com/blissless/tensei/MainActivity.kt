@@ -126,6 +126,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.yield
 import kotlinx.coroutines.withContext
 import java.io.File
 import kotlin.time.Duration.Companion.milliseconds
@@ -955,6 +956,7 @@ fun MainScreen(
             showExtHosterDialog = false
             showExtVideoDialog = false
             scope.launch {
+                yield()
                 val result = viewModel.playEpisodeWithExtension(anime, episode, extPackage)
                 pendingExtResult = result
                 if (result != null && result.videos.isNotEmpty()) {
@@ -998,6 +1000,7 @@ fun MainScreen(
 
     val onPlayEpisode: (AnimeMedia, Int, String?) -> Unit = { anime, episode, title ->
         if (title == null) {
+            isLoadingStream = true
             scope.launch {
                 currentEpisodeTitle = getTmdbEpisodeTitle(anime, episode)
                 loadAndPlayEpisode(anime, episode)
