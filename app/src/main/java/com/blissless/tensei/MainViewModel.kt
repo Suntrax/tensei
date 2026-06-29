@@ -213,96 +213,148 @@ class MainViewModel : ViewModel() {
     private fun ensureMagnetClient(): MagnetExtensionClient {
         return magnetExtensionClient ?: MagnetExtensionClient(context).also {
             magnetExtensionClient = it
+            Log.d(TAG, "ensureMagnetClient: created new MagnetExtensionClient")
         }
     }
 
     fun loadAvailableMagnetExtensions() {
+        Log.d(TAG, "loadAvailableMagnetExtensions: start")
         val client = ensureMagnetClient()
         viewModelScope.launch(Dispatchers.IO) {
+            val startTime = System.currentTimeMillis()
             val detected = client.detectExtensions()
+            val elapsed = System.currentTimeMillis() - startTime
+            Log.d(TAG, "loadAvailableMagnetExtensions: found ${detected.size} extensions in ${elapsed}ms: $detected")
             _availableMagnetExtensions.value = detected.map { it.name to it.authority }
         }
     }
 
+    private fun parseTitleForSearch(title: String): String {
+        var cleaned = title
+        cleaned = cleaned.replace(Regex("\\([^)]*\\)"), "").trim()
+        cleaned = cleaned.replace(Regex("\\[[^\\]]*\\]"), "").trim()
+        cleaned = cleaned.replace(Regex("\\{.*?\\}"), "").trim()
+        cleaned = cleaned.replace(Regex("\\s+"), " ").trim()
+        Log.v(TAG, "parseTitleForSearch: '$title' -> '$cleaned'")
+        return cleaned
+    }
+
     fun fetchMagnetEpisodes(anime: AnimeMedia, authority: String) {
+        Log.d(TAG, "fetchMagnetEpisodes: anime=${anime.id} title=${anime.title} authority=$authority")
         viewModelScope.launch(Dispatchers.IO) {
             fetchMagnetEpisodesSync(anime, authority)
         }
     }
 
     private suspend fun fetchMagnetEpisodesSync(anime: AnimeMedia, authority: String): MagnetData? {
+        val eng = anime.titleEnglish
+        Log.d(TAG, "fetchMagnetEpisodesSync: anime=${anime.id} engTitle='$eng' romaji='${anime.title}' authority=$authority")
+        Log.d(TAG, "fetchMagnetEpisodesSync: using ONLY AniList English title, skipping romaji")
+
+        val searchTerms = mutableListOf<String>()
+        if (!eng.isNullOrBlank()) {
+            val cleaned = parseTitleForSearch(eng)
+            searchTerms.add(cleaned)
+            if (cleaned != eng) searchTerms.add(eng)
+        } else {
+            Log.w(TAG, "fetchMagnetEpisodesSync: no English title available, falling back to romaji")
+            anime.title?.let { searchTerms.add(parseTitleForSearch(it)) }
+        }
+        Log.d(TAG, "fetchMagnetEpisodesSync: generated ${searchTerms.size} English-only search terms: $searchTerms")
+
         val client = ensureMagnetClient()
-        val searchTerms = listOfNotNull(anime.titleEnglish, anime.title).distinct()
         var result: MagnetData? = null
-        for (query in searchTerms) {
+        for ((i, query) in searchTerms.withIndex()) {
+            val startTime = System.currentTimeMillis()
             val fetched = try {
                 client.fetchMagnets(authority, anime.id, query)
             } catch (e: Exception) {
-                android.util.Log.e("MainViewModel", "fetchMagnets threw for '$query'", e)
+                Log.e(TAG, "fetchMagnetEpisodesSync: fetchMagnets threw for term[$i]='$query'", e)
                 null
             }
-            android.util.Log.d(
-                "MainViewModel",
-                "fetchMagnetEpisodesSync: authority=$authority anime='${anime.title}' query='$query' " +
-                        "result=${fetched != null} episodes=${fetched?.episodes?.size ?: 0}"
-            )
-            if (fetched != null && fetched.episodes.isNotEmpty()) {
-                result = fetched
-                break
+            val elapsed = System.currentTimeMillis() - startTime
+            Log.d(TAG, "fetchMagnetEpisodesSync: term[$i]='$query' -> result=${fetched != null} episodes=${fetched?.episodes?.size ?: 0} in ${elapsed}ms")
+            if (fetched != null) {
+                if (fetched.episodes.isEmpty()) {
+                    Log.w(TAG, "fetchMagnetEpisodesSync: extension returned MagnetData but 0 episodes (isSingleTorrent=${fetched.isSingleTorrent})")
+                } else {
+                    result = fetched
+                    break
+                }
             }
         }
+
         if (result != null) {
+            Log.d(TAG, "fetchMagnetEpisodesSync: success — ${result.episodes.size} episodes for anime ${anime.id}")
             _magnetEpisodes.value += (anime.id to result)
         } else {
-            _magnetEpisodes.value -= anime.id
+            Log.w(TAG, "fetchMagnetEpisodesSync: no magnet data found for anime ${anime.id} with any search term")
+            _magnetEpisodes.value += (anime.id to MagnetData(emptyList(), false))
         }
         return result
     }
 
+    fun clearMagnetEpisodes(animeId: Int) {
+        Log.d(TAG, "clearMagnetEpisodes: removing cached magnet data for animeId=$animeId")
+        _magnetEpisodes.value -= animeId
+    }
+
     fun getMagnetEpisodeNumbers(animeId: Int): Set<Int> {
-        val data = _magnetEpisodes.value[animeId] ?: return emptySet()
-        if (data.isSingleTorrent && data.episodes.size == 1) return emptySet()
-        return data.episodes.map { it.episode }.toSet()
+        val data = _magnetEpisodes.value[animeId]
+        if (data == null) {
+            Log.d(TAG, "getMagnetEpisodeNumbers: no data for animeId=$animeId")
+            return emptySet()
+        }
+        if (data.isSingleTorrent && data.episodes.size == 1) {
+            Log.d(TAG, "getMagnetEpisodeNumbers: single torrent mode, returning empty set")
+            return emptySet()
+        }
+        val eps = data.episodes.map { it.episode }.toSet()
+        Log.d(TAG, "getMagnetEpisodeNumbers: animeId=$animeId -> ${eps.size} episodes: $eps")
+        return eps
     }
 
     fun getMagnetForEpisode(animeId: Int, episode: Int): String? {
+        Log.d(TAG, "getMagnetForEpisode: animeId=$animeId ep=$episode")
         val data = _magnetEpisodes.value[animeId]
         if (data == null) {
-            android.util.Log.d("MainViewModel", "getMagnetForEpisode: no cached data for animeId=$animeId")
+            Log.d(TAG, "getMagnetForEpisode: no cached data for animeId=$animeId")
             return null
         }
-        if (data.isSingleTorrent) {
-            val magnet = data.episodes.firstOrNull()?.magnet
-            android.util.Log.d("MainViewModel", "getMagnetForEpisode: single-torrent mode, returning first magnet (present=${magnet != null})")
-            return magnet
+        val magnet = if (data.isSingleTorrent) {
+            Log.d(TAG, "getMagnetForEpisode: single-torrent mode")
+            data.episodes.firstOrNull()?.magnet
+        } else {
+            val ep = data.episodes.find { it.episode == episode }
+            Log.d(TAG, "getMagnetForEpisode: cached episodes=${data.episodes.map { it.episode }} found=${ep != null}")
+            ep?.magnet
         }
-        val ep = data.episodes.find { it.episode == episode }
-        android.util.Log.d(
-            "MainViewModel",
-            "getMagnetForEpisode: animeId=$animeId ep=$episode " +
-                    "cachedEpisodes=${data.episodes.map { it.episode }} found=${ep != null}"
-        )
-        return ep?.magnet
+        Log.d(TAG, "getMagnetForEpisode: result=${magnet != null} ${if (magnet != null) "URI=${magnet.take(80)}..." else ""}")
+        return magnet
     }
 
     suspend fun fetchMagnetForEpisode(anime: AnimeMedia, episode: Int): String? {
-        val client = ensureMagnetClient()
+        Log.d(TAG, "fetchMagnetForEpisode: anime=${anime.id} ep=$episode engTitle='${anime.titleEnglish}' rawTitle='${anime.title}'")
+        ensureMagnetClient()
         val authority = defaultMagnetExtension.value
             ?: _availableMagnetExtensions.value.firstOrNull()?.second
         if (authority.isNullOrBlank()) {
-            android.util.Log.w(
-                "MainViewModel",
-                "fetchMagnetForEpisode: no magnet extension available " +
-                        "(default=${defaultMagnetExtension.value}, detected=${_availableMagnetExtensions.value.size})"
-            )
+            Log.w(TAG, "fetchMagnetForEpisode: no magnet extension authority " +
+                    "(default=${defaultMagnetExtension.value}, detected=${_availableMagnetExtensions.value.size})")
             return null
         }
+        Log.d(TAG, "fetchMagnetForEpisode: using authority=$authority")
         val data = withContext(Dispatchers.IO) {
             fetchMagnetEpisodesSync(anime, authority)
         }
-        // Check for single-torrent data
-        if (data != null && data.isSingleTorrent) return data.episodes.firstOrNull()?.magnet
-        return getMagnetForEpisode(anime.id, episode)
+        if (data != null && data.isSingleTorrent) {
+            val magnet = data.episodes.firstOrNull()?.magnet
+            Log.d(TAG, "fetchMagnetForEpisode: single-torrent result=${magnet != null}")
+            return magnet
+        }
+        val magnet = getMagnetForEpisode(anime.id, episode)
+        Log.d(TAG, "fetchMagnetForEpisode: final result=${magnet != null}")
+        return magnet
     }
 
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {

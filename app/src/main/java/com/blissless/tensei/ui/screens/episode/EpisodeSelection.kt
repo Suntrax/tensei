@@ -267,6 +267,8 @@ fun RichEpisodeScreen(
     var extensionEpisodesNumbers by remember { mutableStateOf<Set<Int>>(emptySet()) }
     var hasExtensionData by remember { mutableStateOf(false) }
     var isLoadingExtensionEpisodes by remember { mutableStateOf(false) }
+    var isExtensionReady by remember { mutableStateOf(false) }
+    var extensionError by remember { mutableStateOf<String?>(null) }
 
     // Magnet extension state
     val availableMagnetExtensions by viewModel.availableMagnetExtensions.collectAsState()
@@ -275,6 +277,9 @@ fun RichEpisodeScreen(
     val currentStreamMethod by viewModel.streamMethod.collectAsState()
     var selectedMagnetAuthority by remember { mutableStateOf<String?>(null) }
     var isMagnetActive by remember { mutableStateOf(false) }
+    var isLoadingMagnetEpisodes by remember { mutableStateOf(false) }
+    var magnetError by remember { mutableStateOf<String?>(null) }
+    var isMagnetReady by remember { mutableStateOf(false) }
 
     val sortedExtensions = remember(availableExtensions, selectedExtensionPkg) {
         val selected = selectedExtensionPkg
@@ -297,6 +302,10 @@ fun RichEpisodeScreen(
             selectedMagnetAuthority = ext
             isMagnetActive = true
             selectedExtensionPkg = null
+            isLoadingMagnetEpisodes = true
+            magnetError = null
+            isMagnetReady = false
+            viewModel.clearMagnetEpisodes(anime.id)
             viewModel.fetchMagnetEpisodes(anime, ext)
         }
     }
@@ -344,21 +353,45 @@ fun RichEpisodeScreen(
         selectedMagnetAuthority != null && magnetEpisodeNumbers.isNotEmpty()
     }
 
-    // Filter episodes based on active source
-    val displayEpisodes = remember(tmdbEpisodes, episodeCount, extensionEpisodesNumbers, hasExtensionData, magnetEpisodeNumbers, hasMagnetData) {
-        val base = tmdbEpisodes.filter { it.episode <= episodeCount }
-        when {
-            hasMagnetData -> base.filter { it.episode in magnetEpisodeNumbers }
-            hasExtensionData -> base.filter { it.episode in extensionEpisodesNumbers }
-            else -> base
+    LaunchedEffect(magnetEpisodesData, anime.id, isLoadingMagnetEpisodes) {
+        if (isLoadingMagnetEpisodes) {
+            val data = magnetEpisodesData[anime.id]
+            if (data != null) {
+                isLoadingMagnetEpisodes = false
+                if (data.isSingleTorrent) {
+                    magnetError = null
+                    isMagnetReady = true
+                } else {
+                    val count = data.episodes.size
+                    if (count <= 0 || count < released) {
+                        magnetError = "Source not found via extension"
+                        isMagnetReady = false
+                    } else {
+                        magnetError = null
+                        isMagnetReady = true
+                    }
+                }
+            }
         }
     }
 
-    val availableEpisodeNumbers = remember(episodeCount, extensionEpisodesNumbers, hasExtensionData, magnetEpisodeNumbers, hasMagnetData) {
+    // Filter episodes based on active source
+    val displayEpisodes = remember(tmdbEpisodes, episodeCount, isMagnetActive, isMagnetReady, isExtensionReady, selectedExtensionPkg) {
+        val base = tmdbEpisodes.filter { it.episode <= episodeCount }
         when {
-            hasMagnetData -> (1..episodeCount).filter { it in magnetEpisodeNumbers }
-            hasExtensionData -> (1..episodeCount).filter { it in extensionEpisodesNumbers }
-            else -> (1..episodeCount).toList()
+            isMagnetActive && isMagnetReady -> base
+            isExtensionReady -> base
+            selectedExtensionPkg == null && !isMagnetActive -> base
+            else -> emptyList()
+        }
+    }
+
+    val availableEpisodeNumbers = remember(episodeCount, isMagnetActive, isMagnetReady, isExtensionReady, selectedExtensionPkg) {
+        when {
+            isMagnetActive && isMagnetReady -> (1..episodeCount).toList()
+            isExtensionReady -> (1..episodeCount).toList()
+            selectedExtensionPkg == null && !isMagnetActive -> (1..episodeCount).toList()
+            else -> emptyList()
         }
     }
 
@@ -469,12 +502,22 @@ fun RichEpisodeScreen(
 
     // Watch for extension episode numbers
     val preFetchedNumbers by viewModel.preFetchedEpisodeNumbers.collectAsState()
-    LaunchedEffect(preFetchedNumbers, anime.id) {
-        val numbers = preFetchedNumbers[anime.id]
-        if (numbers != null) {
-            extensionEpisodesNumbers = numbers
-            hasExtensionData = true
-            isLoadingExtensionEpisodes = false
+    LaunchedEffect(preFetchedNumbers, anime.id, isLoadingExtensionEpisodes) {
+        if (isLoadingExtensionEpisodes) {
+            val numbers = preFetchedNumbers[anime.id]
+            if (numbers != null) {
+                isLoadingExtensionEpisodes = false
+                extensionEpisodesNumbers = numbers
+                if (numbers.isEmpty() || numbers.size < released) {
+                    extensionError = "Source not found via extension"
+                    isExtensionReady = false
+                    hasExtensionData = false
+                } else {
+                    extensionError = null
+                    isExtensionReady = true
+                    hasExtensionData = true
+                }
+            }
         }
     }
 
@@ -482,11 +525,17 @@ fun RichEpisodeScreen(
     LaunchedEffect(selectedExtensionPkg) {
         if (selectedExtensionPkg != null) {
             isLoadingExtensionEpisodes = true
+            extensionError = null
+            isExtensionReady = false
+            hasExtensionData = false
+            extensionEpisodesNumbers = emptySet()
             viewModel.preFetchExtensionEpisodes(anime, selectedExtensionPkg)
         } else {
             extensionEpisodesNumbers = emptySet()
             hasExtensionData = false
             isLoadingExtensionEpisodes = false
+            extensionError = null
+            isExtensionReady = false
         }
     }
 
@@ -620,6 +669,8 @@ fun RichEpisodeScreen(
                                             selectedExtensionPkg = extPkg
                                             isMagnetActive = false
                                             selectedMagnetAuthority = null
+                                            extensionError = null
+                                            isExtensionReady = false
                                         },
                                         label = { Text(extName, maxLines = 1, style = MaterialTheme.typography.labelSmall) },
                                         colors = FilterChipDefaults.filterChipColors(
@@ -647,6 +698,10 @@ fun RichEpisodeScreen(
                                             selectedMagnetAuthority = authority
                                             isMagnetActive = true
                                             selectedExtensionPkg = null
+                                            isLoadingMagnetEpisodes = true
+                                            magnetError = null
+                                            isMagnetReady = false
+                                            viewModel.clearMagnetEpisodes(anime.id)
                                             viewModel.fetchMagnetEpisodes(anime, authority)
                                         },
                                         label = { Text(extName, maxLines = 1, style = MaterialTheme.typography.labelSmall) },
@@ -706,8 +761,48 @@ fun RichEpisodeScreen(
                     }
                 }
 
-                // Episode cards
-                if (displayEpisodes.isNotEmpty()) {
+                // Episode cards — magnet loading/error take priority
+                if (isLoadingMagnetEpisodes) {
+                    item {
+                        Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                CircularProgressIndicator(color = MaterialTheme.colorScheme.tertiary)
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text("Fetching magnet sources...", style = MaterialTheme.typography.bodyMedium, color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                } else if (magnetError != null) {
+                    item {
+                        Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("\u26A0", style = MaterialTheme.typography.headlineLarge)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(magnetError ?: "", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                    }
+                } else if (isLoadingExtensionEpisodes && selectedExtensionPkg != null) {
+                    item {
+                        Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text("Fetching sources...", style = MaterialTheme.typography.bodyMedium, color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                } else if (extensionError != null && selectedExtensionPkg != null) {
+                    item {
+                        Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("\u26A0", style = MaterialTheme.typography.headlineLarge)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(extensionError ?: "", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                    }
+                } else if (displayEpisodes.isNotEmpty()) {
                     items(displayEpisodes.size) { index ->
                         val ep = displayEpisodes[index]
                         val episodeNum = ep.episode
