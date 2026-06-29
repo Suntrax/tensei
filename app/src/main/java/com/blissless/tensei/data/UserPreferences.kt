@@ -65,6 +65,8 @@ class UserPreferences(context: Context) {
         private const val KEY_SUBTITLE_PROFILES = "subtitle_profiles"
         private const val KEY_STREAM_METHOD = "stream_method"
         private const val KEY_DEFAULT_MAGNET_EXTENSION = "default_magnet_extension"
+        private const val KEY_DOWNLOAD_DIRECTORY_URI = "download_directory_uri"
+        private const val KEY_KEEP_DOWNLOADED_FILES = "keep_downloaded_files"
     }
 
     private val sharedPreferences: SharedPreferences =
@@ -163,6 +165,14 @@ class UserPreferences(context: Context) {
     // Default Magnet Extension
     private val _defaultMagnetExtension = MutableStateFlow<String?>(null)
     val defaultMagnetExtension: StateFlow<String?> = _defaultMagnetExtension.asStateFlow()
+
+    // Download Directory URI (SAF tree URI for custom download location)
+    private val _downloadDirectoryUri = MutableStateFlow<String?>(null)
+    val downloadDirectoryUri: StateFlow<String?> = _downloadDirectoryUri.asStateFlow()
+
+    // Keep downloaded video files (MKV/MP4) to custom directory instead of cache-only
+    private val _keepDownloadedFiles = MutableStateFlow(false)
+    val keepDownloadedFiles: StateFlow<Boolean> = _keepDownloadedFiles.asStateFlow()
 
     // Startup Screen
     private val _startupScreen = MutableStateFlow(2)
@@ -276,6 +286,8 @@ class UserPreferences(context: Context) {
         _swipeBrightness.value = sharedPreferences.getBoolean(KEY_SWIPE_BRIGHTNESS, false)
         _swipeSwap.value = sharedPreferences.getBoolean(KEY_SWIPE_SWAP, false)
         _autoUpdateExtensions.value = sharedPreferences.getBoolean(KEY_AUTO_UPDATE_EXTENSIONS, true)
+        _downloadDirectoryUri.value = sharedPreferences.getString(KEY_DOWNLOAD_DIRECTORY_URI, null)
+        _keepDownloadedFiles.value = sharedPreferences.getBoolean(KEY_KEEP_DOWNLOADED_FILES, false)
 
         // Load local favorites
         loadLocalFavorites()
@@ -444,6 +456,16 @@ class UserPreferences(context: Context) {
     fun setDefaultMagnetExtension(authority: String?) {
         _defaultMagnetExtension.value = authority
         sharedPreferences.edit { putString(KEY_DEFAULT_MAGNET_EXTENSION, authority) }
+    }
+
+    fun setDownloadDirectoryUri(uri: String?) {
+        _downloadDirectoryUri.value = uri
+        sharedPreferences.edit { putString(KEY_DOWNLOAD_DIRECTORY_URI, uri) }
+    }
+
+    fun setKeepDownloadedFiles(enabled: Boolean) {
+        _keepDownloadedFiles.value = enabled
+        sharedPreferences.edit { putBoolean(KEY_KEEP_DOWNLOADED_FILES, enabled) }
     }
 
     fun setStartupScreen(screen: Int) {

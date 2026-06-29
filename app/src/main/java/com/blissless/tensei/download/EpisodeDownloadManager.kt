@@ -9,6 +9,8 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.os.Build
+import android.net.Uri
+import android.provider.DocumentsContract
 import android.util.Log
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
@@ -121,6 +123,9 @@ class EpisodeDownloadManager(private val context: Context) {
 
     private val prefs: SharedPreferences
         get() = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    var downloadDirectoryUri: String? = null
+    var keepDownloadedFiles: Boolean = false
 
     private val batchResults = mutableMapOf<String, MutableList<String>>()
     private val batchTotals = mutableMapOf<String, Int>()
@@ -628,6 +633,14 @@ class EpisodeDownloadManager(private val context: Context) {
             dm.addDownload(request)
             dm.resumeDownloads()
             Log.i(TAG, "startDownload: successfully added download for $id (resumeDownloads called)")
+
+            if (keepDownloadedFiles && downloadDirectoryUri != null && !isStreaming) {
+                val uri = Uri.parse(downloadDirectoryUri)
+                Thread {
+                    exportToCustomDirectory(uri, animeName, episode, videoUrl, videoHeaders, videoTitle)
+                }.apply { isDaemon = true }.start()
+            }
+
             return true
         } catch (e: Exception) {
             Log.e(TAG, "startDownload: addDownload failed for $id", e)
@@ -768,6 +781,84 @@ class EpisodeDownloadManager(private val context: Context) {
                 return@runBlocking null
             }
         }
+    }
+
+    private fun exportToCustomDirectory(treeUri: Uri, animeName: String, episode: Int, videoUrl: String, videoHeaders: Map<String, String>, videoTitle: String) {
+        try {
+            val sanitizedAnime = animeName.replace(Regex("[:\\\\/*?\"<>|]"), "_").trim()
+            val ext = videoUrl.substringAfterLast('.').substringBefore('?').substringBefore('/').take(10)
+            val episodeStr = episode.toString().padStart(2, '0')
+            val filename = "${sanitizedAnime} E$episodeStr.$ext"
+            val cr = context.contentResolver
+
+            val animeDirId = findOrCreateDirectory(cr, treeUri, sanitizedAnime) ?: run {
+                Log.w(TAG, "exportToCustomDirectory: failed to create directory $sanitizedAnime"); return
+            }
+
+            val dirUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, animeDirId)
+            val existingDocId = findDocument(cr, dirUri, filename)
+            if (existingDocId != null) {
+                Log.d(TAG, "exportToCustomDirectory: $filename already exists, skipping")
+                return
+            }
+
+            val newFileUri = DocumentsContract.createDocument(cr, dirUri, "video/$ext", filename)
+            if (newFileUri == null) { Log.w(TAG, "exportToCustomDirectory: failed to create file"); return }
+
+            var requestBuilder = okhttp3.Request.Builder().url(videoUrl)
+            for ((key, value) in videoHeaders) requestBuilder = requestBuilder.header(key, value)
+            val request = requestBuilder.build()
+            val response = okHttpClient.newCall(request).execute()
+            if (!response.isSuccessful) {
+                Log.w(TAG, "exportToCustomDirectory: HTTP ${response.code}")
+                DocumentsContract.deleteDocument(cr, newFileUri)
+                return
+            }
+            response.body?.byteStream()?.use { input ->
+                cr.openOutputStream(newFileUri)?.use { output ->
+                    input.copyTo(output)
+                    Log.i(TAG, "exportToCustomDirectory: saved $filename")
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "exportToCustomDirectory: failed", e)
+        }
+    }
+
+    private fun findOrCreateDirectory(cr: android.content.ContentResolver, treeUri: Uri, name: String): String? {
+        val docId = DocumentsContract.getTreeDocumentId(treeUri)
+        val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, docId)
+        val projection = arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+        try {
+            cr.query(childrenUri, projection, null, null, null)?.use { cursor ->
+                while (cursor.moveToNext()) {
+                    val displayName = cursor.getString(cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME))
+                    if (displayName == name) {
+                        return cursor.getString(cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID))
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+        val dirUri = DocumentsContract.createDocument(cr, DocumentsContract.buildDocumentUriUsingTree(treeUri, docId), DocumentsContract.Document.MIME_TYPE_DIR, name)
+        if (dirUri != null) return DocumentsContract.getDocumentId(dirUri)
+        return null
+    }
+
+    private fun findDocument(cr: android.content.ContentResolver, parentUri: Uri, name: String): String? {
+        val docId = DocumentsContract.getTreeDocumentId(parentUri)
+        val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(parentUri, docId)
+        val projection = arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+        try {
+            cr.query(childrenUri, projection, null, null, null)?.use { cursor ->
+                while (cursor.moveToNext()) {
+                    val displayName = cursor.getString(cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME))
+                    if (displayName == name) {
+                        return cursor.getString(cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID))
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+        return null
     }
 
     fun probeVideoMimeType(url: String, headers: Map<String, String>): String {

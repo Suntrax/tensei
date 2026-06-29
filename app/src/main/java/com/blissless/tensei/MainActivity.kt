@@ -851,7 +851,8 @@ fun MainScreen(
                             isLoadingStream = false
                             return@launch
                         }
-                        val fileName = filePath.substringAfterLast(File.separator)
+                        val saveDirPath = engine.saveDir.absolutePath + File.separator
+                        val fileName = if (filePath.startsWith(saveDirPath)) filePath.removePrefix(saveDirPath) else filePath.substringAfterLast(File.separator)
                         android.util.Log.d("MainActivity.Torrent", "onMetadataReceived: filePath='$filePath' fileName='$fileName'")
                         server.setTotalFileSize(engine.getFileSize(fileIndex))
                         server.setPieceSize(engine.getPieceSize())

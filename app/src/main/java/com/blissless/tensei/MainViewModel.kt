@@ -800,6 +800,8 @@ class MainViewModel : ViewModel() {
     val checkUpdatesOnStart: StateFlow<Boolean> get() = userPreferences.checkUpdatesOnStart
     val autoUpdateExtensions: StateFlow<Boolean> get() = userPreferences.autoUpdateExtensions
     val streamMethod: StateFlow<String> get() = userPreferences.streamMethod
+    val downloadDirectoryUri: StateFlow<String?> get() = userPreferences.downloadDirectoryUri
+    val keepDownloadedFiles: StateFlow<Boolean> get() = userPreferences.keepDownloadedFiles
 
     // Notification tap events
     private val _notificationAnimeTaps = MutableSharedFlow<String>(replay = 1, extraBufferCapacity = 1)
@@ -1761,6 +1763,8 @@ class MainViewModel : ViewModel() {
     fun setSwipeBrightness(enabled: Boolean) = userPreferences.setSwipeBrightness(enabled)
     fun setSwipeSwap(enabled: Boolean) = userPreferences.setSwipeSwap(enabled)
     fun setStreamMethod(method: String) = userPreferences.setStreamMethod(method)
+    fun setDownloadDirectoryUri(uri: String?) = userPreferences.setDownloadDirectoryUri(uri)
+    fun setKeepDownloadedFiles(enabled: Boolean) = userPreferences.setKeepDownloadedFiles(enabled)
 
     fun setDefaultMagnetExtension(authority: String) = userPreferences.setDefaultMagnetExtension(authority)
 
@@ -2205,6 +2209,8 @@ class MainViewModel : ViewModel() {
             }
 
             episodeDownloadManager.removeDownload("${animeId}_$episode")
+            episodeDownloadManager.downloadDirectoryUri = downloadDirectoryUri.value
+            episodeDownloadManager.keepDownloadedFiles = keepDownloadedFiles.value
             episodeDownloadManager.startDownload(
                 animeId = animeId,
                 animeName = anime.title,

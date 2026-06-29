@@ -212,6 +212,8 @@ fun EpisodeDownloadDialog(
 
         viewModel.viewModelScope.launch {
             try {
+                downloadManager.downloadDirectoryUri = viewModel.downloadDirectoryUri.value
+                downloadManager.keepDownloadedFiles = viewModel.keepDownloadedFiles.value
                 for (ep in capturedEpisodes) {
                     if (downloadManager.isBatchCancelled(displayTitle)) return@launch
                     currentEpisode = ep

@@ -1,8 +1,11 @@
 package com.blissless.tensei.ui.screens.settings
 
 import android.content.Context
+import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -934,6 +937,16 @@ private fun StreamSettingsPage(
     var showExtPicker by remember { mutableStateOf(false) }
     var showSubtitleLangPicker by remember { mutableStateOf(false) }
     val subtitleLanguages = listOf("English", "Arabic", "French", "German", "Italian", "Portuguese", "Russian", "Spanish", "Japanese", "Chinese", "Korean")
+    val downloadDirectoryUri by viewModel.downloadDirectoryUri.collectAsState()
+    val keepDownloadedFiles by viewModel.keepDownloadedFiles.collectAsState()
+    val directoryPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            viewModel.setDownloadDirectoryUri(uri.toString())
+            viewModel.setKeepDownloadedFiles(true)
+        }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.loadAvailableMagnetExtensions()
@@ -955,6 +968,101 @@ private fun StreamSettingsPage(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
             )
+        }
+
+        if (streamMethod == "magnet") {
+            SectionHeader("DOWNLOAD LOCATION")
+            SettingsCard {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.FileDownload,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Keep downloaded files", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                        Text(
+                            "Save MKV/MP4 files to a custom folder instead of app cache",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                    }
+                    Switch(
+                        checked = keepDownloadedFiles,
+                        onCheckedChange = { viewModel.setKeepDownloadedFiles(it) },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                        )
+                    )
+                }
+            }
+            if (keepDownloadedFiles) {
+                SettingsCard {
+                    val displayPath = downloadDirectoryUri?.let { uri ->
+                        try {
+                            java.net.URLDecoder.decode(
+                                uri.substringAfter("%3A").substringAfter(":"),
+                                "UTF-8"
+                            ).let { path ->
+                                if (path.isNotEmpty()) "/$path" else null
+                            }
+                        } catch (_: Exception) { null }
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(
+                                    if (downloadDirectoryUri != null) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                                    else MaterialTheme.colorScheme.error.copy(alpha = 0.1f)
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.Storage,
+                                contentDescription = null,
+                                tint = if (downloadDirectoryUri != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Download Location", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                            Text(
+                                if (displayPath != null) displayPath else "No folder selected — files stay in app cache",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
+                        }
+                        TextButton(onClick = { directoryPickerLauncher.launch(null) }) {
+                            Text(
+                                if (downloadDirectoryUri != null) "Change" else "Select",
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
         }
 
         SectionHeader("AUDIO")
@@ -1242,6 +1350,17 @@ private fun DownloadsSettingsPage(
     }
     val subtitleLanguages = listOf("English", "Arabic", "French", "German", "Italian", "Portuguese", "Russian", "Spanish", "Japanese", "Chinese", "Korean")
     var showSubtitleLangPicker by remember { mutableStateOf(false) }
+    val streamMethod by viewModel.streamMethod.collectAsState()
+    val downloadDirectoryUri by viewModel.downloadDirectoryUri.collectAsState()
+    val keepDownloadedFiles by viewModel.keepDownloadedFiles.collectAsState()
+    val directoryPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            viewModel.setDownloadDirectoryUri(uri.toString())
+            viewModel.setKeepDownloadedFiles(true)
+        }
+    }
 
     SettingsPageScaffold(title = "Downloads", onBack = onBack) {
         SectionHeader("AUDIO")
@@ -1328,6 +1447,59 @@ private fun DownloadsSettingsPage(
                         if (isIgnoringBattery) "Disabled" else "Fix",
                         fontWeight = FontWeight.Bold
                     )
+                }
+            }
+        }
+
+        if (streamMethod == "magnet") {
+            SectionHeader("DOWNLOAD LOCATION")
+            SettingsCard {
+                val displayPath = downloadDirectoryUri?.let { uri ->
+                    try {
+                        java.net.URLDecoder.decode(
+                            uri.substringAfter("%3A").substringAfter(":"),
+                            "UTF-8"
+                        ).let { path ->
+                            if (path.isNotEmpty()) "/$path" else null
+                        }
+                    } catch (_: Exception) { null }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(
+                                if (downloadDirectoryUri != null) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                                else MaterialTheme.colorScheme.error.copy(alpha = 0.1f)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Storage,
+                            contentDescription = null,
+                            tint = if (downloadDirectoryUri != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Download Location", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                        Text(
+                            if (displayPath != null) displayPath else "No folder selected — files stay in app cache",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                    }
+                    TextButton(onClick = { directoryPickerLauncher.launch(null) }) {
+                        Text(
+                            if (downloadDirectoryUri != null) "Change" else "Select",
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }
