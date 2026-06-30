@@ -939,10 +939,14 @@ private fun StreamSettingsPage(
     val subtitleLanguages = listOf("English", "Arabic", "French", "German", "Italian", "Portuguese", "Russian", "Spanish", "Japanese", "Chinese", "Korean")
     val downloadDirectoryUri by viewModel.downloadDirectoryUri.collectAsState()
     val keepDownloadedFiles by viewModel.keepDownloadedFiles.collectAsState()
+    val streamCtx = LocalContext.current
     val directoryPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri: Uri? ->
         if (uri != null) {
+            try {
+                streamCtx.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            } catch (_: Exception) {}
             viewModel.setDownloadDirectoryUri(uri.toString())
             viewModel.setKeepDownloadedFiles(true)
         }
@@ -1357,6 +1361,9 @@ private fun DownloadsSettingsPage(
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri: Uri? ->
         if (uri != null) {
+            try {
+                context.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            } catch (_: Exception) {}
             viewModel.setDownloadDirectoryUri(uri.toString())
             viewModel.setKeepDownloadedFiles(true)
         }

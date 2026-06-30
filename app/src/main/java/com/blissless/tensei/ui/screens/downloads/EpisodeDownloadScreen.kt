@@ -1,7 +1,13 @@
 package com.blissless.tensei.ui.screens.downloads
 
+import android.content.ContentValues
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
 import android.os.PowerManager
+import android.provider.DocumentsContract
+import android.provider.MediaStore
 import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
@@ -77,12 +83,17 @@ import com.blissless.tensei.MainViewModel
 import com.blissless.tensei.data.models.AnimeMedia
 import com.blissless.tensei.download.EpisodeDownloadManager
 import com.blissless.tensei.extensions.ExtensionsViewModel
+import com.blissless.tensei.TenseiApplication
+import com.blissless.tensei.torrent.TorrentEngine
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlin.time.Duration.Companion.milliseconds
+import java.io.File
+import kotlin.coroutines.resume
 
 private const val TAG = "AnimeDownload"
 
@@ -169,8 +180,241 @@ fun EpisodeDownloadDialog(
         DownloadMode.RANGE -> (rangeFrom..rangeTo).filter { it in 1..released }
     }
 
+    suspend fun downloadExtensionEpisode(ep: Int, displayTitle: String, resolvedCategory: String, extensionPkg: String): Boolean {
+        val result = withContext(Dispatchers.IO) {
+            try {
+                viewModel.playEpisodeWithExtension(anime, ep, extensionPkg)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "playEpisodeWithExtension failed for Ep $ep", e)
+                null
+            }
+        }
+        if (result == null || result.videos.isEmpty()) {
+            Log.w(TAG, "startDownload: no result or empty videos for ep $ep")
+            return false
+        }
+        val sortedVideos = result.videos.sortedByDescending { it.resolution ?: 0 }
+        var downloadSucceeded = false
+        for ((videoIndex, video) in sortedVideos.withIndex()) {
+            Log.d(TAG, "startDownload: ep $ep trying video ${videoIndex + 1}/${sortedVideos.size}: ${video.videoTitle} (${video.resolution}p) url=${video.videoUrl.take(100)}")
+            val mimeType = downloadManager.probeVideoMimeType(video.videoUrl, result.videoHeaders)
+            val started = downloadManager.startDownload(
+                animeId = anime.id, animeName = displayTitle, episode = ep,
+                videoUrl = video.videoUrl, referer = result.referer, videoTitle = video.videoTitle,
+                subtitleUrl = result.subtitleUrl, subtitleTracks = result.subtitleTrackList,
+                videoHeaders = result.videoHeaders, mimeType = mimeType,
+                malId = anime.malId, year = anime.year, category = resolvedCategory,
+            )
+            if (!started) {
+                Log.w(TAG, "startDownload: ep $ep video ${videoIndex + 1} failed to start, trying next source...")
+                continue
+            }
+            Log.i(TAG, "startDownload: ep $ep video ${videoIndex + 1} initiated, waiting...")
+            val downloadId = "${anime.id}_$ep"
+            var finalInfo: EpisodeDownloadManager.DownloadInfo?
+            while (true) {
+                if (batchCancelled || downloadManager.isBatchCancelled(displayTitle)) return false
+                val d = downloadManager.downloadsInfo.value[downloadId]
+                if (d != null && d.state != Download.STATE_QUEUED && d.state != Download.STATE_DOWNLOADING) {
+                    finalInfo = d; break
+                }
+                delay(500.milliseconds)
+            }
+            val completed = finalInfo.state == Download.STATE_COMPLETED
+            val totalBytes = finalInfo.totalBytes
+            val tooSmall = completed && totalBytes > 0L && totalBytes < 1_000_000L
+            if (tooSmall) {
+                Log.w(TAG, "startDownload: ep $ep video ${videoIndex + 1} completed but only ${formatBytes(totalBytes)}, likely a stub file, treating as failure")
+                downloadManager.removeDownload(downloadId)
+            } else if (completed) {
+                downloadSucceeded = true
+                Log.i(TAG, "startDownload: ep $ep download succeeded with video ${videoIndex + 1} (${formatBytes(totalBytes)})")
+            } else {
+                Log.w(TAG, "startDownload: ep $ep video ${videoIndex + 1} failed, trying next source...")
+                downloadManager.removeDownload(downloadId)
+            }
+        }
+        if (!downloadSucceeded) Log.w(TAG, "startDownload: all video sources failed for ep $ep")
+        return downloadSucceeded
+    }
+
+    suspend fun downloadTorrentEpisode(ep: Int, displayTitle: String): Boolean {
+        Log.i(TAG, "downloadTorrentEpisode: fetching magnet for ep $ep...")
+        val magnetUri = withContext(Dispatchers.IO) {
+            viewModel.fetchMagnetForEpisode(anime, ep)
+        }
+        if (magnetUri.isNullOrBlank()) {
+            Log.w(TAG, "downloadTorrentEpisode: no magnet link for ep $ep")
+            return false
+        }
+        Log.i(TAG, "downloadTorrentEpisode: got magnet for ep $ep, starting torrent download...")
+
+        val engine = (context.applicationContext as TenseiApplication).torrentEngine
+        if (!engine.isRunning.get()) engine.start()
+        engine.removeCurrentTorrent()
+
+        val videoExts = setOf("mkv", "mp4", "webm", "avi", "mov", "m4v")
+        val epPattern = Regex("(?:^|[._ \\[\\]()-])0*$ep(?:\$|[._ \\[\\]()-])", RegexOption.IGNORE_CASE)
+        var fileIndex = -1
+        var fileName = ""
+        var filePath = ""
+
+        var torrentListener: TorrentEngine.EngineListener? = null
+        val result = suspendCancellableCoroutine<Boolean> { cont ->
+            val listener = object : TorrentEngine.EngineListener {
+                override fun onMetadataReceived(meta: com.blissless.tensei.torrent.TorrentMeta) {
+                    Log.i(TAG, "downloadTorrentEpisode: metadata received, name='${meta.name}' files=${meta.files.size}")
+                    val videoFiles = meta.files.filter { f ->
+                        f.name.substringAfterLast('.', "").lowercase() in videoExts
+                    }
+                    val matched = videoFiles.filter { f ->
+                        epPattern.containsMatchIn(f.name) || epPattern.containsMatchIn(f.path)
+                    }
+                    val idx = if (matched.isNotEmpty()) {
+                        matched.maxBy { it.size }.index
+                    } else {
+                        videoFiles.maxByOrNull { it.size }?.index ?: -1
+                    }
+                    if (idx < 0) {
+                        Log.w(TAG, "downloadTorrentEpisode: no video file found in torrent")
+                        engine.removeCurrentTorrent()
+                        if (!cont.isCompleted) cont.resume(false)
+                        return
+                    }
+                    fileIndex = idx
+                    filePath = engine.getFileSavePath(fileIndex) ?: ""
+                    fileName = filePath.substringAfterLast(File.separator)
+                    Log.i(TAG, "downloadTorrentEpisode: selected fileIndex=$fileIndex file='$fileName'")
+                    engine.startDownload(fileIndex)
+                }
+
+                override fun onProgress(downloaded: Long, total: Long) {
+                    if (total > 0) {
+                        val progress = downloaded.toFloat() / total
+                        val epProgress = (completedCount.toFloat() + progress) / totalToDownload.coerceAtLeast(1)
+                        downloadProgress = epProgress
+                    }
+                }
+
+                override fun onFinished() {
+                    Log.i(TAG, "downloadTorrentEpisode: download finished for ep $ep")
+                    engine.removeCurrentTorrent()
+                    if (!cont.isCompleted) cont.resume(true)
+                }
+
+                override fun onError(message: String) {
+                    Log.e(TAG, "downloadTorrentEpisode: error for ep $ep: $message")
+                    engine.removeCurrentTorrent()
+                    if (!cont.isCompleted) cont.resume(false)
+                }
+            }
+            torrentListener = listener
+            engine.addListener(listener)
+            engine.addTorrentFromMagnet(magnetUri)
+            cont.invokeOnCancellation {
+                engine.removeListener(listener)
+                engine.removeCurrentTorrent()
+            }
+        }
+        torrentListener?.let { engine.removeListener(it) }
+        if (!result) {
+            Log.w(TAG, "downloadTorrentEpisode: torrent download failed for ep $ep")
+            return false
+        }
+
+        if (filePath.isBlank()) {
+            Log.w(TAG, "downloadTorrentEpisode: save path is blank, cannot copy file")
+            return false
+        }
+        val srcFile = File(filePath)
+        if (!srcFile.exists() || srcFile.length() < 1_000_000L) {
+            Log.w(TAG, "downloadTorrentEpisode: file missing or too small: $filePath")
+            return false
+        }
+
+        val ext = fileName.substringAfterLast('.', "mkv")
+
+        // Always cache locally
+        val cacheDir = File(context.cacheDir, "torrent_downloads").also { it.mkdirs() }
+        val cachedFile = File(cacheDir, "${anime.id}_$ep.$ext")
+        try {
+            if (cachedFile.exists()) cachedFile.delete()
+            srcFile.copyTo(cachedFile)
+            Log.i(TAG, "downloadTorrentEpisode: cached to ${cachedFile.absolutePath}")
+        } catch (e: Exception) {
+            Log.w(TAG, "downloadTorrentEpisode: failed to cache file", e)
+        }
+
+        // Also try to save to the user's custom download directory if set
+        val treeUriStr = viewModel.downloadDirectoryUri.value
+        if (!treeUriStr.isNullOrBlank()) {
+            try {
+                val treeUri = Uri.parse(treeUriStr)
+                context.contentResolver.takePersistableUriPermission(treeUri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            } catch (_: Exception) {}
+            try {
+                val treeUri = Uri.parse(treeUriStr)
+                val cr = context.contentResolver
+                val sanitizedAnime = displayTitle.replace(Regex("[:\\\\/*?\"<>|]"), "_").trim()
+                val episodeStr = ep.toString().padStart(2, '0')
+                val outName = "${sanitizedAnime} E$episodeStr.$ext"
+                val animeDirId = findOrCreateDirectory(cr, treeUri, sanitizedAnime)
+                if (animeDirId != null) {
+                    val dirUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, animeDirId)
+                    val existingId = findDocument(cr, dirUri, outName)
+                    if (existingId != null) {
+                        Log.i(TAG, "downloadTorrentEpisode: $outName already exists, skipping copy")
+                    } else {
+                        val newFileUri = DocumentsContract.createDocument(cr, dirUri, "video/$ext", outName)
+                        if (newFileUri != null) {
+                            cr.openOutputStream(newFileUri)?.use { out ->
+                                srcFile.inputStream().use { it.copyTo(out) }
+                            }
+                            Log.i(TAG, "downloadTorrentEpisode: copied $outName to download directory")
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "downloadTorrentEpisode: failed to copy to download dir", e)
+                // Fallback: save to Downloads folder via MediaStore
+                try {
+                    val sanitizedAnime = displayTitle.replace(Regex("[:\\\\/*?\"<>|]"), "_").trim()
+                    val episodeStr = ep.toString().padStart(2, '0')
+                    val outName = "${sanitizedAnime} E$episodeStr.$ext"
+                    val values = ContentValues().apply {
+                        put(MediaStore.Files.FileColumns.DISPLAY_NAME, outName)
+                        put(MediaStore.Files.FileColumns.MIME_TYPE, "video/$ext")
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            put(MediaStore.Files.FileColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/Tensei")
+                            put(MediaStore.Files.FileColumns.IS_PENDING, 1)
+                        }
+                    }
+                    val uri = context.contentResolver.insert(MediaStore.Files.getContentUri("external"), values)
+                    if (uri != null) {
+                        context.contentResolver.openOutputStream(uri)?.use { out ->
+                            srcFile.inputStream().use { it.copyTo(out) }
+                        }
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            values.clear()
+                            values.put(MediaStore.Files.FileColumns.IS_PENDING, 0)
+                            context.contentResolver.update(uri, values, null, null)
+                        }
+                        Log.i(TAG, "downloadTorrentEpisode: saved to Downloads/Tensei/$outName")
+                    }
+                } catch (e2: Exception) {
+                    Log.w(TAG, "downloadTorrentEpisode: MediaStore fallback also failed", e2)
+                }
+            }
+        }
+
+        Log.i(TAG, "downloadTorrentEpisode: ep $ep download complete")
+        return true
+    }
+
     fun startDownload() {
-        val extPkg = viewModel.defaultExtensionPackage.value
+        val extPkg = viewModel.defaultExtensionPackage.value.ifEmpty { viewModel.defaultMagnetExtension.value ?: "" }
         Log.i(TAG, "startDownload: anime=${anime.id} episodes= extPkg='$extPkg'")
         if (extPkg.isEmpty()) {
             Log.w(TAG, "startDownload: no default extension set")
@@ -211,101 +455,49 @@ fun EpisodeDownloadDialog(
         val capturedEpisodes = episodes.toList()
 
         viewModel.viewModelScope.launch {
+            val magnetAuthorities = viewModel.availableMagnetExtensions.value.map { it.second }.toSet()
+            val isMagnet = extPkg in magnetAuthorities
+            if (isMagnet) requestedDownloadIds = emptySet()
             try {
                 downloadManager.downloadDirectoryUri = viewModel.downloadDirectoryUri.value
                 downloadManager.keepDownloadedFiles = viewModel.keepDownloadedFiles.value
+
                 for (ep in capturedEpisodes) {
                     if (downloadManager.isBatchCancelled(displayTitle)) return@launch
                     currentEpisode = ep
-                    Log.d(TAG, "startDownload: resolving episode $ep...")
-                val result = withContext(Dispatchers.IO) {
-                    try {
-                        viewModel.playEpisodeWithExtension(anime, ep, extPkg)
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        Log.e(TAG, "playEpisodeWithExtension failed for Ep $ep", e)
-                        null
+                    Log.d(TAG, "startDownload: resolving episode $ep... (isMagnet=$isMagnet)")
+
+                    val epSuccess = if (isMagnet) {
+                        downloadTorrentEpisode(ep, displayTitle)
+                    } else {
+                        downloadExtensionEpisode(ep, displayTitle, resolvedCategory, extPkg)
+                    }
+
+                    completedCount += if (epSuccess) 1 else 0
+                    failedCount += if (!epSuccess) 1 else 0
+                    downloadManager.updateBatchNotification(
+                        displayTitle, ep, epSuccess,
+                        completedCount, failedCount, capturedEpisodes.size
+                    )
+                }
+                if (isMagnet) {
+                    isDownloading = false
+                    requestedDownloadIds = emptySet()
+                    if (failedCount > 0) {
+                        val msg = "Downloaded $completedCount episodes, $failedCount failed."
+                        Log.w(TAG, "Torrent download batch complete: $msg")
+                        showFailureDetail = msg
+                    } else {
+                        Log.i(TAG, "Torrent download batch complete: all $completedCount episodes done")
+                        Toast.makeText(context, "Downloaded $completedCount episodes", Toast.LENGTH_SHORT).show()
                     }
                 }
-
-                var epSuccess = false
-                if (result != null && result.videos.isNotEmpty()) {
-                    val sortedVideos = result.videos.sortedByDescending { it.resolution ?: 0 }
-                    var downloadSucceeded = false
-
-                    for ((videoIndex, video) in sortedVideos.withIndex()) {
-
-                        Log.d(TAG, "startDownload: ep $ep trying video ${videoIndex + 1}/${sortedVideos.size}: ${video.videoTitle} (${video.resolution}p) url=${video.videoUrl.take(100)}")
-                        val mimeType = downloadManager.probeVideoMimeType(video.videoUrl, result.videoHeaders)
-
-                        val started = downloadManager.startDownload(
-                            animeId = anime.id,
-                            animeName = displayTitle,
-                            episode = ep,
-                            videoUrl = video.videoUrl,
-                            referer = result.referer,
-                            videoTitle = video.videoTitle,
-                            subtitleUrl = result.subtitleUrl,
-                            subtitleTracks = result.subtitleTrackList,
-                            videoHeaders = result.videoHeaders,
-                            mimeType = mimeType,
-                            malId = anime.malId,
-                            year = anime.year,
-                            category = resolvedCategory,
-                        )
-                        if (!started) {
-                            Log.w(TAG, "startDownload: ep $ep video ${videoIndex + 1} failed to start, trying next source...")
-                            continue
-                        }
-                        Log.i(TAG, "startDownload: ep $ep video ${videoIndex + 1} initiated, waiting...")
-
-                        val downloadId = "${anime.id}_$ep"
-                        var finalInfo: EpisodeDownloadManager.DownloadInfo?
-                        while (true) {
-                            if (batchCancelled || downloadManager.isBatchCancelled(displayTitle)) return@launch
-                            val d = downloadManager.downloadsInfo.value[downloadId]
-                            if (d != null && d.state != Download.STATE_QUEUED && d.state != Download.STATE_DOWNLOADING) {
-                                finalInfo = d
-                                break
-                            }
-                            delay(500.milliseconds)
-                        }
-
-                        val completed = finalInfo.state == Download.STATE_COMPLETED
-                        val totalBytes = finalInfo.totalBytes
-                        val tooSmall = completed && totalBytes > 0L && totalBytes < 1_000_000L
-                        if (tooSmall) {
-                            Log.w(TAG, "startDownload: ep $ep video ${videoIndex + 1} completed but only ${formatBytes(totalBytes)}, likely a stub file, treating as failure")
-                            downloadManager.removeDownload(downloadId)
-                        } else if (completed) {
-                            downloadSucceeded = true
-                            Log.i(TAG, "startDownload: ep $ep download succeeded with video ${videoIndex + 1} (${formatBytes(totalBytes)})")
-                        } else {
-                            Log.w(TAG, "startDownload: ep $ep video ${videoIndex + 1} failed, trying next source...")
-                            downloadManager.removeDownload(downloadId)
-                        }
-                    }
-
-                    epSuccess = downloadSucceeded
-                    if (!epSuccess) {
-                        Log.w(TAG, "startDownload: all video sources failed for ep $ep")
-                    }
-                } else {
-                    Log.w(TAG, "startDownload: no result or empty videos for ep $ep")
-                }
-
-                completedCount += if (epSuccess) 1 else 0
-                failedCount += if (!epSuccess) 1 else 0
-                downloadManager.updateBatchNotification(
-                    displayTitle, ep, epSuccess,
-                    completedCount, failedCount, capturedEpisodes.size
-                )
-            }
             } catch (_: CancellationException) {
                 Log.i(TAG, "startDownload: cancelled")
+                if (isMagnet) { isDownloading = false; requestedDownloadIds = emptySet() }
             } catch (e: Exception) {
                 Log.e(TAG, "startDownload: unexpected error", e)
+                if (isMagnet) { isDownloading = false; requestedDownloadIds = emptySet() }
             }
         }
     }
@@ -779,4 +971,39 @@ fun EpisodeDownloadDialog(
     }
 }
 
+private fun findOrCreateDirectory(cr: android.content.ContentResolver, treeUri: Uri, name: String): String? {
+    val docId = DocumentsContract.getTreeDocumentId(treeUri)
+    val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, docId)
+    val projection = arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+    try {
+        cr.query(childrenUri, projection, null, null, null)?.use { cursor ->
+            while (cursor.moveToNext()) {
+                val displayName = cursor.getString(cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME))
+                if (displayName == name) {
+                    return cursor.getString(cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID))
+                }
+            }
+        }
+    } catch (_: Exception) {}
+    val dirUri = DocumentsContract.createDocument(cr, DocumentsContract.buildDocumentUriUsingTree(treeUri, docId), DocumentsContract.Document.MIME_TYPE_DIR, name)
+    if (dirUri != null) return DocumentsContract.getDocumentId(dirUri)
+    return null
+}
+
+private fun findDocument(cr: android.content.ContentResolver, parentUri: Uri, name: String): String? {
+    val docId = DocumentsContract.getTreeDocumentId(parentUri)
+    val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(parentUri, docId)
+    val projection = arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+    try {
+        cr.query(childrenUri, projection, null, null, null)?.use { cursor ->
+            while (cursor.moveToNext()) {
+                val displayName = cursor.getString(cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME))
+                if (displayName == name) {
+                    return cursor.getString(cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID))
+                }
+            }
+        }
+    } catch (_: Exception) {}
+    return null
+}
 
