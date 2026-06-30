@@ -271,6 +271,7 @@ fun PlayerScreen(
     var showQualityMenu by remember { mutableStateOf(false) }
     var showSpeedMenu by remember { mutableStateOf(false) }
     var showSubtitleMenu by remember { mutableStateOf(false) }
+    var showPlayerSettings by remember { mutableStateOf(false) }
     var subtitlesEnabled by remember { mutableStateOf(subtitleTracks.isNotEmpty()) }
     var selectedSubtitleIndex by remember { mutableIntStateOf(0) }
     var showSubtitleSettings by remember { mutableStateOf(false) }
@@ -848,10 +849,10 @@ fun PlayerScreen(
         }
     }
 
-    LaunchedEffect(showControls, isPlaying, isDragging, hasError, showServerMenu, showQualityMenu, showSpeedMenu, showSubtitleMenu, isManuallySeeking) {
-        if (showControls && isPlaying && !isDragging && !hasError && !showServerMenu && !showQualityMenu && !showSpeedMenu && !showSubtitleMenu && !isManuallySeeking) {
+    LaunchedEffect(showControls, isPlaying, isDragging, hasError, showServerMenu, showQualityMenu, showSpeedMenu, showSubtitleMenu, showPlayerSettings, isManuallySeeking) {
+        if (showControls && isPlaying && !isDragging && !hasError && !showServerMenu && !showQualityMenu && !showSpeedMenu && !showSubtitleMenu && !showPlayerSettings && !isManuallySeeking) {
             delay(2000.milliseconds)
-            if (showControls && !isDragging && !hasError && isPlaying && !showServerMenu && !showSpeedMenu && !showSubtitleMenu && !isManuallySeeking) {
+            if (showControls && !isDragging && !hasError && isPlaying && !showServerMenu && !showSpeedMenu && !showSubtitleMenu && !showPlayerSettings && !isManuallySeeking) {
                 showControls = false
             }
         }
@@ -1565,7 +1566,6 @@ fun PlayerScreen(
                                 }
 
                                 // Player settings button
-                                var showPlayerSettings by remember { mutableStateOf(false) }
                                 Box {
                                     Surface(
                                         shape = RoundedCornerShape(14.dp),

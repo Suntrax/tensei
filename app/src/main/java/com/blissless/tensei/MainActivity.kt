@@ -840,8 +840,32 @@ fun MainScreen(
                 android.util.Log.i("MainActivity.Torrent", "onMetadataReceived: name='${meta.name}' files=${meta.files.size}")
                 scope.launch {
                     try {
-                        val fileIndex = engine.getLargestVideoFileIndex()
-                        android.util.Log.d("MainActivity.Torrent", "onMetadataReceived: selected fileIndex=$fileIndex")
+                        val videoExts = setOf("mkv", "mp4", "webm", "avi", "mov", "m4v")
+                        val videoFiles = meta.files.filter { f ->
+                            f.name.substringAfterLast('.', "").lowercase() in videoExts
+                        }
+                        val epPattern = Regex("(?:^|[._ \\[\\]()-])0*${episode}(?:\$|[._ \\[\\]()-])", RegexOption.IGNORE_CASE)
+                        val matched = videoFiles.filter { f ->
+                            epPattern.containsMatchIn(f.name) || epPattern.containsMatchIn(f.path)
+                        }
+                        val fileIndex = if (matched.isNotEmpty()) {
+                            android.util.Log.d("MainActivity.Torrent", "onMetadataReceived: matched ep $episode -> '${matched.maxBy { it.size }.name}'")
+                            matched.maxBy { it.size }.index
+                        } else {
+                            android.util.Log.w("MainActivity.Torrent", "onMetadataReceived: no pattern match for ep $episode, sample files:")
+                            videoFiles.take(10).forEach { f ->
+                                android.util.Log.w("MainActivity.Torrent", "  video file: [${f.index}] '${f.name}'")
+                            }
+                            android.util.Log.w("MainActivity.Torrent", "onMetadataReceived: trying fallback contains match")
+                            val fallbackMatched = videoFiles.filter { f ->
+                                f.name.contains("$episode") || f.path.contains("$episode")
+                            }
+                            android.util.Log.d("MainActivity.Torrent", "onMetadataReceived: fallback matched ${fallbackMatched.size} files")
+                            fallbackMatched.maxByOrNull { it.size }?.index ?: run {
+                                android.util.Log.w("MainActivity.Torrent", "onMetadataReceived: fallback also failed, using largest")
+                                engine.getLargestVideoFileIndex()
+                            }
+                        }
                         engine.startDownload(fileIndex)
                         val port = server.start()
                         android.util.Log.d("MainActivity.Torrent", "onMetadataReceived: stream server started on port $port")
@@ -926,6 +950,7 @@ fun MainScreen(
             isExtensionFlow = false
             isLoadingStream = true
             scope.launch {
+                yield()
                 android.util.Log.d("MainActivity.Torrent", "loadAndPlayEpisode: checking cache for magnet (animeId=${anime.id})")
                 val cached = viewModel.getMagnetForEpisode(anime.id, episode)
                 android.util.Log.d("MainActivity.Torrent", "loadAndPlayEpisode: cache lookup result=${cached != null}")
@@ -939,9 +964,9 @@ fun MainScreen(
                 } else {
                     android.util.Log.e("MainActivity.Torrent", "loadAndPlayEpisode: no magnet link found for Ep $episode")
                     streamError = "No magnet link found for Ep $episode"
+                    isLoadingStream = false
                     Toast.makeText(context, "No magnet available for Ep $episode", Toast.LENGTH_SHORT).show()
                 }
-                isLoadingStream = false
             }
             return
         }

@@ -63,12 +63,14 @@ class TorrentEngine(private val context: Context) {
             // CRITICAL: enable DHT/LSD/UPnP/NAT-PMP. Magnet links carry only an
             // infohash; without DHT libtorrent cannot discover peers, so metadata
             // never arrives and streaming never starts. Mirrors toram's config.
-            Log.d(TAG, "start: configuring SettingsPack (DHT+LSD+UPnP+NAT-PMP)")
+            Log.d(TAG, "start: configuring SettingsPack (DHT+LSD+UPnP+NAT-PMP, stop-on-finish to avoid seeding)")
             val sp = SettingsPack()
             sp.setEnableDht(true)
             sp.setEnableLsd(true)
             sp.setBoolean(settings_pack.bool_types.enable_upnp.swigValue(), true)
             sp.setBoolean(settings_pack.bool_types.enable_natpmp.swigValue(), true)
+            // Pause torrent when finished to avoid seeding
+            // (stop_when_ready isn't exposed in this SWIG binding version)
             sessionManager.start(SessionParams(sp))
             Log.d(TAG, "start: session started, starting DHT")
             sessionManager.startDht()
@@ -106,6 +108,7 @@ class TorrentEngine(private val context: Context) {
 
     private var lastProgressTime = 0L
     private var lastLoggedState = -1
+    private var finishedNotified = false
 
     private fun processProgress() {
         val h = handle ?: return
@@ -135,8 +138,14 @@ class TorrentEngine(private val context: Context) {
                             " peers=${st.numPeers()} dl=${st.downloadRate() / 1024}KB/s")
                 }
                 if (st.isFinished() || st.isSeeding()) {
-                    Log.i(TAG, "progress: torrent finished/seeding")
-                    listeners.forEach { it.onFinished() }
+                    if (!finishedNotified) {
+                        finishedNotified = true
+                        Log.i(TAG, "progress: torrent finished/seeding — pausing to avoid seeding")
+                        try { h.pause() } catch (_: Exception) {}
+                        listeners.forEach { it.onFinished() }
+                    }
+                } else {
+                    finishedNotified = false
                 }
                 advanceStreamingWindow()
             }
@@ -191,8 +200,12 @@ class TorrentEngine(private val context: Context) {
                     listeners.forEach { it.onError("Failed to download torrent metadata (no peers?)") }
                 }
                 is TorrentFinishedAlert -> {
-                    Log.i(TAG, "alert: TorrentFinished")
-                    listeners.forEach { it.onFinished() }
+                    if (!finishedNotified) {
+                        finishedNotified = true
+                        Log.i(TAG, "alert: TorrentFinished — pausing to avoid seeding")
+                        try { handle?.pause() } catch (_: Exception) {}
+                        listeners.forEach { it.onFinished() }
+                    }
                 }
                 is TorrentErrorAlert -> {
                     Log.e(TAG, "alert: TorrentError — ${alert.javaClass.simpleName}")
@@ -267,6 +280,7 @@ class TorrentEngine(private val context: Context) {
 
     fun startDownload(fileIndex: Int) {
         Log.i(TAG, "startDownload: fileIndex=$fileIndex")
+        finishedNotified = false
         val h = handle ?: run {
             Log.e(TAG, "startDownload: handle is null, aborting")
             return
@@ -333,9 +347,11 @@ class TorrentEngine(private val context: Context) {
         rawHandle?.set_sequential_range(streamingFirstPiece, streamingLastPiece)
         Log.d(TAG, "setupStreamingPriorities: set_sequential_range($streamingFirstPiece, $streamingLastPiece)")
 
+        val tailDeadlineCount = minOf(STREAMING_DEADLINE_SIZE, totalFilePieces)
         var prioSet = 0
         for (i in streamingFirstPiece..streamingLastPiece) {
-            val priority = if (i < streamingWindowEnd) Priority.TOP_PRIORITY else Priority.DEFAULT
+            val isTail = i >= streamingLastPiece - tailDeadlineCount + 1
+            val priority = if (i < streamingWindowEnd || isTail) Priority.TOP_PRIORITY else Priority.DEFAULT
             try {
                 h.piecePriority(i, priority)
                 prioSet++
@@ -343,7 +359,7 @@ class TorrentEngine(private val context: Context) {
                 Log.w(TAG, "setupStreamingPriorities: piecePriority($i) failed: ${e.message}")
             }
         }
-        Log.d(TAG, "setupStreamingPriorities: set $prioSet piece priorities (window TOP_PRIORITY, rest DEFAULT)")
+        Log.d(TAG, "setupStreamingPriorities: set $prioSet piece priorities (head+tail TOP_PRIORITY, rest DEFAULT)")
 
         val headDeadlineCount = minOf(STREAMING_DEADLINE_SIZE, totalFilePieces)
         var deadlineSet = 0
@@ -358,12 +374,14 @@ class TorrentEngine(private val context: Context) {
         }
         Log.d(TAG, "setupStreamingPriorities: set $deadlineSet head deadlines (pieces $streamingFirstPiece-${streamingFirstPiece + headDeadlineCount - 1})")
 
-        if (totalFilePieces > headDeadlineCount + 2) {
-            for (i in maxOf(streamingFirstPiece, streamingLastPiece - 1)..streamingLastPiece) {
-                try { h.setPieceDeadline(i, headDeadlineCount + 50) }
+        val tailDeadlineStart = maxOf(streamingFirstPiece, streamingLastPiece - tailDeadlineCount + 1)
+        if (totalFilePieces > tailDeadlineCount + 2) {
+            for (i in tailDeadlineStart..streamingLastPiece) {
+                val deadline = (i - tailDeadlineStart).coerceAtMost(headDeadlineCount - 1) + 1
+                try { h.setPieceDeadline(i, deadline) }
                 catch (e: Exception) { Log.w(TAG, "setupStreamingPriorities: tail deadline($i) failed: ${e.message}") }
             }
-            Log.d(TAG, "setupStreamingPriorities: set tail deadlines for MKV cue data")
+            Log.d(TAG, "setupStreamingPriorities: set tail deadlines for MKV cue data (pieces $tailDeadlineStart-$streamingLastPiece)")
         }
 
         streamingPrioritiesSet = true

@@ -287,9 +287,12 @@ fun RichEpisodeScreen(
     }
 
     // Sync selectedExtensionPkg with default when it becomes available
-    LaunchedEffect(defaultPkg) {
-        if (defaultPkg.isNotEmpty() && selectedExtensionPkg == null) {
-            selectedExtensionPkg = defaultPkg
+    // Also re-evaluate when stream method changes (e.g., magnet→direct)
+    LaunchedEffect(defaultPkg, currentStreamMethod) {
+        if (currentStreamMethod == "direct") {
+            if (defaultPkg.isNotEmpty() && selectedExtensionPkg == null) {
+                selectedExtensionPkg = defaultPkg
+            }
         }
     }
 
@@ -297,7 +300,9 @@ fun RichEpisodeScreen(
     var hasAutoSelectedMagnet by remember { mutableStateOf(false) }
     LaunchedEffect(defaultMagnetExtension, currentStreamMethod) {
         val ext = defaultMagnetExtension
-        if (!hasAutoSelectedMagnet && currentStreamMethod == "magnet" && ext != null) {
+        if (currentStreamMethod != "magnet") {
+            hasAutoSelectedMagnet = false
+        } else if (!hasAutoSelectedMagnet && ext != null) {
             hasAutoSelectedMagnet = true
             selectedMagnetAuthority = ext
             isMagnetActive = true
