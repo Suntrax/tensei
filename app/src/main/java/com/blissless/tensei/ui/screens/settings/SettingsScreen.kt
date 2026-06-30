@@ -1435,8 +1435,7 @@ private fun DownloadsSettingsPage(
                     } else {
                         try {
                             val intent = android.content.Intent(
-                                android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS,
-                                "package:${context.packageName}".toUri()
+                                android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS
                             )
                             context.startActivity(intent)
                         } catch (_: Exception) {
