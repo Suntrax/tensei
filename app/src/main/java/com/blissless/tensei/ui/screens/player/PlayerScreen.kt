@@ -647,12 +647,7 @@ fun PlayerScreen(
     /** Seek without byte-range requests — rebuilds player with a clip start position.
      *  Prevents error 2001 on proxy streams that don't support Range headers. */
     fun seekPlayerTo(position: Long) {
-        val wasPlaying = exoPlayer.playWhenReady
-        val currentItem = exoPlayer.currentMediaItem ?: return
-        exoPlayer.stop()
-        exoPlayer.setMediaItem(currentItem, position)
-        exoPlayer.prepare()
-        exoPlayer.playWhenReady = wasPlaying
+        exoPlayer.seekTo(position)
     }
 
     fun seekBy(milliseconds: Long) {

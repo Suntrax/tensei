@@ -884,6 +884,28 @@ fun MainScreen(
                         server.setPieceChecker { i -> engine.havePiece(i) }
                         server.setSafeBytesProvider { engine.getContiguousDownloadedBytes() }
 
+                        // Wait until at least MIN_STREAMING_BYTES contiguous from the
+                        // beginning are available before handing URL to ExoPlayer.
+                        // Without this, ExoPlayer gets a 503 or broken pipe when it
+                        // tries to read the file headers.
+                        val minBytes = 4L * 1024 * 1024
+                        android.util.Log.d("MainActivity.Torrent", "onMetadataReceived: waiting for ${minBytes / 1024 / 1024}MB contiguous...")
+                        val waitDeadline = System.nanoTime() + 60_000_000_000L
+                        var waited = false
+                        while (System.nanoTime() < waitDeadline) {
+                            val contiguous = engine.getContiguousDownloadedBytes()
+                            if (contiguous >= minBytes) {
+                                android.util.Log.d("MainActivity.Torrent", "onMetadataReceived: ${contiguous / 1024 / 1024}MB contiguous after wait — starting playback")
+                                break
+                            }
+                            waited = true
+                            delay(200)
+                        }
+                        if (waited) {
+                            val finalContiguous = engine.getContiguousDownloadedBytes()
+                            android.util.Log.i("MainActivity.Torrent", "onMetadataReceived: waited for stream headroom, contiguous=${finalContiguous / 1024 / 1024}MB")
+                        }
+
                         currentVideoUrl = "http://127.0.0.1:$port/$fileName"
                         currentReferer = ""
                         currentEpisodeTitle = sanitizeEpisodeTitle(anime.title) ?: "Episode $episode"
