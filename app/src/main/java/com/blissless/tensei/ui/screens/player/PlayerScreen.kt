@@ -480,6 +480,20 @@ fun PlayerScreen(
                             return
                         }
 
+                        // For torrent streams (local server), don't auto-refresh — that
+                        // restarts the entire torrent download. Instead, retry the seek
+                        // so ExoPlayer reconnects to the TorrentStreamServer after more
+                        // data has downloaded.
+                        if (isInitialLoading && videoUrl.startsWith("http://127.0.0.1:")) {
+                            Log.d("PlayerScreen", "onPlayerError: torrent stream error, retrying seek instead of auto-refresh")
+                            seekRetryCount = 1
+                            hasError = false
+                            playbackError = null
+                            isBuffering = true
+                            prepare()
+                            return
+                        }
+
                         // Auto-refresh for initial load / re-entry failure (stale cached URL).
                         // isAutoRefreshing in MainActivity prevents infinite refreshes.
                         if (isInitialLoading && onRefreshStream != null) {
@@ -588,6 +602,9 @@ fun PlayerScreen(
         val mimeType = if (videoUrl.contains(".m3u8") || videoUrl.contains("/m3u8")) MimeTypes.APPLICATION_M3U8
         else if (videoUrl.contains(".mp4")) MimeTypes.VIDEO_MP4
         else if (videoUrl.contains(".webm")) MimeTypes.VIDEO_WEBM
+        else if (videoUrl.contains(".mkv")) "video/x-matroska"
+        else if (videoUrl.contains(".avi")) "video/x-msvideo"
+        else if (videoUrl.contains(".mov")) "video/quicktime"
         else {
             Log.d("PlayerScreen", "Unknown mime type for URL: ${videoUrl.take(100)}, defaulting to MP4")
             MimeTypes.VIDEO_MP4

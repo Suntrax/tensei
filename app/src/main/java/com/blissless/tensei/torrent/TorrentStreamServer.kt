@@ -161,23 +161,7 @@ class TorrentStreamServer(private val saveDir: File) {
             if (startOffset >= safeNow) {
                 val startPiece = (startOffset / pieceSize).toInt()
                 val endPiece = (minOf(endOffset, fileLength - 1) / pieceSize).toInt()
-                Log.d(TAG, "handleClient: startOffset($startOffset) >= safeNow($safeNow), need pieces $startPiece-$endPiece")
-                if (pieceChecker?.invoke(startPiece) != true || (startPiece != endPiece && pieceChecker?.invoke(endPiece) != true)) {
-                    Log.d(TAG, "handleClient: pieces not ready, blocking up to 2s for download...")
-                    val deadline = System.nanoTime() + 2_000_000_000L
-                    var available = false
-                    while (System.nanoTime() < deadline && running) {
-                        val p = pieceChecker
-                        if (p != null && p(startPiece) && (startPiece == endPiece || p(endPiece))) { available = true; break }
-                        try { Thread.sleep(100) } catch (_: InterruptedException) { break }
-                    }
-                    if (!available) {
-                        Log.e(TAG, "handleClient: timed out waiting for pieces $startPiece-$endPiece (2s)")
-                        sendError(client, 503, "Not yet available")
-                        return
-                    }
-                    Log.d(TAG, "handleClient: pieces became available after waiting")
-                }
+                Log.d(TAG, "handleClient: startOffset($startOffset) >= safeNow($safeNow), need pieces $startPiece-$endPiece — will wait in streaming loop")
             }
 
             val actualEnd = minOf(endOffset, fileLength - 1)
@@ -211,14 +195,10 @@ class TorrentStreamServer(private val saveDir: File) {
                     }
                     if (canRead <= 0) {
                         if (!stalled) {
-                            Log.d(TAG, "handleClient: stalled at pos=$pos (safe=$currentSafe), waiting for piece...")
+                            Log.d(TAG, "handleClient: stalled at pos=$pos (safe=$currentSafe), waiting indefinitely...")
                             stalled = true
                         }
-                        if (System.nanoTime() - waitStart > 2_000_000_000L) {
-                            Log.e(TAG, "handleClient: stalled >2s at pos=$pos, aborting (sent=$bytesSent/$sendLength)")
-                            break
-                        }
-                        try { Thread.sleep(100) } catch (_: InterruptedException) { break }
+                        try { Thread.sleep(500) } catch (_: InterruptedException) { break }
                         continue
                     }
                     if (stalled) {

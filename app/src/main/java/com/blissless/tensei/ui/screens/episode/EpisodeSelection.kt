@@ -508,8 +508,9 @@ fun RichEpisodeScreen(
     }
 
     // Scroll to current episode (next to watch or last watched) with smooth animation
-    LaunchedEffect(currentProgress, episodeCount, isLoadingEpisodes) {
-        if (!isLoadingEpisodes && currentProgress > 0) {
+    // Re-triggers when TMDB, extension, or magnet episodes finish loading.
+    LaunchedEffect(currentProgress, episodeCount, isLoadingEpisodes, isLoadingExtensionEpisodes, isLoadingMagnetEpisodes) {
+        if (!isLoadingEpisodes && !isLoadingExtensionEpisodes && !isLoadingMagnetEpisodes && currentProgress > 0) {
             delay(300.milliseconds)
             val scrollIndex = if (currentProgress < episodeCount) currentProgress else currentProgress - 1
             listState.animateScrollToItem(scrollIndex + 1)
@@ -908,11 +909,10 @@ private fun SimpleRichEpisodeCard(
     onPlay: () -> Unit
 ) {
     val context = LocalContext.current
-    // Current episode has same background as other aired episodes
     val backgroundColor = when {
         isWatched -> if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-        hasAired -> if (isOled) Color(0xFF121212) else MaterialTheme.colorScheme.surface
-        else -> Color.Transparent
+        hasAired -> if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        else -> if (isOled) Color(0xFF121212) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.12f)
     }
 
     // Keep outline indicator for current episode
@@ -1065,11 +1065,10 @@ private fun RichTmdbEpisodeCard(
     onPlay: () -> Unit
 ) {
     val context = LocalContext.current
-    // Current episode has same background as other aired episodes
     val backgroundColor = when {
         isWatched -> if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-        hasAired -> if (isOled) Color(0xFF121212) else MaterialTheme.colorScheme.surface
-        else -> Color.Transparent
+        hasAired -> if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
+        else -> if (isOled) Color(0xFF121212) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.12f)
     }
 
     // Keep outline indicator for current episode

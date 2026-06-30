@@ -431,6 +431,14 @@ class TorrentEngine(private val context: Context) {
         } catch (_: Exception) { 0L }
     }
 
+    fun getLastPieceForFile(): Int {
+        val h = handle ?: return -1
+        val ti = try { h.torrentFile() } catch (_: Exception) { null } ?: return -1
+        val fs = ti.files() ?: return -1
+        val fileIndex = findSelectedFileIndex(h, fs) ?: return -1
+        return fs.lastPieceIndexAtFile(fileIndex)
+    }
+
     fun getContiguousDownloadedBytes(): Long {
         val h = handle ?: return 0L
         val ti = try { h.torrentFile() } catch (_: Exception) { null } ?: return 0L

@@ -884,26 +884,26 @@ fun MainScreen(
                         server.setPieceChecker { i -> engine.havePiece(i) }
                         server.setSafeBytesProvider { engine.getContiguousDownloadedBytes() }
 
-                        // Wait until at least MIN_STREAMING_BYTES contiguous from the
-                        // beginning are available before handing URL to ExoPlayer.
-                        // Without this, ExoPlayer gets a 503 or broken pipe when it
-                        // tries to read the file headers.
-                        val minBytes = 4L * 1024 * 1024
+                        // Wait for enough contiguous data from the start before handing
+                        // the URL to ExoPlayer. ExoPlayer's read timeout + retry
+                        // mechanism handles temporary unavailability for seeks beyond
+                        // the buffered zone (e.g., MKV cues at tail).
+                        val minBytes = 8L * 1024 * 1024
                         android.util.Log.d("MainActivity.Torrent", "onMetadataReceived: waiting for ${minBytes / 1024 / 1024}MB contiguous...")
-                        val waitDeadline = System.nanoTime() + 60_000_000_000L
+                        val waitDeadline = System.nanoTime() + 120_000_000_000L
                         var waited = false
                         while (System.nanoTime() < waitDeadline) {
                             val contiguous = engine.getContiguousDownloadedBytes()
                             if (contiguous >= minBytes) {
-                                android.util.Log.d("MainActivity.Torrent", "onMetadataReceived: ${contiguous / 1024 / 1024}MB contiguous after wait — starting playback")
+                                android.util.Log.d("MainActivity.Torrent", "onMetadataReceived: ${contiguous / 1024 / 1024}MB contiguous — starting playback")
                                 break
                             }
                             waited = true
-                            delay(200)
+                            delay(500)
                         }
                         if (waited) {
                             val finalContiguous = engine.getContiguousDownloadedBytes()
-                            android.util.Log.i("MainActivity.Torrent", "onMetadataReceived: waited for stream headroom, contiguous=${finalContiguous / 1024 / 1024}MB")
+                            android.util.Log.i("MainActivity.Torrent", "onMetadataReceived: waited, contiguous=${finalContiguous / 1024 / 1024}MB")
                         }
 
                         currentVideoUrl = "http://127.0.0.1:$port/$fileName"
@@ -968,6 +968,11 @@ fun MainScreen(
         val streamMethod = viewModel.streamMethod.value
         android.util.Log.d("MainActivity.Torrent", "loadAndPlayEpisode: anime='${anime.title}' ep=$episode streamMethod='$streamMethod'")
         if (streamMethod == "magnet") {
+            if (isAutoRefresh && isAutoRefreshing) {
+                android.util.Log.d("MainActivity.Torrent", "loadAndPlayEpisode: already auto-refreshing, ignoring")
+                return
+            }
+            if (isAutoRefresh) isAutoRefreshing = true
             android.util.Log.i("MainActivity.Torrent", "loadAndPlayEpisode: using magnet stream method")
             isExtensionFlow = false
             isLoadingStream = true
@@ -989,6 +994,7 @@ fun MainScreen(
                     isLoadingStream = false
                     Toast.makeText(context, "No magnet available for Ep $episode", Toast.LENGTH_SHORT).show()
                 }
+                if (isAutoRefresh) isAutoRefreshing = false
             }
             return
         }
