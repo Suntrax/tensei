@@ -453,31 +453,30 @@ fun PlayerScreen(
                             return
                         }
 
-                        // Auto-retry for manual seeks: retry once with seekPlayerTo (catches rare
-                        // transient failures for in-buffer seeks). After that, auto-refresh the URL.
-                        if (isManuallySeeking && seekRetryCount < 1) {
+                        if ((isManuallySeeking || seekRetryCount > 0) && seekRetryCount < 3) {
                             seekRetryCount++
                             hasError = false
                             playbackError = null
                             isBuffering = true
                             val seekPos = currentPosition
-                            if (seekPos > 0) {
-                                val wasPlaying = playWhenReady
-                                val currentItem = currentMediaItem
-                                if (currentItem != null) {
-                                    stop()
-                                    setMediaItem(currentItem, seekPos)
-                                    prepare()
-                                    playWhenReady = wasPlaying
-                                }
+                            Log.w("PlayerScreen", "onPlayerError: retry #$seekRetryCount seekPos=$seekPos error=${error.errorCode}: ${error.message?.take(100)}")
+                            val item = currentMediaItem
+                            val isHls = item?.localConfiguration?.mimeType == MimeTypes.APPLICATION_M3U8
+                            if (isHls && seekPos > 0) {
+                                Log.d("PlayerScreen", "onPlayerError: retry#$seekRetryCount HLS seekTo=$seekPos")
+                                seekTo(seekPos)
+                            } else if (seekPos > 0 && item != null) {
+                                val itemUri = item.localConfiguration?.uri?.toString()?.take(100) ?: "unknown"
+                                Log.d("PlayerScreen", "onPlayerError: retry#$seekRetryCount clipped uri=$itemUri seekPos=$seekPos")
+                                val clippedItem = item.buildUpon()
+                                    .setClipStartPositionMs(seekPos)
+                                    .build()
+                                setMediaItem(clippedItem)
+                                prepare()
                             } else {
+                                Log.d("PlayerScreen", "onPlayerError: retry#$seekRetryCount prepare() only")
                                 prepare()
                             }
-                            return
-                        }
-                        if (isManuallySeeking && onRefreshStream != null) {
-                            onInvalidateStreamCache?.invoke()
-                            onRefreshStream.invoke()
                             return
                         }
 
@@ -488,10 +487,11 @@ fun PlayerScreen(
                             onRefreshStream.invoke()
                         }
 
+                        Log.e("PlayerScreen", "SURFACING ERROR TO USER: code=${error.errorCode} msg=${error.message} isManuallySeeking=$isManuallySeeking seekRetryCount=$seekRetryCount isInitialLoading=$isInitialLoading")
                         hasError = true
                         playbackError = "${error.errorCode}: ${error.message ?: "Unknown"}"
                         showControls = true
-                        Log.e("PlayerScreen", "Playback error: code=${error.errorCode} msg=${error.message} videoUrl=${videoUrl.take(120)}")
+                        Log.e("PlayerScreen", "Playback error details: code=${error.errorCode} msg=${error.message} videoUrl=${videoUrl.take(120)}")
                         Log.e("PlayerScreen", "  cause=${error.cause?.message}")
                         error.cause?.let { cause ->
                             Log.e("PlayerScreen", "  cause type=${cause::class.simpleName}")
@@ -502,6 +502,8 @@ fun PlayerScreen(
                     }
 
                     override fun onPlaybackStateChanged(playbackState: Int) {
+                        val stateName = when (playbackState) { Player.STATE_IDLE -> "IDLE"; Player.STATE_BUFFERING -> "BUFFERING"; Player.STATE_READY -> "READY"; Player.STATE_ENDED -> "ENDED"; else -> "${playbackState}" }
+                        Log.d("PlayerScreen", "onPlaybackStateChanged: $stateName isManuallySeeking=$isManuallySeeking seekRetryCount=$seekRetryCount")
                         isBuffering = playbackState == Player.STATE_BUFFERING
                         if (playbackState == Player.STATE_READY) {
                             hasError = false
@@ -644,13 +646,45 @@ fun PlayerScreen(
         }
     }
 
-    /** Seek without byte-range requests — rebuilds player with a clip start position.
-     *  Prevents error 2001 on proxy streams that don't support Range headers. */
-    fun seekPlayerTo(position: Long) {
-        exoPlayer.seekTo(position)
+    fun seekToPosition(position: Long) {
+        Log.d("PlayerScreen", "seekToPosition: pos=$position bufferedPos=$bufferedPosition maxBufferedPos=$maxBufferedPosition duration=${exoPlayer.duration} isManuallySeeking=$isManuallySeeking")
+        hasError = false
+        playbackError = null
+        isBuffering = true
+        maxBufferedPosition = position
+        bufferedPosition = position
+        val item = exoPlayer.currentMediaItem
+        val isHls = item?.localConfiguration?.mimeType == MimeTypes.APPLICATION_M3U8
+        Log.d("PlayerScreen", "seekToPosition: isHls=$isHls mime=${item?.localConfiguration?.mimeType}")
+        if (isHls) {
+            Log.d("PlayerScreen", "seekToPosition: HLS stream, using seekTo (segments load natively)")
+            exoPlayer.seekTo(position)
+        } else if (position > bufferedPosition) {
+            Log.d("PlayerScreen", "seekToPosition: outside buffer, using clip-based re-prepare (no stop)")
+            val wasPlaying = exoPlayer.playWhenReady
+            if (item != null) {
+                val itemUri = item.localConfiguration?.uri?.toString()?.take(100) ?: "unknown"
+                val itemMime = item.localConfiguration?.mimeType ?: "unknown"
+                Log.d("PlayerScreen", "seekToPosition: uri=$itemUri mime=$itemMime clipStartMs=$position wasPlaying=$wasPlaying")
+                val clippedItem = item.buildUpon()
+                    .setClipStartPositionMs(position)
+                    .build()
+                exoPlayer.setMediaItem(clippedItem)
+                exoPlayer.prepare()
+                exoPlayer.playWhenReady = wasPlaying
+                Log.d("PlayerScreen", "seekToPosition: clip-based re-prepare done, wasPlaying=$wasPlaying")
+            } else {
+                Log.d("PlayerScreen", "seekToPosition: currentMediaItem was null")
+                exoPlayer.seekTo(position)
+            }
+        } else {
+            Log.d("PlayerScreen", "seekToPosition: inside buffer, using seekTo(pos=$position)")
+            exoPlayer.seekTo(position)
+        }
     }
 
     fun seekBy(milliseconds: Long) {
+        Log.d("PlayerScreen", "seekBy: ms=$milliseconds currentPos=$currentPosition bufferedPos=$bufferedPosition duration=$duration")
         isManuallySeeking = true
         seekRetryCount = 0
 
@@ -677,16 +711,7 @@ fun PlayerScreen(
         } else {
             (currentPosition + milliseconds).coerceAtLeast(0)
         }
-        // If seeking forward outside the buffered range, refresh the stream URL
-        // proactively to avoid byte-range request errors on proxy streams.
-        val outsideBuffer = milliseconds > 0 && newPosition > bufferedPosition && onRefreshStream != null
-        if (outsideBuffer) {
-            onSetPendingSeekPosition?.invoke(newPosition)
-            onInvalidateStreamCache?.invoke()
-            onRefreshStream.invoke()
-        } else {
-            seekPlayerTo(newPosition)
-        }
+        seekToPosition(newPosition)
         currentPosition = newPosition
         sliderValue = newPosition.toFloat()
 
@@ -705,17 +730,10 @@ fun PlayerScreen(
     }
 
     fun performManualSeek(position: Long) {
+        Log.d("PlayerScreen", "performManualSeek: pos=$position bufferedPos=$bufferedPosition duration=$duration")
         isManuallySeeking = true
         seekRetryCount = 0
-        // If seeking outside the buffered range, refresh the stream URL proactively.
-        val outsideBuffer = position > bufferedPosition && onRefreshStream != null
-        if (outsideBuffer) {
-            onSetPendingSeekPosition?.invoke(position)
-            onInvalidateStreamCache?.invoke()
-            onRefreshStream.invoke()
-        } else {
-            seekPlayerTo(position)
-        }
+        seekToPosition(position)
         currentPosition = position
         sliderValue = position.toFloat()
         skipResetJob?.cancel()
@@ -733,10 +751,7 @@ fun PlayerScreen(
                 duration = exoPlayer.duration
                 // Get buffered position from ExoPlayer
                 bufferedPosition = exoPlayer.bufferedPosition
-                // Track max buffer position to preserve buffer when scrubbing back
-                if (bufferedPosition > maxBufferedPosition) {
-                    maxBufferedPosition = bufferedPosition
-                }
+                maxBufferedPosition = bufferedPosition
                 if (duration > 0) {
                     sliderValue = currentPosition.toFloat()
                     if (actualEpisodeLength == null && duration > 60000 && exoPlayer.playbackState == Player.STATE_READY) {
@@ -1875,14 +1890,8 @@ fun PlayerScreen(
                                         onDragEnd = {
                                             isDragging = false
                                             val seekPos = sliderValue.toLong()
-                                            val outsideBuffer = seekPos > bufferedPosition && onRefreshStream != null
-                                            if (outsideBuffer) {
-                                                onSetPendingSeekPosition?.invoke(seekPos)
-                                                onInvalidateStreamCache?.invoke()
-                                                onRefreshStream.invoke()
-                                            } else {
-                                                seekPlayerTo(seekPos)
-                                            }
+                                            Log.d("PlayerScreen", "onDragEnd: seekPos=$seekPos bufferedPos=$bufferedPosition duration=$duration")
+                                            seekToPosition(seekPos)
                                             skipResetJob?.cancel()
                                             skipResetJob = scope.launch {
                                                 delay(1500.milliseconds)
@@ -1918,7 +1927,8 @@ fun PlayerScreen(
                                     )
 
                                     // Draw buffer indicator
-                                    if (showBufferIndicator && maxBufferedPosition > currentPosition) {
+                                    val bufferWidth = (bufferedRatio - progressRatio) * sliderWidth
+                                    if (showBufferIndicator && bufferWidth >= 2.dp.toPx()) {
                                         val bufferStartX = progressRatio * sliderWidth
                                         val bufferEndX = bufferedRatio * sliderWidth
                                         drawRoundRect(

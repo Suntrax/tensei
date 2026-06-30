@@ -24,6 +24,7 @@ object LocalProxyServer {
     private var extensionClient: OkHttpClient? = null
     private var currentSource: AnimeHttpSource? = null
     private val pathToVideo = mutableMapOf<String, Video>()
+    private val clientExecutor = Executors.newCachedThreadPool()
 
     fun start(client: OkHttpClient?, source: AnimeCatalogueSource?) {
         if (serverSocket != null) return
@@ -40,17 +41,16 @@ object LocalProxyServer {
             running = true
             Log.i(TAG, "Proxy server started on port $PROXY_PORT")
 
-            val executor = Executors.newSingleThreadExecutor()
-            executor.submit {
+            Thread {
                 while (running) {
                     try {
                         val clientSocket = serverSocket!!.accept()
-                        handleClient(clientSocket)
+                        clientExecutor.execute { handleClient(clientSocket) }
                     } catch (e: Exception) {
                         if (running) Log.e(TAG, "Accept error", e)
                     }
                 }
-            }
+            }.apply { isDaemon = true }.start()
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start proxy server", e)
         }
@@ -68,6 +68,7 @@ object LocalProxyServer {
         running = false
         try { serverSocket?.close() } catch (_: Exception) {}
         serverSocket = null
+        clientExecutor.shutdownNow()
         pathToVideo.clear()
         Log.d(TAG, "Proxy server stopped")
     }
@@ -131,13 +132,27 @@ object LocalProxyServer {
                 else -> null
             }
 
-            if (upstreamHost == null) {
-                Log.w(TAG, "Cannot determine upstream host for $requestPath")
-                sendResponse(clientSocket, 502, "text/plain", "Unknown upstream host".toByteArray())
-                return
+            val upstreamUrl = if (video != null) {
+                val base = video.videoUrl
+                if (query != null && !base.contains("?")) "$base?$query" else base
+            } else if (pathToVideo.isNotEmpty()) {
+                val firstVideo = pathToVideo.values.first()
+                val videoUri = try { URI(firstVideo.videoUrl) } catch (_: Exception) { null }
+                val serverBase = if (videoUri != null) {
+                    val port = if (videoUri.port > 0) ":${videoUri.port}" else ""
+                    "${videoUri.scheme}://${videoUri.host}$port"
+                } else {
+                    firstVideo.videoUrl.substringBeforeLast("/")
+                }
+                "$serverBase$requestPath${if (query != null) "?$query" else ""}"
+            } else {
+                if (upstreamHost == null) {
+                    Log.w(TAG, "Cannot determine upstream host for $requestPath")
+                    sendResponse(clientSocket, 502, "text/plain", "Unknown upstream host".toByteArray())
+                    return
+                }
+                "$upstreamHost$requestPath${if (query != null) "?$query" else ""}"
             }
-
-            val upstreamUrl = "$upstreamHost$requestPath${if (query != null) "?$query" else ""}"
             Log.d(TAG, "Forwarding to: $upstreamUrl")
 
             val effectiveHeaders = videoHeaders ?: sourceHeaders
@@ -159,7 +174,7 @@ object LocalProxyServer {
 
             val responseBytes = if (contentType.contains("m3u8", ignoreCase = true) ||
                 contentType.contains("vnd.apple.mpegurl", ignoreCase = true)) {
-                rewriteM3u8(bodyBytes.toString(Charsets.UTF_8), upstreamHost).toByteArray(Charsets.UTF_8)
+                rewriteM3u8(bodyBytes.toString(Charsets.UTF_8), requestPath, upstreamHost ?: upstreamUrl).toByteArray(Charsets.UTF_8)
             } else {
                 bodyBytes
             }
@@ -178,22 +193,32 @@ object LocalProxyServer {
         }
     }
 
-    private fun rewriteM3u8(content: String, upstreamHost: String): String {
+    private fun rewriteM3u8(content: String, requestPath: String? = null, upstreamHost: String? = null): String {
         val proxyBase = "http://127.0.0.1:$PROXY_PORT"
+        val baseDir = if (requestPath != null && requestPath.contains("/")) {
+            requestPath.substringBeforeLast("/")
+        } else null
         return content.lines().joinToString("\n") { line ->
             val trimmed = line.trim()
             when {
-                trimmed.startsWith("http://") || trimmed.startsWith("https://") -> {
+                trimmed.startsWith("http://127.0.0.1:") || trimmed.startsWith("http://localhost:") -> {
                     try {
                         val uri = URI(trimmed)
                         "$proxyBase${uri.path}${if (uri.query != null) "?${uri.query}" else ""}"
                     } catch (_: Exception) { line }
                 }
+                trimmed.startsWith("http://") || trimmed.startsWith("https://") -> line
                 trimmed.endsWith(".ts") || trimmed.endsWith(".m3u8") ||
                     trimmed.endsWith(".aac") || trimmed.endsWith(".mp4") ||
                     trimmed.endsWith(".vtt") || trimmed.endsWith(".png") ||
                     trimmed.endsWith(".jpg") -> {
-                    if (trimmed.startsWith("/")) "$proxyBase$trimmed" else "$proxyBase/$trimmed"
+                    if (trimmed.startsWith("/")) {
+                        "$proxyBase$trimmed"
+                    } else if (baseDir != null) {
+                        "$proxyBase$baseDir/$trimmed"
+                    } else {
+                        "$proxyBase/$trimmed"
+                    }
                 }
                 else -> line
             }

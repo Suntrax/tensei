@@ -2574,6 +2574,14 @@ class MainViewModel : ViewModel() {
                         }
                     }
                 }
+                // Rewrite non-41223 localhost URLs to go through our multi-threaded proxy
+                if (!effectiveVideoUrl.contains("127.0.0.1:${LocalProxyServer.PROXY_PORT}") &&
+                    (effectiveVideoUrl.contains("127.0.0.1") || effectiveVideoUrl.contains("localhost"))) {
+                    effectiveVideoUrl = effectiveVideoUrl
+                        .replace(Regex("127\\.0\\.0\\.1:\\d+"), "127.0.0.1:${LocalProxyServer.PROXY_PORT}")
+                        .replace(Regex("localhost:\\d+"), "127.0.0.1:${LocalProxyServer.PROXY_PORT}")
+                    Log.d(epTag, "  rewrote to our proxy: ${effectiveVideoUrl.take(120)}")
+                }
                 Log.d(epTag, "  effectiveVideoUrl=${effectiveVideoUrl.take(120)} (isOurProxy=${isOurProxy})")
 
                 val videoHeadersRaw = bestVideo.headers
@@ -2725,6 +2733,15 @@ class MainViewModel : ViewModel() {
                             Log.d(epTag, "  resolveVideo also failed: ${e2.message}")
                         }
                     }
+                }
+
+                // Rewrite non-41223 localhost URLs to go through our multi-threaded proxy
+                if (!effectiveVideoUrl.contains("127.0.0.1:${LocalProxyServer.PROXY_PORT}") &&
+                    (effectiveVideoUrl.contains("127.0.0.1") || effectiveVideoUrl.contains("localhost"))) {
+                    effectiveVideoUrl = effectiveVideoUrl
+                        .replace(Regex("127\\.0\\.0\\.1:\\d+"), "127.0.0.1:${LocalProxyServer.PROXY_PORT}")
+                        .replace(Regex("localhost:\\d+"), "127.0.0.1:${LocalProxyServer.PROXY_PORT}")
+                    Log.d(epTag, "fetchExtensionHosterVideos: rewrote to our proxy: ${effectiveVideoUrl.take(120)}")
                 }
 
                 val videoHeadersRaw = bestVideo.headers

@@ -278,7 +278,7 @@ class UserPreferences(context: Context) {
         val savedMagnetExt = sharedPreferences.getString(KEY_DEFAULT_MAGNET_EXTENSION, null)
         _defaultMagnetExtension.value = savedMagnetExt
         _startupScreen.value = sharedPreferences.getInt(KEY_STARTUP_SCREEN, 2)
-        _bufferAheadSeconds.value = sharedPreferences.getInt(KEY_BUFFER_AHEAD_SECONDS, 60)
+        _bufferAheadSeconds.value = sharedPreferences.getInt(KEY_BUFFER_AHEAD_SECONDS, 30)
         _bufferSizeMb.value = sharedPreferences.getInt(KEY_BUFFER_SIZE_MB, 200)
         _showBufferIndicator.value = sharedPreferences.getBoolean(KEY_SHOW_BUFFER_INDICATOR, true)
         _checkUpdatesOnStart.value = sharedPreferences.getBoolean(KEY_CHECK_UPDATES_ON_START, true)

@@ -475,17 +475,28 @@ fun RichEpisodeScreen(
     }
 
     // Fetch TMDB episodes when screen opens
+    fun hasRealTmdbData(episodes: List<TmdbEpisode>): Boolean =
+        episodes.isNotEmpty() && episodes.any { !it.title.startsWith("Episode ") }
+
     LaunchedEffect(anime.id) {
         val cached = viewModel.getCachedTmdbEpisodes(anime.id, anime.status)
-        if (cached != null) {
+        if (cached != null && hasRealTmdbData(cached)) {
             tmdbEpisodes = cached
             isLoadingEpisodes = false
         } else {
-            try {
-                val episodes = viewModel.fetchTmdbEpisodes(anime.title, anime.id, anime.year, anime.format)
-                viewModel.cacheTmdbEpisodes(anime.id, episodes)
-                tmdbEpisodes = episodes
-            } catch (_: Exception) {}
+            var retries = 0
+            while (retries < 3) {
+                try {
+                    val episodes = viewModel.fetchTmdbEpisodes(anime.title, anime.id, anime.year, anime.format)
+                    if (hasRealTmdbData(episodes) || episodes.isEmpty()) {
+                        viewModel.cacheTmdbEpisodes(anime.id, episodes)
+                        tmdbEpisodes = episodes
+                        break
+                    }
+                } catch (_: Exception) {}
+                retries++
+                if (retries < 3) delay(3000)
+            }
             isLoadingEpisodes = false
         }
     }

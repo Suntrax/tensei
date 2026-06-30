@@ -1016,7 +1016,7 @@ class AnimeRepository(
             
             // Continue with TV show logic
             val tvDetails = fetchTvDetails(bestMatch.id) ?: return@withContext emptyList()
-            
+            Log.d("TmdbDebug", "TV details: id=${bestMatch.id} name=${tvDetails.name} seasons=${tvDetails.seasons.map { it.season_number }} totalEps=${tvDetails.number_of_episodes}")
             
             // Check if this looks like anime vs live action for Chinese titles
             val isChineseTitle = animeTitle.toCharArray().any { it.code in 0x4E00..0x9FFF || it.code in 0x3400..0x4DBF }
@@ -1048,15 +1048,19 @@ class AnimeRepository(
 
             // Fetch all seasons in parallel to speed up and prevent timeouts
             val sortedSeasons = tvDetails.seasons.filter { it.season_number > 0 }.sortedBy { it.season_number }
+            Log.d("TmdbDebug", "Fetching seasons: ${sortedSeasons.map { it.season_number }} for tmdbId=${tvDetails.id}")
             val allSeasonDetails = coroutineScope {
                 sortedSeasons.map { season ->
                     async { fetchSeason(tvDetails.id, season.season_number) }
                 }.awaitAll().filterNotNull()
             }
+            Log.d("TmdbDebug", "Fetched ${allSeasonDetails.size} seasons, episodes per season: ${allSeasonDetails.map { "${it.season_number}:${it.episodes.size}" }}")
 
             val (episodeOffset, maxEpisodes) = calculateEpisodeOffset(tvDetails, allSeasonDetails, animeTitle, animeId, bestMatch.name, searchResults.size)
+            Log.d("TmdbDebug", "Offset=$episodeOffset maxEpisodes=$maxEpisodes animeTitle=$animeTitle")
 
             val result = buildEpisodesFromPool(allSeasonDetails, episodeOffset, latestAiredEpisode, maxEpisodes)
+            Log.d("TmdbDebug", "Final episode count=${result.size}, first=${result.firstOrNull()?.episode}, last=${result.lastOrNull()?.episode}")
             result
         } catch (_: Exception) {
             emptyList()
@@ -1168,7 +1172,8 @@ class AnimeRepository(
 
     private suspend fun fetchSeason(tvId: Int, seasonNumber: Int): TmdbSeasonDetails? = withContext(Dispatchers.IO) {
         try {
-            val url = URL("https://api.themoviedb.org/3/tv/$tvId/season/$seasonNumber?language=en-US")
+            val urlStr = "https://api.themoviedb.org/3/tv/$tvId/season/$seasonNumber?language=en-US"
+            val url = URL(urlStr)
             val connection = (url.openConnection() as HttpsURLConnection).apply {
                 readTimeout = 15000
                 connectTimeout = 15000
@@ -1176,11 +1181,20 @@ class AnimeRepository(
                 setRequestProperty("Authorization", "Bearer $tmdbBearerToken")
             }
 
-            if (connection.responseCode == 200) {
+            val responseCode = connection.responseCode
+            if (responseCode == 200) {
                 val response = connection.inputStream.bufferedReader().readText()
-                json.decodeFromString<TmdbSeasonDetails>(response)
-            } else null
-        } catch (_: Exception) { null }
+                val details = json.decodeFromString<TmdbSeasonDetails>(response)
+                Log.d("TmdbDebug", "Season $seasonNumber: ${details.episodes.size} episodes")
+                details
+            } else {
+                Log.w("TmdbDebug", "Season $seasonNumber: HTTP $responseCode for $urlStr")
+                null
+            }
+        } catch (e: Exception) {
+            Log.e("TmdbDebug", "Season $seasonNumber error: ${e.message}")
+            null
+        }
     }
 
     private fun buildEpisodesFromPool(
@@ -1193,10 +1207,12 @@ class AnimeRepository(
         var absoluteIndex = 1
 
         // First, collect all episodes from TMDB
+        Log.d("TmdbDebug", "buildEpisodesFromPool: offset=$episodeOffset maxEp=$maxEpisodes latest=$latestAiredEpisode seasons=${allSeasonDetails.size}")
         data class EpisodeData(val relativeNum: Int, val title: String?, val description: String?, val image: String?)
         val tmdbEpisodes = mutableListOf<EpisodeData>()
         
         for (season in allSeasonDetails) {
+            Log.d("TmdbDebug", "  Season ${season.season_number}: ${season.episodes.size} episodes, starting absoluteIndex=$absoluteIndex")
             for (episode in season.episodes) {
                 val isTarget = if (maxEpisodes > 0) {
                     absoluteIndex > episodeOffset && absoluteIndex <= (episodeOffset + maxEpisodes)
@@ -1406,6 +1422,15 @@ class AnimeRepository(
         return -1
     }
 
+    private fun wordOverlapScore(original: String, candidate: String): Int {
+        val origWords = original.split(" ").filter { it.length > 2 }.toSet()
+        val candWords = candidate.split(" ").filter { it.length > 2 }.toSet()
+        if (origWords.isEmpty() || candWords.isEmpty()) return 0
+        val common = origWords.intersect(candWords).size
+        val extra = (candWords - origWords).size
+        return common * 30 - extra * 50
+    }
+
     private fun findBestMatch(results: List<TmdbSearchResult>, originalTitle: String): TmdbSearchResult? {
         val normalizedOriginal = normalizeTitle(originalTitle)
         
@@ -1416,6 +1441,7 @@ class AnimeRepository(
         val quickMatch = results.maxByOrNull { result ->
             val name = result.name ?: result.title ?: result.original_name ?: ""
             val normalizedName = normalizeTitle(name)
+            val normalizedOrigName = normalizeTitle(result.original_name ?: "")
             var score = 0
             
             // Skip invalid results
@@ -1430,19 +1456,32 @@ class AnimeRepository(
             }
             
             // Exact match - highest priority
-            if (normalizedName == normalizedOriginal) score += 500
-            
-            // When names are equal, prefer higher ID
             if (normalizedName == normalizedOriginal) {
+                score += 500
+                score += result.id / 1000  // tiebreaker
+            } else if (normalizedOrigName == normalizedOriginal) {
+                score += 500
                 score += result.id / 1000
             }
             
-            // Partial match
+            // Partial match (substring)
             if (normalizedName.length > 2 && normalizedOriginal.length > 2) {
                 if (normalizedOriginal in normalizedName || normalizedName in normalizedOriginal) {
                     score += 100
                 }
             }
+            
+            // Word overlap scoring
+            score += wordOverlapScore(normalizedOriginal, normalizedName)
+            if (result.original_name != null) {
+                score += wordOverlapScore(normalizedOriginal, normalizeTitle(result.original_name))
+            }
+            
+            // Prefer Japanese original language for anime
+            if (result.original_language == "ja") score += 30
+            
+            // Prefer higher popularity
+            score += (result.popularity?.toInt() ?: 0) / 100
             
             score
         }
@@ -1486,7 +1525,12 @@ class AnimeRepository(
                     val normalizedName = normalizeTitle(name)
                     var score = 0
                     if (normalizedName == normalizedOriginal) score += 500
-                    score += result.id / 1000
+                    score += wordOverlapScore(normalizedOriginal, normalizedName)
+                    if (result.original_name != null) {
+                        score += wordOverlapScore(normalizedOriginal, normalizeTitle(result.original_name))
+                    }
+                    if (result.original_language == "ja") score += 30
+                    score += (result.popularity?.toInt() ?: 0) / 100
                     score
                 }?.first
             }
