@@ -519,7 +519,7 @@ fun RichEpisodeScreen(
 
     // Scroll to current episode (next to watch or last watched) with smooth animation
     // Re-triggers when TMDB, extension, or magnet episodes finish loading.
-    val isCompleted = anime.listStatus == "COMPLETED"
+    val isCompleted = anime.listStatus == "COMPLETED" || (anime.listStatus.isBlank() && anime.progress >= anime.totalEpisodes && anime.totalEpisodes > 0)
     LaunchedEffect(currentProgress, episodeCount, isLoadingEpisodes, isLoadingExtensionEpisodes, isLoadingMagnetEpisodes, isCompleted) {
         if (!isCompleted && !isLoadingEpisodes && !isLoadingExtensionEpisodes && !isLoadingMagnetEpisodes && currentProgress > 0) {
             delay(300.milliseconds)
