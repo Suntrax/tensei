@@ -657,13 +657,6 @@ fun RichEpisodeScreen(
                 .width(36.dp).height(4.dp)
                 .background(Color.White.copy(alpha = 0.3f), RoundedCornerShape(2.dp)).zIndex(5f))
 
-            if (isLoadingEpisodes) {
-                CircularProgressIndicator(
-                    modifier = Modifier.align(Alignment.TopCenter).padding(top = statusBarsPadding.calculateTopPadding() + 64.dp).zIndex(10f),
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-
             // Scrollable content: chips + episodes in one LazyColumn
             LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(
@@ -783,48 +776,8 @@ fun RichEpisodeScreen(
                     }
                 }
 
-                // Episode cards — magnet loading/error take priority
-                if (!isLoadingEpisodes && isLoadingMagnetEpisodes) {
-                    item {
-                        Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                CircularProgressIndicator(color = MaterialTheme.colorScheme.tertiary)
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Text("Fetching magnet sources...", style = MaterialTheme.typography.bodyMedium, color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                    }
-                } else if (magnetError != null) {
-                    item {
-                        Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("\u26A0", style = MaterialTheme.typography.headlineLarge)
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(magnetError ?: "", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
-                            }
-                        }
-                    }
-                } else if (!isLoadingEpisodes && isLoadingExtensionEpisodes && selectedExtensionPkg != null) {
-                    item {
-                        Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Text("Fetching sources...", style = MaterialTheme.typography.bodyMedium, color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                    }
-                } else if (extensionError != null && selectedExtensionPkg != null) {
-                    item {
-                        Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("\u26A0", style = MaterialTheme.typography.headlineLarge)
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(extensionError ?: "", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
-                            }
-                        }
-                    }
-                } else if (displayEpisodes.isNotEmpty()) {
+                // Episode cards
+                if (displayEpisodes.isNotEmpty()) {
                     items(displayEpisodes.size) { index ->
                         val ep = displayEpisodes[index]
                         val episodeNum = ep.episode
@@ -890,6 +843,59 @@ fun RichEpisodeScreen(
                                 }
                             }
                         )
+                    }
+                }
+
+                // Loading and error states at the bottom
+                if (isLoadingEpisodes) {
+                    item {
+                        Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                }
+                if (!isLoadingEpisodes && isLoadingMagnetEpisodes) {
+                    item {
+                        Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                CircularProgressIndicator(color = MaterialTheme.colorScheme.tertiary)
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text("Fetching magnet sources...", style = MaterialTheme.typography.bodyMedium, color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                }
+                if (magnetError != null) {
+                    item {
+                        Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("\u26A0", style = MaterialTheme.typography.headlineLarge)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(magnetError ?: "", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                    }
+                }
+                if (!isLoadingEpisodes && isLoadingExtensionEpisodes && selectedExtensionPkg != null) {
+                    item {
+                        Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text("Fetching sources...", style = MaterialTheme.typography.bodyMedium, color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                }
+                if (extensionError != null && selectedExtensionPkg != null) {
+                    item {
+                        Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("\u26A0", style = MaterialTheme.typography.headlineLarge)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(extensionError ?: "", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                            }
+                        }
                     }
                 }
 
