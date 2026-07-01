@@ -696,6 +696,7 @@ fun DownloadsScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             IconButton(onClick = {
+                                if (anyActive) downloadManager.cancelBatch(animeName)
                                 showDownloadDialogFor = null
                             }) {
                                 Icon(Icons.Default.Close, "Close", tint = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface)
