@@ -40,14 +40,16 @@ class MagnetExtensionClient(private val context: Context) {
         return result
     }
 
-    fun fetchMagnets(authority: String, anilistId: Int, animeName: String): MagnetData? {
+    fun fetchMagnets(authority: String, anilistId: Int, animeName: String, animeRomaji: String = "", category: String = ""): MagnetData? {
         val providerUri = Uri.parse("content://$authority/$SCRAPE_PATH")
         val queryUri = providerUri.buildUpon()
             .appendQueryParameter("anime", animeName)
             .appendQueryParameter("anilistId", anilistId.toString())
+            .apply { if (animeRomaji.isNotBlank()) appendQueryParameter("animeRomaji", animeRomaji) }
+            .apply { if (category.isNotBlank()) appendQueryParameter("category", category) }
             .build()
 
-        Log.d(TAG, "fetchMagnets: authority=$authority anime='$animeName' anilistId=$anilistId uri=$queryUri")
+        Log.d(TAG, "fetchMagnets: authority=$authority anime='$animeName' anilistId=$anilistId animeRomaji='$animeRomaji' category='$category' uri=$queryUri")
 
         var cursor: Cursor? = null
         val jsonData: String? = try {

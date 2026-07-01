@@ -267,7 +267,7 @@ class MainViewModel : ViewModel() {
         for ((i, query) in searchTerms.withIndex()) {
             val startTime = System.currentTimeMillis()
             val fetched = try {
-                client.fetchMagnets(authority, anime.id, query)
+                client.fetchMagnets(authority, anime.id, query, parseTitleForSearch(anime.title ?: query), preferredCategory.value)
             } catch (e: Exception) {
                 Log.e(TAG, "fetchMagnetEpisodesSync: fetchMagnets threw for term[$i]='$query'", e)
                 null

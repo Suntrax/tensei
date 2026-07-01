@@ -779,7 +779,7 @@ fun RichEpisodeScreen(
                 }
 
                 // Episode cards — magnet loading/error take priority
-                if (isLoadingMagnetEpisodes) {
+                if (!isLoadingEpisodes && isLoadingMagnetEpisodes) {
                     item {
                         Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -799,7 +799,7 @@ fun RichEpisodeScreen(
                             }
                         }
                     }
-                } else if (isLoadingExtensionEpisodes && selectedExtensionPkg != null) {
+                } else if (!isLoadingEpisodes && isLoadingExtensionEpisodes && selectedExtensionPkg != null) {
                     item {
                         Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
