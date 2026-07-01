@@ -102,6 +102,9 @@ fun ExploreScreen(
     val apiError by viewModel.apiError.collectAsState()
     val isOffline by viewModel.isOffline.collectAsState()
     val simplifyEpisodeMenu by viewModel.simplifyEpisodeMenu.collectAsState(initial = true)
+    val defaultMagnetExt by viewModel.defaultMagnetExtension.collectAsState()
+    val streamMethod by viewModel.streamMethod.collectAsState()
+    val defaultExtPkg by viewModel.defaultExtensionPackage.collectAsState()
     val localAnimeStatus by viewModel.localAnimeStatus.collectAsState()
     
     val filteredFeaturedAnime = remember(featuredAnime, hideAdultContent) {
@@ -456,7 +459,13 @@ fun ExploreScreen(
                     },
                     onPlayClick = { anime ->
                         selectedAnime = anime
-                        showEpisodeSelection = true
+                        val hasDefault = streamMethod == "magnet" && defaultMagnetExt != null || streamMethod == "direct" && defaultExtPkg.isNotEmpty()
+                        if (simplifyEpisodeMenu || hasDefault) {
+                            showEpisodeSelection = true
+                        } else {
+                            showEpisodeSelection = false
+                            onNoExtension()
+                        }
                     },
                     onInfoClick = onFeaturedAnimeClickStable,
                     onSearchClick = onSearchClick,

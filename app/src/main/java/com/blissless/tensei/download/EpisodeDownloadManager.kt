@@ -690,6 +690,7 @@ class EpisodeDownloadManager(private val context: Context) {
     }
 
     fun cancelBatch(animeName: String) {
+        Log.e(TAG, "cancelBatch: $animeName — setting batchCancelledFlags, _downloadsInfo entries=${_downloadsInfo.value.count { it.value.animeName == animeName }}")
         batchCancelledFlags[animeName] = true
         _activeBatches.value -= animeName
         val completed = _downloadsInfo.value.values.count {

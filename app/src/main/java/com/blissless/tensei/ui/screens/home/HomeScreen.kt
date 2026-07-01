@@ -161,6 +161,8 @@ fun HomeScreen(
     var showDetailedAnimeScreen by remember { mutableStateOf(false) }
     var showNoExtensionDialog by remember { mutableStateOf(false) }
     val defaultPkg by viewModel.defaultExtensionPackage.collectAsState()
+    val defaultMagnetExt by viewModel.defaultMagnetExtension.collectAsState()
+    val streamMethod by viewModel.streamMethod.collectAsState()
     val magnetExtensions by viewModel.availableMagnetExtensions.collectAsState()
 
     // Status list screen state
@@ -768,7 +770,7 @@ fun HomeScreen(
                     showEpisodeSheet = false
                 }
             )
-        } else if (defaultPkg.isNotEmpty() || magnetExtensions.isNotEmpty()) {
+        } else if (streamMethod == "magnet" && defaultMagnetExt != null || streamMethod == "direct" && defaultPkg.isNotEmpty()) {
             RichEpisodeScreen(
                 anime = selectedAnime!!,
                 viewModel = viewModel,
@@ -786,7 +788,8 @@ fun HomeScreen(
     }
 
     LaunchedEffect(showEpisodeSheet, selectedAnime) {
-        if (showEpisodeSheet && selectedAnime != null && defaultPkg.isEmpty() && magnetExtensions.isEmpty()) {
+        val hasDefault = simplifyEpisodeMenu || streamMethod == "magnet" && defaultMagnetExt != null || streamMethod == "direct" && defaultPkg.isNotEmpty()
+        if (showEpisodeSheet && selectedAnime != null && !hasDefault) {
             showEpisodeSheet = false
             showNoExtensionDialog = true
         }

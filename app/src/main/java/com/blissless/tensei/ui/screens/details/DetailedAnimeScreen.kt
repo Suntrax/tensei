@@ -200,6 +200,8 @@ fun DetailedAnimeScreen(
     var showStatusDialog by remember { mutableStateOf(false) }
 
     val defaultExtPkg by viewModel.defaultExtensionPackage.collectAsState()
+    val defaultMagnetExt by viewModel.defaultMagnetExtension.collectAsState()
+    val streamMethod by viewModel.streamMethod.collectAsState()
     val magnetExtensions by viewModel.availableMagnetExtensions.collectAsState()
     val localFavorites by viewModel.localFavorites.collectAsState()
     val aniListFavorites by viewModel.aniListFavorites.collectAsState()
@@ -807,7 +809,8 @@ fun DetailedAnimeScreen(
 
                             Button(
                                 onClick = {
-                                    if (defaultExtPkg.isEmpty() && magnetExtensions.isEmpty()) {
+                                    val hasDefault = simplifyEpisodeMenu || streamMethod == "magnet" && defaultMagnetExt != null || streamMethod == "direct" && defaultExtPkg.isNotEmpty()
+                                    if (!hasDefault) {
                                         showNoDefaultExtDialog = true
                                     } else {
                                         showEpisodeSelection = true

@@ -88,9 +88,12 @@ import com.blissless.tensei.torrent.TorrentEngine
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlin.time.Duration.Companion.milliseconds
 import java.io.File
 import kotlin.coroutines.resume
@@ -153,6 +156,7 @@ fun EpisodeDownloadDialog(
     var batteryOptDismissed by remember { mutableStateOf(false) }
     var downloadActive by remember { mutableStateOf(true) }
     var batchCancelled by remember { mutableStateOf(false) }
+    var downloadJob by remember { mutableStateOf<Job?>(null) }
     val isIgnoringBatteryOptimizations = remember {
         val pm = context.getSystemService(PowerManager::class.java)
         pm?.isIgnoringBatteryOptimizations(context.packageName) == true
@@ -196,9 +200,10 @@ fun EpisodeDownloadDialog(
             return false
         }
         val sortedVideos = result.videos.sortedByDescending { it.resolution ?: 0 }
+        Log.e(TAG, "downloadExtensionEpisode: ep=$ep displayTitle=$displayTitle videos=${result.videos.size}")
         var downloadSucceeded = false
         for ((videoIndex, video) in sortedVideos.withIndex()) {
-            Log.d(TAG, "startDownload: ep $ep trying video ${videoIndex + 1}/${sortedVideos.size}: ${video.videoTitle} (${video.resolution}p) url=${video.videoUrl.take(100)}")
+            Log.e(TAG, "downloadExtensionEpisode: ep $ep trying video ${videoIndex + 1}/${sortedVideos.size}: ${video.videoTitle} (${video.resolution}p)")
             val mimeType = downloadManager.probeVideoMimeType(video.videoUrl, result.videoHeaders)
             val started = downloadManager.startDownload(
                 animeId = anime.id, animeName = displayTitle, episode = ep,
@@ -208,14 +213,18 @@ fun EpisodeDownloadDialog(
                 malId = anime.malId, year = anime.year, category = resolvedCategory,
             )
             if (!started) {
-                Log.w(TAG, "startDownload: ep $ep video ${videoIndex + 1} failed to start, trying next source...")
+                Log.e(TAG, "downloadExtensionEpisode: ep $ep video ${videoIndex + 1} failed to start, trying next source...")
                 continue
             }
-            Log.i(TAG, "startDownload: ep $ep video ${videoIndex + 1} initiated, waiting...")
+            Log.e(TAG, "downloadExtensionEpisode: ep $ep video ${videoIndex + 1} initiated, waiting for completion...")
             val downloadId = "${anime.id}_$ep"
             var finalInfo: EpisodeDownloadManager.DownloadInfo?
             while (true) {
-                if (batchCancelled || downloadManager.isBatchCancelled(displayTitle)) return false
+                val isBatchCancelledNow = batchCancelled || downloadManager.isBatchCancelled(displayTitle)
+                if (isBatchCancelledNow) {
+                    Log.e(TAG, "downloadExtensionEpisode: batchCancelled=$batchCancelled isBatchCancelled=${downloadManager.isBatchCancelled(displayTitle)} — returning false for ep $ep")
+                    return false
+                }
                 val d = downloadManager.downloadsInfo.value[downloadId]
                 if (d != null && d.state != Download.STATE_QUEUED && d.state != Download.STATE_DOWNLOADING) {
                     finalInfo = d; break
@@ -241,31 +250,40 @@ fun EpisodeDownloadDialog(
     }
 
     suspend fun downloadTorrentEpisode(ep: Int, displayTitle: String): Boolean {
-        Log.i(TAG, "downloadTorrentEpisode: fetching magnet for ep $ep...")
+        Log.e(TAG, "=== downloadTorrentEpisode: ep $ep START with 120s timeout ===")
+        Log.e(TAG, "downloadTorrentEpisode: fetching magnet for ep $ep...")
         val magnetUri = withContext(Dispatchers.IO) {
             viewModel.fetchMagnetForEpisode(anime, ep)
         }
         if (magnetUri.isNullOrBlank()) {
-            Log.w(TAG, "downloadTorrentEpisode: no magnet link for ep $ep")
+            Log.e(TAG, "downloadTorrentEpisode: no magnet link for ep $ep — returning false")
             return false
         }
-        Log.i(TAG, "downloadTorrentEpisode: got magnet for ep $ep, starting torrent download...")
+        Log.e(TAG, "downloadTorrentEpisode: got magnet uri len=${magnetUri.length} for ep $ep")
 
         val engine = (context.applicationContext as TenseiApplication).torrentEngine
-        if (!engine.isRunning.get()) engine.start()
+        Log.e(TAG, "downloadTorrentEpisode: engine acquired, isRunning=${engine.isRunning.get()}")
+        if (!engine.isRunning.get()) {
+            Log.e(TAG, "downloadTorrentEpisode: engine not running, starting...")
+            engine.start()
+        }
+        Log.e(TAG, "downloadTorrentEpisode: calling engine.removeCurrentTorrent()")
         engine.removeCurrentTorrent()
 
         val videoExts = setOf("mkv", "mp4", "webm", "avi", "mov", "m4v")
-        val epPattern = Regex("(?:^|[._ \\[\\]()-])0*$ep(?:\$|[._ \\[\\]()-])", RegexOption.IGNORE_CASE)
+        val epPattern = Regex("(?:^|[Ee._ \\[\\]()-])0*$ep(?:\$|[Ee._ \\[\\]()-])", RegexOption.IGNORE_CASE)
         var fileIndex = -1
         var fileName = ""
         var filePath = ""
 
         var torrentListener: TorrentEngine.EngineListener? = null
-        val result = suspendCancellableCoroutine<Boolean> { cont ->
-            val listener = object : TorrentEngine.EngineListener {
+        Log.e(TAG, "downloadTorrentEpisode: entering suspendCancellableCoroutine for ep $ep with 120s timeout")
+        val result = try {
+            withTimeout(120_000) {
+                suspendCancellableCoroutine<Boolean> { cont ->
+                    val listener = object : TorrentEngine.EngineListener {
                 override fun onMetadataReceived(meta: com.blissless.tensei.torrent.TorrentMeta) {
-                    Log.i(TAG, "downloadTorrentEpisode: metadata received, name='${meta.name}' files=${meta.files.size}")
+                    Log.e(TAG, "downloadTorrentEpisode: onMetadataReceived: name='${meta.name}' files=${meta.files.size} ep=$ep")
                     val videoFiles = meta.files.filter { f ->
                         f.name.substringAfterLast('.', "").lowercase() in videoExts
                     }
@@ -275,10 +293,11 @@ fun EpisodeDownloadDialog(
                     val idx = if (matched.isNotEmpty()) {
                         matched.maxBy { it.size }.index
                     } else {
-                        videoFiles.maxByOrNull { it.size }?.index ?: -1
+                        Log.e(TAG, "downloadTorrentEpisode: ep $ep — no file matched epPattern, matched=${videoFiles.size} video files total. First 3: ${videoFiles.take(3).map { it.name }}")
+                        -1
                     }
                     if (idx < 0) {
-                        Log.w(TAG, "downloadTorrentEpisode: no video file found in torrent")
+                        Log.e(TAG, "downloadTorrentEpisode: no matching file found for ep $ep — resuming false")
                         engine.removeCurrentTorrent()
                         if (!cont.isCompleted) cont.resume(false)
                         return
@@ -286,69 +305,88 @@ fun EpisodeDownloadDialog(
                     fileIndex = idx
                     filePath = engine.getFileSavePath(fileIndex) ?: ""
                     fileName = filePath.substringAfterLast(File.separator)
-                    Log.i(TAG, "downloadTorrentEpisode: selected fileIndex=$fileIndex file='$fileName'")
+                    Log.e(TAG, "downloadTorrentEpisode: selected fileIndex=$fileIndex file='$fileName' — calling startDownload")
                     engine.startDownload(fileIndex)
                 }
 
                 override fun onProgress(downloaded: Long, total: Long) {
                     if (total > 0) {
+                        val pct = "%.1f".format(downloaded.toFloat() / total * 100)
+                        Log.e(TAG, "downloadTorrentEpisode: progress ep=$ep downloaded=$downloaded total=$total ($pct%)")
                         val progress = downloaded.toFloat() / total
                         val epProgress = (completedCount.toFloat() + progress) / totalToDownload.coerceAtLeast(1)
                         downloadProgress = epProgress
+                    } else {
+                        Log.e(TAG, "downloadTorrentEpisode: progress ep=$ep downloaded=$downloaded total=0 (unknown)")
                     }
                 }
 
                 override fun onFinished() {
-                    Log.i(TAG, "downloadTorrentEpisode: download finished for ep $ep")
+                    Log.e(TAG, "downloadTorrentEpisode: onFinished for ep $ep — resuming true")
                     engine.removeCurrentTorrent()
                     if (!cont.isCompleted) cont.resume(true)
                 }
 
                 override fun onError(message: String) {
-                    Log.e(TAG, "downloadTorrentEpisode: error for ep $ep: $message")
+                    Log.e(TAG, "downloadTorrentEpisode: onError for ep $ep: $message")
                     engine.removeCurrentTorrent()
                     if (!cont.isCompleted) cont.resume(false)
                 }
             }
             torrentListener = listener
+            Log.e(TAG, "downloadTorrentEpisode: addListener + addTorrentFromMagnet for ep $ep")
             engine.addListener(listener)
             engine.addTorrentFromMagnet(magnetUri)
             cont.invokeOnCancellation {
+                Log.e(TAG, "downloadTorrentEpisode: invokeOnCancellation FIRED for ep $ep — removing listener + removing torrent")
                 engine.removeListener(listener)
                 engine.removeCurrentTorrent()
             }
+            Log.e(TAG, "downloadTorrentEpisode: suspendCancellableCoroutine setup done for ep $ep, cont.isCompleted=${cont.isCompleted}")
         }
-        torrentListener?.let { engine.removeListener(it) }
+            }
+        } catch (e: TimeoutCancellationException) {
+            Log.e(TAG, "downloadTorrentEpisode: TIMEOUT after 120s for ep $ep — metadata never received, cleaning up")
+            engine.removeCurrentTorrent()
+            torrentListener?.let { engine.removeListener(it) }
+            false
+        }
+        Log.e(TAG, "downloadTorrentEpisode: suspendCancellableCoroutine returned result=$result for ep $ep")
+        torrentListener?.let {
+            Log.e(TAG, "downloadTorrentEpisode: removing listener after suspendCancellableCoroutine")
+            engine.removeListener(it)
+        }
         if (!result) {
-            Log.w(TAG, "downloadTorrentEpisode: torrent download failed for ep $ep")
+            Log.e(TAG, "downloadTorrentEpisode: result=false for ep $ep — returning false")
             return false
         }
 
         if (filePath.isBlank()) {
-            Log.w(TAG, "downloadTorrentEpisode: save path is blank, cannot copy file")
+            Log.e(TAG, "downloadTorrentEpisode: filePath is blank for ep $ep — returning false")
             return false
         }
         val srcFile = File(filePath)
+        Log.e(TAG, "downloadTorrentEpisode: checking file ep=$ep path=$filePath exists=${srcFile.exists()} length=${srcFile.length()}")
         if (!srcFile.exists() || srcFile.length() < 1_000_000L) {
-            Log.w(TAG, "downloadTorrentEpisode: file missing or too small: $filePath")
+            Log.e(TAG, "downloadTorrentEpisode: file missing or too small: $filePath — returning false")
             return false
         }
 
         val ext = fileName.substringAfterLast('.', "mkv")
+        Log.e(TAG, "downloadTorrentEpisode: ep=$ep ext=$ext fileName=$fileName — starting file copy phase")
 
-        // Always cache locally
         val cacheDir = File(context.cacheDir, "torrent_downloads").also { it.mkdirs() }
         val cachedFile = File(cacheDir, "${anime.id}_$ep.$ext")
         try {
             if (cachedFile.exists()) cachedFile.delete()
             srcFile.copyTo(cachedFile)
-            Log.i(TAG, "downloadTorrentEpisode: cached to ${cachedFile.absolutePath}")
+            Log.e(TAG, "downloadTorrentEpisode: cached to ${cachedFile.absolutePath}")
         } catch (e: Exception) {
-            Log.w(TAG, "downloadTorrentEpisode: failed to cache file", e)
+            Log.e(TAG, "downloadTorrentEpisode: failed to cache file", e)
         }
 
-        // Also try to save to the user's custom download directory if set
         val treeUriStr = viewModel.downloadDirectoryUri.value
+        Log.e(TAG, "downloadTorrentEpisode: downloadDirectoryUri=${treeUriStr ?: "(not set)"}")
         if (!treeUriStr.isNullOrBlank()) {
             try {
                 val treeUri = Uri.parse(treeUriStr)
@@ -360,29 +398,34 @@ fun EpisodeDownloadDialog(
                 val sanitizedAnime = displayTitle.replace(Regex("[:\\\\/*?\"<>|]"), "_").trim()
                 val episodeStr = ep.toString().padStart(2, '0')
                 val outName = "${sanitizedAnime} E$episodeStr.$ext"
+                Log.e(TAG, "downloadTorrentEpisode: trying to save $outName to download directory")
                 val animeDirId = findOrCreateDirectory(cr, treeUri, sanitizedAnime)
                 if (animeDirId != null) {
                     val dirUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, animeDirId)
                     val existingId = findDocument(cr, dirUri, outName)
                     if (existingId != null) {
-                        Log.i(TAG, "downloadTorrentEpisode: $outName already exists, skipping copy")
+                        Log.e(TAG, "downloadTorrentEpisode: $outName already exists, skipping copy")
                     } else {
                         val newFileUri = DocumentsContract.createDocument(cr, dirUri, "video/$ext", outName)
                         if (newFileUri != null) {
                             cr.openOutputStream(newFileUri)?.use { out ->
                                 srcFile.inputStream().use { it.copyTo(out) }
                             }
-                            Log.i(TAG, "downloadTorrentEpisode: copied $outName to download directory")
+                            Log.e(TAG, "downloadTorrentEpisode: copied $outName to download directory")
+                        } else {
+                            Log.e(TAG, "downloadTorrentEpisode: createDocument returned null for $outName")
                         }
                     }
+                } else {
+                    Log.e(TAG, "downloadTorrentEpisode: findOrCreateDirectory returned null for $sanitizedAnime")
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "downloadTorrentEpisode: failed to copy to download dir", e)
-                // Fallback: save to Downloads folder via MediaStore
+                Log.e(TAG, "downloadTorrentEpisode: failed to copy to download dir", e)
                 try {
                     val sanitizedAnime = displayTitle.replace(Regex("[:\\\\/*?\"<>|]"), "_").trim()
                     val episodeStr = ep.toString().padStart(2, '0')
                     val outName = "${sanitizedAnime} E$episodeStr.$ext"
+                    Log.e(TAG, "downloadTorrentEpisode: MediaStore fallback for $outName")
                     val values = ContentValues().apply {
                         put(MediaStore.Files.FileColumns.DISPLAY_NAME, outName)
                         put(MediaStore.Files.FileColumns.MIME_TYPE, "video/$ext")
@@ -401,15 +444,17 @@ fun EpisodeDownloadDialog(
                             values.put(MediaStore.Files.FileColumns.IS_PENDING, 0)
                             context.contentResolver.update(uri, values, null, null)
                         }
-                        Log.i(TAG, "downloadTorrentEpisode: saved to Downloads/Tensei/$outName")
+                        Log.e(TAG, "downloadTorrentEpisode: saved to Downloads/Tensei/$outName")
+                    } else {
+                        Log.e(TAG, "downloadTorrentEpisode: MediaStore insert returned null")
                     }
                 } catch (e2: Exception) {
-                    Log.w(TAG, "downloadTorrentEpisode: MediaStore fallback also failed", e2)
+                    Log.e(TAG, "downloadTorrentEpisode: MediaStore fallback also failed", e2)
                 }
             }
         }
 
-        Log.i(TAG, "downloadTorrentEpisode: ep $ep download complete")
+        Log.e(TAG, "=== downloadTorrentEpisode: ep $ep SUCCESS ===")
         return true
     }
 
@@ -421,9 +466,9 @@ fun EpisodeDownloadDialog(
         } else {
             viewModel.defaultExtensionPackage.value
         }
-        Log.i(TAG, "startDownload: anime=${anime.id} streamMethod=$streamMethod isMagnet=$isMagnet extPkg='$extPkg'")
+        Log.e(TAG, "=== startDownload: anime=${anime.id} streamMethod=$streamMethod isMagnet=$isMagnet extPkg='$extPkg' ===")
         if (extPkg.isEmpty()) {
-            Log.w(TAG, "startDownload: no default extension set")
+            Log.e(TAG, "startDownload: no default extension set — aborting")
             showNoExtDialog = true
             return
         }
@@ -432,7 +477,7 @@ fun EpisodeDownloadDialog(
             it.state == Download.STATE_DOWNLOADING || it.state == Download.STATE_QUEUED
         }
         if (existingActive || isDownloading) {
-            Log.w(TAG, "startDownload: a download batch is already active")
+            Log.e(TAG, "startDownload: a download batch is already active — aborting")
             Toast.makeText(context, "A download is already in progress", Toast.LENGTH_SHORT).show()
             return
         }
@@ -442,11 +487,11 @@ fun EpisodeDownloadDialog(
         val resolvedCategory = if (downloadCategoryPref == "same_as_stream") streamCategoryPref else downloadCategoryPref
         val episodes = getEpisodesToDownload()
         if (episodes.isEmpty()) {
-            Log.w(TAG, "startDownload: no episodes selected")
+            Log.e(TAG, "startDownload: no episodes selected — aborting")
             Toast.makeText(context, "No episodes selected", Toast.LENGTH_SHORT).show()
             return
         }
-        Log.i(TAG, "startDownload: downloading ${episodes.size} episodes: $episodes")
+        Log.e(TAG, "startDownload: downloading ${episodes.size} episodes: $episodes")
 
         isDownloading = true
         completedCount = 0
@@ -454,28 +499,36 @@ fun EpisodeDownloadDialog(
         totalToDownload = episodes.size
         downloadProgress = 0f
         requestedDownloadIds = episodes.map { "${anime.id}_$it" }.toSet()
-        Log.d(TAG, "startDownload: tracking ${requestedDownloadIds.size} download IDs: $requestedDownloadIds")
+        Log.e(TAG, "startDownload: tracking ${requestedDownloadIds.size} download IDs: $requestedDownloadIds")
 
         downloadManager.startBatchNotification(displayTitle, episodes.size, episodes.toSet())
 
         val capturedEpisodes = episodes.toList()
 
-        viewModel.viewModelScope.launch {
-            if (isMagnet) requestedDownloadIds = emptySet()
+        downloadJob = viewModel.viewModelScope.launch {
+            if (isMagnet) {
+                Log.e(TAG, "startDownload: isMagnet=true, clearing requestedDownloadIds (was ${requestedDownloadIds.size} ids)")
+                requestedDownloadIds = emptySet()
+            }
             try {
                 downloadManager.downloadDirectoryUri = viewModel.downloadDirectoryUri.value
                 downloadManager.keepDownloadedFiles = viewModel.keepDownloadedFiles.value
 
-                for (ep in capturedEpisodes) {
-                    if (downloadManager.isBatchCancelled(displayTitle)) return@launch
+                Log.e(TAG, "startDownload: starting loop over ${capturedEpisodes.size} episodes")
+                for ((idx, ep) in capturedEpisodes.withIndex()) {
+                    if (downloadManager.isBatchCancelled(displayTitle)) {
+                        Log.e(TAG, "startDownload: isBatchCancelled($displayTitle)=true at ep loop idx=$idx ep=$ep — returning")
+                        return@launch
+                    }
                     currentEpisode = ep
-                    Log.d(TAG, "startDownload: resolving episode $ep... (isMagnet=$isMagnet)")
+                    Log.e(TAG, "startDownload: processing ep $ep (idx=$idx/${capturedEpisodes.size})")
 
                     val epSuccess = if (isMagnet) {
                         downloadTorrentEpisode(ep, displayTitle)
                     } else {
                         downloadExtensionEpisode(ep, displayTitle, resolvedCategory, extPkg)
                     }
+                    Log.e(TAG, "startDownload: ep $ep result: success=$epSuccess (completed=$completedCount failed=$failedCount)")
 
                     completedCount += if (epSuccess) 1 else 0
                     failedCount += if (!epSuccess) 1 else 0
@@ -489,19 +542,22 @@ fun EpisodeDownloadDialog(
                     requestedDownloadIds = emptySet()
                     if (failedCount > 0) {
                         val msg = "Downloaded $completedCount episodes, $failedCount failed."
-                        Log.w(TAG, "Torrent download batch complete: $msg")
+                        Log.e(TAG, "Torrent download batch complete: $msg")
                         showFailureDetail = msg
                     } else {
-                        Log.i(TAG, "Torrent download batch complete: all $completedCount episodes done")
+                        Log.e(TAG, "Torrent download batch complete: all $completedCount episodes done")
                         Toast.makeText(context, "Downloaded $completedCount episodes", Toast.LENGTH_SHORT).show()
                     }
                 }
             } catch (_: CancellationException) {
-                Log.i(TAG, "startDownload: cancelled")
+                Log.e(TAG, "startDownload: CAUGHT CancellationException — download was cancelled via Job.cancel()")
                 if (isMagnet) { isDownloading = false; requestedDownloadIds = emptySet() }
             } catch (e: Exception) {
-                Log.e(TAG, "startDownload: unexpected error", e)
+                Log.e(TAG, "startDownload: CAUGHT unexpected error", e)
                 if (isMagnet) { isDownloading = false; requestedDownloadIds = emptySet() }
+            } finally {
+                Log.e(TAG, "startDownload: finally block — clearing downloadJob")
+                downloadJob = null
             }
         }
     }
@@ -786,16 +842,15 @@ fun EpisodeDownloadDialog(
                         OutlinedButton(
                             onClick = {
                                 if (isDownloading) {
+                                    val cancelIsMagnet = viewModel.streamMethod.value == "magnet"
+                                    Log.e(TAG, "Cancel button: isMagnet=$cancelIsMagnet, displayTitle=$displayTitle")
                                     downloadActive = false
                                     batchCancelled = true
-                                    val doneCount = requestedDownloadIds.count { id ->
-                                        val d = downloadManager.downloadsInfo.value[id]
-                                        d != null && d.state == Download.STATE_COMPLETED
+                                    downloadManager.cancelBatch(displayTitle)
+                                    if (cancelIsMagnet) {
+                                        Log.e(TAG, "Cancel button: cancelling downloadJob for magnet")
+                                        downloadJob?.cancel()
                                     }
-                                    requestedDownloadIds.forEach { id ->
-                                        downloadManager.removeDownload(id)
-                                    }
-                                    downloadManager.cancelBatchNotification(displayTitle, doneCount, totalToDownload)
                                 }
                                 onDismiss()
                             },
