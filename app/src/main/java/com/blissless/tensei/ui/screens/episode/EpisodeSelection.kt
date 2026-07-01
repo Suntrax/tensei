@@ -286,6 +286,11 @@ fun RichEpisodeScreen(
         availableExtensions.sortedWith(compareBy<Pair<String, String>> { if (it.second == selected) 0 else 1 }.thenBy { it.first })
     }
 
+    val sortedMagnetExtensions = remember(availableMagnetExtensions, selectedMagnetAuthority) {
+        val selected = selectedMagnetAuthority
+        availableMagnetExtensions.sortedWith(compareBy<Pair<String, String>> { if (it.second == selected) 0 else 1 }.thenBy { it.first })
+    }
+
     // Sync selectedExtensionPkg with default when it becomes available
     // Also re-evaluate when stream method changes (e.g., magnet→direct)
     LaunchedEffect(defaultPkg, currentStreamMethod) {
@@ -708,7 +713,7 @@ fun RichEpisodeScreen(
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Text("Magnet:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.tertiary)
-                                availableMagnetExtensions.forEach { (extName, authority) ->
+                                sortedMagnetExtensions.forEach { (extName, authority) ->
                                     FilterChip(
                                         selected = authority == selectedMagnetAuthority && isMagnetActive,
                                         onClick = {
