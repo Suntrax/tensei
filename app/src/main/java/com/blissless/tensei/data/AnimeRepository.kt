@@ -1062,7 +1062,8 @@ class AnimeRepository(
             val result = buildEpisodesFromPool(allSeasonDetails, episodeOffset, latestAiredEpisode, maxEpisodes)
             Log.d("TmdbDebug", "Final episode count=${result.size}, first=${result.firstOrNull()?.episode}, last=${result.lastOrNull()?.episode}")
             result
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.e("TmdbDebug", "fetchTmdbEpisodes failed for animeId=$animeId title=$animeTitle", e)
             emptyList()
         }
     }
@@ -1148,7 +1149,8 @@ class AnimeRepository(
             }
             
             results
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.e("TmdbDebug", "searchTmdb failed for title='$title' format=$format", e)
             emptyList() 
         }
     }
@@ -1167,7 +1169,10 @@ class AnimeRepository(
                 val response = connection.inputStream.bufferedReader().readText()
                 json.decodeFromString<TmdbTvDetails>(response)
             } else null
-        } catch (_: Exception) { null }
+        } catch (e: Exception) {
+            Log.e("TmdbDebug", "fetchTvDetails failed for tmdbId=$tmdbId", e)
+            null
+        }
     }
 
     private suspend fun fetchSeason(tvId: Int, seasonNumber: Int): TmdbSeasonDetails? = withContext(Dispatchers.IO) {
