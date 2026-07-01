@@ -63,7 +63,7 @@ class TorrentEngine(private val context: Context) {
             // CRITICAL: enable DHT/LSD/UPnP/NAT-PMP. Magnet links carry only an
             // infohash; without DHT libtorrent cannot discover peers, so metadata
             // never arrives and streaming never starts. Mirrors toram's config.
-            Log.d(TAG, "start: configuring SettingsPack (DHT+LSD+UPnP+NAT-PMP, stop-on-finish to avoid seeding)")
+            Log.d(TAG, "start: configuring SettingsPack (DHT+LSD+UPnP+NAT-PMP, extended trackers)")
             val sp = SettingsPack()
             sp.setEnableDht(true)
             sp.setEnableLsd(true)
@@ -109,6 +109,8 @@ class TorrentEngine(private val context: Context) {
     private var lastProgressTime = 0L
     private var lastLoggedState = -1
     private var finishedNotified = false
+    private var metadataWaitLogged = false
+    private var torrentAddedTime = 0L
 
     private fun processProgress() {
         val h = handle ?: return
@@ -127,7 +129,7 @@ class TorrentEngine(private val context: Context) {
                 lastLoggedState = state.ordinal
                 Log.i(TAG, "state: ${state.name} | downloaded=${st.totalWantedDone()}/${st.totalWanted()}" +
                         " | peers=${st.numPeers()} seeds=${st.numSeeds()} | dl=${st.downloadRate() / 1024}KB/s" +
-                        " | hasMetadata=${st.hasMetadata()}")
+                        " | hasMetadata=${st.hasMetadata()} | progress=${st.progress()}")
             }
             if (now - lastProgressTime > 2000) {
                 lastProgressTime = now
@@ -136,6 +138,11 @@ class TorrentEngine(private val context: Context) {
                     Log.d(TAG, "progress: ${st.totalWantedDone()}/${st.totalWanted()}" +
                             " (${(st.totalWantedDone() * 100 / st.totalWanted())}%)" +
                             " peers=${st.numPeers()} dl=${st.downloadRate() / 1024}KB/s")
+                }
+                if (!st.hasMetadata() && !metadataWaitLogged) {
+                    metadataWaitLogged = true
+                    val elapsed = if (torrentAddedTime > 0) now - torrentAddedTime else now - lastProgressTime
+                    Log.e(TAG, "METADATA WAIT: elapsed=${elapsed}ms, state=${state.name}, peers=${st.numPeers()}, seeds=${st.numSeeds()}, progress=${st.progress()} — DHT may have no peers for this infohash")
                 }
                 if (st.isFinished() || st.isSeeding()) {
                     if (!finishedNotified) {
@@ -208,11 +215,24 @@ class TorrentEngine(private val context: Context) {
                     }
                 }
                 is TorrentErrorAlert -> {
-                    Log.e(TAG, "alert: TorrentError — ${alert.javaClass.simpleName}")
-                    listeners.forEach { it.onError("Torrent error alert received") }
+                    val errMsg = alert.message() ?: alert.javaClass.simpleName
+                    Log.e(TAG, "alert: TorrentError — $errMsg")
+                    listeners.forEach { it.onError("Torrent error: $errMsg") }
+                }
+                is TrackerErrorAlert -> {
+                    Log.e(TAG, "alert: TrackerError — ${alert.message()}")
+                }
+                is TrackerWarningAlert -> {
+                    Log.w(TAG, "alert: TrackerWarning — ${alert.message()}")
+                }
+                is TrackerReplyAlert -> {
+                    Log.d(TAG, "alert: TrackerReply — ${alert.message()}")
                 }
                 is PeerConnectAlert -> Log.d(TAG, "alert: PeerConnect — a peer connected")
-                is PeerDisconnectedAlert -> Log.d(TAG, "alert: PeerDisconnect — a peer disconnected")
+                is PeerDisconnectedAlert -> {
+                    val msg = alert.message() ?: "no reason"
+                    Log.d(TAG, "alert: PeerDisconnect — $msg")
+                }
                 is DhtBootstrapAlert -> Log.d(TAG, "alert: DhtBootstrap — DHT is initializing")
                 is DhtReplyAlert -> Log.v(TAG, "alert: DhtReply — DHT responded")
                 is ExternalIpAlert -> Log.d(TAG, "alert: ExternalIp — external IP reported")
@@ -238,8 +258,36 @@ class TorrentEngine(private val context: Context) {
     fun addListener(l: EngineListener) = listeners.add(l)
     fun removeListener(l: EngineListener) = listeners.remove(l)
 
+    // Well-known public trackers appended as fallbacks when the magnet's own
+    // trackers are unreachable or return no peers.
+    private val BACKUP_TRACKERS = listOf(
+        "udp://exodus.desync.com:6969/announce",
+        "udp://tracker.cyberia.is:6969/announce",
+        "udp://tracker.moeking.me:6969/announce",
+        "udp://opentracker.i2p.rocks:6969/announce",
+        "udp://tracker.zerobytes.xyz:1337/announce",
+        "udp://tracker1.bt.moack.co.kr:80/announce",
+        "udp://tracker.tiny-vps.com:6969/announce"
+    )
+
+    private fun enhanceMagnetWithTrackers(magnetUri: String): String {
+        var enhanced = magnetUri
+        for (tracker in BACKUP_TRACKERS) {
+            // Skip if this tracker is already present (raw or URL-encoded)
+            val encoded = java.net.URLEncoder.encode(tracker, "UTF-8")
+            if (enhanced.contains("tr=$encoded") || enhanced.contains("tr=${tracker}")) continue
+            enhanced += "&tr=$encoded"
+        }
+        if (enhanced != magnetUri) {
+            val added = BACKUP_TRACKERS.size - (enhanced.length - magnetUri.length) / 100 // rough
+            Log.d(TAG, "enhanceMagnetWithTrackers: appended ${BACKUP_TRACKERS.size} backup trackers")
+        }
+        return enhanced
+    }
+
     fun addTorrentFromMagnet(magnetUri: String) {
-        Log.i(TAG, "addTorrentFromMagnet: ${magnetUri.take(80)}...")
+        val enhancedUri = enhanceMagnetWithTrackers(magnetUri)
+        Log.i(TAG, "addTorrentFromMagnet: ${enhancedUri.take(250)}...")
         if (!isRunning.get()) {
             Log.w(TAG, "addTorrentFromMagnet: engine not running, starting it now")
             start()
@@ -251,7 +299,7 @@ class TorrentEngine(private val context: Context) {
             // add_torrent returns a handle immediately so we can configure
             // streaming priorities before metadata arrives.
             Log.d(TAG, "addTorrentFromMagnet: parsing magnet URI")
-            val atp = AddTorrentParams.parseMagnetUri(magnetUri)
+            val atp = AddTorrentParams.parseMagnetUri(enhancedUri)
             atp.setSavePath(saveDir.absolutePath)
             Log.d(TAG, "addTorrentFromMagnet: savePath=${saveDir.absolutePath}")
             val ec = error_code()
@@ -265,6 +313,7 @@ class TorrentEngine(private val context: Context) {
             }
             rawHandle = raw
             handle = TorrentHandle(raw)
+            torrentAddedTime = System.currentTimeMillis()
             Log.i(TAG, "addTorrentFromMagnet: magnet added, handle valid=${raw.is_valid()}")
 
             // Enable sequential mode IMMEDIATELY when the handle is created.
