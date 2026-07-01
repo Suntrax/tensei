@@ -621,7 +621,7 @@ private fun AccountSettingsPage(
             SectionHeader("SIGNED IN")
             SettingsCard {
                 Row(
-                    modifier = Modifier.padding(vertical = 4.dp),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
