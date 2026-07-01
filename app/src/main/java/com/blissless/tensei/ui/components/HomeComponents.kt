@@ -19,14 +19,17 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -56,6 +59,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.blissless.tensei.MainViewModel
 import com.blissless.tensei.data.models.AnimeMedia
+import com.blissless.tensei.data.models.ContinueWatchingEntry
 import com.blissless.tensei.data.models.TmdbEpisode
 import kotlin.math.absoluteValue
 
@@ -616,6 +620,184 @@ fun ContinueWatchingCard(
                 }
 
                 Column {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(6.dp)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(Color.White.copy(alpha = 0.2f))
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .fillMaxWidth(progressPercent)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(progressColor)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    if (remainingMs > 0 && savedDuration > 0L) {
+                        Text(
+                            text = formatTimeRemaining(remainingMs),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.7f)
+                        )
+                    }
+
+                    Text(
+                        text = displayTitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ContinueWatchingEpisodeRow(
+    entries: List<ContinueWatchingEntry>,
+    playbackPositions: Map<String, Long>,
+    playbackDurations: Map<String, Long>,
+    tmdbEpisodeCache: Map<Int, List<TmdbEpisode>> = emptyMap(),
+    preferEnglishTitles: Boolean = true,
+    disableMaterialColors: Boolean = false,
+    onPlayClick: (ContinueWatchingEntry) -> Unit,
+    onDismissClick: (ContinueWatchingEntry) -> Unit
+) {
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp)
+    ) {
+        itemsIndexed(items = entries, key = { _, entry -> "continue_ep_${entry.animeId}_${entry.episode}" }) { _, entry ->
+            ContinueWatchingEpisodeCard(
+                entry = entry,
+                playbackPositions = playbackPositions,
+                playbackDurations = playbackDurations,
+                tmdbEpisodeCache = tmdbEpisodeCache,
+                preferEnglishTitles = preferEnglishTitles,
+                disableMaterialColors = disableMaterialColors,
+                onPlayClick = { onPlayClick(entry) },
+                onDismissClick = { onDismissClick(entry) }
+            )
+        }
+    }
+}
+
+@Composable
+fun ContinueWatchingEpisodeCard(
+    entry: ContinueWatchingEntry,
+    playbackPositions: Map<String, Long>,
+    playbackDurations: Map<String, Long>,
+    tmdbEpisodeCache: Map<Int, List<TmdbEpisode>> = emptyMap(),
+    preferEnglishTitles: Boolean = true,
+    disableMaterialColors: Boolean = false,
+    onPlayClick: () -> Unit,
+    onDismissClick: () -> Unit
+) {
+    val context = LocalContext.current
+    val playbackKey = "${entry.animeId}_${entry.episode}"
+    val savedPosition = playbackPositions[playbackKey] ?: entry.position
+    val savedDuration = playbackDurations[playbackKey] ?: entry.duration
+    val effectiveDuration = if (savedDuration > 0L) savedDuration else 24 * 60 * 1000L
+    val progressPercent = (savedPosition.toFloat() / effectiveDuration.toFloat()).coerceIn(0f, 1f)
+    val remainingMs = effectiveDuration - savedPosition
+
+    val tmdbStillUrl = tmdbEpisodeCache[entry.animeId]?.find { it.episode == entry.episode }?.image
+    val backgroundImageModel: Any = when {
+        tmdbStillUrl != null -> tmdbStillUrl
+        entry.animeBanner != null -> entry.animeBanner!!
+        else -> entry.animeCover
+    }
+
+    val displayTitle = when {
+        preferEnglishTitles && !entry.animeTitleEnglish.isNullOrEmpty() -> entry.animeTitleEnglish
+        entry.animeTitle.isNotEmpty() -> entry.animeTitle
+        !entry.animeTitleEnglish.isNullOrEmpty() -> entry.animeTitleEnglish
+        else -> "Unknown"
+    }
+
+    val progressColor = if (disableMaterialColors) Color.White else MaterialTheme.colorScheme.primary
+
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier
+            .width(220.dp)
+            .height(130.dp)
+            .clip(RoundedCornerShape(16.dp))
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            AsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(backgroundImageModel)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = displayTitle,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Black.copy(alpha = 0.3f),
+                                Color.Black.copy(alpha = 0.85f)
+                            )
+                        )
+                    )
+            )
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color.Black.copy(alpha = 0.7f)
+                    ) {
+                        Text(
+                            text = "Ep. ${entry.episode}",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                            .clickable { onDismissClick() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Remove",
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+
+                Column(
+                    modifier = Modifier.clickable { onPlayClick() }
+                ) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()

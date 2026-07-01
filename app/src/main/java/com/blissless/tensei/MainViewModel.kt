@@ -1786,9 +1786,11 @@ class MainViewModel : ViewModel() {
 
     // Playback
     val playbackDurations: StateFlow<Map<String, Long>> get() = cacheManager.playbackDurations
+    val startedAt: StateFlow<Map<String, Long>> get() = cacheManager.startedAt
     fun savePlaybackPosition(animeId: Int, episode: Int, position: Long, duration: Long = 0L, isOffline: Boolean = false) = cacheManager.savePlaybackPosition(animeId, episode, position, duration, isOffline)
     fun getPlaybackPosition(animeId: Int, episode: Int, isOffline: Boolean = false) = cacheManager.getPlaybackPosition(animeId, episode, isOffline)
     fun clearPlaybackPosition(animeId: Int, episode: Int) = cacheManager.clearPlaybackPosition(animeId, episode)
+    fun removeContinueWatchingEntry(animeId: Int, episode: Int) = cacheManager.removeContinueWatchingEntry(animeId, episode)
 
     // Stream cache invalidation
     fun invalidateStreamCache(animeId: Int, episode: Int, category: String) {

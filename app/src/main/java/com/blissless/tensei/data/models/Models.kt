@@ -386,7 +386,20 @@ data class HomeCacheData(
 @Serializable
 data class PlaybackPositionCache(
     val positions: Map<String, Long>,
-    val durations: Map<String, Long> = emptyMap()
+    val durations: Map<String, Long> = emptyMap(),
+    val startedAt: Map<String, Long> = emptyMap()
+)
+
+data class ContinueWatchingEntry(
+    val animeId: Int,
+    val episode: Int,
+    val animeTitle: String,
+    val animeTitleEnglish: String?,
+    val animeCover: String,
+    val animeBanner: String?,
+    val position: Long,
+    val duration: Long,
+    val startedAt: Long
 )
 
 // ============================================

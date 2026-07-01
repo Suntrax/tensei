@@ -79,6 +79,7 @@ import coil.request.ImageRequest
 import com.blissless.tensei.MainViewModel
 import com.blissless.tensei.R
 import com.blissless.tensei.data.models.AnimeMedia
+import com.blissless.tensei.data.models.ContinueWatchingEntry
 import com.blissless.tensei.data.models.ExploreAnime
 import com.blissless.tensei.data.models.toDetailedAnimeData
 import com.blissless.tensei.dialogs.HomeAnimeStatusDialog
@@ -91,7 +92,7 @@ import com.blissless.tensei.ui.components.HomeStatusColors
 import com.blissless.tensei.ui.components.LoadingSkeleton
 import com.blissless.tensei.ui.screens.episode.RichEpisodeScreen
 import com.blissless.tensei.ui.components.SectionHeader
-import com.blissless.tensei.ui.components.ContinueWatchingRow
+import com.blissless.tensei.ui.components.ContinueWatchingEpisodeRow
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.blissless.tensei.ui.screens.details.DetailedAnimeScreen
@@ -127,7 +128,8 @@ fun HomeScreen(
     onNavigateToSearch: () -> Unit = {},
     currentScreenIndex: Int = 0,
     playbackPositions: Map<String, Long> = emptyMap(),
-    playbackDurations: Map<String, Long> = emptyMap()
+    playbackDurations: Map<String, Long> = emptyMap(),
+    startedAt: Map<String, Long> = emptyMap()
 ) {
     val currentlyWatching by viewModel.currentlyWatching.collectAsState()
     val planningToWatch by viewModel.planningToWatch.collectAsState()
@@ -190,13 +192,41 @@ fun HomeScreen(
 
     val allListsEmpty = effectiveCurrentlyWatching.isEmpty() && effectivePlanningToWatch.isEmpty() && effectiveCompleted.isEmpty() && effectiveOnHold.isEmpty() && effectiveDropped.isEmpty()
 
-    val continueWatchingAnime = remember(effectiveCurrentlyWatching, playbackPositions) {
-        effectiveCurrentlyWatching.filter { anime ->
-            val nextEpisode = anime.progress + 1
-            val playbackKey = "${anime.id}_$nextEpisode"
-            val pos = playbackPositions[playbackKey] ?: 0L
-            pos > 0L
-        }
+    val allAnime = remember(effectiveCurrentlyWatching, effectivePlanningToWatch, effectiveCompleted, effectiveOnHold, effectiveDropped) {
+        effectiveCurrentlyWatching + effectivePlanningToWatch + effectiveCompleted + effectiveOnHold + effectiveDropped
+    }
+
+    val animeById = remember(allAnime) {
+        allAnime.associateBy { it.id }
+    }
+
+    val continueWatchingEpisodes = remember(allAnime, playbackPositions, startedAt) {
+        val seen = mutableSetOf<String>()
+        playbackPositions.filter { (key, pos) ->
+            pos > 0L && !key.endsWith("_offline")
+        }.mapNotNull { (key, pos) ->
+            val parts = key.split("_")
+            if (parts.size >= 2) {
+                val animeId = parts[0].toIntOrNull()
+                val episode = parts[1].toIntOrNull()
+                if (animeId != null && episode != null && seen.add(key)) {
+                    val anime = animeById[animeId]
+                    if (anime != null) {
+                        ContinueWatchingEntry(
+                            animeId = animeId,
+                            episode = episode,
+                            animeTitle = anime.title,
+                            animeTitleEnglish = anime.titleEnglish,
+                            animeCover = anime.cover,
+                            animeBanner = anime.banner,
+                            position = pos,
+                            duration = playbackDurations[key] ?: 0L,
+                            startedAt = startedAt[key] ?: 0L
+                        )
+                    } else null
+                } else null
+            } else null
+        }.sortedByDescending { it.startedAt }
     }
 
     val hasOfflineContent = !isLoggedIn && (localFavorites.isNotEmpty() || localAnimeStatus.isNotEmpty())
@@ -445,34 +475,42 @@ fun HomeScreen(
                             .verticalScroll(homeScrollState),
                         verticalArrangement = Arrangement.spacedBy(24.dp)
                     ) {
-                        if (continueWatchingAnime.isNotEmpty()) {
+                        if (continueWatchingEpisodes.isNotEmpty()) {
                             SectionHeader(
                                 title = "Continue Watching",
                                 icon = Icons.Default.PlayArrow,
-                                count = continueWatchingAnime.size,
+                                count = continueWatchingEpisodes.size,
                                 iconTint = HomeStatusColors.getColor("CURRENT"),
                                 onClick = {
                                     statusListTitle = "Continue Watching"
                                     statusListIcon = Icons.Default.PlayArrow
                                     statusListType = "CURRENT"
-                                    statusListAnime = continueWatchingAnime
+                                    statusListAnime = continueWatchingEpisodes.map { entry ->
+                                        animeById[entry.animeId] ?: AnimeMedia(id = entry.animeId, title = entry.animeTitle, titleEnglish = entry.animeTitleEnglish, cover = entry.animeCover, banner = entry.animeBanner)
+                                    }
                                     showStatusListScreen = true
                                 }
                             )
-                            ContinueWatchingRow(
-                                animeList = continueWatchingAnime,
+                            ContinueWatchingEpisodeRow(
+                                entries = continueWatchingEpisodes,
                                 playbackPositions = playbackPositions,
                                 playbackDurations = playbackDurations,
                                 tmdbEpisodeCache = tmdbEpisodeCache,
                                 preferEnglishTitles = preferEnglishTitles,
                                 disableMaterialColors = disableMaterialColors,
-                                onPlayClick = { anime, episode ->
-                                    val released = anime.latestEpisode ?: anime.totalEpisodes
-                                    if (anime.latestEpisode != null && episode > released) {
-                                        Toast.makeText(context, "Episode not aired yet", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        onPlayEpisode(anime, episode, null)
+                                onPlayClick = { entry: ContinueWatchingEntry ->
+                                    val anime = animeById[entry.animeId]
+                                    if (anime != null) {
+                                        val released = anime.latestEpisode ?: anime.totalEpisodes
+                                        if (anime.latestEpisode != null && entry.episode > released) {
+                                            Toast.makeText(context, "Episode not aired yet", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            onPlayEpisode(anime, entry.episode, null)
+                                        }
                                     }
+                                },
+                                onDismissClick = { entry: ContinueWatchingEntry ->
+                                    viewModel.removeContinueWatchingEntry(entry.animeId, entry.episode)
                                 }
                             )
                         }

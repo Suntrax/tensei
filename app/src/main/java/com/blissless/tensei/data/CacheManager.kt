@@ -185,6 +185,9 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
     private val _playbackDurations = MutableStateFlow<Map<String, Long>>(emptyMap())
     val playbackDurations: StateFlow<Map<String, Long>> = _playbackDurations.asStateFlow()
 
+    private val _startedAt = MutableStateFlow<Map<String, Long>>(emptyMap())
+    val startedAt: StateFlow<Map<String, Long>> = _startedAt.asStateFlow()
+
     // TMDB episode cache - 24h TTL for non-downloaded anime, persistent for downloaded anime
     private val _tmdbEpisodeCache = MutableStateFlow<Map<Int, List<TmdbEpisode>>>(emptyMap())
     val tmdbEpisodeCache: StateFlow<Map<Int, List<TmdbEpisode>>> = _tmdbEpisodeCache.asStateFlow()
@@ -463,6 +466,7 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
             val cacheData = json.decodeFromString<PlaybackPositionCache>(cachedData)
             _playbackPositions.value = cacheData.positions
             _playbackDurations.value = cacheData.durations
+            _startedAt.value = cacheData.startedAt
         } catch (_: Exception) {
         }
     }
@@ -473,10 +477,13 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
         if (duration > 0L) {
             _playbackDurations.value += (key to duration)
         }
+        if (!_startedAt.value.containsKey(key) && position > 0L) {
+            _startedAt.value += (key to System.currentTimeMillis())
+        }
         try {
             val jsonString = json.encodeToString(
                 PlaybackPositionCache.serializer(),
-                PlaybackPositionCache(_playbackPositions.value, _playbackDurations.value)
+                PlaybackPositionCache(_playbackPositions.value, _playbackDurations.value, _startedAt.value)
             )
             sharedPreferences.edit { putString(CACHE_PLAYBACK_POSITIONS, jsonString) }
         } catch (_: Exception) { }
@@ -491,10 +498,11 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
         if (_playbackPositions.value.containsKey(key)) {
             _playbackPositions.value -= key
             _playbackDurations.value -= key
+            _startedAt.value -= key
             sharedPreferences.edit {
                 val jsonString = json.encodeToString(
                     PlaybackPositionCache.serializer(),
-                    PlaybackPositionCache(_playbackPositions.value, _playbackDurations.value)
+                    PlaybackPositionCache(_playbackPositions.value, _playbackDurations.value, _startedAt.value)
                 )
                 putString(CACHE_PLAYBACK_POSITIONS, jsonString)
             }
@@ -506,13 +514,18 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
         val newMap = _playbackPositions.value.filterKeys { !it.startsWith(prefix) }
         _playbackPositions.value = newMap
         _playbackDurations.value = _playbackDurations.value.filterKeys { !it.startsWith(prefix) }
+        _startedAt.value = _startedAt.value.filterKeys { !it.startsWith(prefix) }
         sharedPreferences.edit {
             val jsonString = json.encodeToString(
                 PlaybackPositionCache.serializer(),
-                PlaybackPositionCache(_playbackPositions.value, _playbackDurations.value)
+                PlaybackPositionCache(_playbackPositions.value, _playbackDurations.value, _startedAt.value)
             )
             putString(CACHE_PLAYBACK_POSITIONS, jsonString)
         }
+    }
+
+    fun removeContinueWatchingEntry(animeId: Int, episode: Int, isOffline: Boolean = false) {
+        clearPlaybackPosition(animeId, episode, isOffline)
     }
 
     fun hasStream(key: String): Boolean {

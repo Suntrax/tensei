@@ -532,6 +532,7 @@ fun MainScreen(
     val isFavoriteRateLimited by viewModel.isFavoriteRateLimited.collectAsState()
     val playbackPositions by viewModel.playbackPositions.collectAsState()
     val playbackDurations by viewModel.playbackDurations.collectAsState()
+    val startedAt by viewModel.startedAt.collectAsState()
 
     LaunchedEffect(isFavoriteRateLimited) {
         if (isFavoriteRateLimited) {
@@ -2074,7 +2075,8 @@ fun MainScreen(
                             },
                             onNavigateToSearch = { showSearchScreen = true },
                             playbackPositions = playbackPositions,
-                            playbackDurations = playbackDurations
+                            playbackDurations = playbackDurations,
+                            startedAt = startedAt
                         )
                         3 -> DownloadsScreen(
                             viewModel = viewModel,
