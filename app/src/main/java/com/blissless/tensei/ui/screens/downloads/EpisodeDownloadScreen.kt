@@ -414,8 +414,14 @@ fun EpisodeDownloadDialog(
     }
 
     fun startDownload() {
-        val extPkg = viewModel.defaultExtensionPackage.value.ifEmpty { viewModel.defaultMagnetExtension.value ?: "" }
-        Log.i(TAG, "startDownload: anime=${anime.id} episodes= extPkg='$extPkg'")
+        val streamMethod = viewModel.streamMethod.value
+        val isMagnet = streamMethod == "magnet"
+        val extPkg = if (isMagnet) {
+            viewModel.defaultMagnetExtension.value ?: ""
+        } else {
+            viewModel.defaultExtensionPackage.value
+        }
+        Log.i(TAG, "startDownload: anime=${anime.id} streamMethod=$streamMethod isMagnet=$isMagnet extPkg='$extPkg'")
         if (extPkg.isEmpty()) {
             Log.w(TAG, "startDownload: no default extension set")
             showNoExtDialog = true
@@ -455,8 +461,6 @@ fun EpisodeDownloadDialog(
         val capturedEpisodes = episodes.toList()
 
         viewModel.viewModelScope.launch {
-            val magnetAuthorities = viewModel.availableMagnetExtensions.value.map { it.second }.toSet()
-            val isMagnet = extPkg in magnetAuthorities
             if (isMagnet) requestedDownloadIds = emptySet()
             try {
                 downloadManager.downloadDirectoryUri = viewModel.downloadDirectoryUri.value
@@ -558,21 +562,7 @@ fun EpisodeDownloadDialog(
                             .statusBarsPadding(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        IconButton(onClick = {
-                            if (isDownloading) {
-                                downloadActive = false
-                                batchCancelled = true
-                                val doneCount = requestedDownloadIds.count { id ->
-                                    val d = downloadManager.downloadsInfo.value[id]
-                                    d != null && d.state == Download.STATE_COMPLETED
-                                }
-                                requestedDownloadIds.forEach { id ->
-                                    downloadManager.removeDownload(id)
-                                }
-                                downloadManager.cancelBatchNotification(displayTitle, doneCount, totalToDownload)
-                            }
-                            onDismiss()
-                        }) {
+                        IconButton(onClick = { onDismiss() }) {
                             Icon(Icons.Default.Close, contentDescription = "Close", tint = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface)
                         }
                         Spacer(modifier = Modifier.width(8.dp))
