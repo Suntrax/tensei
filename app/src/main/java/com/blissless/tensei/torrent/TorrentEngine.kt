@@ -63,17 +63,51 @@ class TorrentEngine(private val context: Context) {
             // CRITICAL: enable DHT/LSD/UPnP/NAT-PMP. Magnet links carry only an
             // infohash; without DHT libtorrent cannot discover peers, so metadata
             // never arrives and streaming never starts. Mirrors toram's config.
-            Log.d(TAG, "start: configuring SettingsPack (DHT+LSD+UPnP+NAT-PMP, extended trackers)")
+            Log.d(TAG, "start: configuring SettingsPack (DHT+LSD+UPnP+NAT-PMP, TCP-only, extended trackers)")
             val sp = SettingsPack()
             sp.setEnableDht(true)
             sp.setEnableLsd(true)
             sp.setBoolean(settings_pack.bool_types.enable_upnp.swigValue(), true)
             sp.setBoolean(settings_pack.bool_types.enable_natpmp.swigValue(), true)
+            // Disable uTP — all uTP connections time out on this device
+            // ([system]: Connection timed out). Force TCP-only transport.
+            sp.setBoolean(settings_pack.bool_types.enable_outgoing_utp.swigValue(), false)
+            sp.setBoolean(settings_pack.bool_types.enable_incoming_utp.swigValue(), false)
+            sp.setBoolean(settings_pack.bool_types.enable_outgoing_tcp.swigValue(), true)
+            sp.setBoolean(settings_pack.bool_types.enable_incoming_tcp.swigValue(), true)
             // Pause torrent when finished to avoid seeding
             // (stop_when_ready isn't exposed in this SWIG binding version)
             sessionManager.start(SessionParams(sp))
             Log.d(TAG, "start: session started, starting DHT")
             sessionManager.startDht()
+
+            // Add extra DHT bootstrap nodes. SessionManager.start() already
+            // seeds the 4 defaults (dht.libtorrent.org, router.bittorrent.com,
+            // router.utorrent.com, dht.transmissionbt.com) via SettingsPack, so
+            // DHT does bootstrap on its own — but adding a few more via the SWIG
+            // session_handle speeds up the initial routing table population,
+            // which helps metadata arrive faster for low-seeder torrents.
+            // (SessionManager has no addDhtNode() in libtorrent4j 2.1.0-39; use
+            // swig().add_dht_node(string_int_pair).)
+            val DHT_BOOTSTRAP = listOf(
+                "router.bittorrent.com" to 6881,
+                "router.utorrent.com" to 6881,
+                "dht.transmissionbt.com" to 6881,
+                "dht.libtorrent.org" to 25401,
+                "router.silotis.us" to 6881,
+                "dht.aelitis.com" to 6881
+            )
+            for ((host, port) in DHT_BOOTSTRAP) {
+                try {
+                    sessionManager.swig().add_dht_node(
+                        org.libtorrent4j.swig.string_int_pair(host, port)
+                    )
+                } catch (e: Exception) {
+                    Log.w(TAG, "add_dht_node($host) failed: ${e.message}")
+                }
+            }
+            Log.d(TAG, "start: added ${DHT_BOOTSTRAP.size} DHT bootstrap nodes")
+
             Log.d(TAG, "start: DHT started, starting poll loop")
             startPollLoop()
             Log.i(TAG, "start: engine ready")
@@ -258,16 +292,19 @@ class TorrentEngine(private val context: Context) {
     fun addListener(l: EngineListener) = listeners.add(l)
     fun removeListener(l: EngineListener) = listeners.remove(l)
 
-    // Well-known public trackers appended as fallbacks when the magnet's own
-    // trackers are unreachable or return no peers.
+    // Well-known public trackers appended as fallbacks. UDP-only because
+    // Android has systemic SSL issues with HTTPS trackers. Ordered by
+    // reliability for anime torrents — open.demonii.com and opentrackr.org
+    // are the most active for Nyaa/AnimeTosho/subsplease ecosystem content.
     private val BACKUP_TRACKERS = listOf(
+        "udp://open.demonii.com:1337/announce",
+        "udp://tracker.opentrackr.org:1337/announce",
         "udp://exodus.desync.com:6969/announce",
+        "udp://tracker.openbittorrent.com:6969/announce",
         "udp://tracker.cyberia.is:6969/announce",
         "udp://tracker.moeking.me:6969/announce",
         "udp://opentracker.i2p.rocks:6969/announce",
-        "udp://tracker.zerobytes.xyz:1337/announce",
-        "udp://tracker1.bt.moack.co.kr:80/announce",
-        "udp://tracker.tiny-vps.com:6969/announce"
+        "udp://tracker.zerobytes.xyz:1337/announce"
     )
 
     private fun enhanceMagnetWithTrackers(magnetUri: String): String {
@@ -279,7 +316,6 @@ class TorrentEngine(private val context: Context) {
             enhanced += "&tr=$encoded"
         }
         if (enhanced != magnetUri) {
-            val added = BACKUP_TRACKERS.size - (enhanced.length - magnetUri.length) / 100 // rough
             Log.d(TAG, "enhanceMagnetWithTrackers: appended ${BACKUP_TRACKERS.size} backup trackers")
         }
         return enhanced
@@ -287,7 +323,7 @@ class TorrentEngine(private val context: Context) {
 
     fun addTorrentFromMagnet(magnetUri: String) {
         val enhancedUri = enhanceMagnetWithTrackers(magnetUri)
-        Log.i(TAG, "addTorrentFromMagnet: ${enhancedUri.take(250)}...")
+        Log.i(TAG, "addTorrentFromMagnet: $enhancedUri")
         if (!isRunning.get()) {
             Log.w(TAG, "addTorrentFromMagnet: engine not running, starting it now")
             start()

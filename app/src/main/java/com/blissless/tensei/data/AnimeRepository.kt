@@ -897,7 +897,7 @@ class AnimeRepository(
             try {
                 val data = json.decodeFromString<AllStaffResponse>(resp)
                 val staff = data.data.Media?.staff?.nodes
-                staff?.distinctBy { it.id }
+                staff
             } catch (_: Exception) {
                 null
             }
