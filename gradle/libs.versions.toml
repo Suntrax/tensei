@@ -2,33 +2,31 @@
 agp = "9.2.1"
 coilCompose = "2.7.0"
 converterGson = "3.0.0"
-coreKtx = "1.18.0"
+coreKtx = "1.19.0"
 coreSplashscreen = "1.2.0"
 datastorePreferences = "1.2.1"
 glanceAppwidget = "1.1.1"
 injektCore = "1.16.1"
-json = "20251224"
-jsoup = "1.22.2"
-jsoupVersion = "1.18.1"
-kotlinxCoroutinesAndroid = "1.10.2"
+json = "20260522"
+jsoupVersion = "1.22.2"
+kotlinxCoroutinesAndroid = "1.11.0"
 kotlinxSerializationJson = "1.11.0"
-lifecycleRuntimeKtx = "2.10.0"
+lifecycleRuntimeKtx = "2.11.0"
 activityCompose = "1.13.0"
-kotlin = "2.3.20"
-composeBom = "2026.03.01"
-lifecycleViewmodelCompose = "2.10.0"
+kotlin = "2.4.0"
+composeBom = "2026.06.01"
+lifecycleViewmodelCompose = "2.11.0"
 materialIconsExtended = "1.7.8"
-media3Ui = "1.10.0"
-media3Datasource = "1.10.0"
-okhttp = "5.3.2"
+media3Ui = "1.10.1"
+media3Datasource = "1.10.1"
+okhttp = "5.4.0"
 preferenceKtx = "1.2.1"
 retrofit = "3.0.0"
-material = "1.13.0"
-foundation = "1.10.6"
+material = "1.14.0"
+foundation = "1.11.4"
 rxjava = "1.3.8"
 kotlinxSerializationJsonOkio = "1.11.0"
-workRuntimeKtx = "2.11.2"
-workRuntimeKtxVersion = "2.10.0"
+workRuntimeKtxVersion = "2.11.2"
 libtorrent4j = "2.1.0-39"
 
 [libraries]
@@ -51,13 +49,11 @@ androidx-media3-ui = { module = "androidx.media3:media3-ui", version.ref = "medi
 androidx-media3-datasource = { module = "androidx.media3:media3-datasource", version.ref = "media3Datasource" }
 androidx-media3-datasource-okhttp = { module = "androidx.media3:media3-datasource-okhttp", version.ref = "media3Datasource" }
 androidx-preference-ktx = { module = "androidx.preference:preference-ktx", version.ref = "preferenceKtx" }
-androidx-work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "workRuntimeKtx" }
 androidx-work-runtime-ktx-v2100 = { module = "androidx.work:work-runtime-ktx", version.ref = "workRuntimeKtxVersion" }
 coil-compose = { module = "io.coil-kt:coil-compose", version.ref = "coilCompose" }
 converter-gson = { module = "com.squareup.retrofit2:converter-gson", version.ref = "converterGson" }
 injekt-core = { module = "uy.kohesive.injekt:injekt-core", version.ref = "injektCore" }
 json = { module = "org.json:json", version.ref = "json" }
-jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }
 jsoup-v1181 = { module = "org.jsoup:jsoup", version.ref = "jsoupVersion" }
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycleRuntimeKtx" }
 androidx-lifecycle-runtime-compose = { group = "androidx.lifecycle", name = "lifecycle-runtime-compose", version.ref = "lifecycleRuntimeKtx" }
