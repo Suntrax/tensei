@@ -687,11 +687,13 @@ fun RichEpisodeScreen(
                                     FilterChip(
                                         selected = extPkg == selectedExtensionPkg && !isMagnetActive,
                                         onClick = {
-                                            selectedExtensionPkg = extPkg
-                                            isMagnetActive = false
-                                            selectedMagnetAuthority = null
-                                            extensionError = null
-                                            isExtensionReady = false
+                                            if (extPkg != selectedExtensionPkg) {
+                                                selectedExtensionPkg = extPkg
+                                                isMagnetActive = false
+                                                selectedMagnetAuthority = null
+                                                extensionError = null
+                                                isExtensionReady = false
+                                            }
                                         },
                                         label = { Text(extName, maxLines = 1, style = MaterialTheme.typography.labelSmall) },
                                         colors = FilterChipDefaults.filterChipColors(
@@ -716,14 +718,16 @@ fun RichEpisodeScreen(
                                     FilterChip(
                                         selected = authority == selectedMagnetAuthority && isMagnetActive,
                                         onClick = {
-                                            selectedMagnetAuthority = authority
-                                            isMagnetActive = true
-                                            selectedExtensionPkg = null
-                                            isLoadingMagnetEpisodes = true
-                                            magnetError = null
-                                            isMagnetReady = false
-                                            viewModel.clearMagnetEpisodes(anime.id)
-                                            viewModel.fetchMagnetEpisodes(anime, authority)
+                                            if (authority != selectedMagnetAuthority || !isMagnetActive) {
+                                                selectedMagnetAuthority = authority
+                                                isMagnetActive = true
+                                                selectedExtensionPkg = null
+                                                isLoadingMagnetEpisodes = true
+                                                magnetError = null
+                                                isMagnetReady = false
+                                                viewModel.clearMagnetEpisodes(anime.id)
+                                                viewModel.fetchMagnetEpisodes(anime, authority)
+                                            }
                                         },
                                         label = { Text(extName, maxLines = 1, style = MaterialTheme.typography.labelSmall) },
                                         colors = FilterChipDefaults.filterChipColors(
