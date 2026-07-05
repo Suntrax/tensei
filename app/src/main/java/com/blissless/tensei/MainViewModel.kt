@@ -76,6 +76,7 @@ import com.blissless.tensei.stream.LocalProxyServer
 import com.blissless.tensei.torrent.MagnetData
 import com.blissless.tensei.torrent.MagnetEpisode
 import com.blissless.tensei.torrent.MagnetExtensionClient
+import com.blissless.tensei.torrent.StreamUrlResult
 import okhttp3.Headers
 import okhttp3.OkHttpClient
 import kotlin.time.Duration.Companion.milliseconds
@@ -355,6 +356,20 @@ class MainViewModel : ViewModel() {
         val magnet = getMagnetForEpisode(anime.id, episode)
         Log.d(TAG, "fetchMagnetForEpisode: final result=${magnet != null}")
         return magnet
+    }
+
+    suspend fun fetchStreamUrlForEpisode(anime: AnimeMedia, episode: Int, lang: String): StreamUrlResult? {
+        Log.d(TAG, "fetchStreamUrlForEpisode: anime=${anime.id} ep=$episode lang=$lang")
+        ensureMagnetClient()
+        val authority = defaultMagnetExtension.value
+            ?: _availableMagnetExtensions.value.firstOrNull()?.second
+        if (authority.isNullOrBlank()) {
+            Log.w(TAG, "fetchStreamUrlForEpisode: no magnet extension authority")
+            return null
+        }
+        return withContext(Dispatchers.IO) {
+            magnetExtensionClient?.fetchStreamUrl(authority, anime.id, episode, lang)
+        }
     }
 
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {

@@ -5,6 +5,7 @@ import android.content.Intent
 import android.database.Cursor
 import android.net.Uri
 import android.util.Log
+import eu.kanade.tachiyomi.animesource.model.Track
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -13,6 +14,12 @@ data class DetectedMagnetExtension(
     val packageName: String,
     val name: String,
     val authority: String
+)
+
+data class StreamUrlResult(
+    val url: String,
+    val headers: Map<String, String> = emptyMap(),
+    val subtitles: List<Track> = emptyList()
 )
 
 class MagnetExtensionClient(private val context: Context) {
@@ -91,12 +98,100 @@ class MagnetExtensionClient(private val context: Context) {
         }
     }
 
+    fun fetchStreamUrl(authority: String, anilistId: Int, episode: Int, lang: String): StreamUrlResult? {
+        val providerUri = Uri.parse("content://$authority/$SCRAPE_PATH")
+        val queryUri = providerUri.buildUpon()
+            .appendQueryParameter("anilistId", anilistId.toString())
+            .appendQueryParameter("episode", episode.toString())
+            .appendQueryParameter("lang", lang)
+            .build()
+
+        Log.d(TAG, "fetchStreamUrl: authority=$authority anilistId=$anilistId episode=$episode lang=$lang uri=$queryUri")
+
+        var cursor: Cursor? = null
+        val jsonData: String? = try {
+            cursor = context.contentResolver.query(queryUri, null, null, null, null)
+            if (cursor != null && cursor.moveToFirst()) {
+                val colIdx = cursor.getColumnIndex("data")
+                if (colIdx != -1) cursor.getString(colIdx) else null
+            } else null
+        } catch (e: Exception) {
+            Log.e(TAG, "fetchStreamUrl: query failed", e)
+            null
+        } finally {
+            cursor?.close()
+        }
+
+        if (jsonData == null) {
+            Log.w(TAG, "fetchStreamUrl: no data returned")
+            return null
+        }
+
+        return try {
+            val json = JSONObject(jsonData)
+            if (json.has("error")) {
+                Log.w(TAG, "fetchStreamUrl: extension error: ${json.getString("error")}")
+                null
+            } else {
+                val url = json.optString("url", null)?.ifBlank { null } ?: return null
+                val headers = mutableMapOf<String, String>()
+                json.optJSONObject("headers")?.let { h ->
+                    val iter = h.keys()
+                    while (iter.hasNext()) {
+                        val key = iter.next()
+                        val value = h.optString(key, "")
+                        if (value.isNotBlank()) headers[key] = value
+                    }
+                }
+                Log.d(TAG, "fetchStreamUrl: url=${url.take(80)}... headers=$headers")
+                val subtitles = mutableListOf<Track>()
+                json.optJSONArray("subtitles")?.let { arr ->
+                    for (i in 0 until arr.length()) {
+                        val sub = arr.optJSONObject(i) ?: continue
+                        val subUrl = sub.optString("url", null)?.ifBlank { null } ?: continue
+                        val lang = sub.optString("label", sub.optString("language", ""))
+                        if (lang.isNotBlank()) {
+                            subtitles.add(Track(subUrl, lang))
+                        }
+                    }
+                }
+                Log.d(TAG, "fetchStreamUrl: ${subtitles.size} subtitle tracks")
+                StreamUrlResult(url, headers, subtitles)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "fetchStreamUrl: parse failed", e)
+            null
+        }
+    }
+
     private fun parseMagnets(jsonData: String, anilistId: Int): MagnetData {
         Log.d(TAG, "parseMagnets: parsing ${jsonData.length} chars for anilistId=$anilistId")
         return try {
             val jsonObject = JSONObject(jsonData)
             if (jsonObject.has("error")) {
                 Log.w(TAG, "parseMagnets: extension error: ${jsonObject.getString("error")}")
+                return MagnetData(emptyList(), false)
+            }
+
+            if (jsonObject.has("episodes")) {
+                val episodesArray = jsonObject.optJSONArray("episodes")
+                if (episodesArray != null && episodesArray.length() > 0) {
+                    val episodes = mutableListOf<MagnetEpisode>()
+                    for (i in 0 until episodesArray.length()) {
+                        val epObj = episodesArray.optJSONObject(i)
+                        if (epObj != null) {
+                            val number = parseEpisodeNumber(epObj.optString("number", ""))
+                            if (number > 0) {
+                                episodes.add(MagnetEpisode(number, "", ""))
+                            }
+                        }
+                    }
+                    if (episodes.isNotEmpty()) {
+                        Log.d(TAG, "parseMagnets: parsed ${episodes.size} episodes from episodes list format")
+                        return MagnetData(episodes.sortedBy { it.episode }, false)
+                    }
+                }
+                Log.w(TAG, "parseMagnets: 'episodes' key present but no valid entries")
                 return MagnetData(emptyList(), false)
             }
 

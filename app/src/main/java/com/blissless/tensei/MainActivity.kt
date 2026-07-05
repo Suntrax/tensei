@@ -100,6 +100,7 @@ import com.blissless.tensei.data.models.ServerInfo
 import com.blissless.tensei.data.models.toDetailedAnimeData
 import com.blissless.tensei.extensions.ExtensionsViewModel
 import com.blissless.tensei.stream.PlayerData
+import com.blissless.tensei.torrent.StreamUrlResult
 import com.blissless.tensei.torrent.TorrentEngine
 import com.blissless.tensei.torrent.TorrentMeta
 import com.blissless.tensei.torrent.TorrentStreamServer
@@ -985,10 +986,34 @@ fun MainScreen(
                 val magnetUri = withContext(Dispatchers.IO) {
                     cached ?: viewModel.fetchMagnetForEpisode(anime, episode)
                 }
-                android.util.Log.i("MainActivity.Torrent", "loadAndPlayEpisode: fetch result=${magnetUri != null}")
-                if (magnetUri != null) {
+                android.util.Log.i("MainActivity.Torrent", "loadAndPlayEpisode: fetch result=${magnetUri != null} magnet=${magnetUri?.take(60)}")
+                if (magnetUri != null && magnetUri.isNotEmpty()) {
                     android.util.Log.d("MainActivity.Torrent", "loadAndPlayEpisode: magnet found, calling playTorrent")
                     playTorrent(magnetUri, anime, episode)
+                } else if (magnetUri != null) {
+                    android.util.Log.d("MainActivity.Torrent", "loadAndPlayEpisode: empty magnet, trying stream URL")
+                    val streamResult = viewModel.fetchStreamUrlForEpisode(anime, episode, viewModel.preferredCategory.value)
+                    android.util.Log.i("MainActivity.Torrent", "loadAndPlayEpisode: streamUrl result=${streamResult != null}")
+                    if (streamResult != null) {
+                        currentVideoUrl = streamResult.url
+                        currentReferer = streamResult.headers["Referer"] ?: ""
+                        currentEpisodeTitle = sanitizeEpisodeTitle(anime.title) ?: "Episode $episode"
+                        currentSubtitleTracks = streamResult.subtitles
+                        currentSubtitleUrl = streamResult.subtitles.firstOrNull { s ->
+                            s.lang.contains("english", ignoreCase = true) || s.lang.contains("en", ignoreCase = true)
+                        }?.url ?: streamResult.subtitles.firstOrNull()?.url
+                        currentQualityOptions = emptyList()
+                        currentQuality = "Auto"
+                        currentServerName = "Tensei"
+                        currentServerIndex = 0
+                        isExtensionFlow = false
+                        showPlayer = true
+                        isLoadingStream = false
+                    } else {
+                        streamError = "No stream available for Ep $episode"
+                        isLoadingStream = false
+                        Toast.makeText(context, "No stream available for Ep $episode", Toast.LENGTH_SHORT).show()
+                    }
                 } else {
                     android.util.Log.e("MainActivity.Torrent", "loadAndPlayEpisode: no magnet link found for Ep $episode")
                     streamError = "No magnet link found for Ep $episode"
