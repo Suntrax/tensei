@@ -870,7 +870,7 @@ fun RichEpisodeScreen(
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 CircularProgressIndicator(color = MaterialTheme.colorScheme.tertiary)
                                 Spacer(modifier = Modifier.height(12.dp))
-                                Text("Fetching magnet sources...", style = MaterialTheme.typography.bodyMedium, color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("Fetching Tensei sources...", style = MaterialTheme.typography.bodyMedium, color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }

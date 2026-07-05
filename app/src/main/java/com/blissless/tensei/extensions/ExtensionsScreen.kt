@@ -288,7 +288,7 @@ fun ExtensionsScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            text = "Magnet Extensions (${magnetExtensions.size})",
+                            text = "Tensei Extensions (${magnetExtensions.size})",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )

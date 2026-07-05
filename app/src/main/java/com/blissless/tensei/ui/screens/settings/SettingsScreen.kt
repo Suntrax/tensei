@@ -964,11 +964,11 @@ private fun StreamSettingsPage(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 SettingsChoiceChip(label = "Direct", isSelected = streamMethod == "direct", onClick = { viewModel.setStreamMethod("direct") })
-                SettingsChoiceChip(label = "Torrent", isSelected = streamMethod == "magnet", onClick = { viewModel.setStreamMethod("magnet") })
+                SettingsChoiceChip(label = "Tensei", isSelected = streamMethod == "magnet", onClick = { viewModel.setStreamMethod("magnet") })
             }
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                "Stream via direct HTTP extensions or BitTorrent magnets",
+                "Stream via direct HTTP extensions or Tensei",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
             )
