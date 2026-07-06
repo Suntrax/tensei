@@ -336,14 +336,22 @@ fun ScheduleScreen(
             }
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Box(
+            modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 4.dp)
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Airing Schedule", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = onBg)
-                Text(if (viewMode == 0) "$todayPastCount aired · $totalUpcomingThisWeek upcoming" else if (selectedDayPastCount > 0) "$selectedDayPastCount aired · $selectedDayFutureCount upcoming" else "$selectedDayFutureCount upcoming",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .width(3.dp)
+                        .height(24.dp)
+                        .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp))
+                )
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Airing Schedule", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                    Text(if (viewMode == 0) "$todayPastCount aired · $totalUpcomingThisWeek upcoming" else if (selectedDayPastCount > 0) "$selectedDayPastCount aired · $selectedDayFutureCount upcoming" else "$selectedDayFutureCount upcoming",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         }
 
@@ -561,14 +569,14 @@ private fun DayHeaderItem(dayName: String, isToday: Boolean) {
             dayName.uppercase(),
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
-            letterSpacing = 1.sp,
+            letterSpacing = 1.5.sp,
             color = if (isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
         )
         if (isToday) {
-            Spacer(Modifier.width(8.dp))
-            Surface(shape = RoundedCornerShape(4.dp), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)) {
+            Spacer(Modifier.width(10.dp))
+            Surface(shape = RoundedCornerShape(6.dp), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)) {
                 Text("TODAY", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
             }
         }
     }
@@ -583,7 +591,7 @@ private fun TimelineAnimeItem(
     animeStatus: String?,
     onClick: () -> Unit
 ) {
-    val lineColor = if (isPast) MaterialTheme.colorScheme.primary.copy(alpha = 0.35f) else MaterialTheme.colorScheme.primary
+    val lineColor = if (isPast) MaterialTheme.colorScheme.primary.copy(alpha = 0.3f) else MaterialTheme.colorScheme.primary
     val contentAlpha = if (isPast) 0.55f else 1f
 
     Row(
@@ -593,15 +601,17 @@ private fun TimelineAnimeItem(
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(50.dp)) {
             Text(timeString, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = lineColor.copy(alpha = contentAlpha))
             Box(modifier = Modifier.padding(top = 4.dp).size(10.dp).background(lineColor, CircleShape))
-            Box(modifier = Modifier.width(1.5.dp).height(90.dp).background(lineColor.copy(alpha = 0.2f)))
+            Box(modifier = Modifier.width(1.5.dp).height(90.dp).background(lineColor.copy(alpha = 0.15f)))
         }
 
         Spacer(Modifier.width(8.dp))
 
-        Card(
+        Surface(
             modifier = Modifier.weight(1f),
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)),
+            shape = RoundedCornerShape(14.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 1.dp,
+            shadowElevation = 1.dp,
             onClick = onClick
         ) {
             Row(
@@ -610,49 +620,49 @@ private fun TimelineAnimeItem(
             ) {
                 AsyncImage(
                     model = anime.cover, contentDescription = anime.title, contentScale = ContentScale.Crop,
-                    modifier = Modifier.width(68.dp).height(92.dp).clip(RoundedCornerShape(8.dp)).alpha(contentAlpha)
+                    modifier = Modifier.width(68.dp).height(92.dp).clip(RoundedCornerShape(10.dp)).alpha(contentAlpha)
                 )
 
                 Spacer(Modifier.width(12.dp))
 
                 Column(modifier = Modifier.weight(1f)) {
                     val displayTitle = if (preferEnglishTitles && !anime.titleEnglish.isNullOrEmpty()) anime.titleEnglish else anime.title
-                    Text(displayTitle, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    Text(displayTitle, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = contentAlpha))
 
-                    Spacer(Modifier.height(6.dp))
+                    Spacer(Modifier.height(8.dp))
 
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Surface(shape = RoundedCornerShape(4.dp), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)) {
+                        Surface(shape = RoundedCornerShape(6.dp), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)) {
                             Text("Ep ${anime.airingEpisode}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
                         }
                         if (animeStatus != null) {
                             val statusColor = StatusColors[animeStatus] ?: Color.Gray
                             val statusLabel = StatusLabels[animeStatus] ?: animeStatus
-                            Surface(shape = RoundedCornerShape(4.dp), color = statusColor.copy(alpha = 0.15f)) {
+                            Surface(shape = RoundedCornerShape(6.dp), color = statusColor.copy(alpha = 0.12f)) {
                                 Text(statusLabel, style = MaterialTheme.typography.labelSmall, color = statusColor, fontWeight = FontWeight.SemiBold,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
                             }
                         }
                     }
 
                     if (!isPast && anime.timeUntilAiring != null) {
-                        Spacer(Modifier.height(4.dp))
+                        Spacer(Modifier.height(6.dp))
                         val timeUntilText = remember(anime.timeUntilAiring) {
                             val sec = anime.timeUntilAiring; val h = sec / 3600; val m = (sec % 3600) / 60
                             when { h > 24 -> "${h / 24}d ${h % 24}h"; h > 0 -> "${h}h ${m}m"; else -> "${m}m" }
                         }
-                        Text("in $timeUntilText", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                        Text("in $timeUntilText", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.primary)
                     }
 
                     if (isPast) {
                         Spacer(Modifier.height(4.dp))
-                        Text("Already aired", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+                        Text("Already aired", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
                     }
                 }
 
-                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "View details", tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f), modifier = Modifier.size(22.dp))
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "View details", tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f), modifier = Modifier.size(20.dp))
             }
         }
     }
@@ -661,11 +671,11 @@ private fun TimelineAnimeItem(
 @Composable
 private fun CurrentTimeIndicator(timeString: String) {
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-    val scale by infiniteTransition.animateFloat(initialValue = 0.8f, targetValue = 1.3f, animationSpec = infiniteRepeatable(animation = tween(800), repeatMode = RepeatMode.Reverse), label = "scale")
-    val alpha by infiniteTransition.animateFloat(initialValue = 0.5f, targetValue = 1f, animationSpec = infiniteRepeatable(animation = tween(800), repeatMode = RepeatMode.Reverse), label = "alpha")
+    val scale by infiniteTransition.animateFloat(initialValue = 0.9f, targetValue = 1.3f, animationSpec = infiniteRepeatable(animation = tween(1000), repeatMode = RepeatMode.Reverse), label = "scale")
+    val alpha by infiniteTransition.animateFloat(initialValue = 0.6f, targetValue = 1f, animationSpec = infiniteRepeatable(animation = tween(1000), repeatMode = RepeatMode.Reverse), label = "alpha")
 
     Row(
-        modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 4.dp),
+        modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 12.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(50.dp)) {
@@ -675,10 +685,10 @@ private fun CurrentTimeIndicator(timeString: String) {
 
         Spacer(Modifier.width(8.dp))
 
-        Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f)) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
-                Box(modifier = Modifier.size(6.dp).background(MaterialTheme.colorScheme.secondary, CircleShape))
-                Spacer(Modifier.width(6.dp))
+        Surface(shape = RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
+                Box(modifier = Modifier.size(8.dp).background(MaterialTheme.colorScheme.secondary, CircleShape))
+                Spacer(Modifier.width(8.dp))
                 Text("NOW", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
             }
         }
@@ -687,15 +697,15 @@ private fun CurrentTimeIndicator(timeString: String) {
 
 @Composable
 private fun ScheduleLoadingSkeleton() {
-    val skeletonColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
-    val secondaryColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+    val skeletonColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+    val secondaryColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
     ) {
         items(6) {
-            Box(modifier = Modifier.fillMaxWidth().padding(start = 58.dp, end = 8.dp, top = 24.dp, bottom = 12.dp).height(32.dp).background(skeletonColor, RoundedCornerShape(6.dp)))
+            Box(modifier = Modifier.fillMaxWidth().padding(start = 58.dp, end = 8.dp, top = 24.dp, bottom = 12.dp).height(20.dp).background(skeletonColor, RoundedCornerShape(6.dp)))
 
             Row(modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 12.dp), verticalAlignment = Alignment.Top) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(50.dp)) {
@@ -705,18 +715,18 @@ private fun ScheduleLoadingSkeleton() {
                     Box(Modifier.padding(top = 4.dp).width(1.5.dp).height(90.dp).background(secondaryColor))
                 }
                 Spacer(Modifier.width(8.dp))
-                Card(modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = skeletonColor)) {
+                Surface(modifier = Modifier.weight(1f), shape = RoundedCornerShape(14.dp), color = skeletonColor) {
                     Row(modifier = Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.width(68.dp).height(92.dp).background(secondaryColor, RoundedCornerShape(8.dp)))
+                        Box(Modifier.width(68.dp).height(92.dp).background(secondaryColor, RoundedCornerShape(10.dp)))
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Box(Modifier.fillMaxWidth(0.8f).height(12.dp).background(secondaryColor, RoundedCornerShape(4.dp)))
-                            Spacer(Modifier.height(8.dp))
+                            Spacer(Modifier.height(10.dp))
                             Box(Modifier.fillMaxWidth(0.45f).height(12.dp).background(secondaryColor, RoundedCornerShape(4.dp)))
-                            Spacer(Modifier.height(8.dp))
-                            Box(Modifier.width(46.dp).height(16.dp).background(secondaryColor, RoundedCornerShape(4.dp)))
+                            Spacer(Modifier.height(10.dp))
+                            Box(Modifier.width(50.dp).height(18.dp).background(secondaryColor, RoundedCornerShape(6.dp)))
                         }
-                        Box(Modifier.size(22.dp).background(secondaryColor, RoundedCornerShape(11.dp)))
+                        Box(Modifier.size(20.dp).background(secondaryColor, RoundedCornerShape(10.dp)))
                     }
                 }
             }

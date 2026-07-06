@@ -1,21 +1,15 @@
 package com.blissless.tensei.ui.components
 
 import androidx.compose.ui.graphics.Color
+import com.blissless.tensei.ui.theme.StatusColors
 
 object HomeStatusColors {
     fun getColor(status: String?): Color {
-        return when (status) {
-            "CURRENT" -> Color(0xFF2196F3)
-            "PLANNING" -> Color(0xFF9C27B0)
-            "COMPLETED" -> Color(0xFF4CAF50)
-            "PAUSED" -> Color(0xFFFFC107)
-            "DROPPED" -> Color(0xFFF44336)
-            else -> Color.Gray
-        }
+        return StatusColors[status] ?: Color.Gray
     }
 
     fun getContainerColor(status: String?): Color {
-        return getColor(status).copy(alpha = 0.2f)
+        return getColor(status).copy(alpha = 0.15f)
     }
 }
 
