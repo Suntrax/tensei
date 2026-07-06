@@ -296,7 +296,7 @@ suspend fun MainViewModel.playEpisodeWithExtension(
                     }
                 }
             } else {
-                val directVideos = try { source.getVideoList(sEpisode) } catch (_: Throwable) { emptyList() }
+                val directVideos = try { source.getVideoList(sEpisode) } catch (e: Throwable) { ErrorHandler.report(MainViewModel.TAG, "operation failed, returning empty list", e); emptyList() }
                 directVideos.forEach {
                     allVideos.add(VideoWithHoster(it, ""))
                     LocalProxyServer.registerVideo(it)
@@ -486,9 +486,9 @@ suspend fun MainViewModel.fetchExtensionHosterVideos(
         try {
             val videos = withContext(Dispatchers.IO) {
                 val result = if (hoster.lazy) {
-                    try { source.getVideoList(hoster) } catch (_: Throwable) { emptyList() }
+                    try { source.getVideoList(hoster) } catch (e: Throwable) { ErrorHandler.report(MainViewModel.TAG, "operation failed, returning empty list", e); emptyList() }
                 } else {
-                    hoster.videoList ?: try { source.getVideoList(hoster) } catch (_: Throwable) { emptyList() }
+                    hoster.videoList ?: try { source.getVideoList(hoster) } catch (e: Throwable) { ErrorHandler.report(MainViewModel.TAG, "operation failed, returning empty list", e); emptyList() }
                 }
                 result
             }

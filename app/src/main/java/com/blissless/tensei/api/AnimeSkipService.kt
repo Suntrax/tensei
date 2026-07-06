@@ -11,6 +11,7 @@ import java.net.URLEncoder
 import javax.net.ssl.HttpsURLConnection
 import com.blissless.tensei.data.models.EpisodeTimestamps
 import com.blissless.tensei.data.models.Timestamp
+import com.blissless.tensei.util.ErrorHandler
 
 /**
  * Service for fetching skip timestamps from multiple sources.
@@ -208,7 +209,7 @@ class AnimeSkipService(private val context: Context? = null) {
                     }
                 )
             } else null
-        } catch (_: Exception) { null }
+        } catch (e: Exception) { ErrorHandler.report("AnimeSkipService", "operation failed, returning null", e); null }
     }
 
     suspend fun getSkipTimestamps(
@@ -220,7 +221,7 @@ class AnimeSkipService(private val context: Context? = null) {
         return try {
             val url = "$API_URL/$malId/$episodeNumber?types[]=op&types[]=ed&episodeLength=$episodeLength"
             executeGetRequest(url)?.let { parseAniSkipResponse(it, episodeNumber) }
-        } catch (_: Exception) { null }
+        } catch (e: Exception) { ErrorHandler.report("AnimeSkipService", "operation failed, returning null", e); null }
     }
 
     suspend fun getSkipTimestampsByName(
@@ -278,7 +279,7 @@ class AnimeSkipService(private val context: Context? = null) {
                 }
                 bestMatch?.malId ?: candidates.firstOrNull()?.malId
             }
-        } catch (_: Exception) { null }
+        } catch (e: Exception) { ErrorHandler.report("AnimeSkipService", "operation failed, returning null", e); null }
     }
 
     private fun parseAniSkipResponse(response: String, episodeNumber: Int): EpisodeTimestamps? {
@@ -307,7 +308,7 @@ class AnimeSkipService(private val context: Context? = null) {
                 recapStart = null, recapEnd = null,
                 allTimestamps = data.results.map { Timestamp(it.interval.startTime, it.skipType, it.skipType) }
             )
-        } catch (_: Exception) { null }
+        } catch (e: Exception) { ErrorHandler.report("AnimeSkipService", "operation failed, returning null", e); null }
     }
 
     private suspend fun executeGetRequest(urlString: String): String? = withContext(Dispatchers.IO) {
@@ -320,7 +321,7 @@ class AnimeSkipService(private val context: Context? = null) {
             if (connection.responseCode == 200) {
                 connection.inputStream.bufferedReader().use { it.readText() }
             } else null
-        } catch (_: Exception) { null }
+        } catch (e: Exception) { ErrorHandler.report("AnimeSkipService", "operation failed, returning null", e); null }
     }
 }
 

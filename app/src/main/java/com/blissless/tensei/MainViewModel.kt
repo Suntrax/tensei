@@ -192,7 +192,7 @@ class MainViewModel : ViewModel() {
                 try {
                     val details = source.getAnimeDetails(sAnime)
                     source.getEpisodeList(details)
-                } catch (_: Exception) { emptyList() }
+                } catch (e: Exception) { ErrorHandler.report(TAG, "operation failed, returning empty list", e); emptyList() }
             }
 
             _preFetchedExtensionData[anime.id] = PreFetchedExtensionData(source, sAnime, sEpisodes)

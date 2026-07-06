@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Group
@@ -602,6 +603,291 @@ internal fun InfoCard(
                 }
                 if (i < specs.size) {
                     Spacer(modifier = Modifier.height(10.dp))
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Genres card showing anime genres as chips.
+ *
+ * @param genres List of genre name strings to display
+ */
+@Composable
+internal fun GenresCard(
+    genres: List<String>,
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f))
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(
+                            Brush.linearGradient(
+                                listOf(
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)
+                                )
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Category,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(
+                        "Genres",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        "Categories & themes",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        letterSpacing = 0.5.sp
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            androidx.compose.foundation.layout.FlowRow(
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+                verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
+            ) {
+                genres.forEach { genre ->
+                    androidx.compose.material3.Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+                    ) {
+                        Text(
+                            genre,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Tags card showing anime tags as clickable chips with show more/less.
+ *
+ * @param tags            List of TagData to display
+ * @param showAllTags     Whether to show all tags or just the first 2
+ * @param onTagClick      Called when a tag chip is clicked
+ * @param onToggleShowAll Called when "Show More"/"Show Less" is clicked
+ */
+@Composable
+internal fun TagsCard(
+    tags: List<com.blissless.tensei.data.models.TagData>,
+    showAllTags: Boolean,
+    onTagClick: (com.blissless.tensei.data.models.TagData) -> Unit,
+    onToggleShowAll: () -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f))
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(
+                            Brush.linearGradient(
+                                listOf(
+                                    MaterialTheme.colorScheme.secondary.copy(alpha = 0.22f),
+                                    MaterialTheme.colorScheme.secondary.copy(alpha = 0.06f)
+                                )
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.Label,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(
+                        "Tags",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        "Labels & descriptors",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        letterSpacing = 0.5.sp
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            val nonSpoilerTags = tags.filter { !it.isMediaSpoiler }
+            val displayedTags = if (showAllTags) nonSpoilerTags else nonSpoilerTags.take(2)
+            val remainingCount = nonSpoilerTags.size - 2
+
+            androidx.compose.foundation.layout.FlowRow(
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+                verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
+            ) {
+                displayedTags.forEach { tag ->
+                    androidx.compose.material3.Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f)),
+                        modifier = Modifier.clip(RoundedCornerShape(16.dp)).clickable {
+                            onTagClick(tag)
+                        }
+                    ) {
+                        Text(
+                            tag.name,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.secondary,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                        )
+                    }
+                }
+                if (remainingCount > 0 && !showAllTags) {
+                    Text(
+                        "+$remainingCount more",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.7f),
+                        modifier = Modifier.align(Alignment.CenterVertically)
+                    )
+                }
+            }
+            if (remainingCount > 0) {
+                Spacer(modifier = Modifier.height(8.dp))
+                TextButton(
+                    onClick = onToggleShowAll,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        if (showAllTags) "Show Less" else "Show More",
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Synopsis card showing the anime description with read more/less.
+ *
+ * @param description        The raw description string (may contain HTML tags)
+ * @param showFullDescription Whether to show the full description or truncate
+ * @param onToggleShowFull   Called when "Read More"/"Show Less" is clicked
+ */
+@Composable
+internal fun SynopsisCard(
+    description: String,
+    showFullDescription: Boolean,
+    onToggleShowFull: () -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f))
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(
+                            Brush.linearGradient(
+                                listOf(
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)
+                                )
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Description,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(
+                        "Synopsis",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        "Story summary",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        letterSpacing = 0.5.sp
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            val cleanDescription = description.replace("<br>", "\n").replace("<br/>", "\n")
+                .replace("<b>", "").replace("</b>", "").replace("<i>", "").replace("</i>", "")
+            Text(cleanDescription, style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = if (showFullDescription) Int.MAX_VALUE else 3, overflow = TextOverflow.Ellipsis,
+                lineHeight = 22.sp)
+            if (cleanDescription.length > 250) {
+                Spacer(modifier = Modifier.height(8.dp))
+                TextButton(
+                    onClick = onToggleShowFull,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        if (showFullDescription) "Show Less" else "Read More",
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
             }
         }

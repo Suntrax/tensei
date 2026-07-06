@@ -138,6 +138,7 @@ import com.blissless.tensei.viewmodel.getVideoCacheSize
 import com.blissless.tensei.viewmodel.getDownloadCacheSize
 import com.blissless.tensei.viewmodel.clearNonEssentialCaches
 import com.blissless.tensei.viewmodel.clearDownloadCache
+import com.blissless.tensei.util.ErrorHandler
 
 @Composable
 fun SettingsScreen(
@@ -561,7 +562,7 @@ private fun StreamSettingsPage(
         if (uri != null) {
             try {
                 streamCtx.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-            } catch (_: Exception) {}
+            } catch (e: Exception) { ErrorHandler.ignore("SettingsScreen", "best-effort operation failed", e) }
             viewModel.setDownloadDirectoryUri(uri.toString())
             viewModel.setKeepDownloadedFiles(true)
         }
@@ -641,7 +642,7 @@ private fun StreamSettingsPage(
                             ).let { path ->
                                 if (path.isNotEmpty()) "/$path" else null
                             }
-                        } catch (_: Exception) { null }
+                        } catch (e: Exception) { ErrorHandler.report("SettingsScreen", "operation failed, returning null", e); null }
                     }
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
@@ -938,7 +939,7 @@ private fun DownloadsSettingsPage(
         if (uri != null) {
             try {
                 context.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-            } catch (_: Exception) {}
+            } catch (e: Exception) { ErrorHandler.ignore("SettingsScreen", "best-effort operation failed", e) }
             viewModel.setDownloadDirectoryUri(uri.toString())
             viewModel.setKeepDownloadedFiles(true)
         }
@@ -1043,7 +1044,7 @@ private fun DownloadsSettingsPage(
                         ).let { path ->
                             if (path.isNotEmpty()) "/$path" else null
                         }
-                    } catch (_: Exception) { null }
+                    } catch (e: Exception) { ErrorHandler.report("SettingsScreen", "operation failed, returning null", e); null }
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),

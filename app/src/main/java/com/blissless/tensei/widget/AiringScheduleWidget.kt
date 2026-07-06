@@ -66,6 +66,7 @@ import java.util.concurrent.TimeUnit
 import androidx.core.content.edit
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.scale
+import com.blissless.tensei.util.ErrorHandler
 
 private const val PREFS_NAME = "airing_schedule_widget"
 private const val ANILIST_PREFS = "anilist_prefs"
@@ -583,7 +584,7 @@ object WidgetScheduleFetcher {
     private fun loadCached(context: Context): WidgetScheduleData? {
         val s = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(KEY_DATA, null) ?: return null
         return try { json.decodeFromString<WidgetScheduleData>(s) }
-        catch (_: Exception) { null }
+        catch (e: Exception) { ErrorHandler.report("AiringScheduleWidget", "operation failed, returning null", e); null }
     }
 
     private fun execute(body: String, authToken: String?, shortTimeout: Boolean = false): String {

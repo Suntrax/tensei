@@ -124,6 +124,7 @@ import com.blissless.tensei.viewmodel.getVideoCacheSize
 import com.blissless.tensei.viewmodel.getDownloadCacheSize
 import com.blissless.tensei.viewmodel.clearNonEssentialCaches
 import com.blissless.tensei.viewmodel.clearDownloadCache
+import com.blissless.tensei.util.ErrorHandler
 
 @UnstableApi
 class MainActivity : ComponentActivity() {
@@ -652,7 +653,7 @@ fun MainScreen(
             val ep = result.episode
             scope.launch {
                 val episodeVideos = withContext(Dispatchers.IO) {
-                    try { src.getVideoList(ep) } catch (_: Throwable) { emptyList() }
+                    try { src.getVideoList(ep) } catch (e: Throwable) { ErrorHandler.report("MainActivity", "operation failed, returning empty list", e); emptyList() }
                 }
                 val subVideo = episodeVideos.find {
                     it.videoTitle.contains("sub", ignoreCase = true) && !it.videoTitle.contains("dub", ignoreCase = true) && it.subtitleTracks.isNotEmpty()
@@ -949,7 +950,7 @@ fun MainScreen(
 
     fun fetchAndCacheEpisode(ep: Int) {
         if (currentAnime == null) return
-        val pkg = extensionSourcePackage
+        val pkg = extensionSourcePackage.ifEmpty { viewModel.defaultExtensionPackage.value }
         if (pkg.isEmpty()) return
         scope.launch {
             if (episodeCache.containsKey(ep)) return@launch
@@ -964,7 +965,7 @@ fun MainScreen(
         if (currentAnime == null) return
         scope.launch {
             val nextEp = currentEpisode + 1
-            val pkg = extensionSourcePackage
+            val pkg = extensionSourcePackage.ifEmpty { viewModel.defaultExtensionPackage.value }
             if (pkg.isEmpty()) return@launch
             val result = viewModel.playEpisodeWithExtension(currentAnime!!, nextEp, pkg)
             if (result != null) {
@@ -975,11 +976,13 @@ fun MainScreen(
     }
 
     val onPreviousEpisode: () -> Unit = {
+        android.util.Log.d("EpisodeNav", "onPreviousEpisode clicked: currentEp=$currentEpisode isChanging=$isChangingEpisode anime=${currentAnime?.id}")
         if (!isChangingEpisode && currentAnime != null && currentEpisode > 1) {
             isChangingEpisode = true
 
             val prevEp = currentEpisode - 1
             val cached = episodeCache[prevEp]
+            android.util.Log.d("EpisodeNav", "onPreviousEpisode: prevEp=$prevEp cached=${cached != null} extSrcPkg='$extensionSourcePackage' defaultExtPkg='${viewModel.defaultExtensionPackage.value}' streamMethod='${viewModel.streamMethod.value}'")
 
             if (cached != null) {
                 currentEpisode = prevEp
@@ -1002,54 +1005,24 @@ fun MainScreen(
                 prefetchExtensionNextEpisode()
                 fetchAndCacheEpisode(prevEp - 1)
             } else {
-                isLoadingStream = true
-                scope.launch {
-                    val pkg = extensionSourcePackage
-                    if (pkg.isEmpty()) {
-                        Toast.makeText(context, "No extension configured", Toast.LENGTH_SHORT).show()
-                        isChangingEpisode = false
-                        isLoadingStream = false
-                        return@launch
-                    }
-                    val result = viewModel.playEpisodeWithExtension(currentAnime!!, prevEp, pkg)
-                    if (result != null && result.videos.isNotEmpty()) {
-                        episodeCache[prevEp] = result
-                        currentEpisode = prevEp
-                        savedPlaybackPosition = viewModel.getPlaybackPosition(currentAnime!!.id, prevEp)
-                        currentEpisodeTitle = sanitizeEpisodeTitle(result.episode?.name) ?: "Episode $prevEp"
-                        currentVideoUrl = result.url
-                        currentReferer = result.referer
-                        currentSubtitleUrl = result.subtitleUrl
-                        currentSubtitleTracks = result.videos.firstOrNull()?.subtitleTracks ?: emptyList()
-                        currentServerName = if (!result.hosters.isNullOrEmpty()) result.hosters.first().hosterName else "Extension"
-                        currentCategory = "sub"
-                        currentQualityOptions = com.blissless.tensei.ui.screens.player.buildQualityOptions(result.videos)
-                        currentQuality = result.videoTitle
-                        extensionOkHttpClient = result.extensionClient
-                        extensionVideoHeaders = result.videoHeaders
-                        extensionHosters = result.hosters
-                        extensionServers = com.blissless.tensei.ui.screens.player.buildServerList(result.hosters)
-                        episodeTrigger++
-                        isChangingEpisode = false
-                        isLoadingStream = false
-                        prefetchExtensionNextEpisode()
-                        fetchAndCacheEpisode(prevEp - 1)
-                    } else {
-                        Toast.makeText(context, "Failed to load episode $prevEp", Toast.LENGTH_SHORT).show()
-                        isChangingEpisode = false
-                        isLoadingStream = false
-                    }
-                }
+                // Cache miss — delegate to loadAndPlayEpisode which handles
+                // both magnet and direct extension stream methods.
+                // Use isAutoRefresh=true to avoid hiding the player.
+                isChangingEpisode = false
+                isAutoRefreshing = false
+                loadAndPlayEpisode(currentAnime!!, prevEp, isAutoRefresh = true)
             }
         }
     }
 
     val onNextEpisode: () -> Unit = {
+        android.util.Log.d("EpisodeNav", "onNextEpisode clicked: currentEp=$currentEpisode isChanging=$isChangingEpisode anime=${currentAnime?.id}")
         if (!isChangingEpisode && currentAnime != null) {
             isChangingEpisode = true
 
             val nextEp = currentEpisode + 1
             val cached = cachedExtensionNext ?: episodeCache[nextEp]
+            android.util.Log.d("EpisodeNav", "onNextEpisode: nextEp=$nextEp cached=${cached != null} extSrcPkg='$extensionSourcePackage' defaultExtPkg='${viewModel.defaultExtensionPackage.value}'")
 
             if (cached != null) {
                 cachedExtensionNext = null
@@ -1074,44 +1047,12 @@ fun MainScreen(
                 prefetchExtensionNextEpisode()
                 fetchAndCacheEpisode(nextEp - 1)
             } else {
-                isLoadingStream = true
-                scope.launch {
-                    val pkg = extensionSourcePackage
-                    if (pkg.isEmpty()) {
-                        Toast.makeText(context, "No extension configured", Toast.LENGTH_SHORT).show()
-                        isChangingEpisode = false
-                        isLoadingStream = false
-                        return@launch
-                    }
-                    val result = viewModel.playEpisodeWithExtension(currentAnime!!, nextEp, pkg)
-                    if (result != null && result.videos.isNotEmpty()) {
-                        episodeCache[nextEp] = result
-                        currentEpisode = nextEp
-                        savedPlaybackPosition = viewModel.getPlaybackPosition(currentAnime!!.id, nextEp)
-                        currentEpisodeTitle = sanitizeEpisodeTitle(result.episode?.name) ?: "Episode $nextEp"
-                        currentVideoUrl = result.url
-                        currentReferer = result.referer
-                        currentSubtitleUrl = result.subtitleUrl
-                        currentSubtitleTracks = result.videos.firstOrNull()?.subtitleTracks ?: emptyList()
-                        currentServerName = if (!result.hosters.isNullOrEmpty()) result.hosters.first().hosterName else "Extension"
-                        currentCategory = "sub"
-                        currentQualityOptions = com.blissless.tensei.ui.screens.player.buildQualityOptions(result.videos)
-                        currentQuality = result.videoTitle
-                        extensionOkHttpClient = result.extensionClient
-                        extensionVideoHeaders = result.videoHeaders
-                        extensionHosters = result.hosters
-                        extensionServers = com.blissless.tensei.ui.screens.player.buildServerList(result.hosters)
-                        episodeTrigger++
-                        isChangingEpisode = false
-                        isLoadingStream = false
-                        prefetchExtensionNextEpisode()
-                        fetchAndCacheEpisode(nextEp - 1)
-                    } else {
-                        Toast.makeText(context, "Failed to load episode $nextEp", Toast.LENGTH_SHORT).show()
-                        isChangingEpisode = false
-                        isLoadingStream = false
-                    }
-                }
+                // Cache miss — delegate to loadAndPlayEpisode which handles
+                // both magnet and direct extension stream methods.
+                // Use isAutoRefresh=true to avoid hiding the player.
+                isChangingEpisode = false
+                isAutoRefreshing = false
+                loadAndPlayEpisode(currentAnime!!, nextEp, isAutoRefresh = true)
             }
         }
     }

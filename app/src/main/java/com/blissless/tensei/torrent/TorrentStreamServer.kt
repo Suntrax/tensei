@@ -10,6 +10,7 @@ import java.net.ServerSocket
 import java.net.Socket
 import java.net.URLDecoder
 import java.util.concurrent.Executors
+import com.blissless.tensei.util.ErrorHandler
 
 class TorrentStreamServer(private val saveDir: File) {
 
@@ -68,7 +69,7 @@ class TorrentStreamServer(private val saveDir: File) {
         Log.i(TAG, "stop: shutting down (totalBytesSent=$totalBytesSent)")
         running = false
         executor.shutdownNow()
-        try { serverSocket?.close() } catch (_: Exception) {}
+        try { serverSocket?.close() } catch (e: Exception) { ErrorHandler.ignore("TorrentStreamServer", "best-effort operation failed", e) }
         Log.d(TAG, "stop: server stopped")
     }
 
@@ -221,7 +222,7 @@ class TorrentStreamServer(private val saveDir: File) {
             Log.i(TAG, "handleClient: done — sent $bytesSent of $sendLength bytes (pos ended at ${startOffset + bytesSent})")
         } catch (e: Exception) {
             if (running) Log.e(TAG, "handleClient: error for path='$requestPath'", e)
-            try { client.close() } catch (_: Exception) {}
+            try { client.close() } catch (e: Exception) { ErrorHandler.ignore("TorrentStreamServer", "best-effort operation failed", e) }
         }
     }
 
@@ -241,8 +242,8 @@ class TorrentStreamServer(private val saveDir: File) {
     private fun sendError(client: Socket, code: Int, msg: String) {
         Log.w(TAG, "sendError: $code $msg")
         val resp = "HTTP/1.1 $code $msg\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-        try { client.getOutputStream().write(resp.toByteArray()); client.getOutputStream().flush() } catch (_: Exception) {}
-        try { client.close() } catch (_: Exception) {}
+        try { client.getOutputStream().write(resp.toByteArray()); client.getOutputStream().flush() } catch (e: Exception) { ErrorHandler.ignore("TorrentStreamServer", "best-effort operation failed", e) }
+        try { client.close() } catch (e: Exception) { ErrorHandler.ignore("TorrentStreamServer", "best-effort operation failed", e) }
     }
 
     private fun thread(name: String, action: () -> Unit): Thread {

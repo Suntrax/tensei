@@ -14,6 +14,7 @@ import java.net.ServerSocket
 import java.net.Socket
 import java.net.URI
 import java.util.concurrent.Executors
+import com.blissless.tensei.util.ErrorHandler
 
 object LocalProxyServer {
     private const val TAG = "LocalProxyServer"
@@ -28,7 +29,7 @@ object LocalProxyServer {
 
     fun start(client: OkHttpClient?, source: AnimeCatalogueSource?) {
         if (serverSocket != null) return
-        extensionClient = client ?: try { eu.kanade.tachiyomi.network.NetworkHelper.getInstance().client } catch (_: Exception) { null }
+        extensionClient = client ?: try { eu.kanade.tachiyomi.network.NetworkHelper.getInstance().client } catch (e: Exception) { ErrorHandler.report("LocalProxyServer", "operation failed, returning null", e); null }
         if (extensionClient == null) {
             Log.w(TAG, "No extension client available — proxy will return 502")
         }
@@ -61,12 +62,12 @@ object LocalProxyServer {
             val path = URI(video.videoUrl).path
             pathToVideo[path] = video
             Log.d(TAG, "Registered video path: $path -> ${video.videoUrl.take(60)}")
-        } catch (_: Exception) {}
+        } catch (e: Exception) { ErrorHandler.ignore("LocalProxyServer", "best-effort operation failed", e) }
     }
 
     fun stop() {
         running = false
-        try { serverSocket?.close() } catch (_: Exception) {}
+        try { serverSocket?.close() } catch (e: Exception) { ErrorHandler.ignore("LocalProxyServer", "best-effort operation failed", e) }
         serverSocket = null
         clientExecutor.shutdownNow()
         pathToVideo.clear()
@@ -127,7 +128,7 @@ object LocalProxyServer {
                     ?.let { h.value(it) }
             }
             val upstreamHost = when {
-                referer != null -> try { URI(referer).let { "${it.scheme}://${it.host}" } } catch (_: Exception) { null }
+                referer != null -> try { URI(referer).let { "${it.scheme}://${it.host}" } } catch (e: Exception) { ErrorHandler.report("LocalProxyServer", "operation failed, returning null", e); null }
                 sourceBaseUrl != null -> sourceBaseUrl
                 else -> null
             }
@@ -137,7 +138,7 @@ object LocalProxyServer {
                 if (query != null && !base.contains("?")) "$base?$query" else base
             } else if (pathToVideo.isNotEmpty()) {
                 val firstVideo = pathToVideo.values.first()
-                val videoUri = try { URI(firstVideo.videoUrl) } catch (_: Exception) { null }
+                val videoUri = try { URI(firstVideo.videoUrl) } catch (e: Exception) { ErrorHandler.report("LocalProxyServer", "operation failed, returning null", e); null }
                 val serverBase = if (videoUri != null) {
                     val port = if (videoUri.port > 0) ":${videoUri.port}" else ""
                     "${videoUri.scheme}://${videoUri.host}$port"
@@ -189,7 +190,7 @@ object LocalProxyServer {
         } catch (e: Exception) {
             Log.e(TAG, "Proxy handler error", e)
         } finally {
-            try { clientSocket.close() } catch (_: Exception) {}
+            try { clientSocket.close() } catch (e: Exception) { ErrorHandler.ignore("LocalProxyServer", "best-effort operation failed", e) }
         }
     }
 
@@ -242,6 +243,6 @@ object LocalProxyServer {
             writer.write(header.toByteArray())
             writer.write(body)
             writer.flush()
-        } catch (_: Exception) {}
+        } catch (e: Exception) { ErrorHandler.ignore("LocalProxyServer", "best-effort operation failed", e) }
     }
 }

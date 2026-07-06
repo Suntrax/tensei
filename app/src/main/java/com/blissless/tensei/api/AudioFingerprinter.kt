@@ -11,6 +11,7 @@ import java.io.FileOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.sqrt
+import com.blissless.tensei.util.ErrorHandler
 
 /**
  * Audio fingerprinting service for detecting OP/ED timestamps.
@@ -125,7 +126,7 @@ class AudioFingerprinter(private val context: Context) {
             val endTime = startTime + fingerprint.duration
 
             MatchResult(true, startTime, endTime.coerceAtMost(episodeDuration), matchPosition.second)
-        } catch (_: Exception) { null }
+        } catch (e: Exception) { ErrorHandler.report("AudioFingerprinter", "operation failed, returning null", e); null }
     }
 
     private fun downloadAudioSegment(url: String): File? {
@@ -151,7 +152,7 @@ class AudioFingerprinter(private val context: Context) {
             }
             connection.disconnect()
             if (tempFile.length() > 0) tempFile else { tempFile.delete(); null }
-        } catch (_: Exception) { null }
+        } catch (e: Exception) { ErrorHandler.report("AudioFingerprinter", "operation failed, returning null", e); null }
     }
 
     private fun generateFingerprint(audioFile: File): AudioFingerprint? {
@@ -183,7 +184,7 @@ class AudioFingerprinter(private val context: Context) {
             val energyProfile = computeEnergyProfile(samples)
             val peakPattern = computePeakPattern(energyProfile)
             AudioFingerprint(samples.size.toFloat() / SAMPLE_RATE, energyProfile, peakPattern)
-        } catch (_: Exception) { null }
+        } catch (e: Exception) { ErrorHandler.report("AudioFingerprinter", "operation failed, returning null", e); null }
     }
 
     private fun extractAudioSamples(extractor: MediaExtractor, format: MediaFormat): FloatArray {
@@ -300,7 +301,7 @@ class AudioFingerprinter(private val context: Context) {
             val energyProfile = computeEnergyProfile(samples)
             val peakPattern = computePeakPattern(energyProfile)
             AudioFingerprint(samples.size.toFloat() / SAMPLE_RATE, energyProfile, peakPattern)
-        } catch (_: Exception) { null }
+        } catch (e: Exception) { ErrorHandler.report("AudioFingerprinter", "operation failed, returning null", e); null }
     }
 
     private fun extractAudioSamplesForDuration(extractor: MediaExtractor, format: MediaFormat, maxDurationSeconds: Int): FloatArray {

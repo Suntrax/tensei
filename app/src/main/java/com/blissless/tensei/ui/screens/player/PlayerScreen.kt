@@ -1818,40 +1818,25 @@ fun PlayerScreen(
                 }
 
                 if (isLoadingStream || isChangingServer) {
-                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center).offset(y = 64.dp), color = Color.White)
+                    PlayerLoadingIndicator(modifier = Modifier.align(Alignment.Center).offset(y = 64.dp))
                 }
 
                 if (hasError && playbackError != null) {
-                    Card(
-                        modifier = Modifier.align(Alignment.Center).padding(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A1A)),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.Refresh, null, tint = Color(0xFFFFA726), modifier = Modifier.size(32.dp))
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text("Stream Error", color = Color.White, style = MaterialTheme.typography.titleMedium)
-                            Text(playbackError ?: "Unknown error", color = Color.Gray, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
-
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            if (onServerChange != null) {
-                                val servers = if (currentCategory == "sub") subServers else dubServers
-                                if (servers.size > 1) {
-                                    Button(
-                                        onClick = {
-                                            val currentIndex = servers.indexOfFirst { it.name == currentServerName }
-                                            val nextIndex = (currentIndex + 1) % servers.size
-                                            handleServerChange(servers[nextIndex].name, currentCategory)
-                                        },
-                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                                    ) {
-                                        Text("Try Next Server")
-                                    }
-                                }
-                            }
-                        }
+                    val canTryNextServer = onServerChange != null && let {
+                        val servers = if (currentCategory == "sub") subServers else dubServers
+                        servers.size > 1
                     }
+                    StreamErrorOverlay(
+                        errorMessage = playbackError ?: "Unknown error",
+                        showTryNextServer = canTryNextServer,
+                        onTryNextServer = {
+                            val servers = if (currentCategory == "sub") subServers else dubServers
+                            val currentIndex = servers.indexOfFirst { it.name == currentServerName }
+                            val nextIndex = (currentIndex + 1) % servers.size
+                            handleServerChange(servers[nextIndex].name, currentCategory)
+                        },
+                        modifier = Modifier.align(Alignment.Center),
+                    )
                 }
 
                 // Bottom gradient - slides from bottom

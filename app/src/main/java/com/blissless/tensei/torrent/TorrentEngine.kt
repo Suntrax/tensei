@@ -8,6 +8,7 @@ import org.libtorrent4j.swig.error_code
 import org.libtorrent4j.swig.settings_pack
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
+import com.blissless.tensei.util.ErrorHandler
 
 class TorrentEngine(private val context: Context) {
 
@@ -182,7 +183,7 @@ class TorrentEngine(private val context: Context) {
                     if (!finishedNotified) {
                         finishedNotified = true
                         Log.i(TAG, "progress: torrent finished/seeding — pausing to avoid seeding")
-                        try { h.pause() } catch (_: Exception) {}
+                        try { h.pause() } catch (e: Exception) { ErrorHandler.ignore("TorrentEngine", "best-effort operation failed", e) }
                         listeners.forEach { it.onFinished() }
                     }
                 } else {
@@ -244,7 +245,7 @@ class TorrentEngine(private val context: Context) {
                     if (!finishedNotified) {
                         finishedNotified = true
                         Log.i(TAG, "alert: TorrentFinished — pausing to avoid seeding")
-                        try { handle?.pause() } catch (_: Exception) {}
+                        try { handle?.pause() } catch (e: Exception) { ErrorHandler.ignore("TorrentEngine", "best-effort operation failed", e) }
                         listeners.forEach { it.onFinished() }
                     }
                 }
@@ -378,7 +379,7 @@ class TorrentEngine(private val context: Context) {
         Log.d(TAG, "startDownload: applying file priorities")
         applyFilePriorities(h, fileIndex)
 
-        val ti = try { h.torrentFile() } catch (_: Exception) { null }
+        val ti = try { h.torrentFile() } catch (e: Exception) { ErrorHandler.report("TorrentEngine", "operation failed, returning null", e); null }
         if (ti != null) {
             Log.d(TAG, "startDownload: metadata available, setting up streaming priorities")
             setupStreamingPriorities(h, fileIndex)
@@ -395,7 +396,7 @@ class TorrentEngine(private val context: Context) {
             return
         }
         Log.d(TAG, "setupStreamingPriorities: fileIndex=$fileIndex")
-        val ti = try { h.torrentFile() } catch (_: Exception) { null } ?: run {
+        val ti = try { h.torrentFile() } catch (e: Exception) { ErrorHandler.report("TorrentEngine", "operation failed, returning null", e); null } ?: run {
             Log.w(TAG, "setupStreamingPriorities: no torrent info yet, deferring")
             pendingStreamFileIndex = fileIndex
             return
@@ -413,7 +414,7 @@ class TorrentEngine(private val context: Context) {
             return
         }
 
-        val fileName = try { fs.fileName(fileIndex) } catch (_: Exception) { "<unknown>" }
+        val fileName = try { fs.fileName(fileIndex) } catch (e: Exception) { ErrorHandler.report("TorrentEngine", "operation failed, returning unknown", e); "<unknown>" }
         val fileSize = fs.fileSize(fileIndex)
         streamingFirstPiece = fs.pieceIndexAtFile(fileIndex)
         streamingLastPiece = fs.lastPieceIndexAtFile(fileIndex)
@@ -513,12 +514,12 @@ class TorrentEngine(private val context: Context) {
             val size = h.torrentFile()?.files()?.fileSize(fileIndex) ?: 0L
             Log.d(TAG, "getFileSize: fileIndex=$fileIndex size=$size")
             size
-        } catch (_: Exception) { 0L }
+        } catch (e: Exception) { ErrorHandler.report("TorrentEngine", "operation failed, returning 0L", e); 0L }
     }
 
     fun getLastPieceForFile(): Int {
         val h = handle ?: return -1
-        val ti = try { h.torrentFile() } catch (_: Exception) { null } ?: return -1
+        val ti = try { h.torrentFile() } catch (e: Exception) { ErrorHandler.report("TorrentEngine", "operation failed, returning null", e); null } ?: return -1
         val fs = ti.files() ?: return -1
         val fileIndex = findSelectedFileIndex(h, fs) ?: return -1
         return fs.lastPieceIndexAtFile(fileIndex)
@@ -526,7 +527,7 @@ class TorrentEngine(private val context: Context) {
 
     fun getContiguousDownloadedBytes(): Long {
         val h = handle ?: return 0L
-        val ti = try { h.torrentFile() } catch (_: Exception) { null } ?: return 0L
+        val ti = try { h.torrentFile() } catch (e: Exception) { ErrorHandler.report("TorrentEngine", "operation failed, returning null", e); null } ?: return 0L
         val fs = ti.files() ?: return 0L
         val fileIndex = findSelectedFileIndex(h, fs) ?: return 0L
         val fileSize = fs.fileSize(fileIndex)
@@ -548,7 +549,7 @@ class TorrentEngine(private val context: Context) {
 
     private fun findSelectedFileIndex(h: TorrentHandle, fs: FileStorage): Int? {
         for (i in 0 until fs.numFiles()) {
-            try { if (h.filePriority(i) != Priority.IGNORE) return i } catch (_: Exception) {}
+            try { if (h.filePriority(i) != Priority.IGNORE) return i } catch (e: Exception) { ErrorHandler.ignore("TorrentEngine", "best-effort operation failed", e) }
         }
         var maxSize = 0L; var maxIdx = 0
         for (i in 0 until fs.numFiles()) {
@@ -565,20 +566,20 @@ class TorrentEngine(private val context: Context) {
             val path = ti.files()?.filePath(fileIndex, saveDir.absolutePath)
             Log.d(TAG, "getFileSavePath: fileIndex=$fileIndex path=$path")
             path
-        } catch (_: Exception) { null }
+        } catch (e: Exception) { ErrorHandler.report("TorrentEngine", "operation failed, returning null", e); null }
     }
 
-    fun getNumPieces(): Int = try { handle?.torrentFile()?.numPieces() ?: 1 } catch (_: Exception) { 1 }
+    fun getNumPieces(): Int = try { handle?.torrentFile()?.numPieces() ?: 1 } catch (e: Exception) { ErrorHandler.report("TorrentEngine", "operation failed, returning 1", e); 1 }
 
     fun getPieceSize(): Long {
-        val ti = try { handle?.torrentFile() } catch (_: Exception) { null } ?: return 4L * 1024 * 1024
+        val ti = try { handle?.torrentFile() } catch (e: Exception) { ErrorHandler.report("TorrentEngine", "operation failed, returning null", e); null } ?: return 4L * 1024 * 1024
         return (ti.totalSize() + ti.numPieces() - 1) / ti.numPieces()
     }
 
     fun havePiece(pieceIndex: Int): Boolean {
         return try {
             rawHandle?.have_piece(pieceIndex) ?: false
-        } catch (_: Exception) { false }
+        } catch (e: Exception) { ErrorHandler.report("TorrentEngine", "operation failed, returning false", e); false }
     }
 
     fun removeCurrentTorrent() {
@@ -595,7 +596,7 @@ class TorrentEngine(private val context: Context) {
 
     fun clearCache() {
         Log.d(TAG, "clearCache: deleting ${saveDir.absolutePath}")
-        try { saveDir.listFiles()?.forEach { it.deleteRecursively() } } catch (_: Exception) {}
+        try { saveDir.listFiles()?.forEach { it.deleteRecursively() } } catch (e: Exception) { ErrorHandler.ignore("TorrentEngine", "best-effort operation failed", e) }
     }
 
     fun stop() {
@@ -662,7 +663,7 @@ class TorrentEngine(private val context: Context) {
             }
             Log.i(TAG, "getLargestVideoFileIndex: selected=$bestIdx '${fs.fileName(bestIdx)}' ($bestSize bytes)")
             bestIdx
-        } catch (_: Exception) { 0 }
+        } catch (e: Exception) { ErrorHandler.report("TorrentEngine", "operation failed, returning 0", e); 0 }
     }
 
     fun findVideoFileIndex(fileNameHint: String): Int {
@@ -674,7 +675,7 @@ class TorrentEngine(private val context: Context) {
                 if (name.contains(fileNameHint, ignoreCase = true)) return i
             }
             getLargestVideoFileIndex()
-        } catch (_: Exception) { 0 }
+        } catch (e: Exception) { ErrorHandler.report("TorrentEngine", "operation failed, returning 0", e); 0 }
     }
 
     private fun buildMeta(ti: TorrentInfo): TorrentMeta {

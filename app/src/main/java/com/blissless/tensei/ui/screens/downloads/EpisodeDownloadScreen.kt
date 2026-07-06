@@ -100,6 +100,7 @@ import kotlin.coroutines.resume
 // Extension functions on MainViewModel (defined in com.blissless.tensei.viewmodel)
 import com.blissless.tensei.viewmodel.fetchMagnetForEpisode
 import com.blissless.tensei.viewmodel.playEpisodeWithExtension
+import com.blissless.tensei.util.ErrorHandler
 
 private const val TAG = "AnimeDownload"
 
@@ -394,7 +395,7 @@ fun EpisodeDownloadDialog(
             try {
                 val treeUri = Uri.parse(treeUriStr)
                 context.contentResolver.takePersistableUriPermission(treeUri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-            } catch (_: Exception) {}
+            } catch (e: Exception) { ErrorHandler.ignore("EpisodeDownload", "best-effort operation failed", e) }
             try {
                 val treeUri = Uri.parse(treeUriStr)
                 val cr = context.contentResolver
@@ -922,7 +923,7 @@ fun EpisodeDownloadDialog(
                             Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS
                         )
                         context.startActivity(intent)
-                    } catch (_: Exception) {}
+                    } catch (e: Exception) { ErrorHandler.ignore("EpisodeDownload", "best-effort operation failed", e) }
                 }) { Text("Disable") }
             },
             dismissButton = {
@@ -1032,7 +1033,7 @@ private fun findOrCreateDirectory(cr: android.content.ContentResolver, treeUri: 
                 }
             }
         }
-    } catch (_: Exception) {}
+    } catch (e: Exception) { ErrorHandler.ignore("EpisodeDownload", "best-effort operation failed", e) }
     val dirUri = DocumentsContract.createDocument(cr, DocumentsContract.buildDocumentUriUsingTree(treeUri, docId), DocumentsContract.Document.MIME_TYPE_DIR, name)
     if (dirUri != null) return DocumentsContract.getDocumentId(dirUri)
     return null
@@ -1051,7 +1052,7 @@ private fun findDocument(cr: android.content.ContentResolver, parentUri: Uri, na
                 }
             }
         }
-    } catch (_: Exception) {}
+    } catch (e: Exception) { ErrorHandler.ignore("EpisodeDownload", "best-effort operation failed", e) }
     return null
 }
 
