@@ -457,7 +457,7 @@ fun HomeScreen(
                                 ) {
                                     AsyncImage(
                                         model = ImageRequest.Builder(LocalContext.current)
-                                            .data("https://anilist.co/img/icons/favicon-32x32.png")
+                                            .data(com.blissless.tensei.network.Endpoints.AniList.FAVICON)
                                             .crossfade(true)
                                             .build(),
                                         contentDescription = "AniList",

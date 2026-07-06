@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.util.Base64
 import com.blissless.tensei.BuildConfig
+import com.blissless.tensei.network.Endpoints
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
@@ -16,7 +17,7 @@ import androidx.core.net.toUri
 class MalApiService(context: Context) {
 
     companion object {
-        private const val MAL_API_BASE = "https://api.myanimelist.net/v2"
+        private const val MAL_API_BASE = Endpoints.Mal.API_BASE
         private const val TIMEOUT_MS = 15000
     }
 
@@ -30,7 +31,7 @@ class MalApiService(context: Context) {
 
         val scope = "write:users+read:users+profile"
 
-        val url = "https://myanimelist.net/v1/oauth2/authorize" +
+        val url = Endpoints.Mal.AUTH_URL +
                 "?response_type=code" +
                 "&client_id=$clientId" +
                 "&redirect_uri=${URLEncoder.encode(redirectUri, "UTF-8")}" +
@@ -56,7 +57,7 @@ class MalApiService(context: Context) {
 
                 authManager.clearCodeVerifier()
 
-                val url = URL("https://myanimelist.net/v1/oauth2/token")
+                val url = URL(Endpoints.Mal.TOKEN_URL)
 
                 val conn = url.openConnection() as HttpURLConnection
                 conn.requestMethod = "POST"

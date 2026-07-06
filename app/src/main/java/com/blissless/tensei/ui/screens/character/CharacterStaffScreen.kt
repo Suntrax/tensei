@@ -272,7 +272,7 @@ fun CharacterScreen(
                                     val shareText = buildString {
                                         char.name?.full?.let { append(it) }
                                         append("\n\n")
-                                        append("https://anilist.co/character/${char.id}")
+                                        append(com.blissless.tensei.network.Endpoints.AniList.characterPageUrl(char.id))
                                     }
                                     val sendIntent = Intent().apply {
                                         action = Intent.ACTION_SEND
@@ -555,7 +555,7 @@ fun StaffScreen(
                                     val shareText = buildString {
                                         staffData.name?.full?.let { append(it) }
                                         append("\n\n")
-                                        append("https://anilist.co/staff/${staffData.id}")
+                                        append(com.blissless.tensei.network.Endpoints.AniList.staffPageUrl(staffData.id))
                                     }
                                     val sendIntent = Intent().apply {
                                         action = Intent.ACTION_SEND

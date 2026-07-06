@@ -37,6 +37,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.json.Json
 import java.io.File
+import com.blissless.tensei.util.ErrorHandler
 
 @UnstableApi
 class CacheManager(private val sharedPreferences: SharedPreferences) {
@@ -271,7 +272,7 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
                 }
             }
             _tmdbEpisodeCache.value = restored
-        } catch (_: Exception) {}
+        } catch (e: Exception) { ErrorHandler.ignore("CacheManager", "operation failed (best-effort)", e) }
     }
 
     fun saveTmdbEpisodeCache() {
@@ -284,13 +285,13 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
                 "$id|$ts"
             }
             sharedPreferences.edit { putString(TMDB_CACHE_PREFS, json.encodeToString(timestamped)) }
-        } catch (_: Exception) {}
+        } catch (e: Exception) { ErrorHandler.ignore("CacheManager", "operation failed (best-effort)", e) }
     }
 
     private fun savePersistentTmdbIds() {
         try {
             sharedPreferences.edit { putString(TMDB_PERSISTENT_IDS_PREFS, json.encodeToString(_persistentTmdbIds.toList())) }
-        } catch (_: Exception) {}
+        } catch (e: Exception) { ErrorHandler.ignore("CacheManager", "operation failed (best-effort)", e) }
     }
 
     fun invalidateUserCache() {
@@ -324,7 +325,7 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
         if (cachedData != null && isCacheValid(CACHE_HOME_TIME)) {
             return try {
                 json.decodeFromString<HomeCacheData>(cachedData)
-            } catch (_: Exception) { null }
+            } catch (e: Exception) { ErrorHandler.report("CacheManager", "operation failed, returning null", e); null }
         }
         return null
     }
@@ -343,7 +344,7 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
         if (cachedData != null && isCacheValid(CACHE_EXPLORE_TIME)) {
             return try {
                 json.decodeFromString<ExploreCacheData>(cachedData)
-            } catch (_: Exception) { null }
+            } catch (e: Exception) { ErrorHandler.report("CacheManager", "operation failed, returning null", e); null }
         }
         return null
     }
@@ -362,7 +363,7 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
         val cachedData = sharedPreferences.getString(CACHE_AIRING_DATA, null) ?: return null
         return try {
             json.decodeFromString<AiringCacheData>(cachedData)
-        } catch (_: Exception) { null }
+        } catch (e: Exception) { ErrorHandler.report("CacheManager", "operation failed, returning null", e); null }
     }
 
     fun loadStreamCache() {
@@ -486,7 +487,7 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
                 PlaybackPositionCache(_playbackPositions.value, _playbackDurations.value, _startedAt.value)
             )
             sharedPreferences.edit { putString(CACHE_PLAYBACK_POSITIONS, jsonString) }
-        } catch (_: Exception) { }
+        } catch (e: Exception) { ErrorHandler.ignore("CacheManager", "operation failed (best-effort)", e) }
     }
 
     fun getPlaybackPosition(animeId: Int, episode: Int, isOffline: Boolean = false): Long = _playbackPositions.value["${animeId}_$episode${if (isOffline) "_offline" else ""}"] ?: 0L
@@ -611,14 +612,14 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
             val now = System.currentTimeMillis()
             _extensionStreamCache.clear()
             _extensionStreamCache.putAll(parsed.filter { (now - it.value.cachedAt) < STREAM_CACHE_DURATION_MS })
-        } catch (_: Exception) {}
+        } catch (e: Exception) { ErrorHandler.ignore("CacheManager", "operation failed (best-effort)", e) }
     }
 
     private fun saveExtensionStreamCache() {
         try {
             val raw = json.encodeToString(_extensionStreamCache)
             sharedPreferences.edit { putString(CACHE_EXTENSION_STREAMS, raw) }
-        } catch (_: Exception) {}
+        } catch (e: Exception) { ErrorHandler.ignore("CacheManager", "operation failed (best-effort)", e) }
     }
 
     // Time-based expiration for detailed anime cache
@@ -844,7 +845,7 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
         val cache = videoCache ?: return
         try {
             cache.removeResource(videoUrl)
-        } catch (_: Exception) {}
+        } catch (e: Exception) { ErrorHandler.ignore("CacheManager", "operation failed (best-effort)", e) }
     }
 
     // ExoPlayer video cache management

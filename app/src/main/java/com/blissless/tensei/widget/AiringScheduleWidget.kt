@@ -587,7 +587,7 @@ object WidgetScheduleFetcher {
     }
 
     private fun execute(body: String, authToken: String?, shortTimeout: Boolean = false): String {
-        val conn = URL("https://graphql.anilist.co").openConnection() as HttpURLConnection
+        val conn = URL(com.blissless.tensei.network.Endpoints.AniList.GRAPHQL).openConnection() as HttpURLConnection
         conn.requestMethod = "POST"
         conn.setRequestProperty("Content-Type", "application/json")
         conn.setRequestProperty("Accept", "application/json")

@@ -19,7 +19,7 @@ import com.blissless.tensei.data.models.Timestamp
 class AnimeSkipService(private val context: Context? = null) {
 
     companion object {
-        private const val API_URL = "https://api.aniskip.com/v2/skip-times"
+        private const val API_URL = com.blissless.tensei.network.Endpoints.AnimeSkip.API_URL
         private const val DEFAULT_EPISODE_LENGTH = 1440
         private const val MAX_INTRO_DURATION = 150
         private const val MAX_OUTRO_DURATION = 180
@@ -253,7 +253,7 @@ class AnimeSkipService(private val context: Context? = null) {
     private suspend fun searchMalId(animeName: String, targetYear: Int? = null): Int? = withContext(Dispatchers.IO) {
         try {
             val encodedName = URLEncoder.encode(animeName, "UTF-8")
-            val url = "https://api.jikan.moe/v4/anime?q=$encodedName&limit=10"
+            val url = com.blissless.tensei.network.Endpoints.Jikan.searchAnime(encodedName, 10)
             executeGetRequest(url)?.let { response ->
                 val data = json.decodeFromString<JikanSearchResponse>(response)
                 val candidates = data.data

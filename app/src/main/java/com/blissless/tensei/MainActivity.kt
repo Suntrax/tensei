@@ -611,10 +611,7 @@ fun MainScreen(
         overlayState = if (prev.isNotEmpty()) prev.last() else OverlayState.None
     }
 
-    fun sanitizeEpisodeTitle(title: String?): String? {
-        if (title == null) return null
-        return title.replaceFirst(Regex("^Ep\\.?(?:isode)?\\s*\\d+[\\s:\\-–—]+", RegexOption.IGNORE_CASE), "").trim()
-    }
+    fun sanitizeEpisodeTitle(title: String?): String? = com.blissless.tensei.ui.screens.player.sanitizeEpisodeTitle(title)
 
     fun playExtensionVideo(result: MainViewModel.ExtensionStreamResult, index: Int) {
         result.videos.forEachIndexed { _, _ ->
@@ -628,13 +625,7 @@ fun MainScreen(
         currentVideoUrl = result.url.ifEmpty { video.videoUrl }
         currentReferer = result.referer
         val preferredLang = viewModel.defaultSubtitleLang.value
-        val sortedTracks = video.subtitleTracks.sortedByDescending { t ->
-            when {
-                t.lang.equals(preferredLang, ignoreCase = true) -> 2
-                t.lang.equals("English", ignoreCase = true) -> 1
-                else -> 0
-            }
-        }
+        val sortedTracks = com.blissless.tensei.ui.screens.player.sortSubtitleTracks(video.subtitleTracks, preferredLang)
         currentSubtitleTracks = sortedTracks
         currentSubtitleUrl = sortedTracks.firstOrNull()?.url
         sortedTracks.forEachIndexed { _, _ ->
@@ -1000,12 +991,12 @@ fun MainScreen(
                 currentSubtitleTracks = cached.videos.firstOrNull()?.subtitleTracks ?: emptyList()
                 currentServerName = if (!cached.hosters.isNullOrEmpty()) cached.hosters.first().hosterName else "Extension"
                 currentCategory = "sub"
-                currentQualityOptions = cached.videos.map { QualityOption(quality = it.videoTitle, url = it.videoUrl, width = it.resolution ?: 0) }
+                currentQualityOptions = com.blissless.tensei.ui.screens.player.buildQualityOptions(cached.videos)
                 currentQuality = cached.videoTitle
                 extensionOkHttpClient = cached.extensionClient
                 extensionVideoHeaders = cached.videoHeaders
                 extensionHosters = cached.hosters
-                extensionServers = (cached.hosters ?: emptyList()).map { h -> ServerInfo(name = h.hosterName, url = h.hosterUrl) }
+                extensionServers = com.blissless.tensei.ui.screens.player.buildServerList(cached.hosters)
                 episodeTrigger++
                 isChangingEpisode = false
                 prefetchExtensionNextEpisode()
@@ -1032,12 +1023,12 @@ fun MainScreen(
                         currentSubtitleTracks = result.videos.firstOrNull()?.subtitleTracks ?: emptyList()
                         currentServerName = if (!result.hosters.isNullOrEmpty()) result.hosters.first().hosterName else "Extension"
                         currentCategory = "sub"
-                        currentQualityOptions = result.videos.map { QualityOption(quality = it.videoTitle, url = it.videoUrl, width = it.resolution ?: 0) }
+                        currentQualityOptions = com.blissless.tensei.ui.screens.player.buildQualityOptions(result.videos)
                         currentQuality = result.videoTitle
                         extensionOkHttpClient = result.extensionClient
                         extensionVideoHeaders = result.videoHeaders
                         extensionHosters = result.hosters
-                        extensionServers = (result.hosters ?: emptyList()).map { h -> ServerInfo(name = h.hosterName, url = h.hosterUrl) }
+                        extensionServers = com.blissless.tensei.ui.screens.player.buildServerList(result.hosters)
                         episodeTrigger++
                         isChangingEpisode = false
                         isLoadingStream = false
@@ -1071,12 +1062,12 @@ fun MainScreen(
                 currentSubtitleTracks = cached.videos.firstOrNull()?.subtitleTracks ?: emptyList()
                 currentServerName = if (!cached.hosters.isNullOrEmpty()) cached.hosters.first().hosterName else "Extension"
                 currentCategory = "sub"
-                currentQualityOptions = cached.videos.map { QualityOption(quality = it.videoTitle, url = it.videoUrl, width = it.resolution ?: 0) }
+                currentQualityOptions = com.blissless.tensei.ui.screens.player.buildQualityOptions(cached.videos)
                 currentQuality = cached.videoTitle
                 extensionOkHttpClient = cached.extensionClient
                 extensionVideoHeaders = cached.videoHeaders
                 extensionHosters = cached.hosters
-                extensionServers = (cached.hosters ?: emptyList()).map { h -> ServerInfo(name = h.hosterName, url = h.hosterUrl) }
+                extensionServers = com.blissless.tensei.ui.screens.player.buildServerList(cached.hosters)
                 episodeCache[nextEp] = cached
                 episodeTrigger++
                 isChangingEpisode = false
@@ -1104,12 +1095,12 @@ fun MainScreen(
                         currentSubtitleTracks = result.videos.firstOrNull()?.subtitleTracks ?: emptyList()
                         currentServerName = if (!result.hosters.isNullOrEmpty()) result.hosters.first().hosterName else "Extension"
                         currentCategory = "sub"
-                        currentQualityOptions = result.videos.map { QualityOption(quality = it.videoTitle, url = it.videoUrl, width = it.resolution ?: 0) }
+                        currentQualityOptions = com.blissless.tensei.ui.screens.player.buildQualityOptions(result.videos)
                         currentQuality = result.videoTitle
                         extensionOkHttpClient = result.extensionClient
                         extensionVideoHeaders = result.videoHeaders
                         extensionHosters = result.hosters
-                        extensionServers = (result.hosters ?: emptyList()).map { h -> ServerInfo(name = h.hosterName, url = h.hosterUrl) }
+                        extensionServers = com.blissless.tensei.ui.screens.player.buildServerList(result.hosters)
                         episodeTrigger++
                         isChangingEpisode = false
                         isLoadingStream = false
@@ -1141,7 +1132,7 @@ fun MainScreen(
                 currentSubtitleUrl = result.subtitleUrl
                 currentServerName = hosterName
                 currentCategory = if (hosterName.contains("dub", ignoreCase = true) || result.videoTitle.contains("dub", ignoreCase = true)) "dub" else "sub"
-                currentQualityOptions = result.videos.map { QualityOption(quality = it.videoTitle, url = it.videoUrl, width = it.resolution ?: 0) }
+                currentQualityOptions = com.blissless.tensei.ui.screens.player.buildQualityOptions(result.videos)
                 currentQuality = result.videoTitle
                 extensionOkHttpClient = result.extensionClient
                 extensionVideoHeaders = result.videoHeaders
@@ -2116,6 +2107,13 @@ fun MainScreen(
                 val updateViewModel: UpdateViewModel = viewModel()
                 val pendingUpdateState by viewModel.pendingUpdateRelease.collectAsState()
                 var showUpdateDialog by remember { mutableStateOf(false) }
+
+                // Collect toast messages from UpdateViewModel
+                LaunchedEffect(Unit) {
+                    updateViewModel.toastMessage.collect { message ->
+                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                    }
+                }
 
                 LaunchedEffect(pendingUpdateState) {
                     if (pendingUpdateState != null) {

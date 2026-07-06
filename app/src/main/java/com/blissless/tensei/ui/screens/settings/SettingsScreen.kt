@@ -287,7 +287,7 @@ private fun AccountSettingsPage(
                 ) {
                     AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)
-                            .data("https://anilist.co/img/icons/favicon-32x32.png")
+                            .data(com.blissless.tensei.network.Endpoints.AniList.FAVICON)
                             .crossfade(true).build(),
                         contentDescription = "AniList",
                         modifier = Modifier.size(20.dp)
@@ -306,7 +306,7 @@ private fun AccountSettingsPage(
                 ) {
                     AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)
-                            .data("https://cdn.myanimelist.net/images/favicon.ico")
+                            .data(com.blissless.tensei.network.Endpoints.Mal.FAVICON)
                             .crossfade(true).build(),
                         contentDescription = "MyAnimeList",
                         modifier = Modifier.size(20.dp)
@@ -1551,7 +1551,7 @@ private fun AboutSettingsPage(
 
         SectionHeader("LINKS")
         SettingsCard {
-            val githubUrl = "https://github.com/Suntrax/tensei"
+            val githubUrl = com.blissless.tensei.network.Endpoints.GitHub.TENSEI_REPO
             Row(
                 modifier = Modifier
                     .fillMaxWidth()

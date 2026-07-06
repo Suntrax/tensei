@@ -91,6 +91,13 @@ fun ExtensionsScreen(
 
     val context = LocalContext.current
 
+    // Collect toast messages from the ViewModel
+    LaunchedEffect(Unit) {
+        viewModel.toastMessage.collect { (message, duration) ->
+            Toast.makeText(context, message, duration).show()
+        }
+    }
+
     LaunchedEffect(uiState.refreshMessage) {
         uiState.refreshMessage?.let {
             Toast.makeText(context, it, Toast.LENGTH_SHORT).show()

@@ -552,7 +552,7 @@ fun DetailedAnimeScreen(
                     val shareText = buildString {
                         append(displayData.title)
                         append("\n\n")
-                        append("https://anilist.co/anime/${displayData.id}")
+                        append(com.blissless.tensei.network.Endpoints.AniList.animePageUrl(displayData.id))
                     }
                     val sendIntent = Intent().apply {
                         action = Intent.ACTION_SEND

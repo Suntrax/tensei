@@ -67,7 +67,7 @@ data class JikanHistoryEntry(
 class JikanService {
     
     companion object {
-        private const val JIKAN_API_BASE = "https://api.jikan.moe/v4"
+        private const val JIKAN_API_BASE = com.blissless.tensei.network.Endpoints.Jikan.API_BASE
         private const val TIMEOUT_MS = 15000
     }
     

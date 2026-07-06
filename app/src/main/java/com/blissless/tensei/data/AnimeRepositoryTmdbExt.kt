@@ -10,6 +10,7 @@ import com.blissless.tensei.data.models.TmdbSearchResponse
 import com.blissless.tensei.data.models.TmdbSearchResult
 import com.blissless.tensei.data.models.TmdbSeasonDetails
 import com.blissless.tensei.data.models.TmdbTvDetails
+import com.blissless.tensei.network.Endpoints
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -75,7 +76,7 @@ suspend fun AnimeRepository.fetchTmdbEpisodes(
                     episode = 1,
                     title = bestMatch.title,
                     description = bestMatch.overview ?: "",
-                    image = bestMatch.poster_path?.let { "https://image.tmdb.org/t/p/w500$it" }
+                    image = bestMatch.poster_path?.let { Endpoints.Tmdb.imageUrl(it) }
                 ))
             }
             
@@ -148,7 +149,7 @@ internal fun AnimeRepository.searchTmdb(title: String, format: String? = null): 
             
             if (isMovie) {
                 // Use search/movie endpoint for movies
-                val movieUrl = URL("https://api.themoviedb.org/3/search/movie?query=$encodedTitle")
+                val movieUrl = URL(Endpoints.Tmdb.searchMovie(encodedTitle))
                 val movieConnection = (movieUrl.openConnection() as HttpsURLConnection).apply {
                     readTimeout = 15000
                     connectTimeout = 15000
@@ -165,7 +166,7 @@ internal fun AnimeRepository.searchTmdb(title: String, format: String? = null): 
                 
                 // If no movie results, try TV endpoint as fallback
                 if (results.isEmpty()) {
-                    val tvUrl = URL("https://api.themoviedb.org/3/search/tv?query=$encodedTitle")
+                    val tvUrl = URL(Endpoints.Tmdb.searchTv(encodedTitle))
                     val tvConnection = (tvUrl.openConnection() as HttpsURLConnection).apply {
                         readTimeout = 15000
                         connectTimeout = 15000
@@ -181,7 +182,7 @@ internal fun AnimeRepository.searchTmdb(title: String, format: String? = null): 
                 }
             } else {
                 // Use search/tv endpoint for TV series - this searches by title properly
-                val tvUrl = URL("https://api.themoviedb.org/3/search/tv?query=$encodedTitle")
+                val tvUrl = URL(Endpoints.Tmdb.searchTv(encodedTitle))
                 val tvConnection = (tvUrl.openConnection() as HttpsURLConnection).apply {
                     readTimeout = 15000
                     connectTimeout = 15000
@@ -197,7 +198,7 @@ internal fun AnimeRepository.searchTmdb(title: String, format: String? = null): 
                 
                 // If no TV results, try movie endpoint as fallback
                 if (results.isEmpty()) {
-                    val movieUrl = URL("https://api.themoviedb.org/3/search/movie?query=$encodedTitle")
+                    val movieUrl = URL(Endpoints.Tmdb.searchMovie(encodedTitle))
                     val movieConnection = (movieUrl.openConnection() as HttpsURLConnection).apply {
                         readTimeout = 15000
                         connectTimeout = 15000
@@ -222,7 +223,7 @@ internal fun AnimeRepository.searchTmdb(title: String, format: String? = null): 
 
 internal fun AnimeRepository.fetchTvDetails(tmdbId: Int): TmdbTvDetails? {
         return try {
-            val url = URL("https://api.themoviedb.org/3/tv/$tmdbId?language=en-US")
+            val url = URL(Endpoints.Tmdb.tvDetails(tmdbId))
             val connection = (url.openConnection() as HttpsURLConnection).apply {
                 readTimeout = 15000
                 connectTimeout = 15000
@@ -242,7 +243,7 @@ internal fun AnimeRepository.fetchTvDetails(tmdbId: Int): TmdbTvDetails? {
 
 internal suspend fun AnimeRepository.fetchSeason(tvId: Int, seasonNumber: Int): TmdbSeasonDetails? = withContext(Dispatchers.IO) {
         try {
-            val urlStr = "https://api.themoviedb.org/3/tv/$tvId/season/$seasonNumber?language=en-US"
+            val urlStr = Endpoints.Tmdb.season(tvId, seasonNumber)
             val url = URL(urlStr)
             val connection = (url.openConnection() as HttpsURLConnection).apply {
                 readTimeout = 15000
@@ -295,7 +296,7 @@ internal fun AnimeRepository.buildEpisodesFromPool(
                     val title = if (episode.name != null && !episode.name.startsWith("Episode", ignoreCase = true)) {
                         episode.name
                     } else null
-                    val image = episode.still_path?.let { "https://image.tmdb.org/t/p/w500$it" }
+                    val image = episode.still_path?.let { Endpoints.Tmdb.imageUrl(it) }
                     
                     tmdbEpisodes.add(EpisodeData(relativeNum, title, episode.overview, image))
                 }
@@ -442,7 +443,7 @@ internal suspend fun AnimeRepository.fetchEpisodeOffsetFromAniwatch(
         return withContext(Dispatchers.IO) {
             try {
                 val encodedTitle = URLEncoder.encode(animeTitle, "UTF-8")
-                val url = URL("https://aniwatch-cxjn.vercel.app/api/v2/hianime/search?q=$encodedTitle&page=1")
+                val url = URL(Endpoints.Aniwatch.search(encodedTitle, 1))
                 val connection = (url.openConnection() as HttpsURLConnection).apply {
                     readTimeout = 15000
                     connectTimeout = 15000
@@ -456,7 +457,7 @@ internal suspend fun AnimeRepository.fetchEpisodeOffsetFromAniwatch(
                 val bestMatch = animes.firstOrNull()?.jsonObject ?: return@withContext Pair(-1, 0)
                 val aniwatchId = bestMatch["id"]?.jsonPrimitive?.content ?: return@withContext Pair(-1, 0)
 
-                val episodesUrl = URL("https://aniwatch-cxjn.vercel.app/api/v2/hianime/anime/$aniwatchId/episodes")
+                val episodesUrl = URL(Endpoints.Aniwatch.episodes(aniwatchId))
                 val epConnection = (episodesUrl.openConnection() as HttpsURLConnection).apply {
                     readTimeout = 15000
                     connectTimeout = 15000

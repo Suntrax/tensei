@@ -2306,57 +2306,5 @@ fun PlayerScreen(
     }
 }
 
-internal fun loadSubtitleProfileData(context: Context): SubtitleProfileData {
-    val prefs = context.getSharedPreferences("anilist_prefs", Context.MODE_PRIVATE)
-    val saved = prefs.getString("subtitle_profiles", null)
-    val activeIndex = prefs.getInt("subtitle_active_profile", 0)
-    if (saved != null) {
-        try {
-            val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
-            val data = json.decodeFromString(SubtitleProfileData.serializer(), saved)
-            return if (activeIndex in data.profiles.indices) data.copy(activeProfileIndex = activeIndex)
-            else data
-        } catch (_: Exception) { }
-    }
-    return SubtitleProfileData()
-}
+// loadSubtitleProfileData and applySubtitleStyle moved to SubtitleStyleHelpers.kt
 
-@OptIn(UnstableApi::class)
-internal fun applySubtitleStyle(subtitleView: androidx.media3.ui.SubtitleView, settings: SubtitleSettings) {
-    val edgeType = when {
-        settings.enableShadow -> CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW
-        settings.enableOutline -> CaptionStyleCompat.EDGE_TYPE_OUTLINE
-        else -> CaptionStyleCompat.EDGE_TYPE_NONE
-    }
-    val edgeColor = when (edgeType) {
-        CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW -> (settings.shadowColor and 0xFFFFFFFFL).toInt()
-        else -> (settings.outlineColor and 0xFFFFFFFFL).toInt()
-    }
-    val style = CaptionStyleCompat(
-        (settings.fontColor and 0xFFFFFFFFL).toInt(),
-        (settings.backgroundColor and 0xFFFFFFFFL).toInt(),
-        android.graphics.Color.TRANSPARENT,
-        edgeType,
-        edgeColor,
-        null
-    )
-    subtitleView.setStyle(style)
-    subtitleView.setFixedTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, settings.fontSize)
-    subtitleView.rotation = settings.rotation
-
-    val parent = subtitleView.parent as? View
-    val pw = parent?.width?.toFloat() ?: 0f
-    val ph = parent?.height?.toFloat() ?: 0f
-    if (pw > 0 && ph > 0) {
-        subtitleView.translationX = (settings.horizontalPosition - 0.5f) * pw
-        subtitleView.translationY = (settings.verticalPosition - 0.95f) * ph
-    } else {
-        subtitleView.post {
-            val p = subtitleView.parent as? View ?: return@post
-            val w = p.width.toFloat().coerceAtLeast(1f)
-            val h = p.height.toFloat().coerceAtLeast(1f)
-            subtitleView.translationX = (settings.horizontalPosition - 0.5f) * w
-            subtitleView.translationY = (settings.verticalPosition - 0.95f) * h
-        }
-    }
-}

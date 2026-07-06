@@ -28,6 +28,7 @@ import com.blissless.tensei.data.models.ViewerResponse
 import com.blissless.tensei.network.GraphQLClient
 import com.blissless.tensei.network.GraphQLConfig
 import kotlinx.serialization.json.Json
+import com.blissless.tensei.util.ErrorHandler
 
 /**
  * Handles all API calls and data fetching.
@@ -764,7 +765,7 @@ class AnimeRepository(
         return publicGraphqlRequest(query, mapOf("id" to animeId))?.let {
             try {
                 json.decodeFromString<AnimeRelationsResponse>(it).data.Media
-            } catch (_: Exception) { null }
+            } catch (e: Exception) { ErrorHandler.report("AnimeRepository", "operation failed, returning null", e); null }
         }
     }
 
@@ -1012,7 +1013,7 @@ class AnimeRepository(
                         )
                     } else null
                 }
-            } catch (_: Exception) { null }
+            } catch (e: Exception) { ErrorHandler.report("AnimeRepository", "operation failed, returning null", e); null }
         }
     }
 

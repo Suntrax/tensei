@@ -61,7 +61,7 @@ data class GraphQLConfig(
  * - Client ID rotation
  */
 class GraphQLClient(
-    private val endpoint: String = "https://graphql.anilist.co",
+    private val endpoint: String = Endpoints.AniList.GRAPHQL,
     private val config: GraphQLConfig = GraphQLConfig()
 ) {
     companion object;

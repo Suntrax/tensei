@@ -17,8 +17,11 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -65,6 +68,13 @@ class ExtensionsViewModel(application: Application) : AndroidViewModel(applicati
 
     private val _uiState = MutableStateFlow(ExtensionsUiState())
     val uiState: StateFlow<ExtensionsUiState> = _uiState.asStateFlow()
+
+    /**
+     * One-shot toast messages emitted from the ViewModel.
+     * Collect in the Composable layer and show as a Toast.
+     */
+    private val _toastMessage = MutableSharedFlow<Pair<String, Int>>(extraBufferCapacity = 4)
+    val toastMessage: SharedFlow<Pair<String, Int>> = _toastMessage.asSharedFlow()
 
     private var lastExtensionCount = 0
 
@@ -162,7 +172,7 @@ class ExtensionsViewModel(application: Application) : AndroidViewModel(applicati
         val ctx = getApplication<Application>()
         viewModelScope.launch {
             try {
-                Toast.makeText(ctx, "Downloading ${repoExtension.name}...", Toast.LENGTH_SHORT).show()
+                _toastMessage.tryEmit("Downloading ${repoExtension.name}..." to Toast.LENGTH_SHORT)
                 val apkFile = downloadApk(repoExtension.apk, repoExtension.packageName)
                 val uri = FileProvider.getUriForFile(
                     ctx,
@@ -180,7 +190,7 @@ class ExtensionsViewModel(application: Application) : AndroidViewModel(applicati
                 loadExtensions()
                 refreshUpdatableState(findUpdatableExtensions())
             } catch (e: Exception) {
-                Toast.makeText(ctx, "Install failed: ${e.message}", Toast.LENGTH_LONG).show()
+                _toastMessage.tryEmit("Install failed: ${e.message}" to Toast.LENGTH_LONG)
             }
         }
     }

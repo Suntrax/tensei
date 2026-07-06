@@ -77,6 +77,12 @@ android {
         buildConfig = true
     }
 
+    testOptions {
+        unitTests {
+            isReturnDefaultValues = true
+            isIncludeAndroidResources = true
+        }
+    }
 }
 
 kotlin {
@@ -163,4 +169,11 @@ dependencies {
     implementation(libs.libtorrent4j.android.arm)
     implementation(libs.libtorrent4j.android.x86)
     implementation(libs.libtorrent4j.android.x8664)
+
+    // ─── Unit testing ─────────────────────────────────────────────────────
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
+    testImplementation("com.google.truth:truth:1.4.2")
+    testImplementation("org.mockito:mockito-core:5.12.0")
+    testImplementation("org.mockito.kotlin:mockito-kotlin:5.4.0")
 }

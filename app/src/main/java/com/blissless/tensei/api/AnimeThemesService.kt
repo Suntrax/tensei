@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit
 class AnimeThemesService {
 
     companion object {
-        private const val API_BASE = "https://api.animethemes.moe"
+        private const val API_BASE = com.blissless.tensei.network.Endpoints.AnimeThemes.API_BASE
     }
 
     private val client = OkHttpClient.Builder()

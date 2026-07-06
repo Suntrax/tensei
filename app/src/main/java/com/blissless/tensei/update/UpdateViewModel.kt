@@ -6,15 +6,17 @@ import android.app.NotificationManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
-import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -43,6 +45,13 @@ class UpdateViewModel(application: Application) : AndroidViewModel(application) 
 
     private val _uiState = MutableStateFlow(UpdateUiState())
     val uiState: StateFlow<UpdateUiState> = _uiState.asStateFlow()
+
+    /**
+     * One-shot toast messages emitted from the ViewModel.
+     * Collect in the Composable layer and show as a Toast.
+     */
+    private val _toastMessage = MutableSharedFlow<String>(extraBufferCapacity = 4)
+    val toastMessage: SharedFlow<String> = _toastMessage.asSharedFlow()
 
     private val owner = "Suntrax"
     private val repo = "tensei"
@@ -103,7 +112,7 @@ class UpdateViewModel(application: Application) : AndroidViewModel(application) 
                 if (compareVersions(cleanTag, currentVersion) <= 0) {
                     _uiState.value = UpdateUiState(release = release)
                     if (showToast) {
-                        Toast.makeText(getApplication(), "Already up to date ($currentVersion)", Toast.LENGTH_SHORT).show()
+                        _toastMessage.tryEmit("Already up to date ($currentVersion)")
                     }
                     return@launch
                 }
@@ -145,7 +154,7 @@ class UpdateViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private suspend fun fetchLatestRelease(): GitHubRelease = withContext(Dispatchers.IO) {
-        val url = "https://api.github.com/repos/$owner/$repo/releases/latest"
+        val url = com.blissless.tensei.network.Endpoints.GitHub.latestRelease(owner, repo)
         val request = Request.Builder().url(url)
             .header("Accept", "application/vnd.github.v3+json")
             .build()

@@ -23,6 +23,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.Headers
 import okhttp3.OkHttpClient
+import com.blissless.tensei.util.ErrorHandler
 
 /**
  * Extension playback logic for [MainViewModel].
@@ -63,7 +64,7 @@ suspend fun MainViewModel.playEpisodeWithExtension(
                 } else null
             }
             val cacheSourceHttp = cacheSource as? AnimeHttpSource
-            val cacheClient = (cacheSourceHttp?.client) ?: try { NetworkHelper.getInstance().client } catch (_: Exception) { null }
+            val cacheClient = (cacheSourceHttp?.client) ?: try { NetworkHelper.getInstance().client } catch (e: Exception) { ErrorHandler.report(MainViewModel.TAG, "operation failed, returning null", e); null }
             if (cachedIsOurProxy) {
                 LocalProxyServer.start(cacheClient, cacheSource)
                 val portFix = Regex("127\\.0\\.0\\.1:\\d+")
@@ -160,7 +161,7 @@ suspend fun MainViewModel.playEpisodeWithExtension(
             val directClient = sourceHttp?.client
             val extensionClient = directClient ?: run {
                 Log.w(epTag, "  AnimeHttpSource.client was null, falling back to NetworkHelper.getInstance().client")
-                try { NetworkHelper.getInstance().client } catch (_: Exception) { null }
+                try { NetworkHelper.getInstance().client } catch (e: Exception) { ErrorHandler.report(MainViewModel.TAG, "operation failed, returning null", e); null }
             }
             Log.d(epTag, "  extensionClient=${extensionClient != null} (source is AnimeHttpSource=${sourceHttp != null} directClient=${directClient != null})")
 
@@ -556,7 +557,7 @@ suspend fun MainViewModel.fetchExtensionHosterVideos(
             val sourceHttp = source as? AnimeHttpSource
             val directClient = sourceHttp?.client
             val extensionClient = directClient ?: run {
-                try { NetworkHelper.getInstance().client } catch (_: Exception) { null }
+                try { NetworkHelper.getInstance().client } catch (e: Exception) { ErrorHandler.report(MainViewModel.TAG, "operation failed, returning null", e); null }
             }
             val isOurProxy = effectiveVideoUrl.contains("127.0.0.1:${LocalProxyServer.PROXY_PORT}") || effectiveVideoUrl.contains("localhost:${LocalProxyServer.PROXY_PORT}")
             val resultClient = if (isOurProxy) extensionClient else null

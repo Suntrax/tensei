@@ -32,13 +32,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.BlurOn
 import androidx.compose.material.icons.filled.BorderColor
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FitScreen
@@ -46,7 +45,6 @@ import androidx.compose.material.icons.filled.FormatColorFill
 import androidx.compose.material.icons.filled.FormatColorText
 import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Tune
@@ -55,14 +53,11 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -84,8 +79,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalView
@@ -105,11 +98,11 @@ import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
-private const val LOREM_IPSUM = "The quick brown fox jumps over the lazy dog.\nThis is a second line for testing."
+internal const val LOREM_IPSUM = "The quick brown fox jumps over the lazy dog.\nThis is a second line for testing."
 
-data class TemplateBg(val name: String, val colors: List<Color>)
+internal data class TemplateBg(val name: String, val colors: List<Color>)
 
-private val TEMPLATES = listOf(
+internal val TEMPLATES = listOf(
     TemplateBg("Dark Scene", listOf(Color(0xFF1a1a2e), Color(0xFF16213e))),
     TemplateBg("Daylight", listOf(Color(0xFF87CEEB), Color(0xFF98D8C8))),
     TemplateBg("Sunset", listOf(Color(0xFFFF6B35), Color(0xFFFFD93D))),
@@ -120,16 +113,16 @@ private val TEMPLATES = listOf(
     TemplateBg("Solid White", listOf(Color.White)),
 )
 
-private val OUTLINE_PRESETS = listOf(
+internal val OUTLINE_PRESETS = listOf(
     Color.Black, Color.White, Color.Red, Color(0xFFFF8C00),
     Color.Yellow, Color.Green, Color.Blue, Color.Magenta
 )
 
-private val SHADOW_PRESETS = listOf(
+internal val SHADOW_PRESETS = listOf(
     Color.Black, Color.White, Color(0xFF333333), Color(0xFF555555), Color(0xFF777777)
 )
 
-private val BG_SUB_PRESETS = listOf(
+internal val BG_SUB_PRESETS = listOf(
     0x00000000L, 0x40000000L, 0x80000000L, 0xC0000000L,
     0x40FFFFFFL, 0x80FFFFFFL, 0xFF000000L, 0xFFFFFFFFL
 )
@@ -182,11 +175,11 @@ private object Defaults {
 
 // Dark surface for video overlay panels (always dark regardless of theme)
 private val PanelSurface = Color(0xFF121220)
-private val PanelDivider = Color(0xFF2A2A40)
+// PanelDivider moved to SubtitleSettingsComponents.kt (internal)
 
 private val panelShape = RoundedCornerShape(20.dp, 20.dp, 0.dp, 0.dp)
 private val cardShape = RoundedCornerShape(14.dp)
-private val chipShape = RoundedCornerShape(10.dp)
+internal val chipShape = RoundedCornerShape(10.dp)
 private val toolbarShape = RoundedCornerShape(16.dp)
 
 // ---------------------------------------------------------------------------
@@ -687,706 +680,13 @@ private enum class Panel {
     Template, TextSize, Outline, Shadow, Bg, FontColor, Advanced
 }
 
-// ===========================================================================
-// Reusable UI components
-// ===========================================================================
+// Reusable UI components moved to SubtitleSettingsComponents.kt
+// (PanelHeader, ResetTextButton, SectionDivider, ToggleRow, SliderRow,
+//  ToolbarIconButton, BottomToolbarButton, ColorSwatchRow, ThemeColorItem)
 
-@Composable
-private fun PanelHeader(
-    title: String,
-    onDismiss: () -> Unit,
-    onReset: (() -> Unit)? = null
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = title,
-            color = Color.White,
-            fontSize = 17.sp,
-            fontWeight = FontWeight.SemiBold
-        )
-        Spacer(Modifier.weight(1f))
-        onReset?.let {
-            ResetTextButton(onClick = it)
-        }
-        Spacer(Modifier.width(4.dp))
-        IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
-            Icon(
-                Icons.Default.Close,
-                contentDescription = "Close",
-                tint = Color.White.copy(alpha = 0.6f),
-                modifier = Modifier.size(20.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun ResetTextButton(onClick: () -> Unit) {
-    TextButton(onClick = onClick) {
-        Icon(
-            Icons.Default.Refresh,
-            contentDescription = "Reset",
-            modifier = Modifier.size(14.dp),
-            tint = Color.White.copy(alpha = 0.5f)
-        )
-        Spacer(Modifier.width(4.dp))
-        Text("Reset", color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp)
-    }
-}
-
-@Composable
-private fun SectionDivider() {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp)
-            .height(1.dp)
-            .background(PanelDivider)
-    )
-}
-
-@Composable
-private fun ToggleRow(
-    label: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = label,
-            color = Color.White.copy(alpha = 0.8f),
-            fontSize = 14.sp
-        )
-        Spacer(Modifier.weight(1f))
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = MaterialTheme.colorScheme.primary,
-                checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
-                uncheckedThumbColor = Color.White.copy(alpha = 0.3f),
-                uncheckedTrackColor = Color.White.copy(alpha = 0.08f)
-            )
-        )
-    }
-}
-
-@Composable
-private fun SliderRow(
-    label: String,
-    value: Float,
-    onValueChange: (Float) -> Unit,
-    valueRange: ClosedFloatingPointRange<Float>,
-    displayValue: String
-) {
-    Column(modifier = Modifier.padding(horizontal = 20.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = label,
-                color = Color.White.copy(alpha = 0.7f),
-                fontSize = 13.sp
-            )
-            Spacer(Modifier.weight(1f))
-            Text(
-                text = displayValue,
-                color = MaterialTheme.colorScheme.primary,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium
-            )
-        }
-        Slider(
-            value = value,
-            onValueChange = onValueChange,
-            valueRange = valueRange,
-            colors = SliderDefaults.colors(
-                thumbColor = MaterialTheme.colorScheme.primary,
-                activeTrackColor = MaterialTheme.colorScheme.primary,
-                inactiveTrackColor = Color.White.copy(alpha = 0.08f)
-            )
-        )
-    }
-}
-
-@Composable
-private fun ToolbarIconButton(
-    icon: ImageVector,
-    label: String,
-    onClick: () -> Unit
-) {
-    IconButton(onClick = onClick, modifier = Modifier.size(36.dp)) {
-        Icon(
-            icon,
-            contentDescription = label,
-            tint = Color.White.copy(alpha = 0.7f),
-            modifier = Modifier.size(18.dp)
-        )
-    }
-}
-
-@Composable
-private fun BottomToolbarButton(
-    icon: ImageVector,
-    label: String,
-    isActive: Boolean = false,
-    onClick: () -> Unit
-) {
-    val bgColor = if (isActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.04f)
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(bgColor, RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 8.dp)
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(
-                icon,
-                contentDescription = label,
-                tint = if (isActive) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.6f),
-                modifier = Modifier.size(20.dp)
-            )
-            Text(
-                text = label,
-                color = if (isActive) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.5f),
-                fontSize = 9.sp,
-                fontWeight = if (isActive) FontWeight.Medium else FontWeight.Normal
-            )
-        }
-    }
-}
-
-@Composable
-private fun ColorSwatchRow(
-    colors: List<Color>,
-    selectedColor: Long,
-    onColorSelect: (Long) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Row(
-        modifier = modifier.horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        colors.forEach { c ->
-            val isSelected = selectedColor == c.toArgb().toLong()
-            Box(
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(CircleShape)
-                    .background(c)
-                    .then(
-                        if (isSelected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
-                        else Modifier.border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
-                    )
-                    .clickable { onColorSelect(c.toArgb().toLong()) },
-                contentAlignment = Alignment.Center
-            ) {
-                if (isSelected) {
-                    Icon(
-                        Icons.Default.Check,
-                        contentDescription = null,
-                        tint = if (c == Color.Black || c == Color(0xFF333333) || c == Color(0xFF555555)) Color.White else Color.Black,
-                        modifier = Modifier.size(14.dp)
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ThemeColorItem(
-    name: String,
-    colors: List<Color>,
-    isSelected: Boolean,
-    onClick: () -> Unit
-) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        val bgBrush = if (colors.size == 1) Brush.verticalGradient(listOf(colors[0], colors[0]))
-                      else Brush.verticalGradient(colors)
-        val borderMod = if (isSelected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))
-                        else Modifier.border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
-        Box(
-            modifier = Modifier
-                .size(44.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(bgBrush)
-                .then(borderMod)
-                .clickable(onClick = onClick)
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = name,
-            color = if (isSelected) Color.White.copy(alpha = 0.9f) else Color.White.copy(alpha = 0.45f),
-            fontSize = 10.sp,
-            maxLines = 1
-        )
-    }
-}
-
-// ===========================================================================
-// PANELS
-// ===========================================================================
-
-@Composable
-private fun TemplatePanel(
-    selectedIndex: Int,
-    onSelect: (Int) -> Unit,
-    onDismiss: () -> Unit
-) {
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)
-    ) {
-        PanelHeader(title = "Background Templates", onDismiss = onDismiss)
-        SectionDivider()
-        Spacer(Modifier.height(12.dp))
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            TEMPLATES.chunked(4).forEach { row ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    row.forEach { tmpl ->
-                        val idx = TEMPLATES.indexOf(tmpl)
-                        ThemeColorItem(
-                            name = tmpl.name,
-                            colors = tmpl.colors,
-                            isSelected = idx == selectedIndex,
-                            onClick = { onSelect(idx) }
-                        )
-                    }
-                }
-            }
-        }
-        Spacer(Modifier.height(8.dp))
-    }
-}
-
-@Composable
-private fun TextSizePanel(
-    currentSize: Float,
-    onSizeChange: (Float) -> Unit,
-    onReset: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)
-    ) {
-        PanelHeader(title = "Text Size", onDismiss = onDismiss, onReset = onReset)
-        SectionDivider()
-        Spacer(Modifier.height(12.dp))
-        SliderRow(
-            label = "Font Size",
-            value = currentSize,
-            onValueChange = onSizeChange,
-            valueRange = 10f..48f,
-            displayValue = "${currentSize.toInt()} sp"
-        )
-    }
-}
-
-@Composable
-private fun OutlinePanel(
-    enabled: Boolean,
-    onToggle: (Boolean) -> Unit,
-    width: Float,
-    onWidthChange: (Float) -> Unit,
-    color: Long,
-    onColorChange: (Long) -> Unit,
-    onResetAll: () -> Unit,
-    onResetWidth: () -> Unit,
-    onResetColor: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)
-    ) {
-        PanelHeader(title = "Outline", onDismiss = onDismiss, onReset = onResetAll)
-        SectionDivider()
-        Spacer(Modifier.height(8.dp))
-        ToggleRow(label = "Enable Outline", checked = enabled, onCheckedChange = onToggle)
-        if (enabled) {
-            Spacer(Modifier.height(8.dp))
-            SliderRow(
-                label = "Width",
-                value = width,
-                onValueChange = onWidthChange,
-                valueRange = 1f..6f,
-                displayValue = "${width.toInt()} px"
-            )
-            Spacer(Modifier.height(12.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Color", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
-                Spacer(Modifier.weight(1f))
-                ResetTextButton(onClick = onResetColor)
-            }
-            ColorSwatchRow(
-                colors = OUTLINE_PRESETS,
-                selectedColor = color,
-                onColorSelect = onColorChange,
-                modifier = Modifier.padding(horizontal = 20.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun ShadowPanel(
-    enabled: Boolean,
-    onToggle: (Boolean) -> Unit,
-    blur: Float,
-    onBlurChange: (Float) -> Unit,
-    offsetX: Float,
-    onOffsetXChange: (Float) -> Unit,
-    offsetY: Float,
-    onOffsetYChange: (Float) -> Unit,
-    color: Long,
-    onColorChange: (Long) -> Unit,
-    onResetAll: () -> Unit,
-    onResetBlur: () -> Unit,
-    onResetOffsetX: () -> Unit,
-    onResetOffsetY: () -> Unit,
-    onResetColor: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 24.dp)
-            .verticalScroll(rememberScrollState())
-    ) {
-        PanelHeader(title = "Shadow", onDismiss = onDismiss, onReset = onResetAll)
-        SectionDivider()
-        Spacer(Modifier.height(8.dp))
-        ToggleRow(label = "Enable Shadow", checked = enabled, onCheckedChange = onToggle)
-        if (enabled) {
-            Spacer(Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Blur", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
-                Spacer(Modifier.weight(1f))
-                ResetTextButton(onClick = onResetBlur)
-            }
-            SliderRow(
-                label = "",
-                value = blur,
-                onValueChange = onBlurChange,
-                valueRange = 1f..10f,
-                displayValue = "${blur.toInt()} px"
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Offset X", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
-                Spacer(Modifier.weight(1f))
-                ResetTextButton(onClick = onResetOffsetX)
-            }
-            SliderRow(
-                label = "",
-                value = offsetX,
-                onValueChange = onOffsetXChange,
-                valueRange = -10f..10f,
-                displayValue = "${offsetX.toInt()} px"
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Offset Y", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
-                Spacer(Modifier.weight(1f))
-                ResetTextButton(onClick = onResetOffsetY)
-            }
-            SliderRow(
-                label = "",
-                value = offsetY,
-                onValueChange = onOffsetYChange,
-                valueRange = -10f..10f,
-                displayValue = "${offsetY.toInt()} px"
-            )
-            Spacer(Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Color", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
-                Spacer(Modifier.weight(1f))
-                ResetTextButton(onClick = onResetColor)
-            }
-            ColorSwatchRow(
-                colors = SHADOW_PRESETS,
-                selectedColor = color,
-                onColorSelect = onColorChange,
-                modifier = Modifier.padding(horizontal = 20.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun BgPanel(
-    bgColor: Long,
-    onColorChange: (Long) -> Unit,
-    onReset: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    val bgAlpha = ((bgColor shr 24) and 0xFF).toFloat() / 255f
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)
-    ) {
-        PanelHeader(title = "Subtitle Background", onDismiss = onDismiss, onReset = onReset)
-        SectionDivider()
-        Spacer(Modifier.height(12.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("Presets", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
-        }
-        Spacer(Modifier.height(8.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            BG_SUB_PRESETS.forEach { colorLong ->
-                val color = Color(colorLong)
-                val isSelected = (bgColor and 0x00FFFFFFL) == (colorLong and 0x00FFFFFFL)
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(CircleShape)
-                        .background(color)
-                        .then(
-                            if (isSelected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
-                            else Modifier.border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
-                        )
-                        .clickable { onColorChange(colorLong) },
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (isSelected) {
-                        Icon(
-                            Icons.Default.Check,
-                            contentDescription = null,
-                            tint = if (Color(colorLong) == Color.Black) Color.White else Color.Black,
-                            modifier = Modifier.size(14.dp)
-                        )
-                    }
-                }
-            }
-        }
-        Spacer(Modifier.height(12.dp))
-        SliderRow(
-            label = "Opacity",
-            value = bgAlpha,
-            onValueChange = { newAlpha ->
-                val alphaBits = (newAlpha * 255).toInt().coerceIn(0, 255)
-                val newColor = (bgColor and 0x00FFFFFFL) or (alphaBits.toLong() shl 24)
-                onColorChange(newColor)
-            },
-            valueRange = 0f..1f,
-            displayValue = "${(bgAlpha * 100).toInt()}%"
-        )
-    }
-}
-
-@Composable
-private fun FontColorPanel(
-    currentColor: Long,
-    onColorChange: (Long) -> Unit,
-    onReset: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)
-    ) {
-        PanelHeader(title = "Font Color", onDismiss = onDismiss, onReset = onReset)
-        SectionDivider()
-        Spacer(Modifier.height(8.dp))
-        ImmediateColorPickerContent(
-            initialColor = Color(currentColor),
-            onColorChange = { newColor ->
-                onColorChange(newColor.toArgb().toLong())
-            }
-        )
-    }
-}
-
-@Composable
-private fun AdvancedPanel(
-    verticalPosition: Float,
-    onVerticalChange: (Float) -> Unit,
-    horizontalPosition: Float,
-    onHorizontalChange: (Float) -> Unit,
-    maxWidthRatio: Float,
-    onMaxWidthChange: (Float) -> Unit,
-    delayMs: Int,
-    onDelayChange: (Int) -> Unit,
-    rotation: Float,
-    onRotationChange: (Float) -> Unit,
-    onResetAll: () -> Unit,
-    onResetVertical: () -> Unit,
-    onResetHorizontal: () -> Unit,
-    onResetMaxWidth: () -> Unit,
-    onResetDelay: () -> Unit,
-    onResetRotation: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 24.dp)
-            .verticalScroll(rememberScrollState())
-    ) {
-        PanelHeader(title = "Advanced Settings", onDismiss = onDismiss, onReset = onResetAll)
-        SectionDivider()
-        Spacer(Modifier.height(8.dp))
-
-        Text(
-            text = "Position",
-            color = Color.White.copy(alpha = 0.5f),
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-            letterSpacing = 1.sp,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("Vertical", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
-            Spacer(Modifier.weight(1f))
-            ResetTextButton(onClick = onResetVertical)
-        }
-        SliderRow(
-            label = "",
-            value = verticalPosition,
-            onValueChange = onVerticalChange,
-            valueRange = 0.05f..0.95f,
-            displayValue = "${(verticalPosition * 100).toInt()}%"
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("Horizontal", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
-            Spacer(Modifier.weight(1f))
-            ResetTextButton(onClick = onResetHorizontal)
-        }
-        SliderRow(
-            label = "",
-            value = horizontalPosition,
-            onValueChange = onHorizontalChange,
-            valueRange = 0.05f..0.95f,
-            displayValue = "${(horizontalPosition * 100).toInt()}%"
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("Max Width", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
-            Spacer(Modifier.weight(1f))
-            ResetTextButton(onClick = onResetMaxWidth)
-        }
-        SliderRow(
-            label = "",
-            value = maxWidthRatio,
-            onValueChange = onMaxWidthChange,
-            valueRange = 0.3f..1f,
-            displayValue = "${(maxWidthRatio * 100).toInt()}%"
-        )
-
-        Spacer(Modifier.height(8.dp))
-        SectionDivider()
-        Spacer(Modifier.height(8.dp))
-
-        Text(
-            text = "Timing",
-            color = Color.White.copy(alpha = 0.5f),
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-            letterSpacing = 1.sp,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("Delay", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
-            Spacer(Modifier.weight(1f))
-            ResetTextButton(onClick = onResetDelay)
-        }
-        SliderRow(
-            label = "",
-            value = (delayMs / 1000f).coerceIn(-10f, 10f),
-            onValueChange = { onDelayChange((it * 1000).roundToInt()) },
-            valueRange = -10f..10f,
-            displayValue = "${delayMs} ms"
-        )
-
-        Spacer(Modifier.height(8.dp))
-        SectionDivider()
-        Spacer(Modifier.height(8.dp))
-
-        Text(
-            text = "Rotation",
-            color = Color.White.copy(alpha = 0.5f),
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-            letterSpacing = 1.sp,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("Angle: ${rotation.toInt()}°", color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp)
-            Spacer(Modifier.weight(1f))
-            ResetTextButton(onClick = onResetRotation)
-        }
-        Spacer(Modifier.height(8.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            listOf(0f, 45f, 90f, 135f, 180f, 270f).forEach { ang ->
-                Surface(
-                    onClick = { onRotationChange(ang) },
-                    shape = chipShape,
-                    color = if (rotation == ang) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
-                    else Color.White.copy(alpha = 0.06f)
-                ) {
-                    Text(
-                        text = "${ang.toInt()}°",
-                        color = if (rotation == ang) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.6f),
-                        fontSize = 13.sp,
-                        fontWeight = if (rotation == ang) FontWeight.SemiBold else FontWeight.Normal,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                    )
-                }
-            }
-        }
-    }
-}
+// Panels moved to SubtitleSettingsPanels.kt
+// (TemplatePanel, TextSizePanel, OutlinePanel, ShadowPanel, BgPanel,
+//  FontColorPanel, AdvancedPanel)
 
 // ===========================================================================
 // CONFIRMATION / RENAME OVERLAYS
@@ -1701,7 +1001,7 @@ private fun RotationWheel(
 // Color Picker
 // ===========================================================================
 @Composable
-private fun ImmediateColorPickerContent(
+internal fun ImmediateColorPickerContent(
     initialColor: Color,
     onColorChange: (Color) -> Unit,
 ) {

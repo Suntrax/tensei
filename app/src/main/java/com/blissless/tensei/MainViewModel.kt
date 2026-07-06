@@ -85,6 +85,7 @@ import com.blissless.tensei.viewmodel.getMagnetForEpisode
 // Extension functions on AnimeRepository (defined in com.blissless.tensei.data)
 import com.blissless.tensei.data.fetchTmdbEpisodes
 import com.blissless.tensei.data.fetchAnimeRelationsList
+import com.blissless.tensei.util.ErrorHandler
 
 @UnstableApi
 class MainViewModel : ViewModel() {
@@ -176,7 +177,7 @@ class MainViewModel : ViewModel() {
                                 (anime.titleEnglish != null && a.title.contains(anime.titleEnglish, ignoreCase = true))
                     } ?: page.animes.firstOrNull()
                     if (matchedSAnime != null) break
-                } catch (_: Exception) { }
+                } catch (e: Exception) { ErrorHandler.ignore(TAG, "operation failed (best-effort)", e) }
             }
 
             val sAnime = matchedSAnime
@@ -583,7 +584,7 @@ class MainViewModel : ViewModel() {
     fun checkForUpdatesSilently() {
         viewModelScope.launch {
             try {
-                val url = "https://api.github.com/repos/Suntrax/tensei/releases/latest"
+                val url = com.blissless.tensei.network.Endpoints.GitHub.TENSEI_LATEST_RELEASE
                 val request = okhttp3.Request.Builder().url(url)
                     .header("Accept", "application/vnd.github.v3+json")
                     .build()
@@ -608,7 +609,7 @@ class MainViewModel : ViewModel() {
                 if (cmp > 0) {
                     _pendingUpdateRelease.value = release
                 }
-            } catch (_: Exception) { }
+            } catch (e: Exception) { ErrorHandler.ignore(TAG, "operation failed (best-effort)", e) }
         }
     }
 
@@ -706,7 +707,7 @@ class MainViewModel : ViewModel() {
             _malFavorites.value = emptyList()
         }
 
-        val url = "https://anilist.co/api/v2/oauth/authorize?client_id=$CLIENT_ID&response_type=token"
+        val url = com.blissless.tensei.network.Endpoints.AniList.authUrl(CLIENT_ID)
         context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
     }
 
@@ -1410,16 +1411,18 @@ class MainViewModel : ViewModel() {
             relations = relationsList,
             isAdult = media.isAdult,
             characters = media.characters,
-            trailerUrl = media.trailer?.let {
-                when (it.site) {
-                    "youtube" -> "https://www.youtube.com/watch?v=${it.id}"
-                    "dailymotion" -> "https://www.dailymotion.com/video/${it.id}"
+            trailerUrl = media.trailer?.let { tr ->
+                val videoId = tr.id ?: return@let null
+                when (tr.site) {
+                    "youtube" -> com.blissless.tensei.network.Endpoints.YouTube.watchUrl(videoId)
+                    "dailymotion" -> com.blissless.tensei.network.Endpoints.Dailymotion.watchUrl(videoId)
                     else -> null
                 }
             },
-            trailerThumbnail = media.trailer?.let {
-                if (it.site == "youtube" && it.id != null) {
-                    "https://img.youtube.com/vi/${it.id}/maxresdefault.jpg"
+            trailerThumbnail = media.trailer?.let { tr ->
+                val videoId = tr.id ?: return@let null
+                if (tr.site == "youtube") {
+                    com.blissless.tensei.network.Endpoints.YouTube.thumbnailUrl(videoId)
                 } else null
             },
             staff = media.staff
