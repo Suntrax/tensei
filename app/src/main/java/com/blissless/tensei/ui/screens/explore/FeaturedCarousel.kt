@@ -34,7 +34,9 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -60,6 +62,11 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.blissless.tensei.data.models.ExploreAnime
+import com.blissless.tensei.ui.theme.StatusCompleted
+import com.blissless.tensei.ui.theme.StatusCurrent
+import com.blissless.tensei.ui.theme.StatusDropped
+import com.blissless.tensei.ui.theme.StatusPaused
+import com.blissless.tensei.ui.theme.StatusPlanning
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -140,7 +147,7 @@ fun FeaturedCarousel(
         onDispose { autoScrollJob?.cancel() }
     }
 
-    Box(modifier = Modifier.fillMaxWidth().height(520.dp)) {
+    Box(modifier = Modifier.fillMaxWidth().height(560.dp)) {
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.fillMaxSize(),
@@ -166,9 +173,9 @@ fun FeaturedCarousel(
                     modifier = Modifier.fillMaxSize().background(
                         Brush.verticalGradient(
                             listOf(
-                                Color.Black.copy(alpha = 0.3f),
-                                Color.Transparent,
-                                Color.Black.copy(alpha = 0.7f),
+                                Color.Black.copy(alpha = 0.35f),
+                                Color.Black.copy(alpha = 0.05f),
+                                Color.Black.copy(alpha = 0.65f),
                                 Color.Black.copy(alpha = 0.95f)
                             )
                         )
@@ -188,37 +195,73 @@ fun FeaturedCarousel(
                     .background(
                         Brush.verticalGradient(
                             listOf(
-                                Color.Black.copy(alpha = 0.6f),
+                                Color.Black.copy(alpha = 0.7f),
                                 Color.Transparent
                             )
                         )
                     )
-                    .padding(start = 16.dp, end = 16.dp, top = 28.dp)
+                    .padding(start = 20.dp, end = 20.dp, top = 32.dp)
                     .align(Alignment.TopCenter)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    AsyncImage(
-                        model = com.blissless.tensei.R.mipmap.ic_launcher_round,
-                        contentDescription = "App",
-                        modifier = Modifier.size(32.dp).clip(CircleShape)
-                    )
-                    IconButton(onClick = onSearchClick) {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = "Search",
-                            tint = Color.White,
-                            modifier = Modifier.size(24.dp)
-                        )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = Color.White.copy(alpha = 0.12f),
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                AsyncImage(
+                                    model = com.blissless.tensei.R.mipmap.ic_launcher_round,
+                                    contentDescription = "App",
+                                    modifier = Modifier.size(28.dp).clip(CircleShape)
+                                )
+                            }
+                        }
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            val currentPage = pagerState.currentPage % actualCount
+                            repeat(actualCount) { index ->
+                                Box(
+                                    modifier = Modifier
+                                        .size(if (index == currentPage) 16.dp else 5.dp, 5.dp)
+                                        .background(
+                                            if (index == currentPage) Color.White
+                                            else Color.White.copy(alpha = 0.4f),
+                                            RoundedCornerShape(3.dp)
+                                        )
+                                )
+                            }
+                        }
+                        Surface(
+                            shape = CircleShape,
+                            color = Color.White.copy(alpha = 0.12f),
+                            modifier = Modifier.size(40.dp),
+                            onClick = onSearchClick
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.Search,
+                                    contentDescription = "Search",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        }
                     }
                 }
             }
 
             Box(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).align(Alignment.BottomCenter),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).align(Alignment.BottomCenter),
                 contentAlignment = Alignment.BottomCenter
             ) {
             val currentAnime by remember {
@@ -245,14 +288,15 @@ fun FeaturedCarousel(
                     Text(
                         text = displayTitle,
                         color = Color.White,
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.Center
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 8.dp)
                     )
                     
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
                     
                     Row(
                         horizontalArrangement = Arrangement.Center,
@@ -261,95 +305,100 @@ fun FeaturedCarousel(
                         val avgScore = currentAnime.averageScore
                         val format = currentAnime.format
                         currentAnime.year?.let { year ->
-                            Text(text = year.toString(), color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.bodySmall)
-                            Text(text = " • ", color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.bodySmall)
+                            Text(text = year.toString(), color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodyMedium)
+                            Text(text = " • ", color = Color.White.copy(alpha = 0.4f), style = MaterialTheme.typography.bodyMedium)
                         }
                         val formatText = when (format?.uppercase()) {
                             "MOVIE" -> "Movie"
                             "ONA", "OVA", "TV" -> "Series"
                             else -> "Series"
                         }
-                        Text(text = formatText, color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.bodySmall)
+                        Text(text = formatText, color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodyMedium)
                         if (avgScore != null) {
-                            Text(text = " • ", color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.bodySmall)
+                            Text(text = " • ", color = Color.White.copy(alpha = 0.4f), style = MaterialTheme.typography.bodyMedium)
                             val scoreValue = avgScore / 10.0
-                            val scoreFormatted = "%,.1f".format(scoreValue).replace(".", ",")
                             Text(
-                                text = "★ $scoreFormatted",
+                                text = "★ ${"%.1f".format(scoreValue)}",
                                 color = Color(0xFFFFD700),
-                                style = MaterialTheme.typography.bodySmall,
+                                style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Bold
                             )
                         }
                     }
                     
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(20.dp))
                     
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         val currentStatus = animeStatusMap[currentAnime.id]
                         val isSaved = currentStatus != null
                         val statusColor = when (currentStatus) {
-                            "COMPLETED" -> Color(0xFF4CAF50)
-                            "CURRENT" -> Color(0xFF2196F3)
-                            "PLANNING" -> Color(0xFF9C27B0)
-                            "PAUSED" -> Color(0xFFFFC107)
-                            "DROPPED" -> Color(0xFFF44336)
+                            "COMPLETED" -> StatusCompleted
+                            "CURRENT" -> StatusCurrent
+                            "PLANNING" -> StatusPlanning
+                            "PAUSED" -> StatusPaused
+                            "DROPPED" -> StatusDropped
                             else -> Color.White
                         }
                         
                         IconButton(
                             onClick = { onStatusClick(currentAnime) },
-                            modifier = Modifier.size(40.dp)
+                            modifier = Modifier.size(44.dp)
                         ) {
-                            Icon(
-                                if (isSaved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
-                                contentDescription = "Save",
-                                tint = if (isSaved) statusColor else Color.White,
-                                modifier = Modifier.size(22.dp)
-                            )
+                            Surface(
+                                shape = CircleShape,
+                                color = (if (isSaved) statusColor else Color.White).copy(alpha = 0.15f),
+                                modifier = Modifier.size(44.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        if (isSaved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                                        contentDescription = "Save",
+                                        tint = if (isSaved) statusColor else Color.White,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                            }
                         }
                         
                         Button(
                             onClick = { onPlayClick(currentAnime) },
-                            modifier = Modifier
-                                .height(48.dp)
-                                .background(
-                                    brush = Brush.horizontalGradient(
-                                        colors = listOf(
-                                            MaterialTheme.colorScheme.primary,
-                                            MaterialTheme.colorScheme.tertiary
-                                        )
-                                    ),
-                                    shape = RoundedCornerShape(12.dp)
-                                ),
-                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.height(50.dp),
+                            shape = RoundedCornerShape(16.dp),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = Color.Transparent,
-                                contentColor = MaterialTheme.colorScheme.onPrimary
+                                containerColor = Color.White.copy(alpha = 0.15f),
+                                contentColor = Color.White
                             )
                         ) {
                             Icon(
                                 Icons.Outlined.PlayArrow,
                                 contentDescription = "Watch",
-                                modifier = Modifier.size(24.dp)
+                                modifier = Modifier.size(22.dp)
                             )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Watch Now", style = MaterialTheme.typography.labelMedium)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Watch Now", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
                         }
                         
                         IconButton(
                             onClick = { onInfoClick(currentAnime) },
-                            modifier = Modifier.size(40.dp)
+                            modifier = Modifier.size(44.dp)
                         ) {
-                            Icon(
-                                Icons.Outlined.Info,
-                                contentDescription = "Info",
-                                tint = Color.White,
-                                modifier = Modifier.size(20.dp)
-                            )
+                            Surface(
+                                shape = CircleShape,
+                                color = Color.White.copy(alpha = 0.12f),
+                                modifier = Modifier.size(44.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.Outlined.Info,
+                                        contentDescription = "Info",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                            }
                         }
                     }
                 }

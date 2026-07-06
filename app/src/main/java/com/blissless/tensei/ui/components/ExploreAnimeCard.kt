@@ -276,11 +276,11 @@ fun ExploreAnimeCard(
         }
     }
 
-    Column(modifier = Modifier.width(110.dp)) {
+    Column(modifier = Modifier.width(120.dp)) {
         Card(
             shape = RoundedCornerShape(4.dp),
             modifier = Modifier
-                .height(160.dp)
+                .height(170.dp)
                 .clip(RoundedCornerShape(4.dp))
                 .clickable(onClick = {
                     val bounds = cardBounds
@@ -309,20 +309,10 @@ fun ExploreAnimeCard(
                     modifier = Modifier.fillMaxSize()
                 )
 
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        .height(70.dp)
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    Color.Transparent,
-                                    Color.Black.copy(alpha = 0.9f)
-                                )
-                            )
-                        )
-                )
+                Box(modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().height(40.dp)
+                    .background(Brush.verticalGradient(colors = listOf(Color.Black.copy(alpha = 0.5f), Color.Transparent))))
+                Box(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(80.dp)
+                    .background(Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f)))))
 
                 if (statusIndicatorColor != Color.Transparent) {
                     Box(
@@ -330,6 +320,7 @@ fun ExploreAnimeCard(
                             .align(Alignment.TopCenter)
                             .fillMaxWidth()
                             .height(3.dp)
+                            .padding(top = 44.dp)
                             .background(statusIndicatorColor)
                     )
                 }
@@ -339,15 +330,15 @@ fun ExploreAnimeCard(
                         modifier = Modifier
                             .align(Alignment.TopEnd)
                             .padding(6.dp),
-                        shape = RoundedCornerShape(4.dp),
-                        color = Color.Black.copy(alpha = 0.7f)
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color.Black.copy(alpha = 0.65f)
                     ) {
                         Text(
                             "★ ${String.format(Locale.US, "%.1f", score)}",
                             color = Color(0xFFFFD700),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                         )
                     }
                 }
@@ -357,8 +348,8 @@ fun ExploreAnimeCard(
                         modifier = Modifier
                             .align(Alignment.TopStart)
                             .padding(6.dp),
-                        shape = RoundedCornerShape(4.dp),
-                        color = Color.Black.copy(alpha = 0.7f)
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color.Black.copy(alpha = 0.65f)
                     ) {
                         Text(
                             episodeText,
@@ -366,7 +357,7 @@ fun ExploreAnimeCard(
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                         )
                     }
                 }
@@ -374,9 +365,9 @@ fun ExploreAnimeCard(
                 if (showAnimeCardButtons) {
                     Row(
                         modifier = Modifier
-                            .align(Alignment.BottomStart)
+                            .align(Alignment.BottomCenter)
                             .fillMaxWidth()
-                            .padding(horizontal = 6.dp, vertical = 6.dp),
+                            .padding(horizontal = 8.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         FilledTonalIconButton(
@@ -393,7 +384,7 @@ fun ExploreAnimeCard(
                                 }
                             },
                             modifier = Modifier
-                                .size(32.dp)
+                                .size(34.dp)
                                 .scale(if (showAnimation) bookmarkScale else 1f),
                             shape = RoundedCornerShape(4.dp),
                             colors = IconButtonDefaults.filledTonalIconButtonColors(
@@ -421,10 +412,10 @@ fun ExploreAnimeCard(
 
                         FilledTonalIconButton(
                             onClick = { onClick(null) },
-                            modifier = Modifier.size(32.dp),
+                            modifier = Modifier.size(34.dp),
                             shape = RoundedCornerShape(4.dp),
                             colors = IconButtonDefaults.filledTonalIconButtonColors(
-                                containerColor = Color.Black.copy(alpha = 0.6f),
+                                containerColor = Color.Black.copy(alpha = 0.5f),
                                 contentColor = Color.White
                             )
                         ) {
@@ -445,16 +436,15 @@ fun ExploreAnimeCard(
             !anime.titleEnglish.isNullOrEmpty() -> anime.titleEnglish
             else -> "Unknown"
         }
-    
-    Text(
+
+        Text(
             text = displayTitle,
-            modifier = Modifier
-                .padding(top = 6.dp)
-                .height(32.dp),
+            modifier = Modifier.padding(top = 8.dp).height(36.dp),
             maxLines = 2,
             style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Medium,
             overflow = TextOverflow.Ellipsis,
-            color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground
+            color = MaterialTheme.colorScheme.onSurface
         )
     }
 }
@@ -465,24 +455,22 @@ internal fun LoadingPlaceholder(isOled: Boolean = false) {
 
     LazyRow(
         contentPadding = PaddingValues(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         items(3, key = { "loading_$it" }) {
-            Column(modifier = Modifier.width(110.dp)) {
-                // Image area matching actual card height
+            Column(modifier = Modifier.width(120.dp)) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(160.dp)
-                        .background(skeletonColor, RoundedCornerShape(4.dp))
+                        .height(170.dp)
+                        .background(skeletonColor, RoundedCornerShape(12.dp))
                 )
-                // Title text skeleton
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth()
+                        .fillMaxWidth(0.8f)
                         .height(12.dp)
-                        .padding(horizontal = 4.dp)
+                        .padding(horizontal = 2.dp)
                         .background(skeletonColor, RoundedCornerShape(4.dp))
                 )
             }
@@ -493,26 +481,34 @@ internal fun LoadingPlaceholder(isOled: Boolean = false) {
 @Composable
 internal fun SectionTitle(title: String, count: Int? = null, isOled: Boolean = false) {
     Row(
-        modifier = Modifier.padding(start = 16.dp, top = 20.dp, bottom = 8.dp),
+        modifier = Modifier.padding(start = 16.dp, top = 22.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        Box(
+            modifier = Modifier
+                .width(3.dp)
+                .height(18.dp)
+                .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp))
+        )
+        Spacer(modifier = Modifier.width(12.dp))
         Text(
             title,
             style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = if (isOled) Color.White else MaterialTheme.colorScheme.onBackground
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface
         )
         count?.let {
             Spacer(modifier = Modifier.width(8.dp))
             Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = if (isOled) Color.White.copy(alpha = 0.1f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
             ) {
                 Text(
                     "$it",
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
                 )
             }
         }

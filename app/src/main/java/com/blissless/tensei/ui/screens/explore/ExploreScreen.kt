@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -419,34 +420,35 @@ fun ExploreScreen(
                     .verticalScroll(scrollState)
                     .padding(bottom = 80.dp)
             ) {
-            // Error/Offline Banner
             if (apiError != null || isOffline) {
                 Surface(
-                    modifier = Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    shape = RoundedCornerShape(14.dp),
                     color = if (isOffline) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.errorContainer,
-                    tonalElevation = 4.dp
+                    tonalElevation = 2.dp
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Center
                     ) {
                         Icon(
                             imageVector = if (isOffline) Icons.Default.SignalWifiOff else Icons.Default.CloudOff,
                             contentDescription = null,
-                            tint = if (isOffline) Color.White else MaterialTheme.colorScheme.onErrorContainer,
-                            modifier = Modifier.size(20.dp)
+                            tint = if (isOffline) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f),
+                            modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = if (isOffline) "No internet connection" else "AniList is currently unavailable",
-                            color = if (isOffline) Color.White else MaterialTheme.colorScheme.onErrorContainer,
-                            style = MaterialTheme.typography.bodyMedium
+                            color = if (isOffline) Color.White.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.bodySmall
                         )
                     }
                 }
+                Spacer(modifier = Modifier.height(8.dp))
             }
             
             // Featured Carousel with HorizontalPager

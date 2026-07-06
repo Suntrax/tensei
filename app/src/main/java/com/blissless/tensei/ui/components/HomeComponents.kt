@@ -72,33 +72,38 @@ data class HomeAnimeCardBounds(
 @Composable
 fun LoadingSkeleton() {
     val shimmerColors = listOf(
-        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
         MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
-        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
     )
 
-    Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(28.dp)) {
         repeat(3) { sectionIndex ->
-            // Section header skeleton
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
             ) {
                 Box(
-                    modifier = Modifier.width(20.dp).height(20.dp).background(
+                    modifier = Modifier.width(3.dp).height(20.dp).background(
+                        shimmerColors[0], RoundedCornerShape(2.dp)
+                    )
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Box(
+                    modifier = Modifier.width(16.dp).height(16.dp).background(
                         shimmerColors[0], RoundedCornerShape(4.dp)
                     )
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Box(
-                    modifier = Modifier.width(140.dp).height(18.dp).background(
+                    modifier = Modifier.width(140.dp).height(16.dp).background(
                         shimmerColors[0], RoundedCornerShape(4.dp)
                     )
                 )
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.weight(1f))
                 Box(
-                    modifier = Modifier.width(24.dp).height(18.dp).background(
-                        shimmerColors[0], RoundedCornerShape(12.dp)
+                    modifier = Modifier.width(32.dp).height(20.dp).background(
+                        shimmerColors[0], RoundedCornerShape(10.dp)
                     )
                 )
             }
@@ -110,51 +115,32 @@ fun LoadingSkeleton() {
                 contentPadding = PaddingValues(horizontal = 16.dp)
             ) {
                 items(4, key = { "skeleton_${sectionIndex}_$it" }) {
-                    Column(modifier = Modifier.width(130.dp)) {
-                        // Image area
+                    Column(modifier = Modifier.width(140.dp)) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(185.dp)
-                                .background(
-                                    shimmerColors[0],
-                                    RoundedCornerShape(8.dp)
-                                )
+                                .height(195.dp)
+                                .background(shimmerColors[0], RoundedCornerShape(14.dp))
                         )
-                        // Title area
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
                         Box(
                             modifier = Modifier
-                                .fillMaxWidth()
+                                .fillMaxWidth(0.8f)
                                 .height(12.dp)
-                                .padding(horizontal = 4.dp)
-                                .background(
-                                    shimmerColors[0],
-                                    RoundedCornerShape(4.dp)
-                                )
+                                .padding(horizontal = 2.dp)
+                                .background(shimmerColors[0], RoundedCornerShape(4.dp))
                         )
                         Spacer(modifier = Modifier.height(4.dp))
-                        // Progress bar skeleton
                         Box(
                             modifier = Modifier
-                                .fillMaxWidth()
+                                .fillMaxWidth(0.5f)
                                 .height(3.dp)
-                                .padding(horizontal = 4.dp)
+                                .padding(horizontal = 2.dp)
                                 .background(
-                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.1f),
+                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.08f),
                                     RoundedCornerShape(2.dp)
                                 )
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth(0.5f)
-                                    .height(3.dp)
-                                    .background(
-                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
-                                        RoundedCornerShape(2.dp)
-                                    )
-                            )
-                        }
+                        )
                     }
                 }
             }
@@ -171,36 +157,46 @@ fun SectionHeader(
     onClick: () -> Unit = {}
 ) {
     Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp,
+        shadowElevation = 1.dp,
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(14.dp))
             .clickable { onClick() }
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+            modifier = Modifier.padding(start = 4.dp, end = 12.dp, top = 8.dp, bottom = 8.dp)
         ) {
-            Icon(imageVector = icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(20.dp))
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .height(24.dp)
+                    .background(iconTint, RoundedCornerShape(2.dp))
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Icon(imageVector = icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 title,
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface
             )
             Spacer(modifier = Modifier.weight(1f))
             Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                shape = RoundedCornerShape(10.dp),
+                color = iconTint.copy(alpha = 0.12f)
             ) {
                 Text(
                     "$count",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                    fontWeight = FontWeight.SemiBold,
+                    color = iconTint,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
                 )
             }
         }
@@ -397,45 +393,48 @@ fun HomeAnimeCard(
             .build()
     }
 
-    Column(modifier = Modifier.width(130.dp)) {
-        Card(shape = RoundedCornerShape(12.dp), modifier = Modifier
-            .height(185.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .clickable {
-                onClick(
-                    if (cardBounds != null && cardBounds!!.width() > 0 && cardBounds!!.height() > 0) {
-                        HomeAnimeCardBounds(anime.id, anime.cover, cardBounds!!)
-                    } else null
-                )
-            }
-            .onGloballyPositioned { coordinates ->
-                val position = coordinates.positionInRoot()
-                val size = coordinates.size
-                cardBounds = android.graphics.RectF(
-                    position.x,
-                    position.y,
-                    position.x + size.width,
-                    position.y + size.height
-                )
-            }
+    Column(modifier = Modifier.width(140.dp)) {
+        Card(
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier
+                .height(195.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .clickable {
+                    onClick(
+                        if (cardBounds != null && cardBounds!!.width() > 0 && cardBounds!!.height() > 0) {
+                            HomeAnimeCardBounds(anime.id, anime.cover, cardBounds!!)
+                        } else null
+                    )
+                }
+                .onGloballyPositioned { coordinates ->
+                    val position = coordinates.positionInRoot()
+                    val size = coordinates.size
+                    cardBounds = android.graphics.RectF(
+                        position.x,
+                        position.y,
+                        position.x + size.width,
+                        position.y + size.height
+                    )
+                }
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 AsyncImage(model = imageRequest, contentDescription = anime.title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
 
-                // Gradient at bottom
-                Box(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(70.dp)
-                    .background(Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.9f)))))
+                // Gradient overlays
+                Box(modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().height(50.dp)
+                    .background(Brush.verticalGradient(colors = listOf(Color.Black.copy(alpha = 0.6f), Color.Transparent))))
+                Box(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(80.dp)
+                    .background(Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f)))))
 
                 // Top Row: Episode Counter (left) + Info Button (right)
                 Row(
-                    modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(6.dp),
+                    modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.Top
                 ) {
-                    // Episode Counter with background
                     Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = Color.Black.copy(alpha = 0.7f)
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color.Black.copy(alpha = 0.65f)
                     ) {
                         Text(
                             text = progressText,
@@ -443,37 +442,32 @@ fun HomeAnimeCard(
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                         )
                     }
 
-                    // Info Button (top right)
                     FilledTonalIconButton(
                         onClick = { onInfoClick(cardBounds?.let { HomeAnimeCardBounds(anime.id, anime.cover, it) }) },
-                        modifier = Modifier.size(32.dp),
+                        modifier = Modifier.size(30.dp),
                         shape = RoundedCornerShape(10.dp),
-                        colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = Color.Black.copy(alpha = 0.6f), contentColor = Color.White)
-                    ) { Icon(imageVector = Icons.Outlined.Info, contentDescription = "Anime Info", modifier = Modifier.size(18.dp)) }
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = Color.Black.copy(alpha = 0.5f), contentColor = Color.White)
+                    ) { Icon(imageVector = Icons.Outlined.Info, contentDescription = "Anime Info", modifier = Modifier.size(16.dp)) }
                 }
 
-                // Status indicator bar at top (under the text/buttons)
+                // Status indicator bar at top
                 if (showStatusColors) {
-                    Box(modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().height(3.dp).padding(top = 44.dp).background(statusColor))
+                    Box(modifier = Modifier.align(Alignment.TopStart).fillMaxWidth(1f).height(3.dp).padding(top = 48.dp).background(statusColor))
                 }
 
-                // Progress bar at bottom (continue watching indicator)
+                // Bottom gradient for progress
                 if (showProgressBar && progressPercent > 0f) {
                     Box(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .fillMaxWidth()
                             .height(4.dp)
+                            .background(Color.Black.copy(alpha = 0.3f))
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(Color.Black.copy(alpha = 0.3f))
-                        )
                         Box(
                             modifier = Modifier
                                 .fillMaxHeight()
@@ -482,18 +476,24 @@ fun HomeAnimeCard(
                         )
                     }
                 }
-
             }
         }
-        // Title - use English if preferred and available, otherwise use romaji title
         val displayTitle = when {
             preferEnglishTitles && !anime.titleEnglish.isNullOrEmpty() -> anime.titleEnglish
             anime.title.isNotEmpty() -> anime.title
             !anime.titleEnglish.isNullOrEmpty() -> anime.titleEnglish
             else -> "Unknown"
         }
-        Box(modifier = Modifier.width(130.dp).height(36.dp)) {
-            Text(text = displayTitle, modifier = Modifier.padding(top = 6.dp), maxLines = 2, style = MaterialTheme.typography.labelMedium, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurface)
+        Box(modifier = Modifier.width(140.dp).height(40.dp)) {
+            Text(
+                text = displayTitle,
+                modifier = Modifier.padding(top = 8.dp),
+                maxLines = 2,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Medium,
+                overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onSurface
+            )
         }
     }
 }
@@ -726,11 +726,11 @@ fun ContinueWatchingEpisodeCard(
     val progressColor = if (disableMaterialColors) Color.White else MaterialTheme.colorScheme.primary
 
     Card(
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(18.dp),
         modifier = Modifier
-            .width(220.dp)
-            .height(130.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .width(240.dp)
+            .height(140.dp)
+            .clip(RoundedCornerShape(18.dp))
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             AsyncImage(
@@ -749,8 +749,8 @@ fun ContinueWatchingEpisodeCard(
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
-                                Color.Black.copy(alpha = 0.3f),
-                                Color.Black.copy(alpha = 0.85f)
+                                Color.Black.copy(alpha = 0.25f),
+                                Color.Black.copy(alpha = 0.9f)
                             )
                         )
                     )
@@ -759,7 +759,7 @@ fun ContinueWatchingEpisodeCard(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(12.dp),
+                    .padding(14.dp),
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(
@@ -769,27 +769,27 @@ fun ContinueWatchingEpisodeCard(
                 ) {
                     Surface(
                         shape = RoundedCornerShape(8.dp),
-                        color = Color.Black.copy(alpha = 0.7f)
+                        color = Color.Black.copy(alpha = 0.65f)
                     ) {
                         Text(
                             text = "Ep. ${entry.episode}",
                             style = MaterialTheme.typography.labelMedium,
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                         )
                     }
                     Box(
                         modifier = Modifier
-                            .size(36.dp)
-                            .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                            .size(34.dp)
+                            .background(Color.Black.copy(alpha = 0.5f), CircleShape)
                             .clickable { onDismissClick() },
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             Icons.Default.Close,
                             contentDescription = "Remove",
-                            tint = Color.White,
+                            tint = Color.White.copy(alpha = 0.8f),
                             modifier = Modifier.size(16.dp)
                         )
                     }
@@ -801,9 +801,9 @@ fun ContinueWatchingEpisodeCard(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(6.dp)
+                            .height(5.dp)
                             .clip(RoundedCornerShape(3.dp))
-                            .background(Color.White.copy(alpha = 0.2f))
+                            .background(Color.White.copy(alpha = 0.15f))
                     ) {
                         Box(
                             modifier = Modifier
@@ -814,20 +814,20 @@ fun ContinueWatchingEpisodeCard(
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
 
                     if (remainingMs > 0 && savedDuration > 0L) {
                         Text(
                             text = formatTimeRemaining(remainingMs),
                             style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.7f)
+                            color = Color.White.copy(alpha = 0.6f)
                         )
                     }
 
                     Text(
                         text = displayTitle,
                         style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Medium,
+                        fontWeight = FontWeight.SemiBold,
                         color = Color.White,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
