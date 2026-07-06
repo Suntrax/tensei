@@ -481,23 +481,9 @@ fun DetailedAnimeScreen(
         }
 
         if (showNoDefaultExtDialog) {
-            AlertDialog(
-                onDismissRequest = { showNoDefaultExtDialog = false },
-                title = { Text("No Default Extension") },
-                text = { Text("Set a default extension in Settings to enable streaming.") },
-                confirmButton = {
-                    TextButton(onClick = {
-                        showNoDefaultExtDialog = false
-                        onNoExtension()
-                    }) {
-                        Text("Go to Settings")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showNoDefaultExtDialog = false }) {
-                        Text("Cancel")
-                    }
-                }
+            NoDefaultExtensionDialog(
+                onDismiss = { showNoDefaultExtDialog = false },
+                onGoToSettings = onNoExtension,
             )
         }
 
@@ -785,41 +771,15 @@ fun DetailedAnimeScreen(
 
                 item {
                     Spacer(modifier = Modifier.height(20.dp))
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                        ),
-                    ) {
-                        Box(modifier = Modifier.padding(12.dp)) {
-                            val notYetAired = displayData.status == "NOT_YET_RELEASED"
-
-                            Button(
-                                onClick = {
-                                    val hasDefault = simplifyEpisodeMenu || streamMethod == "magnet" && defaultMagnetExt != null || streamMethod == "direct" && defaultExtPkg.isNotEmpty()
-                                    if (!hasDefault) {
-                                        showNoDefaultExtDialog = true
-                                    } else {
-                                        showEpisodeSelection = true
-                                    }
-                                },
-                                modifier = Modifier.fillMaxWidth().height(48.dp),
-                                shape = RoundedCornerShape(12.dp),
-                                enabled = !notYetAired,
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.primary,
-                                    disabledContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
-                                )
-                            ) {
-                                Icon(Icons.Default.PlayArrow, null, Modifier.size(20.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Watch Now", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge)
-                            }
-                        }
-                    }
+                    WatchNowButton(
+                        status = displayData.status,
+                        simplifyEpisodeMenu = simplifyEpisodeMenu,
+                        streamMethod = streamMethod,
+                        hasDefaultMagnetExt = defaultMagnetExt != null,
+                        hasDefaultExtPkg = defaultExtPkg.isNotEmpty(),
+                        onNoDefaultExtension = { showNoDefaultExtDialog = true },
+                        onShowEpisodeSelection = { showEpisodeSelection = true },
+                    )
                 }
 
                 item {
@@ -1241,102 +1201,10 @@ fun DetailedAnimeScreen(
                 if (displayData.trailerUrl != null) {
                     item {
                         Spacer(modifier = Modifier.height(20.dp))
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp)
-                                .clip(RoundedCornerShape(20.dp))
-                                .clickable {
-                                    val intent = Intent(Intent.ACTION_VIEW, displayData.trailerUrl.toUri())
-                                    context.startActivity(intent)
-                                },
-                            shape = RoundedCornerShape(20.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                            ),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f))
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(38.dp)
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .background(
-                                                Brush.linearGradient(
-                                                    listOf(
-                                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
-                                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)
-                                                    )
-                                                )
-                                            ),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            Icons.Default.PlayCircle,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Column {
-                                        Text(
-                                            "Trailer",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                        Text(
-                                            "Watch the trailer",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                                            letterSpacing = 0.5.sp
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .aspectRatio(16f / 9f)
-                                        .clip(RoundedCornerShape(12.dp))
-                                ) {
-                                    AsyncImage(
-                                        model = displayData.trailerThumbnail ?: "",
-                                        contentDescription = "Trailer Thumbnail",
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.fillMaxSize()
-                                    )
-                                    Box(
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        FilledIconButton(
-                                            onClick = {
-                                                val intent = Intent(Intent.ACTION_VIEW, displayData.trailerUrl.toUri())
-                                                context.startActivity(intent)
-                                            },
-                                            modifier = Modifier.size(60.dp),
-                                            colors = IconButtonDefaults.filledIconButtonColors(
-                                                containerColor = Color(0xFF1A1A1A).copy(alpha = 0.9f),
-                                                contentColor = Color.White
-                                            )
-                                        ) {
-                                            Icon(
-                                                Icons.Default.PlayArrow,
-                                                contentDescription = "Play Trailer",
-                                                modifier = Modifier.size(34.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text("Watch on YouTube", style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
+                        TrailerCard(
+                            trailerUrl = displayData.trailerUrl,
+                            trailerThumbnail = displayData.trailerThumbnail,
+                        )
                     }
                 }
 
