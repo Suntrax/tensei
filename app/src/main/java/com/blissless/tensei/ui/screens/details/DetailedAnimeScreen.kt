@@ -125,6 +125,8 @@ import com.blissless.tensei.data.models.LocalAnimeEntry
 import com.blissless.tensei.data.models.TagData
 import com.blissless.tensei.dialogs.HomeAnimeStatusDialog
 import com.blissless.tensei.ui.components.rememberCinematicAnimation
+import com.blissless.tensei.ui.theme.StatusColors
+import com.blissless.tensei.ui.theme.StatusLabels
 import com.blissless.tensei.ui.screens.downloads.EpisodeDownloadDialog
 import com.blissless.tensei.ui.screens.episode.EpisodeSelectionDialog
 import com.blissless.tensei.ui.screens.episode.RichEpisodeScreen
@@ -148,6 +150,13 @@ private fun formatDate(dateStr: String): String {
         dateStr
     }
 }
+
+private data class SpecEntry(
+    val label: String,
+    val value: String,
+    val icon: ImageVector? = null,
+    val fullSpan: Boolean = false
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -882,28 +891,14 @@ fun DetailedAnimeScreen(
                                     }
                                 }
                                 if (statusToCheck != null) {
-                                    val statusColor = when (statusToCheck) {
-                                        "CURRENT" -> Color(0xFF2196F3)
-                                        "PLANNING" -> Color(0xFF9C27B0)
-                                        "COMPLETED" -> Color(0xFF4CAF50)
-                                        "PAUSED" -> Color(0xFFFFC107)
-                                        "DROPPED" -> Color(0xFFF44336)
-                                        else -> MaterialTheme.colorScheme.primary
-                                    }
+                                    val statusColor = StatusColors[statusToCheck] ?: MaterialTheme.colorScheme.primary
                                     Column(horizontalAlignment = Alignment.End) {
                                         Surface(
                                             shape = RoundedCornerShape(6.dp),
-                                            color = statusColor.copy(alpha = 0.2f)
+                                            color = statusColor.copy(alpha = 0.12f)
                                         ) {
                                             Text(
-                                                text = when (statusToCheck) {
-                                                    "CURRENT" -> "Watching"
-                                                    "PLANNING" -> "Planning"
-                                                    "COMPLETED" -> "Completed"
-                                                    "PAUSED" -> "On Hold"
-                                                    "DROPPED" -> "Dropped"
-                                                    else -> statusToCheck
-                                                },
+                                                text = StatusLabels[statusToCheck] ?: statusToCheck,
                                                 style = MaterialTheme.typography.labelMedium,
                                                 color = statusColor,
                                                 fontWeight = FontWeight.SemiBold,
@@ -1053,99 +1048,209 @@ fun DetailedAnimeScreen(
                 }
 
                 item {
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(20.dp))
+
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp),
-                        shape = RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(20.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                        )
+                            containerColor = MaterialTheme.colorScheme.surface
+                        ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f))
                     ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
+                        Column(modifier = Modifier.padding(20.dp)) {
+
+                            // ----- Section header: gradient icon tile + title + subtitle -----
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Surface(
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                                    modifier = Modifier.size(36.dp)
+                                Box(
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(
+                                            Brush.linearGradient(
+                                                listOf(
+                                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
+                                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)
+                                                )
+                                            )
+                                        ),
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                                        Icon(
-                                            Icons.Default.Info,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(20.dp)
+                                    Icon(
+                                        Icons.Default.Info,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        "Information",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        "Overview & details",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                        letterSpacing = 0.5.sp
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(18.dp))
+
+                            // ----- Hero stats strip (Episodes / Duration / Score) -----
+                            val latestEp = displayData.latestEpisode?.takeIf { it > 0 }
+                            val totalEp = displayData.episodes.takeIf { it > 0 }
+                            val epDisplay = when {
+                                latestEp != null && totalEp != null -> "$latestEp / $totalEp"
+                                latestEp != null -> "$latestEp"
+                                totalEp != null -> "$totalEp"
+                                else -> null
+                            }
+                            val durationMin = displayData.duration?.takeIf { it > 0 }
+                            val scoreValue = displayData.averageScore?.takeIf { it > 0 }
+
+                            val heroStats = listOfNotNull<Pair<String, String>>(
+                                epDisplay?.let { "Episodes" to it },
+                                durationMin?.let { "Duration" to "${it}m" },
+                                scoreValue?.let { "Score" to String.format(Locale.US, "%.1f", it / 10.0) }
+                            )
+
+                            if (heroStats.isNotEmpty()) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                                        .padding(vertical = 14.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    heroStats.forEachIndexed { index, (label, value) ->
+                                        val accent = when (label) {
+                                            "Episodes" -> MaterialTheme.colorScheme.primary
+                                            "Duration" -> MaterialTheme.colorScheme.tertiary
+                                            "Score"    -> Color(0xFFFFB300)
+                                            else       -> MaterialTheme.colorScheme.primary
+                                        }
+                                        val icon = when (label) {
+                                            "Score" -> Icons.Default.Star
+                                            else    -> null
+                                        }
+                                        HeroStatCell(
+                                            value = value,
+                                            label = label,
+                                            accent = accent,
+                                            icon = icon,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        if (index < heroStats.lastIndex) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .width(1.dp)
+                                                    .height(28.dp)
+                                                    .background(
+                                                        MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)
+                                                    )
+                                            )
+                                        }
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(16.dp))
+                            }
+
+                            // ----- Bento spec grid (2-column, responsive full-span rows) -----
+                            val specs = buildList {
+                                displayData.format?.let {
+                                    add(
+                                        SpecEntry(
+                                            label = "Format",
+                                            value = it.replace("_", " ")
+                                                .lowercase()
+                                                .replaceFirstChar { c -> c.uppercase() },
+                                            icon = Icons.Default.Category
+                                        )
+                                    )
+                                }
+                                displayData.status?.let {
+                                    add(
+                                        SpecEntry(
+                                            label = "Status",
+                                            value = statusDisplay,
+                                            icon = Icons.Default.PlayCircle
+                                        )
+                                    )
+                                }
+                                if (displayData.season != null && displayData.year != null) {
+                                    add(
+                                        SpecEntry(
+                                            label = "Season",
+                                            value = "${displayData.season.replace("_", " ").lowercase().replaceFirstChar { c -> c.uppercase() }} ${displayData.year}"
+                                        )
+                                    )
+                                }
+                                displayData.source?.let {
+                                    add(
+                                        SpecEntry(
+                                            label = "Source",
+                                            value = it.replace("_", " ")
+                                                .lowercase()
+                                                .replaceFirstChar { c -> c.uppercase() },
+                                            icon = Icons.Default.Description
+                                        )
+                                    )
+                                }
+                                if (displayData.studios.isNotEmpty()) {
+                                    val studio = displayData.studios
+                                        .filter { it.isAnimationStudio }
+                                        .joinToString(", ") { it.name }
+                                    if (studio.isNotEmpty()) {
+                                        add(
+                                            SpecEntry(
+                                                label = "Studio",
+                                                value = studio,
+                                                icon = Icons.Default.Group,
+                                                fullSpan = true
+                                            )
                                         )
                                     }
                                 }
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Text("Information", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onBackground)
-                            }
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            // Main stats row
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceEvenly
-                            ) {
-                                val latestEp = displayData.latestEpisode?.takeIf { it > 0 }
-                                val totalEp = displayData.episodes.takeIf { it > 0 }
-                                val epDisplay = when {
-                                    latestEp != null && totalEp != null -> "$latestEp / $totalEp"
-                                    latestEp != null -> "$latestEp"
-                                    totalEp != null -> "$totalEp"
-                                    else -> null
+                                displayData.startDate?.let {
+                                    add(SpecEntry(label = "Started", value = formatDate(it)))
                                 }
-                                epDisplay?.let {
-                                    InfoStat("Episodes", it, Icons.Default.PlayCircle, MaterialTheme.colorScheme.primary)
-                                }
-                                displayData.duration?.let {
-                                    InfoStat("Duration", "$it min", Icons.Default.Timer, MaterialTheme.colorScheme.primary)
-                                }
-                                displayData.averageScore?.let { score ->
-                                    InfoStat("Score", String.format(Locale.US, "%.1f", score / 10.0), Icons.Default.Star, Color(0xFFFFD700))
+                                if (displayData.status != "RELEASING" && displayData.status != "NOT_YET_RELEASED") {
+                                    displayData.endDate?.let {
+                                        add(SpecEntry(label = "Ended", value = formatDate(it)))
+                                    }
                                 }
                             }
 
-                            Spacer(modifier = Modifier.height(16.dp))
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
-                            Spacer(modifier = Modifier.height(12.dp))
+                            var i = 0
+                            while (i < specs.size) {
+                                val current = specs[i]
+                                val next = specs.getOrNull(i + 1)
 
-                            // Info grid - 2 columns
-                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Row(modifier = Modifier.fillMaxWidth()) {
-                                    displayData.format?.let { format ->
-                                        InfoItemRow("Format", format.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() }, modifier = Modifier.weight(1f)) 
+                                if (next != null && !current.fullSpan) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        BentoSpecCell(current, modifier = Modifier.weight(1f))
+                                        BentoSpecCell(next, modifier = Modifier.weight(1f))
                                     }
-                                    displayData.status?.let { 
-                                        InfoItemRow("Status", statusDisplay, modifier = Modifier.weight(1f)) 
-                                    }
+                                    i += 2
+                                } else {
+                                    BentoSpecCell(current, modifier = Modifier.fillMaxWidth())
+                                    i += 1
                                 }
-                                Row(modifier = Modifier.fillMaxWidth()) {
-                                    if (displayData.season != null && displayData.year != null) {
-                                        InfoItemRow("Season", "${displayData.season.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() }} ${displayData.year}", modifier = Modifier.weight(1f))
-                                    }
-                                    displayData.source?.let { 
-                                        InfoItemRow("Source", it.replace("_", " ").lowercase().replaceFirstChar { c -> c.uppercase() }, modifier = Modifier.weight(1f)) 
-                                    }
-                                }
-                                if (displayData.studios.isNotEmpty()) {
-                                    val studio = displayData.studios.filter { it.isAnimationStudio }.joinToString(", ") { it.name }
-                                    if (studio.isNotEmpty()) {
-                                        InfoItemRow("Studio", studio)
-                                    }
-                                }
-                                Row(modifier = Modifier.fillMaxWidth()) {
-                                    displayData.startDate?.let { 
-                                        InfoItemRow("Started", formatDate(it), modifier = Modifier.weight(1f)) 
-                                    }
-                                    if (displayData.status != "RELEASING" && displayData.status != "NOT_YET_RELEASED") {
-                                        displayData.endDate?.let { 
-                                            InfoItemRow("Ended", formatDate(it), modifier = Modifier.weight(1f)) 
-                                        }
-                                    }
+                                if (i < specs.size) {
+                                    Spacer(modifier = Modifier.height(10.dp))
                                 }
                             }
                         }
@@ -1159,35 +1264,56 @@ fun DetailedAnimeScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp)
-                                .clip(RoundedCornerShape(16.dp))
+                                .clip(RoundedCornerShape(20.dp))
                                 .clickable {
                                     val intent = Intent(Intent.ACTION_VIEW, displayData.trailerUrl.toUri())
                                     context.startActivity(intent)
                                 },
-                            shape = RoundedCornerShape(16.dp),
+                            shape = RoundedCornerShape(20.dp),
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                            )
+                            ),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f))
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Surface(
-                                        shape = RoundedCornerShape(10.dp),
-                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                                        modifier = Modifier.size(36.dp)
+                                    Box(
+                                        modifier = Modifier
+                                            .size(38.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(
+                                                Brush.linearGradient(
+                                                    listOf(
+                                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
+                                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)
+                                                    )
+                                                )
+                                            ),
+                                        contentAlignment = Alignment.Center
                                     ) {
-                                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                                            Icon(
-                                                Icons.Default.PlayCircle,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                        }
+                                        Icon(
+                                            Icons.Default.PlayCircle,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
                                     }
                                     Spacer(modifier = Modifier.width(12.dp))
-                                    Text("Trailer", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onBackground)
+                                    Column {
+                                        Text(
+                                            "Trailer",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            "Watch the trailer",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                            letterSpacing = 0.5.sp
+                                        )
+                                    }
                                 }
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Box(
@@ -1240,30 +1366,51 @@ fun DetailedAnimeScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp),
-                            shape = RoundedCornerShape(16.dp),
+                            shape = RoundedCornerShape(20.dp),
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                            )
+                            ),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f))
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Surface(
-                                        shape = RoundedCornerShape(10.dp),
-                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                                        modifier = Modifier.size(36.dp)
+                                    Box(
+                                        modifier = Modifier
+                                            .size(38.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(
+                                                Brush.linearGradient(
+                                                    listOf(
+                                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
+                                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)
+                                                    )
+                                                )
+                                            ),
+                                        contentAlignment = Alignment.Center
                                     ) {
-                                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                                            Icon(
-                                                Icons.Default.Category,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                        }
+                                        Icon(
+                                            Icons.Default.Category,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
                                     }
                                     Spacer(modifier = Modifier.width(12.dp))
-                                    Text("Genres", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onBackground)
+                                    Column {
+                                        Text(
+                                            "Genres",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            "Categories & themes",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                            letterSpacing = 0.5.sp
+                                        )
+                                    }
                                 }
                                 Spacer(modifier = Modifier.height(12.dp))
                                 FlowRow(
@@ -1297,30 +1444,51 @@ fun DetailedAnimeScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp),
-                            shape = RoundedCornerShape(16.dp),
+                            shape = RoundedCornerShape(20.dp),
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                            )
+                            ),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f))
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Surface(
-                                        shape = RoundedCornerShape(10.dp),
-                                        color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f),
-                                        modifier = Modifier.size(36.dp)
+                                    Box(
+                                        modifier = Modifier
+                                            .size(38.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(
+                                                Brush.linearGradient(
+                                                    listOf(
+                                                        MaterialTheme.colorScheme.secondary.copy(alpha = 0.22f),
+                                                        MaterialTheme.colorScheme.secondary.copy(alpha = 0.06f)
+                                                    )
+                                                )
+                                            ),
+                                        contentAlignment = Alignment.Center
                                     ) {
-                                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                                            Icon(
-                                                Icons.AutoMirrored.Filled.Label,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.secondary,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                        }
+                                        Icon(
+                                            Icons.AutoMirrored.Filled.Label,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.secondary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
                                     }
                                     Spacer(modifier = Modifier.width(12.dp))
-                                    Text("Tags", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onBackground)
+                                    Column {
+                                        Text(
+                                            "Tags",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            "Labels & descriptors",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                            letterSpacing = 0.5.sp
+                                        )
+                                    }
                                 }
                                 Spacer(modifier = Modifier.height(12.dp))
                                 val nonSpoilerTags = displayData.tags.filter { !it.isMediaSpoiler }
@@ -1377,35 +1545,55 @@ fun DetailedAnimeScreen(
                 if (!displayData.description.isNullOrEmpty()) {
                     item {
                         Spacer(modifier = Modifier.height(20.dp))
-                        // Redesigned Synopsis Section
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp),
-                            shape = RoundedCornerShape(16.dp),
+                            shape = RoundedCornerShape(20.dp),
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                            )
+                            ),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f))
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Surface(
-                                        shape = RoundedCornerShape(10.dp),
-                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                                        modifier = Modifier.size(36.dp)
+                                    Box(
+                                        modifier = Modifier
+                                            .size(38.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(
+                                                Brush.linearGradient(
+                                                    listOf(
+                                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
+                                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)
+                                                    )
+                                                )
+                                            ),
+                                        contentAlignment = Alignment.Center
                                     ) {
-                                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                                            Icon(
-                                                Icons.Default.Description,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                        }
+                                        Icon(
+                                            Icons.Default.Description,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
                                     }
                                     Spacer(modifier = Modifier.width(12.dp))
-                                    Text("Synopsis", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onBackground)
+                                    Column {
+                                        Text(
+                                            "Synopsis",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            "Story summary",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                            letterSpacing = 0.5.sp
+                                        )
+                                    }
                                 }
                                 Spacer(modifier = Modifier.height(12.dp))
                                 val cleanDescription = displayData.description.replace("<br>", "\n").replace("<br/>", "\n")
@@ -1442,30 +1630,51 @@ fun DetailedAnimeScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp),
-                            shape = RoundedCornerShape(16.dp),
+                            shape = RoundedCornerShape(20.dp),
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                            )
+                            ),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f))
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                                    Surface(
-                                        shape = RoundedCornerShape(10.dp),
-                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                                        modifier = Modifier.size(36.dp)
+                                    Box(
+                                        modifier = Modifier
+                                            .size(38.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(
+                                                Brush.linearGradient(
+                                                    listOf(
+                                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
+                                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)
+                                                    )
+                                                )
+                                            ),
+                                        contentAlignment = Alignment.Center
                                     ) {
-                                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                                            Icon(
-                                                Icons.Default.Link,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                        }
+                                        Icon(
+                                            Icons.Default.Link,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
                                     }
                                     Spacer(modifier = Modifier.width(12.dp))
-                                    Text("Relations", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onBackground)
+                                    Column {
+                                        Text(
+                                            "Relations",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            "Connected series",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                            letterSpacing = 0.5.sp
+                                        )
+                                    }
                                     Spacer(modifier = Modifier.weight(1f))
                                     if (filteredRelations.isNotEmpty()) {
                                         TextButton(onClick = { 
@@ -1649,30 +1858,51 @@ fun DetailedAnimeScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp),
-                            shape = RoundedCornerShape(16.dp),
+                            shape = RoundedCornerShape(20.dp),
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                            )
+                            ),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f))
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                                    Surface(
-                                        shape = RoundedCornerShape(10.dp),
-                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                                        modifier = Modifier.size(36.dp)
+                                    Box(
+                                        modifier = Modifier
+                                            .size(38.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(
+                                                Brush.linearGradient(
+                                                    listOf(
+                                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
+                                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)
+                                                    )
+                                                )
+                                            ),
+                                        contentAlignment = Alignment.Center
                                     ) {
-                                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                                            Icon(
-                                                Icons.Default.Group,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                        }
+                                        Icon(
+                                            Icons.Default.Group,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
                                     }
                                     Spacer(modifier = Modifier.width(12.dp))
-                                    Text("Cast", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onBackground)
+                                    Column {
+                                        Text(
+                                            "Cast",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            "Characters & voice actors",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                            letterSpacing = 0.5.sp
+                                        )
+                                    }
                                     Spacer(modifier = Modifier.weight(1f))
                                     if (castList.isNotEmpty()) {
                                         TextButton(onClick = onViewAllCast) {
@@ -1799,30 +2029,51 @@ fun DetailedAnimeScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp),
-                            shape = RoundedCornerShape(16.dp),
+                            shape = RoundedCornerShape(20.dp),
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                            )
+                            ),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f))
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                                    Surface(
-                                        shape = RoundedCornerShape(10.dp),
-                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                                        modifier = Modifier.size(36.dp)
+                                    Box(
+                                        modifier = Modifier
+                                            .size(38.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(
+                                                Brush.linearGradient(
+                                                    listOf(
+                                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
+                                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)
+                                                    )
+                                                )
+                                            ),
+                                        contentAlignment = Alignment.Center
                                     ) {
-                                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                                            Icon(
-                                                Icons.Default.Person,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                        }
+                                        Icon(
+                                            Icons.Default.Person,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
                                     }
                                     Spacer(modifier = Modifier.width(12.dp))
-                                    Text("Staff", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onBackground)
+                                    Column {
+                                        Text(
+                                            "Staff",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            "Production crew",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                            letterSpacing = 0.5.sp
+                                        )
+                                    }
                                     Spacer(modifier = Modifier.weight(1f))
                                     if (staffList.isNotEmpty()) {
                                         TextButton(onClick = onViewAllStaff) {
@@ -2077,37 +2328,83 @@ fun DetailedAnimeScreen(
 }
 
 @Composable
-private fun InfoStat(label: String, value: String, icon: ImageVector, color: Color) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Surface(
-            shape = CircleShape,
-            color = color.copy(alpha = 0.15f),
-            modifier = Modifier.size(48.dp)
-        ) {
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(24.dp))
+private fun HeroStatCell(
+    value: String,
+    label: String,
+    accent: Color,
+    icon: ImageVector? = null,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            icon?.let {
+                Icon(
+                    it,
+                    contentDescription = null,
+                    tint = accent,
+                    modifier = Modifier.size(14.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
             }
+            Text(
+                value,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = accent,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            label.uppercase(),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Medium,
+            letterSpacing = 1.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
+        )
     }
 }
 
+
 @Composable
-private fun InfoItemRow(label: String, value: String, modifier: Modifier = Modifier) {
-    Column(modifier = modifier.padding(end = 8.dp)) {
+private fun BentoSpecCell(spec: SpecEntry, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.30f))
+            .padding(14.dp)
+    ) {
         Text(
-            text = label,
+            spec.label.uppercase(),
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface
+            letterSpacing = 1.2.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
         )
+        Spacer(modifier = Modifier.height(6.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            spec.icon?.let { ic ->
+                Icon(
+                    ic,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+            }
+            Text(
+                spec.value,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 
