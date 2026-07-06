@@ -3,11 +3,9 @@ package com.blissless.tensei
 import android.content.Context
 import android.content.Intent
 import android.net.ConnectivityManager
-import android.util.Log
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import androidx.core.net.toUri
-import androidx.glance.appwidget.updateAll
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.util.UnstableApi
@@ -22,10 +20,6 @@ import com.blissless.tensei.data.UserPreferences
 import com.blissless.tensei.data.models.AiringScheduleAnime
 import com.blissless.tensei.data.models.AnimeMedia
 import com.blissless.tensei.data.models.AnimeRelation
-import com.blissless.tensei.data.models.CachedExtensionStream
-import com.blissless.tensei.data.models.CachedHoster
-import com.blissless.tensei.data.models.CachedTrack
-import com.blissless.tensei.data.models.CachedVideo
 import com.blissless.tensei.data.models.CharacterData
 import com.blissless.tensei.data.models.DetailedAnimeData
 import com.blissless.tensei.data.models.ExploreAnime
@@ -34,9 +28,7 @@ import com.blissless.tensei.data.models.ExploreCacheData
 import com.blissless.tensei.data.models.ExploreMedia
 import com.blissless.tensei.data.models.HomeCacheData
 import com.blissless.tensei.data.models.LocalAnimeEntry
-import com.blissless.tensei.data.models.MediaCoverImage
 import com.blissless.tensei.data.models.MediaTag
-import com.blissless.tensei.data.models.MediaTitle
 import com.blissless.tensei.data.models.StoredFavorite
 import com.blissless.tensei.data.models.StudioData
 import com.blissless.tensei.data.models.TmdbEpisode
@@ -45,12 +37,9 @@ import com.blissless.tensei.data.models.UserAnimeStats
 import com.blissless.tensei.data.models.UserFavoriteAnime
 import com.blissless.tensei.download.EpisodeDownloadManager
 import com.blissless.tensei.update.GitHubRelease
-import com.blissless.tensei.widget.AiringScheduleWidget
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -70,42 +59,58 @@ import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Hoster
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.model.Track
-import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
-import eu.kanade.tachiyomi.network.NetworkHelper
-import com.blissless.tensei.stream.LocalProxyServer
 import com.blissless.tensei.torrent.MagnetData
-import com.blissless.tensei.torrent.MagnetEpisode
 import com.blissless.tensei.torrent.MagnetExtensionClient
-import com.blissless.tensei.torrent.StreamUrlResult
-import okhttp3.Headers
 import okhttp3.OkHttpClient
-import kotlin.time.Duration.Companion.milliseconds
+// Extension functions on MainViewModel (defined in com.blissless.tensei.viewmodel)
+import com.blissless.tensei.viewmodel.startApiRetryLoop
+import com.blissless.tensei.viewmodel.queueSync
+import com.blissless.tensei.viewmodel.fetchMalList
+import com.blissless.tensei.viewmodel.toggleMalFavoriteById
+import com.blissless.tensei.viewmodel.loadMalFavoritesFromCache
+import com.blissless.tensei.viewmodel.fetchAniListFavorites
+import com.blissless.tensei.viewmodel.loadAniListFavoritesFromStorage
+import com.blissless.tensei.viewmodel.toggleAniListFavorite
+import com.blissless.tensei.viewmodel.refreshReleasingAnimeProgress
+import com.blissless.tensei.viewmodel.playEpisodeWithExtension
+import com.blissless.tensei.viewmodel.fetchExtensionHosterVideos
+import com.blissless.tensei.viewmodel.loadAvailableMagnetExtensions
+import com.blissless.tensei.viewmodel.fetchMagnetEpisodes
+import com.blissless.tensei.viewmodel.fetchMagnetForEpisode
+import com.blissless.tensei.viewmodel.fetchStreamUrlForEpisode
+import com.blissless.tensei.viewmodel.ensureMagnetClient
+import com.blissless.tensei.viewmodel.clearMagnetEpisodes
+import com.blissless.tensei.viewmodel.getMagnetEpisodeNumbers
+import com.blissless.tensei.viewmodel.getMagnetForEpisode
+// Extension functions on AnimeRepository (defined in com.blissless.tensei.data)
+import com.blissless.tensei.data.fetchTmdbEpisodes
+import com.blissless.tensei.data.fetchAnimeRelationsList
 
 @UnstableApi
 class MainViewModel : ViewModel() {
 
     companion object {
-        private const val TAG = "MainViewModel"
+        internal const val TAG = "MainViewModel"
         private const val CLIENT_ID = BuildConfig.CLIENT_ID_ANILIST
-        private const val MIN_REFRESH_INTERVAL_MS = 5 * 60 * 1000L // 5 minutes
-        private const val SYNC_DEBOUNCE_MS = 2000L // 2 seconds debounce for API sync
-        private const val FAVORITE_DEBOUNCE_MS = 1000L // 1 second debounce for favorite toggles
+        internal const val MIN_REFRESH_INTERVAL_MS = 5 * 60 * 1000L // 5 minutes
+        internal const val SYNC_DEBOUNCE_MS = 2000L // 2 seconds debounce for API sync
+        internal const val FAVORITE_DEBOUNCE_MS = 1000L // 1 second debounce for favorite toggles
     }
 
-    private lateinit var userPreferences: UserPreferences
-    private lateinit var cacheManager: CacheManager
+    internal lateinit var userPreferences: UserPreferences
+    internal lateinit var cacheManager: CacheManager
     lateinit var episodeDownloadManager: EpisodeDownloadManager
-    private lateinit var repository: AnimeRepository
-    private lateinit var context: Context
+    internal lateinit var repository: AnimeRepository
+    internal lateinit var context: Context
     private var connectivityCallback: ConnectivityManager.NetworkCallback? = null
-    private var sourceManager: com.blissless.tensei.stream.SourceManager? = null
+    internal var sourceManager: com.blissless.tensei.stream.SourceManager? = null
 
     data class PreFetchedExtensionData(
         val source: AnimeCatalogueSource,
         val sAnime: SAnime,
         val episodes: List<SEpisode>
     )
-    private val _preFetchedExtensionData = mutableMapOf<Int, PreFetchedExtensionData>()
+    internal val _preFetchedExtensionData = mutableMapOf<Int, PreFetchedExtensionData>()
 
     fun getPreFetchedExtensionData(animeId: Int): PreFetchedExtensionData? =
         _preFetchedExtensionData[animeId]
@@ -195,182 +200,23 @@ class MainViewModel : ViewModel() {
     }
 
     // ─── Magnet Extension Support ────────────────────────────────────────
-    private var magnetExtensionClient: MagnetExtensionClient? = null
+    // State holders (internal so viewmodel/MainViewModelMagnetExt.kt can access them).
+    // Method implementations live in that file.
+    internal var magnetExtensionClient: MagnetExtensionClient? = null
 
-    private val _availableMagnetExtensions = MutableStateFlow<List<Pair<String, String>>>(emptyList())
+    internal val _availableMagnetExtensions = MutableStateFlow<List<Pair<String, String>>>(emptyList())
     val availableMagnetExtensions: StateFlow<List<Pair<String, String>>> = _availableMagnetExtensions.asStateFlow()
 
     val defaultMagnetExtension: StateFlow<String?> get() = userPreferences.defaultMagnetExtension
 
-    private val _magnetEpisodes = MutableStateFlow<Map<Int, MagnetData>>(emptyMap())
+    internal val _magnetEpisodes = MutableStateFlow<Map<Int, MagnetData>>(emptyMap())
     val magnetEpisodes: StateFlow<Map<Int, MagnetData>> = _magnetEpisodes.asStateFlow()
 
-    /**
-     * Lazily create the magnet extension client. [loadAvailableMagnetExtensions] is the
-     * normal entry point, but playback (deep links, auto-refresh, widgets) can be
-     * triggered before any screen calls it — without this guard the client stays null
-     * and [fetchMagnetForEpisode] silently returns null ("no magnet link found").
-     */
-    private fun ensureMagnetClient(): MagnetExtensionClient {
-        return magnetExtensionClient ?: MagnetExtensionClient(context).also {
-            magnetExtensionClient = it
-            Log.d(TAG, "ensureMagnetClient: created new MagnetExtensionClient")
-        }
-    }
-
-    fun loadAvailableMagnetExtensions() {
-        Log.d(TAG, "loadAvailableMagnetExtensions: start")
-        val client = ensureMagnetClient()
-        viewModelScope.launch(Dispatchers.IO) {
-            val startTime = System.currentTimeMillis()
-            val detected = client.detectExtensions()
-            val elapsed = System.currentTimeMillis() - startTime
-            Log.d(TAG, "loadAvailableMagnetExtensions: found ${detected.size} extensions in ${elapsed}ms: $detected")
-            _availableMagnetExtensions.value = detected.map { it.name to it.authority }
-        }
-    }
-
-    private fun parseTitleForSearch(title: String): String {
-        var cleaned = title
-        cleaned = cleaned.replace(Regex("\\([^)]*\\)"), "").trim()
-        cleaned = cleaned.replace(Regex("\\[[^\\]]*\\]"), "").trim()
-        cleaned = cleaned.replace(Regex("\\{.*?\\}"), "").trim()
-        cleaned = cleaned.replace(Regex("\\s+"), " ").trim()
-        Log.v(TAG, "parseTitleForSearch: '$title' -> '$cleaned'")
-        return cleaned
-    }
-
-    fun fetchMagnetEpisodes(anime: AnimeMedia, authority: String) {
-        Log.d(TAG, "fetchMagnetEpisodes: anime=${anime.id} title=${anime.title} authority=$authority")
-        viewModelScope.launch(Dispatchers.IO) {
-            fetchMagnetEpisodesSync(anime, authority)
-        }
-    }
-
-    private suspend fun fetchMagnetEpisodesSync(anime: AnimeMedia, authority: String): MagnetData? {
-        val eng = anime.titleEnglish
-        Log.d(TAG, "fetchMagnetEpisodesSync: anime=${anime.id} engTitle='$eng' romaji='${anime.title}' authority=$authority")
-        Log.d(TAG, "fetchMagnetEpisodesSync: using ONLY AniList English title, skipping romaji")
-
-        val searchTerms = mutableListOf<String>()
-        if (!eng.isNullOrBlank()) {
-            val cleaned = parseTitleForSearch(eng)
-            searchTerms.add(cleaned)
-            if (cleaned != eng) searchTerms.add(eng)
-        } else {
-            Log.w(TAG, "fetchMagnetEpisodesSync: no English title available, falling back to romaji")
-            anime.title?.let { searchTerms.add(parseTitleForSearch(it)) }
-        }
-        Log.d(TAG, "fetchMagnetEpisodesSync: generated ${searchTerms.size} English-only search terms: $searchTerms")
-
-        val client = ensureMagnetClient()
-        var result: MagnetData? = null
-        for ((i, query) in searchTerms.withIndex()) {
-            val startTime = System.currentTimeMillis()
-            val fetched = try {
-                client.fetchMagnets(authority, anime.id, query, parseTitleForSearch(anime.title ?: query), preferredCategory.value)
-            } catch (e: Exception) {
-                Log.e(TAG, "fetchMagnetEpisodesSync: fetchMagnets threw for term[$i]='$query'", e)
-                null
-            }
-            val elapsed = System.currentTimeMillis() - startTime
-            Log.d(TAG, "fetchMagnetEpisodesSync: term[$i]='$query' -> result=${fetched != null} episodes=${fetched?.episodes?.size ?: 0} in ${elapsed}ms")
-            if (fetched != null) {
-                if (fetched.episodes.isEmpty()) {
-                    Log.w(TAG, "fetchMagnetEpisodesSync: extension returned MagnetData but 0 episodes (isSingleTorrent=${fetched.isSingleTorrent})")
-                } else {
-                    result = fetched
-                    break
-                }
-            }
-        }
-
-        if (result != null) {
-            Log.d(TAG, "fetchMagnetEpisodesSync: success — ${result.episodes.size} episodes for anime ${anime.id}")
-            _magnetEpisodes.value += (anime.id to result)
-        } else {
-            Log.w(TAG, "fetchMagnetEpisodesSync: no magnet data found for anime ${anime.id} with any search term")
-            _magnetEpisodes.value += (anime.id to MagnetData(emptyList(), false))
-        }
-        return result
-    }
-
-    fun clearMagnetEpisodes(animeId: Int) {
-        Log.d(TAG, "clearMagnetEpisodes: removing cached magnet data for animeId=$animeId")
-        _magnetEpisodes.value -= animeId
-    }
-
-    fun getMagnetEpisodeNumbers(animeId: Int): Set<Int> {
-        val data = _magnetEpisodes.value[animeId]
-        if (data == null) {
-            Log.d(TAG, "getMagnetEpisodeNumbers: no data for animeId=$animeId")
-            return emptySet()
-        }
-        if (data.isSingleTorrent && data.episodes.size == 1) {
-            Log.d(TAG, "getMagnetEpisodeNumbers: single torrent mode, returning empty set")
-            return emptySet()
-        }
-        val eps = data.episodes.map { it.episode }.toSet()
-        Log.d(TAG, "getMagnetEpisodeNumbers: animeId=$animeId -> ${eps.size} episodes: $eps")
-        return eps
-    }
-
-    fun getMagnetForEpisode(animeId: Int, episode: Int): String? {
-        Log.d(TAG, "getMagnetForEpisode: animeId=$animeId ep=$episode")
-        val data = _magnetEpisodes.value[animeId]
-        if (data == null) {
-            Log.d(TAG, "getMagnetForEpisode: no cached data for animeId=$animeId")
-            return null
-        }
-        val magnet = if (data.isSingleTorrent) {
-            Log.d(TAG, "getMagnetForEpisode: single-torrent mode")
-            data.episodes.firstOrNull()?.magnet
-        } else {
-            val ep = data.episodes.find { it.episode == episode }
-            Log.d(TAG, "getMagnetForEpisode: cached episodes=${data.episodes.map { it.episode }} found=${ep != null}")
-            ep?.magnet
-        }
-        Log.d(TAG, "getMagnetForEpisode: result=${magnet != null} ${if (magnet != null) "URI=${magnet.take(80)}..." else ""}")
-        return magnet
-    }
-
-    suspend fun fetchMagnetForEpisode(anime: AnimeMedia, episode: Int): String? {
-        Log.d(TAG, "fetchMagnetForEpisode: anime=${anime.id} ep=$episode engTitle='${anime.titleEnglish}' rawTitle='${anime.title}'")
-        ensureMagnetClient()
-        val authority = defaultMagnetExtension.value
-            ?: _availableMagnetExtensions.value.firstOrNull()?.second
-        if (authority.isNullOrBlank()) {
-            Log.w(TAG, "fetchMagnetForEpisode: no magnet extension authority " +
-                    "(default=${defaultMagnetExtension.value}, detected=${_availableMagnetExtensions.value.size})")
-            return null
-        }
-        Log.d(TAG, "fetchMagnetForEpisode: using authority=$authority")
-        val data = withContext(Dispatchers.IO) {
-            fetchMagnetEpisodesSync(anime, authority)
-        }
-        if (data != null && data.isSingleTorrent) {
-            val magnet = data.episodes.firstOrNull()?.magnet
-            Log.d(TAG, "fetchMagnetForEpisode: single-torrent result=${magnet != null}")
-            return magnet
-        }
-        val magnet = getMagnetForEpisode(anime.id, episode)
-        Log.d(TAG, "fetchMagnetForEpisode: final result=${magnet != null}")
-        return magnet
-    }
-
-    suspend fun fetchStreamUrlForEpisode(anime: AnimeMedia, episode: Int, lang: String): StreamUrlResult? {
-        Log.d(TAG, "fetchStreamUrlForEpisode: anime=${anime.id} ep=$episode lang=$lang")
-        ensureMagnetClient()
-        val authority = defaultMagnetExtension.value
-            ?: _availableMagnetExtensions.value.firstOrNull()?.second
-        if (authority.isNullOrBlank()) {
-            Log.w(TAG, "fetchStreamUrlForEpisode: no magnet extension authority")
-            return null
-        }
-        return withContext(Dispatchers.IO) {
-            magnetExtensionClient?.fetchStreamUrl(authority, anime.id, episode, lang)
-        }
-    }
+    // Magnet extension methods — implementations live in viewmodel/MainViewModelMagnetExt.kt
+    // (fun ensureMagnetClient, loadAvailableMagnetExtensions, parseTitleForSearch,
+    //  fetchMagnetEpisodes, fetchMagnetEpisodesSync, clearMagnetEpisodes,
+    //  getMagnetEpisodeNumbers, getMagnetForEpisode, fetchMagnetForEpisode,
+    //  fetchStreamUrlForEpisode)
 
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: android.net.Network) {
@@ -387,260 +233,18 @@ class MainViewModel : ViewModel() {
         }
     }
 
-    private var apiRetryJob: Job? = null
-
-    private fun startApiRetryLoop() {
-        apiRetryJob?.cancel()
-        apiRetryJob = viewModelScope.launch {
-            while (true) {
-                delay(MIN_REFRESH_INTERVAL_MS.milliseconds)
-                if (!_isOffline.value && _apiError.value != null) {
-                    fetchExploreData(force = true)
-                }
-            }
-        }
-    }
+    internal var apiRetryJob: Job? = null
 
     // Sync queue for debounced AniList API calls
-    private data class PendingSync(val type: String, val mediaId: Int, val malId: Int? = null, val status: String? = null, val progress: Int? = null, val score: Int? = null, val entryId: Int? = null, val favoriteAdded: Boolean? = null)
-    private val pendingSyncs = mutableMapOf<Int, PendingSync>() // mediaId -> pending sync
-    private var syncJob: Job? = null
-    private var favoriteSyncJob: Job? = null
+    internal data class PendingSync(val type: String, val mediaId: Int, val malId: Int? = null, val status: String? = null, val progress: Int? = null, val score: Int? = null, val entryId: Int? = null, val favoriteAdded: Boolean? = null)
+    internal val pendingSyncs = mutableMapOf<Int, PendingSync>() // mediaId -> pending sync
+    internal var syncJob: Job? = null
+    internal var favoriteSyncJob: Job? = null
 
-    private fun queueSync(mediaId: Int, type: String, malId: Int? = null, status: String? = null, progress: Int? = null, score: Int? = null, entryId: Int? = null, favoriteAdded: Boolean? = null) {
-        val existingSync = pendingSyncs[mediaId]
-        val resolvedMalId = malId ?: existingSync?.malId ?: cacheManager.detailedAnimeCache.value[mediaId]?.malId
-
-        pendingSyncs[mediaId] = PendingSync(type, mediaId, resolvedMalId, status ?: existingSync?.status, progress ?: existingSync?.progress, score ?: existingSync?.score, entryId ?: existingSync?.entryId, favoriteAdded ?: existingSync?.favoriteAdded)
-
-        if (type == "favorite") {
-            // Favorites use a separate 1-second debounce that resets on each toggle
-            favoriteSyncJob?.cancel()
-            favoriteSyncJob = viewModelScope.launch {
-                delay(FAVORITE_DEBOUNCE_MS.milliseconds)
-                executeFavoriteSyncs()
-            }
-        } else {
-            syncJob?.cancel()
-            syncJob = viewModelScope.launch {
-                delay(SYNC_DEBOUNCE_MS.milliseconds)
-                executePendingSyncs()
-            }
-        }
-    }
-
-    private suspend fun executeFavoriteSyncs() {
-        // Only execute pending favorite syncs (not other types)
-        val favoriteSyncs = pendingSyncs.filter { it.value.type == "favorite" }.toMap()
-        // Remove only the favorite entries from pending
-        favoriteSyncs.keys.forEach { pendingSyncs.remove(it) }
-
-        for ((_, sync) in favoriteSyncs) {
-            val shouldBeFavorited = sync.favoriteAdded == true
-            try {
-                if (shouldBeFavorited) {
-                    repository.addAniListFavorite(sync.mediaId)
-                } else {
-                    repository.removeAniListFavorite(sync.mediaId)
-                }
-            } catch (_: Exception) {
-                // Re-queue the failed sync so it retries
-                pendingSyncs[sync.mediaId] = sync
-            }
-        }
-    }
-
-    private suspend fun executePendingSyncs() {
-        // Only process non-favorite syncs (favorites have their own debounce path)
-        val syncsToExecute = pendingSyncs.filter { it.value.type != "favorite" }.toMap()
-        syncsToExecute.keys.forEach { pendingSyncs.remove(it) }
-
-        for ((_, sync) in syncsToExecute) {
-            when (sync.type) {
-                "status" -> {
-                    sync.status?.let {
-                        if (_loginProvider.value == LoginProvider.MAL) {
-                            val malId = sync.malId
-                            if (malId != null) {
-                                val malStatus = mapToMalStatus(it)
-                                if (malStatus != null) {
-                                    malApiService.updateAnimeStatus(malId, malStatus, sync.score, sync.progress)
-                                }
-                            }
-                        } else {
-                            repository.updateStatus(sync.mediaId, it, sync.progress)
-                        }
-                    }
-                }
-                "progress" -> {
-                    sync.progress?.let {
-                        if (_loginProvider.value == LoginProvider.MAL) {
-                            val malId = sync.malId
-                            if (malId != null) {
-                                malApiService.updateAnimeStatus(malId, null, null, it)
-                            }
-                        } else {
-                            repository.updateProgress(sync.mediaId, it)
-                        }
-                    }
-                }
-                "score" -> {
-                    sync.score?.let {
-                        if (_loginProvider.value == LoginProvider.MAL) {
-                            val malId = sync.malId
-                            if (malId != null) {
-                                malApiService.updateAnimeStatus(malId, null, it, null)
-                            }
-                        } else {
-                            repository.updateScore(sync.mediaId, it)
-                        }
-                    }
-                }
-                "delete" -> {
-                    sync.entryId?.let {
-                        if (_loginProvider.value == LoginProvider.MAL) {
-                            val malId = sync.malId
-                            if (malId != null) {
-                                malApiService.deleteAnimeFromList(malId)
-                            }
-                        } else {
-                            repository.deleteListEntry(it)
-                        }
-                    }
-                }
-            }
-        }
-
-        if (syncsToExecute.isNotEmpty()) {
-            if (_loginProvider.value == LoginProvider.MAL) {
-                fetchMalList()
-            } else {
-                fetchLists()
-            }
-        }
-    }
-
-    private fun mapToMalStatus(status: String): String? {
-        return when (status) {
-            "CURRENT" -> "watching"
-            "PLANNING" -> "plan_to_watch"
-            "COMPLETED" -> "completed"
-            "PAUSED" -> "on_hold"
-            "DROPPED" -> "dropped"
-            else -> null
-        }
-    }
-
-    private fun mapFromMalStatus(malStatus: String?): String {
-        return when (malStatus) {
-            "watching" -> "CURRENT"
-            "plan_to_watch" -> "PLANNING"
-            "completed" -> "COMPLETED"
-            "on_hold" -> "PAUSED"
-            "dropped" -> "DROPPED"
-            else -> "PLANNING"
-        }
-    }
-
-    private suspend fun fetchMalList() {
-        if (_loginProvider.value != LoginProvider.MAL) return
-
-        val entries = malApiService.getAnimeList()
-
-        val currentlyWatching = mutableListOf<AnimeMedia>()
-        val planningToWatch = mutableListOf<AnimeMedia>()
-        val completed = mutableListOf<AnimeMedia>()
-        val onHold = mutableListOf<AnimeMedia>()
-        val dropped = mutableListOf<AnimeMedia>()
-
-        entries.forEach { entry ->
-            val malId = entry.node.id
-            val status = entry.list_status?.status
-            val progress = entry.list_status?.num_episodes_watched ?: 0
-
-            // Find matching anime from cache by MAL ID
-            val cachedAnime = cacheManager.detailedAnimeCache.value.values.find {
-                it.malId == malId || it.id == malId
-            }
-
-            val anime = if (cachedAnime != null) {
-                AnimeMedia(
-                    id = cachedAnime.id,
-                    title = cachedAnime.title,
-                    titleEnglish = cachedAnime.titleEnglish,
-                    cover = cachedAnime.cover,
-                    banner = cachedAnime.banner,
-                    progress = progress,
-                    totalEpisodes = cachedAnime.episodes,
-                    latestEpisode = cachedAnime.latestEpisode ?: cachedAnime.nextAiringEpisode?.let { it - 1 },
-                    status = cachedAnime.status ?: "",
-                    averageScore = cachedAnime.averageScore,
-                    genres = cachedAnime.genres,
-                    listStatus = mapFromMalStatus(status),
-                    malId = malId,
-                    format = cachedAnime.format
-                )
-            } else {
-                AnimeMedia(
-                    id = malId,
-                    title = entry.node.title,
-                    titleEnglish = entry.node.alternative_titles?.en ?: entry.node.title,
-                    cover = entry.node.main_picture?.large ?: entry.node.main_picture?.medium ?: "",
-                    progress = progress,
-                    totalEpisodes = entry.node.num_episodes,
-                    listStatus = mapFromMalStatus(status),
-                    malId = malId
-                )
-            }
-
-            when (mapFromMalStatus(status)) {
-                "CURRENT" -> currentlyWatching.add(anime)
-                "PLANNING" -> planningToWatch.add(anime)
-                "COMPLETED" -> completed.add(anime)
-                "PAUSED" -> onHold.add(anime)
-                "DROPPED" -> dropped.add(anime)
-                else -> planningToWatch.add(anime) // Default to planning for unknown status
-            }
-        }
-
-        _currentlyWatching.value = currentlyWatching.sortedByDescending { it.averageScore ?: 0 }
-        _planningToWatch.value = planningToWatch.sortedByDescending { it.averageScore ?: 0 }
-        _completed.value = completed.sortedByDescending { it.averageScore ?: 0 }
-        _onHold.value = onHold.sortedByDescending { it.averageScore ?: 0 }
-        _dropped.value = dropped.sortedByDescending { it.averageScore ?: 0 }
-
-        loadMalFavoritesFromCache()
-    }
-
-    private fun toggleMalFavoriteById(mediaId: Int) {
-        val currentFavorites = _malFavorites.value.toMutableList()
-        val existingIndex = currentFavorites.indexOfFirst { it.id == mediaId || it.malId == mediaId }
-        if (existingIndex >= 0) {
-            currentFavorites.removeAt(existingIndex)
-        } else {
-            // Try to find the anime in existing lists
-            val allAnime = _currentlyWatching.value + _planningToWatch.value + _completed.value + _onHold.value + _dropped.value
-            val anime = allAnime.find { it.id == mediaId || it.malId == mediaId }
-            if (anime != null) {
-                currentFavorites.add(anime)
-            }
-        }
-        _malFavorites.value = currentFavorites
-        userPreferences.saveMalFavorites(currentFavorites.map { it.id })
-    }
-
-    private fun loadMalFavoritesFromCache() {
-        val favoriteIds = userPreferences.getMalFavorites()
-        val allAnime = _currentlyWatching.value + _planningToWatch.value + _completed.value + _onHold.value + _dropped.value
-        val favoriteAnimeList = mutableListOf<AnimeMedia>()
-        for (id in favoriteIds) {
-            val anime = allAnime.find { it.id == id || it.malId == id }
-            if (anime != null) {
-                favoriteAnimeList.add(anime)
-            }
-        }
-        _malFavorites.value = favoriteAnimeList
-    }
+    // MAL sync methods — implementations live in viewmodel/MainViewModelMalSyncExt.kt
+    // (fun startApiRetryLoop, queueSync, executeFavoriteSyncs, executePendingSyncs,
+    //  mapToMalStatus, mapFromMalStatus, fetchMalList, toggleMalFavoriteById,
+    //  loadMalFavoritesFromCache)
 
     // Track last refresh time to prevent rapid re-fetches (persisted to survive app restarts)
     private var lastHomeRefreshTime: Long
@@ -652,7 +256,7 @@ class MainViewModel : ViewModel() {
         set(value) = userPreferences.setLastExploreRefreshTime(value)
 
     // UI State
-    private val _userId = MutableStateFlow<Int?>(null)
+    internal val _userId = MutableStateFlow<Int?>(null)
 
     private val _userName = MutableStateFlow<String?>(null)
     val userName: StateFlow<String?> = _userName.asStateFlow()
@@ -675,10 +279,10 @@ class MainViewModel : ViewModel() {
     private val _isLoadingExplore = MutableStateFlow(false)
     val isLoadingExplore: StateFlow<Boolean> = _isLoadingExplore.asStateFlow()
 
-    private val _isOffline = MutableStateFlow(false)
+    internal val _isOffline = MutableStateFlow(false)
     val isOffline: StateFlow<Boolean> = _isOffline.asStateFlow()
 
-    private val _apiError = MutableStateFlow<String?>(null)
+    internal val _apiError = MutableStateFlow<String?>(null)
     val apiError: StateFlow<String?> = _apiError.asStateFlow()
 
     private val _isLoadingHome = MutableStateFlow(false)
@@ -691,19 +295,19 @@ class MainViewModel : ViewModel() {
     val splashReady: StateFlow<Boolean> = _splashReady.asStateFlow()
 
     // Anime lists
-    private val _currentlyWatching = MutableStateFlow<List<AnimeMedia>>(emptyList())
+    internal val _currentlyWatching = MutableStateFlow<List<AnimeMedia>>(emptyList())
     val currentlyWatching: StateFlow<List<AnimeMedia>> = _currentlyWatching.asStateFlow()
 
-    private val _planningToWatch = MutableStateFlow<List<AnimeMedia>>(emptyList())
+    internal val _planningToWatch = MutableStateFlow<List<AnimeMedia>>(emptyList())
     val planningToWatch: StateFlow<List<AnimeMedia>> = _planningToWatch.asStateFlow()
 
-    private val _completed = MutableStateFlow<List<AnimeMedia>>(emptyList())
+    internal val _completed = MutableStateFlow<List<AnimeMedia>>(emptyList())
     val completed: StateFlow<List<AnimeMedia>> = _completed.asStateFlow()
 
-    private val _onHold = MutableStateFlow<List<AnimeMedia>>(emptyList())
+    internal val _onHold = MutableStateFlow<List<AnimeMedia>>(emptyList())
     val onHold: StateFlow<List<AnimeMedia>> = _onHold.asStateFlow()
 
-    private val _dropped = MutableStateFlow<List<AnimeMedia>>(emptyList())
+    internal val _dropped = MutableStateFlow<List<AnimeMedia>>(emptyList())
     val dropped: StateFlow<List<AnimeMedia>> = _dropped.asStateFlow()
 
     // Offline anime lists (for logged-out users)
@@ -758,14 +362,14 @@ class MainViewModel : ViewModel() {
     val airingAnimeList: StateFlow<List<AiringScheduleAnime>> = _airingAnimeList.asStateFlow()
 
     // Other UI state
-    private val _userActivity = MutableStateFlow<List<UserActivity>>(emptyList())
+    internal val _userActivity = MutableStateFlow<List<UserActivity>>(emptyList())
     val userActivity: StateFlow<List<UserActivity>> = _userActivity.asStateFlow()
 
-    private val _userStats = MutableStateFlow<UserAnimeStats?>(null)
+    internal val _userStats = MutableStateFlow<UserAnimeStats?>(null)
     val userStats: StateFlow<UserAnimeStats?> = _userStats.asStateFlow()
 
     // AniList Favorites
-    private val _aniListFavorites = MutableStateFlow<List<UserFavoriteAnime>>(emptyList())
+    internal val _aniListFavorites = MutableStateFlow<List<UserFavoriteAnime>>(emptyList())
     val aniListFavorites: StateFlow<List<UserFavoriteAnime>> = _aniListFavorites.asStateFlow()
 
     // Jikan (MAL) Favorites and History
@@ -842,34 +446,23 @@ class MainViewModel : ViewModel() {
 
     val playbackPositions: StateFlow<Map<String, Long>> get() = cacheManager.playbackPositions
 
-    // Get cache data source factory for disk caching
-    fun getCacheDataSourceFactory(referer: String, extensionClient: OkHttpClient? = null, extensionHeaders: Map<String, String> = emptyMap()) =
-        cacheManager.getCacheDataSourceFactory(referer, extensionClient, extensionHeaders)
-
-    // Download cache management
-    fun getDownloadCacheSize(): Long = episodeDownloadManager.getDownloadCacheSize()
-
-    fun clearDownloadCache() {
-        viewModelScope.launch {
-            episodeDownloadManager.clearDownloadCache()
-            // Re-initialize for future downloads
-            episodeDownloadManager.initialize()
-        }
-    }
+    // Cache methods — implementations live in viewmodel/MainViewModelCacheExt.kt
+    // (fun getCacheDataSourceFactory, getDownloadCacheSize, clearDownloadCache,
+    //  savePlaybackPosition, … clearNonEssentialCaches)
 
     // MAL API Service
-    private lateinit var malApiService: MalApiService
+    internal lateinit var malApiService: MalApiService
 
     // Login provider tracking
-    private val _loginProvider = MutableStateFlow(LoginProvider.NONE)
+    internal val _loginProvider = MutableStateFlow(LoginProvider.NONE)
     val loginProvider: StateFlow<LoginProvider> = _loginProvider.asStateFlow()
 
     // MAL favorites (stored locally with full anime data)
-    private val _malFavorites = MutableStateFlow<List<AnimeMedia>>(emptyList())
+    internal val _malFavorites = MutableStateFlow<List<AnimeMedia>>(emptyList())
     val malFavorites: StateFlow<List<AnimeMedia>> = _malFavorites.asStateFlow()
 
     // Toast messages for UI feedback
-    private val _toastMessage = MutableSharedFlow<String>()
+    internal val _toastMessage = MutableSharedFlow<String>()
     val toastMessage: SharedFlow<String> = _toastMessage.asSharedFlow()
 
     private val _logoutEvent = MutableSharedFlow<Unit>()
@@ -1733,55 +1326,9 @@ class MainViewModel : ViewModel() {
         }
     }
 
-    // Settings
-    fun setThemeMode(mode: String) {
-        userPreferences.setThemeMode(mode)
-        viewModelScope.launch { AiringScheduleWidget.updateAll(context) }
-    }
-
-
-    fun setDisableMaterialColors(enabled: Boolean) = userPreferences.setDisableMaterialColors(enabled)
-    fun setPreferredCategory(category: String) = userPreferences.setPreferredCategory(category)
-    fun setShowStatusColors(enabled: Boolean) = userPreferences.setShowStatusColors(enabled)
-    fun setShowAnimeCardButtons(enabled: Boolean) = userPreferences.setShowAnimeCardButtons(enabled)
-    fun setPreferEnglishTitles(enabled: Boolean) = userPreferences.setPreferEnglishTitles(enabled)
-    fun setPreventScheduleSync(enabled: Boolean) = userPreferences.setPreventScheduleSync(enabled)
-    fun setTrackingPercentage(percentage: Int) = userPreferences.setTrackingPercentage(percentage)
-    fun setForwardSkipSeconds(seconds: Int) = userPreferences.setForwardSkipSeconds(seconds)
-    fun setBackwardSkipSeconds(seconds: Int) = userPreferences.setBackwardSkipSeconds(seconds)
-    fun setSimplifyEpisodeMenu(enabled: Boolean) = userPreferences.setSimplifyEpisodeMenu(enabled)
-    fun setAutoSkipOpening(enabled: Boolean) = userPreferences.setAutoSkipOpening(enabled)
-    fun setAutoSkipEnding(enabled: Boolean) = userPreferences.setAutoSkipEnding(enabled)
-    fun setAutoPlayNextEpisode(enabled: Boolean) = userPreferences.setAutoPlayNextEpisode(enabled)
-    fun setDefaultExtensionPackage(packageName: String) {
-        clearAllExtensionStreamCaches()
-        invalidateAllStreamCaches()
-        cacheManager.clearVideoCache(context)
-        userPreferences.setDefaultExtensionPackage(packageName)
-        cacheManager.initializeVideoCache(context)
-    }
-
-    fun invalidateAllStreamCaches() {
-        cacheManager.invalidateAllStreamCaches()
-    }
-    fun setDefaultSubtitleLang(lang: String) = userPreferences.setDefaultSubtitleLang(lang)
-    fun setDownloadPreferredCategory(category: String) = userPreferences.setDownloadPreferredCategory(category)
-    fun setDownloadSubtitleLang(lang: String) = userPreferences.setDownloadSubtitleLang(lang)
-    fun setHideAdultContent(enabled: Boolean) = userPreferences.setHideAdultContent(enabled)
-    fun setStartupScreen(screen: Int) = userPreferences.setStartupScreen(screen)
-    fun setBufferAheadSeconds(seconds: Int) = userPreferences.setBufferAheadSeconds(seconds)
-    fun setBufferSizeMb(sizeMb: Int) = userPreferences.setBufferSizeMb(sizeMb)
-    fun setShowBufferIndicator(show: Boolean) = userPreferences.setShowBufferIndicator(show)
-    fun setCheckUpdatesOnStart(enabled: Boolean) = userPreferences.setCheckUpdatesOnStart(enabled)
-    fun setAutoUpdateExtensions(enabled: Boolean) = userPreferences.setAutoUpdateExtensions(enabled)
-    fun setSwipeVolume(enabled: Boolean) = userPreferences.setSwipeVolume(enabled)
-    fun setSwipeBrightness(enabled: Boolean) = userPreferences.setSwipeBrightness(enabled)
-    fun setSwipeSwap(enabled: Boolean) = userPreferences.setSwipeSwap(enabled)
-    fun setStreamMethod(method: String) = userPreferences.setStreamMethod(method)
-    fun setDownloadDirectoryUri(uri: String?) = userPreferences.setDownloadDirectoryUri(uri)
-    fun setKeepDownloadedFiles(enabled: Boolean) = userPreferences.setKeepDownloadedFiles(enabled)
-
-    fun setDefaultMagnetExtension(authority: String) = userPreferences.setDefaultMagnetExtension(authority)
+    // Settings — implementations live in viewmodel/MainViewModelSettingsExt.kt
+    // (fun setThemeMode, setDefaultExtensionPackage, invalidateAllStreamCaches,
+    //  setDisableMaterialColors, … setDefaultMagnetExtension)
 
     // Favorites
     fun toggleLocalFavorite(mediaId: Int) {
@@ -1802,43 +1349,11 @@ class MainViewModel : ViewModel() {
     // Playback
     val playbackDurations: StateFlow<Map<String, Long>> get() = cacheManager.playbackDurations
     val startedAt: StateFlow<Map<String, Long>> get() = cacheManager.startedAt
-    fun savePlaybackPosition(animeId: Int, episode: Int, position: Long, duration: Long = 0L, isOffline: Boolean = false) = cacheManager.savePlaybackPosition(animeId, episode, position, duration, isOffline)
-    fun getPlaybackPosition(animeId: Int, episode: Int, isOffline: Boolean = false) = cacheManager.getPlaybackPosition(animeId, episode, isOffline)
-    fun clearPlaybackPosition(animeId: Int, episode: Int) = cacheManager.clearPlaybackPosition(animeId, episode)
-    fun removeContinueWatchingEntry(animeId: Int, episode: Int) = cacheManager.removeContinueWatchingEntry(animeId, episode)
-
-    // Stream cache invalidation
-    fun invalidateStreamCache(animeId: Int, episode: Int, category: String) {
-        cacheManager.invalidateStreamCache(animeId, episode, category)
-    }
-
-    fun getCachedExtensionStream(animeId: Int, episode: Int): CachedExtensionStream? {
-        return cacheManager.getCachedExtensionStream("${animeId}_$episode")
-    }
-
-    fun cacheExtensionStream(animeId: Int, episode: Int, data: CachedExtensionStream) {
-        cacheManager.cacheExtensionStream("${animeId}_$episode", data)
-    }
-
-    fun invalidateExtensionStreamCache(animeId: Int, episode: Int) {
-        cacheManager.invalidateExtensionStreamCache("${animeId}_$episode")
-    }
-
-    fun clearAnimeExtensionStreamCaches(animeId: Int) {
-        cacheManager.clearAnimeExtensionStreamCaches(animeId)
-    }
-
-    fun clearAllExtensionStreamCaches() {
-        cacheManager.clearAllExtensionStreamCaches()
-    }
-
-    fun removeFromVideoCache(videoUrl: String) {
-        cacheManager.removeFromVideoCache(videoUrl)
-    }
-
-    // Cache management
-    fun getVideoCacheSize(context: Context): Long = cacheManager.getVideoCacheSize(context)
-    fun clearNonEssentialCaches(context: Context) = cacheManager.clearNonEssentialCaches(context)
+    // Playback position & stream cache — implementations live in viewmodel/MainViewModelCacheExt.kt
+    // (fun savePlaybackPosition, getPlaybackPosition, clearPlaybackPosition,
+    //  removeContinueWatchingEntry, invalidateStreamCache, getCachedExtensionStream,
+    //  cacheExtensionStream, invalidateExtensionStreamCache, clearAnimeExtensionStreamCaches,
+    //  clearAllExtensionStreamCaches, removeFromVideoCache, getVideoCacheSize, clearNonEssentialCaches)
 
     /**
      * Get stream for a specific server.
@@ -1976,181 +1491,13 @@ class MainViewModel : ViewModel() {
         return cachedTags!!
     }
 
-    fun fetchUserActivity() {
-        val userId = _userId.value ?: return
-        viewModelScope.launch { repository.fetchUserActivity(userId)?.let { _userActivity.value = it } }
-    }
-    fun fetchUserStats() {
-        val userId = _userId.value ?: return
-        viewModelScope.launch {
-            repository.fetchUserStats(userId)?.let {
-                _userStats.value = it.data.User.statistics.anime
-            }
-        }
-    }
-    fun fetchAniListFavorites() {
-        val userId = _userId.value ?: return
-        viewModelScope.launch {
-            repository.fetchUserFavorites(userId)?.let { response ->
-                val apiFavorites = response.data.User.favourites.anime.nodes
-                // Merge API favorites with locally stored favorites to preserve offline additions
-                val localFavoriteIds = userPreferences.aniListFavorites.value
-                val mergedFavorites = apiFavorites.map { apiFav ->
-                    val isLocalFavorite = localFavoriteIds.contains(apiFav.id)
-                    if (isLocalFavorite) {
-                        // Keep local version which might have more up-to-date info
-                        val localFav = _aniListFavorites.value.find { it.id == apiFav.id }
-                        localFav ?: apiFav
-                    } else {
-                        apiFav
-                    }
-                }.toMutableList()
+    // AniList favorites & user activity — implementations live in viewmodel/MainViewModelAniListFavoritesExt.kt
+    // (fun fetchUserActivity, fetchUserStats, fetchAniListFavorites,
+    //  loadAniListFavoritesFromStorage, toggleAniListFavorite, refreshReleasingAnimeProgress)
 
-                // Add any favorites that were added locally but not on API yet
-                localFavoriteIds.forEach { localId ->
-                    if (mergedFavorites.none { it.id == localId }) {
-                        val localOnly = _aniListFavorites.value.find { it.id == localId }
-                        if (localOnly != null) {
-                            mergedFavorites.add(localOnly)
-                        }
-                    }
-                }
-
-                _aniListFavorites.value = mergedFavorites
-            }
-        }
-    }
-
-    fun loadAniListFavoritesFromStorage() {
-        // Load favorites from UserPreferences (IDs only)
-        val favoriteIds = userPreferences.aniListFavorites.value
-
-        if (favoriteIds.isEmpty()) {
-            _aniListFavorites.value = emptyList()
-            return
-        }
-
-        // Convert IDs to UserFavoriteAnime placeholders (will be enriched by detailedAnimeCache if available)
-        val favorites = favoriteIds.map { id ->
-            val cached = cacheManager.detailedAnimeCache.value[id]
-            if (cached != null) {
-                UserFavoriteAnime(
-                    id = cached.id,
-                    title = MediaTitle(romaji = cached.title, english = cached.titleEnglish),
-                    coverImage = MediaCoverImage(extraLarge = cached.cover),
-                    episodes = cached.episodes,
-                    averageScore = cached.averageScore,
-                    genres = cached.genres,
-                    seasonYear = cached.year
-                )
-            } else {
-                // Try to find in currently watching lists
-                val allAnime = _currentlyWatching.value + _planningToWatch.value + _completed.value + _onHold.value + _dropped.value
-                val anime = allAnime.find { it.id == id }
-                if (anime != null) {
-                    UserFavoriteAnime(
-                        id = anime.id,
-                        title = MediaTitle(romaji = anime.title, english = anime.titleEnglish),
-                        coverImage = MediaCoverImage(extraLarge = anime.cover),
-                        episodes = anime.totalEpisodes,
-                        averageScore = anime.averageScore,
-                        genres = anime.genres,
-                        seasonYear = anime.year
-                    )
-                } else {
-                    UserFavoriteAnime(
-                        id = id,
-                        title = MediaTitle(romaji = "Loading...", english = null),
-                        coverImage = MediaCoverImage(large = "", medium = ""),
-                        episodes = null,
-                        averageScore = null,
-                        genres = emptyList(),
-                        seasonYear = null
-                    )
-                }
-            }
-        }
-        _aniListFavorites.value = favorites
-    }
-    fun toggleAniListFavorite(mediaId: Int, anime: AnimeMedia? = null) {
-        if (_loginProvider.value == LoginProvider.MAL) {
-            // Toggle MAL favorite using the ID-based method
-            toggleMalFavoriteById(mediaId)
-        } else {
-            // Toggle AniList favorite - local-first with persistence
-            // Check both in-memory list AND persisted storage to determine current state
-            val isFavoriteInMemory = _aniListFavorites.value.any { it.id == mediaId }
-            val isFavoriteInStorage = userPreferences.isAniListFavorite(mediaId)
-            val isFavorite = isFavoriteInMemory || isFavoriteInStorage
-            val willBeAdded = !isFavorite
-
-            // Update persisted storage
-            userPreferences.toggleAniListFavorite(mediaId)
-
-            // Update UI list
-            if (isFavorite) {
-                _aniListFavorites.value = _aniListFavorites.value.filter { it.id != mediaId }
-            } else {
-                if (anime != null) {
-                    val userFavorite = UserFavoriteAnime(
-                        id = anime.id,
-                        title = MediaTitle(romaji = anime.title, english = anime.titleEnglish),
-                        coverImage = MediaCoverImage(extraLarge = anime.cover),
-                        episodes = anime.totalEpisodes,
-                        averageScore = anime.averageScore,
-                        genres = anime.genres,
-                        seasonYear = anime.year
-                    )
-                    _aniListFavorites.value += userFavorite
-                } else {
-                    val cachedAnime = cacheManager.detailedAnimeCache.value[mediaId]
-                    val placeholder = UserFavoriteAnime(
-                        id = mediaId,
-                        title = MediaTitle(romaji = cachedAnime?.title ?: "Loading...", english = cachedAnime?.titleEnglish),
-                        coverImage = MediaCoverImage(extraLarge = cachedAnime?.cover ?: ""),
-                        episodes = cachedAnime?.episodes,
-                        averageScore = cachedAnime?.averageScore,
-                        genres = cachedAnime?.genres ?: emptyList(),
-                        seasonYear = cachedAnime?.year
-                    )
-                    _aniListFavorites.value += placeholder
-                }
-            }
-
-            // Queue the API call for debounced sync with the desired state
-            queueSync(mediaId, "favorite", favoriteAdded = willBeAdded)
-        }
-    }
-
-    // ============================================
-    // PREFETCHING - Streams for adjacent episodes
-    // ============================================
-
-    private suspend fun refreshReleasingAnimeProgress() {
-        if (_loginProvider.value == LoginProvider.MAL) {
-            return
-        }
-
-        val releasing = _currentlyWatching.value.filter { it.status == "RELEASING" }
-        if (releasing.isEmpty()) return
-        releasing.chunked(3).forEach { chunk ->
-            chunk.map { anime ->
-                viewModelScope.async {
-                    repository.fetchDetailedAnime(anime.id)?.let { media ->
-                        val newLatestEpisode = media.nextAiringEpisode?.episode?.let { it - 1 }
-                        if (newLatestEpisode != anime.latestEpisode) return@async anime.copy(latestEpisode = newLatestEpisode)
-                    }
-                    null
-                }
-            }.awaitAll().filterNotNull().forEach { updated ->
-                _currentlyWatching.value = _currentlyWatching.value.map { if (it.id == updated.id) updated else it }
-            }
-        }
-        saveHomeDataToCache()
-    }
 
     // Misc
-    private fun saveHomeDataToCache() = cacheManager.saveHomeDataToCache(HomeCacheData(_currentlyWatching.value, _planningToWatch.value, _completed.value, _onHold.value, _dropped.value, _userId.value, _userName.value, _userAvatar.value))
+    internal fun saveHomeDataToCache() = cacheManager.saveHomeDataToCache(HomeCacheData(_currentlyWatching.value, _planningToWatch.value, _completed.value, _onHold.value, _dropped.value, _userId.value, _userName.value, _userAvatar.value))
     private fun saveExploreDataToCache() = cacheManager.saveExploreDataToCache(ExploreCacheData(_featuredAnime.value, _seasonalAnime.value, _topSeries.value, _topMovies.value, _actionAnime.value, _romanceAnime.value, _comedyAnime.value, _fantasyAnime.value, _scifiAnime.value))
 
     fun refreshHome(force: Boolean = false) {
@@ -2264,554 +1611,9 @@ class MainViewModel : ViewModel() {
         val episode: SEpisode? = null,
     )
 
-    suspend fun playEpisodeWithExtension(
-        anime: AnimeMedia,
-        episodeNumber: Int,
-        defaultPackage: String,
-    ): ExtensionStreamResult? {
-        val epTag = "AnimeDownload"
-        val cached = getCachedExtensionStream(anime.id, episodeNumber)
-        if (cached != null) {
-            Log.i(epTag, "playEpisodeWithExtension: cache hit for ep $episodeNumber url=${cached.url.take(100)}")
-            val isOurPort = "127.0.0.1:${LocalProxyServer.PROXY_PORT}"
-            val cachedIsOurProxy = cached.url.contains(isOurPort) || cached.url.contains("localhost:${LocalProxyServer.PROXY_PORT}")
-            val staleProxy = !cachedIsOurProxy && (cached.url.contains("127.0.0.1:") || cached.url.contains("localhost:"))
-            if (staleProxy) {
-                Log.w(epTag, "playEpisodeWithExtension: stale proxy cache for ep $episodeNumber, refetching")
-                invalidateExtensionStreamCache(anime.id, episodeNumber)
-            } else {
-            val cacheSource = withContext(Dispatchers.IO) {
-                val smForCache = sourceManager
-                if (smForCache != null) {
-                    if (smForCache.getSources().isEmpty()) { smForCache.loadSources() }
-                    smForCache.getSources().find { it.extension.packageName == defaultPackage }?.source
-                } else null
-            }
-            val cacheSourceHttp = cacheSource as? AnimeHttpSource
-            val cacheClient = (cacheSourceHttp?.client) ?: try { NetworkHelper.getInstance().client } catch (_: Exception) { null }
-            if (cachedIsOurProxy) {
-                LocalProxyServer.start(cacheClient, cacheSource)
-                val portFix = Regex("127\\.0\\.0\\.1:\\d+")
-                val ourPort = "127.0.0.1:${LocalProxyServer.PROXY_PORT}"
-                cached.videos.forEach { cv ->
-                    val headers = cv.headers?.let { map ->
-                        Headers.Builder().apply { map.forEach { (k, v) -> add(k, v) } }.build()
-                    }
-                    LocalProxyServer.registerVideo(
-                        Video(
-                            videoUrl = cv.videoUrl.replace(portFix, ourPort),
-                            videoTitle = cv.videoTitle,
-                            resolution = cv.resolution,
-                            headers = headers,
-                            subtitleTracks = cv.subtitleTracks.map { Track(it.url.replace(portFix, ourPort), it.lang) },
-                            audioTracks = cv.audioTracks.map { Track(it.url.replace(portFix, ourPort), it.lang) },
-                        )
-                    )
-                    Log.d(epTag, "  cache registered video: ${cv.videoUrl.take(80)}")
-                }
-            }
-            val cacheHeaders = if (cached.videoHeaders.isEmpty() && cachedIsOurProxy && cacheSourceHttp != null) {
-                cacheSourceHttp.headers?.let { h ->
-                    (0 until h.size).associate { h.name(it) to h.value(it) }
-                } ?: cached.videoHeaders
-            } else {
-                cached.videoHeaders
-            }
-            val fixedUrl = if (cachedIsOurProxy) {
-                cached.url.replace(Regex("127\\.0\\.0\\.1:\\d+"), "127.0.0.1:${LocalProxyServer.PROXY_PORT}")
-            } else cached.url
-            return ExtensionStreamResult(
-                url = fixedUrl,
-                referer = cached.referer.ifEmpty {
-                    cacheHeaders.entries.firstOrNull { it.key.equals("Referer", ignoreCase = true) }?.value ?: ""
-                },
-                subtitleUrl = if (cachedIsOurProxy) cached.subtitleUrl?.replace(Regex("127\\.0\\.0\\.1:\\d+"), "127.0.0.1:${LocalProxyServer.PROXY_PORT}") else cached.subtitleUrl,
-                subtitleTrackList = cached.subtitleTracks.map { Track(it.url, it.lang) },
-                videoTitle = cached.videoTitle,
-                videos = cached.videos.map { v ->
-                    val headers = v.headers?.let { map ->
-                        Headers.Builder().apply {
-                            map.forEach { (k, v) -> add(k, v) }
-                        }.build()
-                    }
-                    Video(
-                        videoUrl = if (cachedIsOurProxy) v.videoUrl.replace(Regex("127\\.0\\.0\\.1:\\d+"), "127.0.0.1:${LocalProxyServer.PROXY_PORT}") else v.videoUrl,
-                        videoTitle = v.videoTitle,
-                        resolution = v.resolution,
-                        headers = headers,
-                        subtitleTracks = v.subtitleTracks.map { Track(it.url, it.lang) },
-                        audioTracks = v.audioTracks.map { Track(it.url, it.lang) },
-                    )
-                },
-                hosters = cached.hosters?.map { Hoster(hosterUrl = it.hosterUrl, hosterName = it.hosterName) },
-                extensionClient = if (cachedIsOurProxy) cacheClient else null,
-                videoHeaders = cacheHeaders,
-                source = if (cachedIsOurProxy) cacheSource else null,
-                episode = null,
-            )
-            }
-        }
-        Log.i(epTag, "playEpisodeWithExtension: anime=${anime.id} ep=$episodeNumber pkg=$defaultPackage")
-        return withContext(Dispatchers.IO) {
-            try {
-                val sm = sourceManager
-                if (sm == null) {
-                    Log.w(epTag, "playEpisodeWithExtension: sourceManager is null")
-                    viewModelScope.launch { _toastMessage.emit("Download failed: Source manager not initialized") }
-                    return@withContext null
-                }
+    // Extension playback — implementations live in viewmodel/MainViewModelExtensionPlaybackExt.kt
+    // (suspend fun playEpisodeWithExtension, suspend fun fetchExtensionHosterVideos)
 
-                Log.d(epTag, "playEpisodeWithExtension: loading sources")
-                sm.loadSources()
-                val allSources = sm.getSources()
-                var sourceWithExt = allSources.find { it.extension.packageName == defaultPackage }
-                if (sourceWithExt == null) {
-                    Log.w(epTag, "playEpisodeWithExtension: source $defaultPackage not found, reloading")
-                    sm.reloadSources()
-                    sm.loadSources()
-                    val reloaded = sm.getSources()
-                    sourceWithExt = reloaded.find { it.extension.packageName == defaultPackage }
-                    if (sourceWithExt == null) {
-                        Log.e(epTag, "playEpisodeWithExtension: source $defaultPackage not found even after reload")
-                        viewModelScope.launch { _toastMessage.emit("Download failed: Extension '$defaultPackage' not found") }
-                        return@withContext null
-                    }
-                }
-                val sw = sourceWithExt
-                val source = sw.source
-                Log.i(epTag, "playEpisodeWithExtension: using source ${sw.source.name} for ep $episodeNumber")
-
-                val sourceHttp = source as? AnimeHttpSource
-                val directClient = sourceHttp?.client
-                val extensionClient = directClient ?: run {
-                    Log.w(epTag, "  AnimeHttpSource.client was null, falling back to NetworkHelper.getInstance().client")
-                    try { NetworkHelper.getInstance().client } catch (_: Exception) { null }
-                }
-                Log.d(epTag, "  extensionClient=${extensionClient != null} (source is AnimeHttpSource=${sourceHttp != null} directClient=${directClient != null})")
-
-                var matchedSAnime: SAnime? = null
-                var sEpisodes: List<SEpisode> = emptyList()
-
-                val preFetched = getPreFetchedExtensionData(anime.id)
-                if (preFetched != null && preFetched.source == source) {
-                    Log.i(epTag, "playEpisodeWithExtension: using pre-fetched data for ep $episodeNumber")
-                    matchedSAnime = preFetched.sAnime
-                    sEpisodes = preFetched.episodes
-                }
-
-                if (matchedSAnime == null) {
-                    val searchTerms = listOfNotNull(anime.titleEnglish, anime.title).distinct()
-                    Log.d(epTag, "playEpisodeWithExtension: searching for anime with terms: $searchTerms")
-                    for (query in searchTerms) {
-                        try {
-                            val page = source.getSearchAnime(1, query, AnimeFilterList())
-                            val results = page.animes
-                            Log.d(epTag, "${sw.source.name}: got ${results.size} results for \"$query\"")
-                            if (results.isEmpty()) continue
-                            val normalizedQuery = query.lowercase()
-                                .replace(Regex("[-–—_:;]"), " ")
-                                .replace(Regex("['’´`]"), "'")
-                                .replace(Regex("\\s+"), " ")
-                                .trim()
-                            val queryWords = normalizedQuery.split(" ").filter { it.length > 1 }
-                            val scored = results.map { a ->
-                                val title = a.title
-                                val normalizedTitle = title.lowercase()
-                                    .replace(Regex("[-–—_:;]"), " ")
-                                    .replace(Regex("['’´`]"), "'")
-                                    .replace(Regex("\\s+"), " ")
-                                    .trim()
-                                val titleWords = normalizedTitle.split(" ").filter { it.length > 1 }
-
-                                val score = when {
-                                    normalizedTitle == normalizedQuery -> 1000
-                                    normalizedTitle.contains(normalizedQuery) -> 600 + normalizedTitle.length / 10
-                                    normalizedQuery.contains(normalizedTitle) -> {
-                                        val lengthPenalty = (normalizedQuery.length - normalizedTitle.length)
-                                        maxOf(50, 400 - lengthPenalty)
-                                    }
-                                    else -> {
-                                        val matchingWords = queryWords.count { w -> titleWords.any { it == w || it.startsWith(w) || w.startsWith(it) } }
-                                        val wordScore = if (queryWords.isNotEmpty()) (matchingWords * 200) / queryWords.size else 0
-                                        wordScore + (matchingWords * 10)
-                                    }
-                                }
-                                Log.d(epTag, "  \"${a.title}\" -> score=$score")
-                                a to score
-                            }
-                            val best = scored.maxByOrNull { it.second }
-                            matchedSAnime = best?.first
-                            if (matchedSAnime != null && (best?.second ?: 0) >= 300) break
-                        } catch (e: Exception) {
-                            Log.w("ExtensionSearch", "Search failed for ${sw.source.name}: ${e.message}")
-                        }
-                    }
-
-                    if (matchedSAnime == null) {
-                        Log.w(epTag, "playEpisodeWithExtension: no matching anime found for ep $episodeNumber after searching all terms")
-                        viewModelScope.launch { _toastMessage.emit("Download failed for Ep $episodeNumber: Could not find '${anime.title}' in extension") }
-                        return@withContext null
-                    }
-                    Log.i(epTag, "playEpisodeWithExtension: matched anime '${matchedSAnime.title}' (url=${matchedSAnime.url}) for ep $episodeNumber")
-
-                    sEpisodes = sm.getEpisodes(source, matchedSAnime)
-                    Log.d(epTag, "playEpisodeWithExtension: got ${sEpisodes.size} episodes from source")
-
-                    if (sEpisodes.isEmpty()) {
-                        Log.d(epTag, "playEpisodeWithExtension: no episodes, fetching anime details")
-                        try {
-                            matchedSAnime = sm.getAnimeDetails(source, matchedSAnime)
-                        } catch (e: Exception) {
-                            Log.w(epTag, "playEpisodeWithExtension: getAnimeDetails failed", e)
-                        }
-                        sEpisodes = sm.getEpisodes(source, matchedSAnime)
-                        Log.d(epTag, "playEpisodeWithExtension: after details, got ${sEpisodes.size} episodes")
-                    }
-                }
-
-                val sEpisode = if (sEpisodes.isEmpty()) {
-                    Log.w(epTag, "playEpisodeWithExtension: no episodes from source, creating fallback episode")
-                    SEpisode.create().apply {
-                        url = matchedSAnime.url
-                        name = matchedSAnime.title
-                        episode_number = 1.0f
-                    }
-                } else {
-                    val matched = sEpisodes.find { it.episode_number.toInt() == episodeNumber }
-                        ?: sEpisodes.firstOrNull { it.name.contains("Episode $episodeNumber", ignoreCase = true) }
-                        ?: sEpisodes.firstOrNull { it.name.contains("$episodeNumber", ignoreCase = true) }
-                        ?: sEpisodes.getOrNull(episodeNumber - 1)
-                    if (matched == null) {
-                        Log.w(epTag, "playEpisodeWithExtension: episode $episodeNumber not found among ${sEpisodes.size} episodes")
-                        viewModelScope.launch { _toastMessage.emit("Download failed for Ep $episodeNumber: Episode not found in extension") }
-                        return@withContext null
-                    }
-                    matched
-                }
-
-                if (source is AnimeHttpSource) {
-                    source.prepareNewEpisode(sEpisode, matchedSAnime)
-                }
-
-                data class VideoWithHoster(val video: Video, val hosterName: String)
-                val allVideos = mutableListOf<VideoWithHoster>()
-                var resolvedHosters: List<Hoster>? = null
-
-                // Start proxy server in case videos return localhost URLs
-                LocalProxyServer.start(extensionClient, source)
-
-                val hosters = try {
-                    source.getHosterList(sEpisode)
-                } catch (_: Throwable) {
-                    null
-                }
-
-                if (!hosters.isNullOrEmpty()) {
-                    resolvedHosters = hosters
-                    for (hoster in hosters) {
-                        val hosterVideos = try {
-                            if (hoster.lazy) source.getVideoList(hoster) else hoster.videoList ?: source.getVideoList(hoster)
-                        } catch (_: Throwable) {
-                            emptyList()
-                        }
-                        hosterVideos.forEach {
-                            allVideos.add(VideoWithHoster(it, hoster.hosterName))
-                            LocalProxyServer.registerVideo(it)
-                        }
-                    }
-                } else {
-                    val directVideos = try { source.getVideoList(sEpisode) } catch (_: Throwable) { emptyList() }
-                    directVideos.forEach {
-                        allVideos.add(VideoWithHoster(it, ""))
-                        LocalProxyServer.registerVideo(it)
-                    }
-                }
-
-                if (allVideos.isEmpty()) {
-                    Log.w(epTag, "playEpisodeWithExtension: no videos found for ep $episodeNumber")
-                    viewModelScope.launch { _toastMessage.emit("Download failed for Ep $episodeNumber: No video sources found") }
-                    return@withContext null
-                }
-                Log.d(epTag, "playEpisodeWithExtension: found ${allVideos.size} videos for ep $episodeNumber")
-                allVideos.forEach { v ->
-                    Log.d(epTag, "  video: ${v.video.videoTitle} (${v.video.resolution}p) url=${v.video.videoUrl.take(100)} hoster=${v.hosterName} internalData=${v.video.internalData.take(60)} mpvArgs=${v.video.mpvArgs}")
-                }
-
-                val dubVideos = allVideos.filter {
-                    it.hosterName.contains("dub", ignoreCase = true) || it.video.videoTitle.contains("dub", ignoreCase = true)
-                }
-                val subVideos = allVideos.filter { v ->
-                    !v.hosterName.contains("dub", ignoreCase = true) && !v.video.videoTitle.contains("dub", ignoreCase = true) &&
-                    (v.hosterName.contains("sub", ignoreCase = true) || v.video.videoTitle.contains("sub", ignoreCase = true))
-                }
-
-                val preferDub = preferredCategory.value == "dub"
-                val preferSub = preferredCategory.value == "sub"
-                val candidates = when {
-                    preferDub && dubVideos.isNotEmpty() -> dubVideos
-                    preferSub && subVideos.isNotEmpty() -> subVideos
-                    dubVideos.isNotEmpty() -> dubVideos
-                    subVideos.isNotEmpty() -> subVideos
-                    else -> allVideos
-                }
-
-                val bestVideo = candidates.maxByOrNull {
-                    val res = it.video.resolution ?: 0
-                    if (res == 0) it.video.videoTitle.filter { c -> c.isDigit() }.toIntOrNull() ?: 0 else res
-                }?.video ?: allVideos.last().video
-                Log.i(epTag, "playEpisodeWithExtension: selected video '${bestVideo.videoTitle}' (${bestVideo.resolution}p) url=${bestVideo.videoUrl.take(120)}")
-
-                val isOurProxy = bestVideo.videoUrl.contains("127.0.0.1:${LocalProxyServer.PROXY_PORT}") || bestVideo.videoUrl.contains("localhost:${LocalProxyServer.PROXY_PORT}")
-                var effectiveVideoUrl = bestVideo.videoUrl
-                // Try to resolve the video URL via getVideoUrl or resolveVideo
-                if (isOurProxy) {
-                    Log.d(epTag, "  our proxy URL detected, trying getVideoUrl...")
-                    try {
-                        if (source is AnimeHttpSource) {
-                            val result = source.getVideoUrl(bestVideo)
-                            Log.d(epTag, "  getVideoUrl returned: ${result.take(120)}")
-                            if (!result.contains("127.0.0.1") && !result.contains("localhost") && result.isNotBlank()) {
-                                effectiveVideoUrl = result
-                            }
-                        }
-                    } catch (e: Exception) {
-                        Log.d(epTag, "  getVideoUrl failed: ${e.message}")
-                        try {
-                            if (source is AnimeHttpSource) {
-                                Log.d(epTag, "  trying resolveVideo...")
-                                val resolved = source.resolveVideo(bestVideo)
-                                val rUrl = resolved?.videoUrl
-                                Log.d(epTag, "  resolveVideo returned: ${rUrl?.take(120)}")
-                                if (rUrl != null && !rUrl.contains("127.0.0.1") && !rUrl.contains("localhost")) {
-                                    effectiveVideoUrl = rUrl
-                                }
-                            }
-                        } catch (e2: Exception) {
-                            Log.d(epTag, "  resolveVideo also failed: ${e2.message}")
-                        }
-                    }
-                }
-                // Rewrite non-41223 localhost URLs to go through our multi-threaded proxy
-                if (!effectiveVideoUrl.contains("127.0.0.1:${LocalProxyServer.PROXY_PORT}") &&
-                    (effectiveVideoUrl.contains("127.0.0.1") || effectiveVideoUrl.contains("localhost"))) {
-                    effectiveVideoUrl = effectiveVideoUrl
-                        .replace(Regex("127\\.0\\.0\\.1:\\d+"), "127.0.0.1:${LocalProxyServer.PROXY_PORT}")
-                        .replace(Regex("localhost:\\d+"), "127.0.0.1:${LocalProxyServer.PROXY_PORT}")
-                    Log.d(epTag, "  rewrote to our proxy: ${effectiveVideoUrl.take(120)}")
-                }
-                Log.d(epTag, "  effectiveVideoUrl=${effectiveVideoUrl.take(120)} (isOurProxy=${isOurProxy})")
-
-                val videoHeadersRaw = bestVideo.headers
-                val sourceHeadersRaw = (source as? AnimeHttpSource)?.headers
-                val referer = videoHeadersRaw?.let { h ->
-                    (0 until h.size).firstOrNull { h.name(it).equals("Referer", ignoreCase = true) }
-                        ?.let { h.value(it) }
-                } ?: sourceHeadersRaw?.let { h ->
-                    (0 until h.size).firstOrNull { h.name(it).equals("Referer", ignoreCase = true) }
-                        ?.let { h.value(it) }
-                } ?: ""
-                val videoHeaders = if (videoHeadersRaw != null) {
-                    (0 until videoHeadersRaw.size).associate { videoHeadersRaw.name(it) to videoHeadersRaw.value(it) }
-                } else if (sourceHeadersRaw != null) {
-                    (0 until sourceHeadersRaw.size).associate { sourceHeadersRaw.name(it) to sourceHeadersRaw.value(it) }
-                } else {
-                    emptyMap()
-                }
-                Log.d(epTag, "  referer=${referer.take(60)} videoHeaders=${videoHeaders} hasVideoHeaders=${videoHeadersRaw != null}")
-                Log.d(epTag, "  subtitle tracks: ${bestVideo.subtitleTracks.size}, audio tracks: ${bestVideo.audioTracks.size}")
-
-                val bestVideoHost = allVideos.find { it.video.videoUrl == bestVideo.videoUrl }
-                val derivedHosters = if (resolvedHosters != null) {
-                    val selectedName = bestVideoHost?.hosterName
-                    val reordered = resolvedHosters.toMutableList()
-                    val idx = selectedName?.let { n -> reordered.indexOfFirst { it.hosterName == n } } ?: -1
-                    if (idx > 0) {
-                        val item = reordered.removeAt(idx)
-                        reordered.add(0, item)
-                    }
-                    reordered
-                } else {
-                    val hosterForSelected = bestVideoHost?.let {
-                        Hoster(hosterUrl = it.video.videoUrl, hosterName = it.video.videoTitle.take(50), videoList = listOf(it.video), lazy = false)
-                    }
-                    val rest = allVideos.filter { it.video.videoUrl != bestVideo.videoUrl }.map {
-                        Hoster(hosterUrl = it.video.videoUrl, hosterName = it.video.videoTitle.take(50), videoList = listOf(it.video), lazy = false)
-                    }.distinctBy { it.hosterName }
-                    listOfNotNull(hosterForSelected) + rest
-                }
-
-                val videos = allVideos.map { it.video }
-
-                val preferredLang = defaultSubtitleLang.value
-                val sortedSubs = bestVideo.subtitleTracks.sortedByDescending { t ->
-                    when {
-                        t.lang.equals(preferredLang, ignoreCase = true) -> 2
-                        t.lang.equals("English", ignoreCase = true) -> 1
-                        else -> 0
-                    }
-                }
-
-                cacheExtensionStream(anime.id, episodeNumber, CachedExtensionStream(
-                    url = effectiveVideoUrl,
-                    referer = referer,
-                    subtitleUrl = sortedSubs.firstOrNull()?.url,
-                    subtitleTracks = sortedSubs.map { CachedTrack(it.url, it.lang) },
-                    videoTitle = bestVideo.videoTitle,
-                    videos = videos.map { v ->
-                        val headersMap = v.headers?.let { h ->
-                            (0 until h.size).associate { h.name(it) to h.value(it) }
-                        }
-                        CachedVideo(
-                            videoUrl = v.videoUrl,
-                            videoTitle = v.videoTitle,
-                            resolution = v.resolution,
-                            headers = headersMap,
-                            subtitleTracks = v.subtitleTracks.map { CachedTrack(it.url, it.lang) },
-                            audioTracks = v.audioTracks.map { CachedTrack(it.url, it.lang) },
-                        )
-                    },
-                    hosters = derivedHosters.map { CachedHoster(hosterUrl = it.hosterUrl, hosterName = it.hosterName) },
-                    videoHeaders = videoHeaders,
-                    cachedAt = System.currentTimeMillis(),
-                ))
-                val resultIsOurProxy = effectiveVideoUrl.contains("127.0.0.1:${LocalProxyServer.PROXY_PORT}") || effectiveVideoUrl.contains("localhost:${LocalProxyServer.PROXY_PORT}")
-                val resultClient = if (resultIsOurProxy) {
-                    extensionClient  // our proxy URL needs the client for forwarding
-                } else {
-                    null  // direct or other proxy URL: use DefaultHttpDataSource
-                }
-                ExtensionStreamResult(
-                    url = effectiveVideoUrl,
-                    referer = referer,
-                    subtitleUrl = sortedSubs.firstOrNull()?.url,
-                    subtitleTrackList = sortedSubs,
-                    videoTitle = bestVideo.videoTitle,
-                    videos = videos,
-                    hosters = derivedHosters,
-                    extensionClient = resultClient,
-                    videoHeaders = videoHeaders,
-                    source = source,
-                    episode = sEpisode,
-                )
-            } catch (e: Exception) {
-                Log.e(epTag, "playEpisodeWithExtension: exception for ep $episodeNumber", e)
-                viewModelScope.launch { _toastMessage.emit("Download failed for Ep $episodeNumber: ${e.message}") }
-                null
-            }
-        }
-    }
-
-    suspend fun fetchExtensionHosterVideos(
-        source: AnimeCatalogueSource,
-        hoster: Hoster,
-    ): ExtensionStreamResult? {
-        val epTag = "AnimeDownload"
-        return withContext(Dispatchers.IO) {
-            try {
-                val videos = withContext(Dispatchers.IO) {
-                    val result = if (hoster.lazy) {
-                        try { source.getVideoList(hoster) } catch (_: Throwable) { emptyList() }
-                    } else {
-                        hoster.videoList ?: try { source.getVideoList(hoster) } catch (_: Throwable) { emptyList() }
-                    }
-                    result
-                }
-                if (videos.isEmpty()) return@withContext null
-                videos.forEach { LocalProxyServer.registerVideo(it) }
-
-                val bestVideo = videos.maxByOrNull {
-                    val res = it.resolution ?: 0
-                    if (res == 0) it.videoTitle.filter { c -> c.isDigit() }.toIntOrNull() ?: 0 else res
-                } ?: videos.last()
-
-                var effectiveVideoUrl = bestVideo.videoUrl
-                if (effectiveVideoUrl.contains("127.0.0.1") || effectiveVideoUrl.contains("localhost")) {
-                    Log.d(epTag, "fetchExtensionHosterVideos: proxy URL detected, trying getVideoUrl...")
-                    try {
-                        if (source is AnimeHttpSource) {
-                            val result = source.getVideoUrl(bestVideo)
-                            Log.d(epTag, "  getVideoUrl returned: ${result.take(120)}")
-                            if (!result.contains("127.0.0.1") && !result.contains("localhost") && result.isNotBlank()) {
-                                effectiveVideoUrl = result
-                            }
-                        }
-                    } catch (e: Exception) {
-                        Log.d(epTag, "  getVideoUrl failed: ${e.message}")
-                        try {
-                            if (source is AnimeHttpSource) {
-                                val resolved = source.resolveVideo(bestVideo)
-                                val rUrl = resolved?.videoUrl
-                                Log.d(epTag, "  resolveVideo returned: ${rUrl?.take(120)}")
-                                if (rUrl != null && !rUrl.contains("127.0.0.1") && !rUrl.contains("localhost")) {
-                                    effectiveVideoUrl = rUrl
-                                }
-                            }
-                        } catch (e2: Exception) {
-                            Log.d(epTag, "  resolveVideo also failed: ${e2.message}")
-                        }
-                    }
-                }
-
-                // Rewrite non-41223 localhost URLs to go through our multi-threaded proxy
-                if (!effectiveVideoUrl.contains("127.0.0.1:${LocalProxyServer.PROXY_PORT}") &&
-                    (effectiveVideoUrl.contains("127.0.0.1") || effectiveVideoUrl.contains("localhost"))) {
-                    effectiveVideoUrl = effectiveVideoUrl
-                        .replace(Regex("127\\.0\\.0\\.1:\\d+"), "127.0.0.1:${LocalProxyServer.PROXY_PORT}")
-                        .replace(Regex("localhost:\\d+"), "127.0.0.1:${LocalProxyServer.PROXY_PORT}")
-                    Log.d(epTag, "fetchExtensionHosterVideos: rewrote to our proxy: ${effectiveVideoUrl.take(120)}")
-                }
-
-                val videoHeadersRaw = bestVideo.headers
-                val sourceHeadersRaw = (source as? AnimeHttpSource)?.headers
-                val referer = videoHeadersRaw?.let { h ->
-                    (0 until h.size).firstOrNull { h.name(it).equals("Referer", ignoreCase = true) }
-                        ?.let { h.value(it) }
-                } ?: sourceHeadersRaw?.let { h ->
-                    (0 until h.size).firstOrNull { h.name(it).equals("Referer", ignoreCase = true) }
-                        ?.let { h.value(it) }
-                } ?: ""
-                val videoHeaders = if (videoHeadersRaw != null) {
-                    (0 until videoHeadersRaw.size).associate { videoHeadersRaw.name(it) to videoHeadersRaw.value(it) }
-                } else if (sourceHeadersRaw != null) {
-                    (0 until sourceHeadersRaw.size).associate { sourceHeadersRaw.name(it) to sourceHeadersRaw.value(it) }
-                } else {
-                    emptyMap()
-                }
-
-                val sourceHttp = source as? AnimeHttpSource
-                val directClient = sourceHttp?.client
-                val extensionClient = directClient ?: run {
-                    try { NetworkHelper.getInstance().client } catch (_: Exception) { null }
-                }
-                val isOurProxy = effectiveVideoUrl.contains("127.0.0.1:${LocalProxyServer.PROXY_PORT}") || effectiveVideoUrl.contains("localhost:${LocalProxyServer.PROXY_PORT}")
-                val resultClient = if (isOurProxy) extensionClient else null
-
-                val preferredLang = defaultSubtitleLang.value
-                val sortedSubs = bestVideo.subtitleTracks.sortedByDescending { t ->
-                    when {
-                        t.lang.equals(preferredLang, ignoreCase = true) -> 2
-                        t.lang.equals("English", ignoreCase = true) -> 1
-                        else -> 0
-                    }
-                }
-
-                ExtensionStreamResult(
-                    url = effectiveVideoUrl,
-                    referer = referer,
-                    subtitleUrl = sortedSubs.firstOrNull()?.url,
-                    subtitleTrackList = sortedSubs,
-                    videoTitle = bestVideo.videoTitle,
-                    videos = videos,
-                    hosters = listOf(hoster),
-                    extensionClient = resultClient,
-                    videoHeaders = videoHeaders,
-                    source = source,
-                )
-            } catch (_: Exception) {
-                null
-            }
-        }
-    }
 
     override fun onCleared() {
         super.onCleared()

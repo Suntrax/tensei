@@ -85,6 +85,13 @@ import com.blissless.tensei.download.EpisodeDownloadManager
 import com.blissless.tensei.ui.components.ContinueWatchingRow
 import com.blissless.tensei.ui.components.SectionHeader
 import com.blissless.tensei.ui.screens.player.OfflinePlayerScreen
+// Extension functions on MainViewModel (defined in com.blissless.tensei.viewmodel)
+import com.blissless.tensei.viewmodel.getPlaybackPosition
+import com.blissless.tensei.viewmodel.savePlaybackPosition
+import com.blissless.tensei.viewmodel.setAutoPlayNextEpisode
+import com.blissless.tensei.viewmodel.setSwipeVolume
+import com.blissless.tensei.viewmodel.setSwipeBrightness
+import com.blissless.tensei.viewmodel.setSwipeSwap
 
 @OptIn(UnstableApi::class)
 @SuppressLint("UnstableApiUsage")

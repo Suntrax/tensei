@@ -16,45 +16,23 @@ import androidx.annotation.OptIn
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Error
-import androidx.compose.material.icons.filled.Explore
-import androidx.compose.material.icons.filled.FileDownload
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -65,7 +43,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -75,13 +52,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -100,7 +73,6 @@ import com.blissless.tensei.data.models.ServerInfo
 import com.blissless.tensei.data.models.toDetailedAnimeData
 import com.blissless.tensei.extensions.ExtensionsViewModel
 import com.blissless.tensei.stream.PlayerData
-import com.blissless.tensei.torrent.StreamUrlResult
 import com.blissless.tensei.torrent.TorrentEngine
 import com.blissless.tensei.torrent.TorrentMeta
 import com.blissless.tensei.torrent.TorrentStreamServer
@@ -131,6 +103,27 @@ import kotlinx.coroutines.yield
 import kotlinx.coroutines.withContext
 import java.io.File
 import kotlin.time.Duration.Companion.milliseconds
+// Extension functions on MainViewModel (defined in com.blissless.tensei.viewmodel)
+import com.blissless.tensei.viewmodel.getPlaybackPosition
+import com.blissless.tensei.viewmodel.savePlaybackPosition
+import com.blissless.tensei.viewmodel.clearPlaybackPosition
+import com.blissless.tensei.viewmodel.getMagnetForEpisode
+import com.blissless.tensei.viewmodel.fetchMagnetForEpisode
+import com.blissless.tensei.viewmodel.fetchStreamUrlForEpisode
+import com.blissless.tensei.viewmodel.playEpisodeWithExtension
+import com.blissless.tensei.viewmodel.fetchExtensionHosterVideos
+import com.blissless.tensei.viewmodel.invalidateStreamCache
+import com.blissless.tensei.viewmodel.clearAnimeExtensionStreamCaches
+import com.blissless.tensei.viewmodel.removeFromVideoCache
+import com.blissless.tensei.viewmodel.setAutoPlayNextEpisode
+import com.blissless.tensei.viewmodel.setSwipeVolume
+import com.blissless.tensei.viewmodel.setSwipeBrightness
+import com.blissless.tensei.viewmodel.setSwipeSwap
+import com.blissless.tensei.viewmodel.getCacheDataSourceFactory
+import com.blissless.tensei.viewmodel.getVideoCacheSize
+import com.blissless.tensei.viewmodel.getDownloadCacheSize
+import com.blissless.tensei.viewmodel.clearNonEssentialCaches
+import com.blissless.tensei.viewmodel.clearDownloadCache
 
 @UnstableApi
 class MainActivity : ComponentActivity() {
@@ -164,58 +157,13 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             var showSplash by remember { mutableStateOf(true) }
-            var splashProgress by remember { mutableFloatStateOf(1f) }
-
-            LaunchedEffect(mainViewModel.splashReady) {
-                if (mainViewModel.splashReady.value) {
-                    splashProgress = 2f
-                    delay(400.milliseconds)
-                    showSplash = false
-                }
-            }
-
-            LaunchedEffect(Unit) {
-                delay(1400.milliseconds)
-                splashProgress = 2f
-                delay(400.milliseconds)
-                showSplash = false
-            }
 
             if (showSplash) {
-                val animatedProgress by animateFloatAsState(
-                    targetValue = splashProgress,
-                    animationSpec = tween(durationMillis = 400, easing = LinearEasing),
-                    label = "splash_progress"
+                com.blissless.tensei.ui.components.SplashScreen(
+                    splashReady = { mainViewModel.splashReady.value },
+                    onFinished = { showSplash = false },
+                    splashDrawableRes = R.drawable.splash,
                 )
-
-                val scale = when {
-                    animatedProgress < 1f -> 0.85f + (0.15f * animatedProgress)
-                    else -> 1f + ((animatedProgress - 1f) * 0.15f)
-                }
-                val alpha = when {
-                    animatedProgress < 1f -> animatedProgress
-                    animatedProgress < 2f -> 1f - ((animatedProgress - 1f) * 1f)
-                    else -> 0f
-                }
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black)
-                ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.splash),
-                        contentDescription = null,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .graphicsLayer(
-                                scaleX = scale,
-                                scaleY = scale,
-                                alpha = alpha.coerceIn(0f, 1f)
-                            ),
-                        contentScale = ContentScale.Crop
-                    )
-                }
             } else {
             val themeModeStr by mainViewModel.themeMode.collectAsState()
             val isOled by mainViewModel.isOled.collectAsState()
@@ -269,103 +217,21 @@ class MainActivity : ComponentActivity() {
             }
 
             if (showLocalSyncDialog) {
-                AlertDialog(
-                    onDismissRequest = { showLocalSyncDialog = false },
-                    containerColor = Color(0xFF1A1A1A),
-                    title = { 
-                        Text(
-                            "Sync Local Changes",
-                            color = Color.White,
-                            style = MaterialTheme.typography.headlineSmall
-                        ) 
+                com.blissless.tensei.ui.components.LocalSyncDialog(
+                    localAnimeCount = localAnimeStatus.size,
+                    onDismiss = { showLocalSyncDialog = false },
+                    onDiscard = {
+                        showLocalSyncDialog = false
+                        mainViewModel.discardLocalChanges()
                     },
-                    text = {
-                        Column {
-                            Text(
-                                "You have ${localAnimeStatus.size} anime tracked offline.",
-                                color = Color.White.copy(alpha = 0.8f),
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            
-                            Text(
-                                "Choose how to sync:",
-                                color = Color.White,
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                            
-                            Text(
-                                "1. Discard Local Changes",
-                                color = Color(0xFFF44336),
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Text(
-                                "Remove all offline changes. AniList data will remain unchanged.",
-                                color = Color.White.copy(alpha = 0.6f),
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                            
-                            Text(
-                                "2. Add New Anime Only",
-                                color = Color(0xFF4CAF50),
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Text(
-                                "Add new anime from offline to AniList. Won't overwrite existing entries.",
-                                color = Color.White.copy(alpha = 0.6f),
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                            
-                            Text(
-                                "3. Overwrite AniList",
-                                color = Color(0xFF2196F3),
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Text(
-                                "Replace all matching anime on AniList with your offline changes.",
-                                color = Color.White.copy(alpha = 0.6f),
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
+                    onAddNewOnly = {
+                        showLocalSyncDialog = false
+                        mainViewModel.addLocalToAniListOnlyNew()
                     },
-                    confirmButton = {
-                        TextButton(
-                            onClick = {
-                                showLocalSyncDialog = false
-                                mainViewModel.discardLocalChanges()
-                            }
-                        ) {
-                            Text("Discard", color = Color(0xFFF44336))
-                        }
+                    onOverwrite = {
+                        showLocalSyncDialog = false
+                        mainViewModel.overwriteAniListWithLocal()
                     },
-                    dismissButton = {
-                        Row {
-                            TextButton(
-                                onClick = {
-                                    showLocalSyncDialog = false
-                                    mainViewModel.addLocalToAniListOnlyNew()
-                                }
-                            ) {
-                                Text("Add New Only", color = Color(0xFF4CAF50))
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            TextButton(
-                                onClick = {
-                                    showLocalSyncDialog = false
-                                    mainViewModel.overwriteAniListWithLocal()
-                                }
-                            ) {
-                                Text("Overwrite", color = Color(0xFF2196F3))
-                            }
-                        }
-                    }
                 )
             }
 
@@ -2228,159 +2094,21 @@ fun MainScreen(
                     )
                 }
 
-                val surfaceColor = if (isOled) Color.Black else MaterialTheme.colorScheme.surface
-                val onSurfaceColor = if (isOled) Color.White else MaterialTheme.colorScheme.onSurface
-                val primaryContainerColor = MaterialTheme.colorScheme.primaryContainer
+                com.blissless.tensei.ui.components.BottomNavigationBar(
+                    selectedIndex = currentPage,
+                    isOled = isOled,
+                    disableMaterialColors = disableMaterialColors,
+                    hideNavbar = hideNavbar,
+                    isLoadingStream = isLoadingStream,
+                    showSearchScreen = showSearchScreen,
+                    onSelect = { currentPage = it },
+                    scope = scope,
+                )
 
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .navigationBarsPadding()
-                        .offset(y = (-16).dp)
-                ) {
-                    if (!hideNavbar && !isLoadingStream && !showSearchScreen) {
-                        Surface(
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .fillMaxWidth()
-                                .padding(bottom = 4.dp, start = 48.dp, end = 48.dp),
-                            shape = MaterialTheme.shapes.extraLarge,
-                            color = surfaceColor.copy(alpha = 0.95f),
-                            tonalElevation = 4.dp,
-                            shadowElevation = 8.dp,
-                            border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(width = 1.dp)
-                        ) {
-                            val selectedIndex = currentPage
-
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 2.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                val items = listOf("Schedule", "Explore", "Home", "Downloads")
-                                val icons = listOf(Icons.Default.CalendarMonth, Icons.Default.Explore, Icons.Default.Home, Icons.Default.FileDownload)
-
-                            items.forEachIndexed { index, item ->
-                                val isSelected = index == selectedIndex
-
-                                Box(
-                                    modifier = Modifier
-                                        .weight(if (isSelected) 0.67f else 0.25f)
-                                        .animateContentSize(
-                                            animationSpec = spring(
-                                                dampingRatio = Spring.DampingRatioNoBouncy,
-                                                stiffness = Spring.StiffnessLow
-                                            )
-                                        )
-                                        .height(56.dp)
-                                        .pointerInput(Unit) {
-                                            awaitPointerEventScope {
-                                                while (true) {
-                                                    val event = awaitPointerEvent()
-                                                    if (event.changes.any { it.pressed }) {
-                                                        scope.launch {
-                                                            currentPage = index
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        },
-                                    contentAlignment = Alignment.Center
-                                ) {
-
-                                    if (isSelected) {
-                                        val pillColor = if (disableMaterialColors) {
-                                            Color.White.copy(alpha = 0.2f)
-                                        } else {
-                                            primaryContainerColor
-                                        }
-                                        val pillTextColor = if (disableMaterialColors) {
-                                            Color.White
-                                        } else {
-                                            MaterialTheme.colorScheme.onPrimaryContainer
-                                        }
-
-                                        Surface(
-                                            shape = MaterialTheme.shapes.extraLarge,
-                                            color = pillColor,
-                                            modifier = Modifier
-                                                .fillMaxHeight()
-                                                .padding(vertical = 5.dp)
-                                                .fillMaxWidth(0.95f)
-                                        ) {
-                                            Row(
-                                                modifier = Modifier.padding(horizontal = 12.dp),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.Center
-                                            ) {
-                                                Icon(
-                                                    icons[index],
-                                                    contentDescription = item,
-                                                    tint = pillTextColor,
-                                                    modifier = Modifier.size(18.dp)
-                                                )
-                                                Spacer(modifier = Modifier.width(4.dp))
-                                                Text(
-                                                    item,
-                                                    color = pillTextColor,
-                                                    style = MaterialTheme.typography.labelMedium
-                                                )
-                                            }
-                                        }
-                                    } else {
-                                        Icon(
-                                            icons[index],
-                                            contentDescription = item,
-                                            tint = if (isOled) Color.White.copy(alpha = 0.6f) else onSurfaceColor.copy(alpha = 0.6f),
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    }
-                }
-
-streamError?.let { error ->
-                    LaunchedEffect(error) {
-                        delay(3500.milliseconds)
-                        streamError = null
-                    }
-
-                    AlertDialog(
-                        onDismissRequest = { streamError = null },
-                        icon = {
-                            Icon(
-                                imageVector = Icons.Default.Error,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.size(28.dp)
-                            )
-                        },
-                        title = { 
-                            Text(
-                                text = "Stream Error",
-                                style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.error
-                            )
-                        },
-                        text = { 
-                            Text(
-                                text = error,
-                                style = MaterialTheme.typography.bodySmall,
-                                maxLines = 3,
-                                modifier = Modifier.width(250.dp)
-                            )
-                        },
-                        confirmButton = { 
-                            TextButton(onClick = { streamError = null }) {
-                                Text("OK", fontWeight = FontWeight.Bold)
-                            }
-},
-                        dismissButton = null
+                streamError?.let { error ->
+                    com.blissless.tensei.ui.components.StreamErrorDialog(
+                        error = error,
+                        onDismiss = { streamError = null },
                     )
                 }
 
@@ -2397,54 +2125,13 @@ streamError?.let { error ->
 
                 val pendingUpdate = pendingUpdateState
                 if (showUpdateDialog && pendingUpdate != null) {
-                    AlertDialog(
-                        onDismissRequest = { showUpdateDialog = false },
-                        icon = {
-                            Icon(
-                                imageVector = Icons.Default.Info,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(28.dp)
-                            )
+                    com.blissless.tensei.ui.components.UpdateAvailableDialog(
+                        release = pendingUpdate,
+                        onDismiss = { showUpdateDialog = false },
+                        onUpdate = {
+                            showUpdateDialog = false
+                            updateViewModel.setReleaseAndDownload(pendingUpdate)
                         },
-                        title = {
-                            Text(
-                                text = "Update Available",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                        },
-                        text = {
-                            Column {
-                                Text(
-                                    text = "Version ${pendingUpdate.tagName.removePrefix("v")} is now available.",
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = "Would you like to download and install it?",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        },
-                        confirmButton = {
-                            Button(
-                                onClick = {
-                                    showUpdateDialog = false
-                                    updateViewModel.setReleaseAndDownload(pendingUpdate)
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Text("Update")
-                            }
-                        },
-                        dismissButton = {
-                            TextButton(onClick = { showUpdateDialog = false }) {
-                                Text("Later")
-                            }
-                        }
                     )
                 }
             }

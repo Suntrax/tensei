@@ -97,6 +97,9 @@ import kotlinx.coroutines.withTimeout
 import kotlin.time.Duration.Companion.milliseconds
 import java.io.File
 import kotlin.coroutines.resume
+// Extension functions on MainViewModel (defined in com.blissless.tensei.viewmodel)
+import com.blissless.tensei.viewmodel.fetchMagnetForEpisode
+import com.blissless.tensei.viewmodel.playEpisodeWithExtension
 
 private const val TAG = "AnimeDownload"
 

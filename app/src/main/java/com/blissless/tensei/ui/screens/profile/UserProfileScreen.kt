@@ -85,6 +85,12 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
+// Extension functions on MainViewModel (defined in com.blissless.tensei.viewmodel)
+import com.blissless.tensei.viewmodel.fetchAniListFavorites
+import com.blissless.tensei.viewmodel.fetchUserActivity
+import com.blissless.tensei.viewmodel.fetchUserStats
+import com.blissless.tensei.viewmodel.loadAniListFavoritesFromStorage
+import com.blissless.tensei.viewmodel.toggleAniListFavorite
 
 data class HistoryData(val entries: List<JikanHistoryEntry>, val statuses: List<String>, val progressList: List<String>)
 

@@ -103,6 +103,9 @@ import com.blissless.tensei.ui.screens.status.StatusListScreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
+// Extension functions on MainViewModel (defined in com.blissless.tensei.viewmodel)
+import com.blissless.tensei.viewmodel.loadAvailableMagnetExtensions
+import com.blissless.tensei.viewmodel.removeContinueWatchingEntry
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

@@ -106,6 +106,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.milliseconds
+// Extension functions on MainViewModel (defined in com.blissless.tensei.viewmodel)
+import com.blissless.tensei.viewmodel.clearMagnetEpisodes
+import com.blissless.tensei.viewmodel.fetchMagnetEpisodes
+import com.blissless.tensei.viewmodel.loadAvailableMagnetExtensions
+import com.blissless.tensei.viewmodel.setDefaultMagnetExtension
+import com.blissless.tensei.viewmodel.setStreamMethod
 
 @Composable
 fun EpisodeSelectionDialog(

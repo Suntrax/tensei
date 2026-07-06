@@ -56,7 +56,6 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -97,7 +96,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -132,31 +130,14 @@ import com.blissless.tensei.ui.screens.episode.EpisodeSelectionDialog
 import com.blissless.tensei.ui.screens.episode.RichEpisodeScreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.absoluteValue
 import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.milliseconds
+// Extension functions on MainViewModel (defined in com.blissless.tensei.viewmodel)
+import com.blissless.tensei.viewmodel.loadAvailableMagnetExtensions
+import com.blissless.tensei.viewmodel.toggleAniListFavorite
 
-private fun formatDate(dateStr: String): String {
-    return try {
-        val parts = dateStr.split("-")
-        if (parts.size == 3) {
-            val date = LocalDate.of(parts[0].toInt(), parts[1].toInt(), parts[2].toInt())
-            date.format(DateTimeFormatter.ofPattern("d MMMM, yyyy"))
-        } else dateStr
-    } catch (_: Exception) {
-        dateStr
-    }
-}
-
-private data class SpecEntry(
-    val label: String,
-    val value: String,
-    val icon: ImageVector? = null,
-    val fullSpan: Boolean = false
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -2326,91 +2307,4 @@ fun DetailedAnimeScreen(
         )
     }
 }
-
-@Composable
-private fun HeroStatCell(
-    value: String,
-    label: String,
-    accent: Color,
-    icon: ImageVector? = null,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            icon?.let {
-                Icon(
-                    it,
-                    contentDescription = null,
-                    tint = accent,
-                    modifier = Modifier.size(14.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-            }
-            Text(
-                value,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = accent,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            label.uppercase(),
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Medium,
-            letterSpacing = 1.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
-        )
-    }
-}
-
-
-@Composable
-private fun BentoSpecCell(spec: SpecEntry, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.30f))
-            .padding(14.dp)
-    ) {
-        Text(
-            spec.label.uppercase(),
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Medium,
-            letterSpacing = 1.2.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
-        )
-        Spacer(modifier = Modifier.height(6.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            spec.icon?.let { ic ->
-                Icon(
-                    ic,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-            }
-            Text(
-                spec.value,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
-
-private fun easeOut(t: Float): Float {
-    val t1 = t - 1f
-    return t1 * t1 * t1 + 1f
-}
-
 
