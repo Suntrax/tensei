@@ -75,6 +75,11 @@ import com.blissless.tensei.api.jikan.JikanImageUrls
 import com.blissless.tensei.api.jikan.JikanImages
 import com.blissless.tensei.api.myanimelist.LoginProvider
 import com.blissless.tensei.data.models.UserAnimeStats
+import com.blissless.tensei.ui.theme.StatusCompleted
+import com.blissless.tensei.ui.theme.StatusCurrent
+import com.blissless.tensei.ui.theme.StatusDropped
+import com.blissless.tensei.ui.theme.StatusPaused
+import com.blissless.tensei.ui.theme.StatusPlanning
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -693,12 +698,12 @@ private fun HistoryItem(
     status: String? = null, progress: String? = null
 ) {
     val (statusIcon, statusColor, statusLabel) = when {
-        status?.contains("completed", ignoreCase = true) == true -> Triple(Icons.Default.Check, Color(0xFF4CAF50), "Completed")
-        status?.contains("watching", ignoreCase = true) == true -> Triple(Icons.Default.PlayArrow, Color(0xFF2196F3), "Watched")
-        status?.contains("plan", ignoreCase = true) == true -> Triple(Icons.Default.Bookmark, Color(0xFF9C27B0), "Planning to Watch")
-        status?.contains("hold", ignoreCase = true) == true -> Triple(Icons.Default.Pause, Color(0xFFFFC107), "On Hold")
-        status?.contains("dropped", ignoreCase = true) == true -> Triple(Icons.Default.Delete, Color(0xFFF44336), "Dropped")
-        else -> Triple(Icons.Default.PlayArrow, Color(0xFF2196F3), status ?: "")
+        status?.contains("completed", ignoreCase = true) == true -> Triple(Icons.Default.Check, StatusCompleted, "Completed")
+        status?.contains("watching", ignoreCase = true) == true -> Triple(Icons.Default.PlayArrow, StatusCurrent, "Watched")
+        status?.contains("plan", ignoreCase = true) == true -> Triple(Icons.Default.Bookmark, StatusPlanning, "Planning to Watch")
+        status?.contains("hold", ignoreCase = true) == true -> Triple(Icons.Default.Pause, StatusPaused, "On Hold")
+        status?.contains("dropped", ignoreCase = true) == true -> Triple(Icons.Default.Delete, StatusDropped, "Dropped")
+        else -> Triple(Icons.Default.PlayArrow, StatusCurrent, status ?: "")
     }
 
     Card(

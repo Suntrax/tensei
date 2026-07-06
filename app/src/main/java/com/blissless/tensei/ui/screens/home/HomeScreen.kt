@@ -1012,34 +1012,48 @@ fun HomeScreen(
             properties = DialogProperties(usePlatformDefaultWidth = true)
         ) {
             Surface(
-                shape = RoundedCornerShape(28.dp),
+                shape = RoundedCornerShape(24.dp),
                 color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 4.dp,
-                shadowElevation = 4.dp
+                tonalElevation = 2.dp,
+                shadowElevation = 2.dp
             ) {
                 Column(
-                    modifier = Modifier.padding(28.dp),
+                    modifier = Modifier.padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Surface(
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
-                        modifier = Modifier.size(64.dp)
+                    // Header icon with gradient
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.05f)
+                                    )
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            AsyncImage(
-                                model = R.mipmap.ic_launcher_round,
-                                contentDescription = "App",
-                                modifier = Modifier.size(44.dp).clip(CircleShape)
-                            )
-                        }
+                        AsyncImage(
+                            model = R.mipmap.ic_launcher_round,
+                            contentDescription = "App",
+                            modifier = Modifier.size(40.dp).clip(CircleShape)
+                        )
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
                         if (isLoggedIn) "Account" else "More",
-                        style = MaterialTheme.typography.headlineSmall,
+                        style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        if (isLoggedIn) "Profile, settings & more" else "Favorites & settings",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                     )
                     Spacer(modifier = Modifier.height(24.dp))
                     if (isLoggedIn) {
@@ -1112,7 +1126,7 @@ private fun ProfileSheetItem(
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -1120,19 +1134,27 @@ private fun ProfileSheetItem(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
-                modifier = Modifier.size(44.dp)
+            // Gradient frosted icon tile
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(
+                        Brush.linearGradient(
+                            listOf(
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.05f)
+                            )
+                        )
+                    ),
+                contentAlignment = Alignment.Center
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        icon,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(22.dp)
+                )
             }
             Text(
                 label,
