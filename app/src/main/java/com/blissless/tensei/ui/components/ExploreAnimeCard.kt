@@ -320,7 +320,6 @@ fun ExploreAnimeCard(
                             .align(Alignment.TopCenter)
                             .fillMaxWidth()
                             .height(3.dp)
-                            .padding(top = 44.dp)
                             .background(statusIndicatorColor)
                     )
                 }

@@ -454,10 +454,7 @@ fun HomeAnimeCard(
                     ) { Icon(imageVector = Icons.Outlined.Info, contentDescription = "Anime Info", modifier = Modifier.size(16.dp)) }
                 }
 
-                // Status indicator bar at top
-                if (showStatusColors) {
-                    Box(modifier = Modifier.align(Alignment.TopStart).fillMaxWidth(1f).height(3.dp).padding(top = 48.dp).background(statusColor))
-                }
+                
 
                 // Bottom gradient for progress
                 if (showProgressBar && progressPercent > 0f) {
