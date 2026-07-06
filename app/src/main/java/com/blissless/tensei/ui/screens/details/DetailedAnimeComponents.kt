@@ -16,8 +16,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -381,4 +386,224 @@ internal fun NoDefaultExtensionDialog(
             }
         }
     )
+}
+
+/**
+ * Information card showing anime specs (format, status, season, studio, dates).
+ *
+ * Displays a hero stats strip (episodes/duration/score) and a bento-style
+ * spec grid built from the anime's metadata.
+ *
+ * @param displayData  The detailed anime data to show
+ * @param statusDisplay The human-readable status string (e.g. "Airing", "Released")
+ */
+@Composable
+internal fun InfoCard(
+    displayData: com.blissless.tensei.data.models.DetailedAnimeData,
+    statusDisplay: String,
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f))
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            // ----- Section header: gradient icon tile + title + subtitle -----
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(
+                            Brush.linearGradient(
+                                listOf(
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)
+                                )
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Info,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(
+                        "Information",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        "Overview & details",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        letterSpacing = 0.5.sp
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            // ----- Hero stats strip (Episodes / Duration / Score) -----
+            val latestEp = displayData.latestEpisode?.takeIf { it > 0 }
+            val totalEp = displayData.episodes.takeIf { it > 0 }
+            val epDisplay = when {
+                latestEp != null && totalEp != null -> "$latestEp / $totalEp"
+                latestEp != null -> "$latestEp"
+                totalEp != null -> "$totalEp"
+                else -> null
+            }
+            val durationMin = displayData.duration?.takeIf { it > 0 }
+            val scoreValue = displayData.averageScore?.takeIf { it > 0 }
+
+            val heroStats = listOfNotNull<Pair<String, String>>(
+                epDisplay?.let { "Episodes" to it },
+                durationMin?.let { "Duration" to "${it}m" },
+                scoreValue?.let { "Score" to String.format(java.util.Locale.US, "%.1f", it / 10.0) }
+            )
+
+            if (heroStats.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                        .padding(vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    heroStats.forEachIndexed { index, (label, value) ->
+                        val accent = when (label) {
+                            "Episodes" -> MaterialTheme.colorScheme.primary
+                            "Duration" -> MaterialTheme.colorScheme.tertiary
+                            "Score"    -> Color(0xFFFFB300)
+                            else       -> MaterialTheme.colorScheme.primary
+                        }
+                        val icon = when (label) {
+                            "Score" -> Icons.Default.Star
+                            else    -> null
+                        }
+                        HeroStatCell(
+                            value = value,
+                            label = label,
+                            accent = accent,
+                            icon = icon,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (index < heroStats.lastIndex) {
+                            Box(
+                                modifier = Modifier
+                                    .width(1.dp)
+                                    .height(28.dp)
+                                    .background(
+                                        MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)
+                                    )
+                            )
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            // ----- Bento spec grid (2-column, responsive full-span rows) -----
+            val specs = buildList {
+                displayData.format?.let {
+                    add(
+                        SpecEntry(
+                            label = "Format",
+                            value = it.replace("_", " ")
+                                .lowercase()
+                                .replaceFirstChar { c -> c.uppercase() },
+                            icon = Icons.Default.Category
+                        )
+                    )
+                }
+                displayData.status?.let {
+                    add(
+                        SpecEntry(
+                            label = "Status",
+                            value = statusDisplay,
+                            icon = Icons.Default.PlayCircle
+                        )
+                    )
+                }
+                if (displayData.season != null && displayData.year != null) {
+                    add(
+                        SpecEntry(
+                            label = "Season",
+                            value = "${displayData.season.replace("_", " ").lowercase().replaceFirstChar { c -> c.uppercase() }} ${displayData.year}"
+                        )
+                    )
+                }
+                displayData.source?.let {
+                    add(
+                        SpecEntry(
+                            label = "Source",
+                            value = it.replace("_", " ")
+                                .lowercase()
+                                .replaceFirstChar { c -> c.uppercase() },
+                            icon = Icons.Default.Description
+                        )
+                    )
+                }
+                if (displayData.studios.isNotEmpty()) {
+                    val studio = displayData.studios
+                        .filter { it.isAnimationStudio }
+                        .joinToString(", ") { it.name }
+                    if (studio.isNotEmpty()) {
+                        add(
+                            SpecEntry(
+                                label = "Studio",
+                                value = studio,
+                                icon = Icons.Default.Group,
+                                fullSpan = true
+                            )
+                        )
+                    }
+                }
+                displayData.startDate?.let {
+                    add(SpecEntry(label = "Started", value = formatDate(it)))
+                }
+                if (displayData.status != "RELEASING" && displayData.status != "NOT_YET_RELEASED") {
+                    displayData.endDate?.let {
+                        add(SpecEntry(label = "Ended", value = formatDate(it)))
+                    }
+                }
+            }
+
+            var i = 0
+            while (i < specs.size) {
+                val current = specs[i]
+                val next = specs.getOrNull(i + 1)
+
+                if (next != null && !current.fullSpan) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)
+                    ) {
+                        BentoSpecCell(current, modifier = Modifier.weight(1f))
+                        BentoSpecCell(next, modifier = Modifier.weight(1f))
+                    }
+                    i += 2
+                } else {
+                    BentoSpecCell(current, modifier = Modifier.fillMaxWidth())
+                    i += 1
+                }
+                if (i < specs.size) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
+            }
+        }
+    }
 }
