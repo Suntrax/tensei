@@ -2164,93 +2164,20 @@ fun PlayerScreen(
         }
 
         // Volume Overlay Indicator (on top of controls)
-        val accentColor = if (disableMaterialColors) Color.White else MaterialTheme.colorScheme.primary
-        AnimatedVisibility(
+        VolumeOverlay(
             visible = showVolumeOverlay,
-            enter = fadeIn(animationSpec = tween(200)) + slideInVertically { it / 4 },
-            exit = fadeOut(animationSpec = tween(300)),
-            modifier = Modifier.align(Alignment.CenterStart)
-        ) {
-            Column(
-                modifier = Modifier
-                    .padding(start = 16.dp)
-                    .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(16.dp))
-                    .padding(12.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.VolumeUp,
-                    contentDescription = "Volume",
-                    tint = accentColor,
-                    modifier = Modifier.size(22.dp)
-                )
-                Text(
-                    text = "${(playerVolume * 100).toInt()}%",
-                    color = Color.White,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Medium
-                )
-                Box(
-                    modifier = Modifier
-                        .width(4.dp)
-                        .height(80.dp)
-                        .background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(2.dp))
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .fillMaxHeight(playerVolume)
-                            .align(Alignment.BottomCenter)
-                            .background(accentColor, RoundedCornerShape(2.dp))
-                    )
-                }
-            }
-        }
+            volume = playerVolume,
+            disableMaterialColors = disableMaterialColors,
+            modifier = Modifier.align(Alignment.CenterStart),
+        )
 
         // Brightness Overlay Indicator (on top of controls)
-        AnimatedVisibility(
+        BrightnessOverlay(
             visible = showBrightnessOverlay,
-            enter = fadeIn(animationSpec = tween(200)) + slideInVertically { it / 4 },
-            exit = fadeOut(animationSpec = tween(300)),
-            modifier = Modifier.align(Alignment.CenterEnd)
-        ) {
-            Column(
-                modifier = Modifier
-                    .padding(end = 16.dp)
-                    .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(16.dp))
-                    .padding(12.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.BrightnessHigh,
-                    contentDescription = "Brightness",
-                    tint = if (disableMaterialColors) Color.White else Color(0xFFFFD54F),
-                    modifier = Modifier.size(22.dp)
-                )
-                Text(
-                    text = "${(currentBrightness * 100).toInt()}%",
-                    color = Color.White,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Medium
-                )
-                Box(
-                    modifier = Modifier
-                        .width(4.dp)
-                        .height(80.dp)
-                        .background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(2.dp))
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .fillMaxHeight(currentBrightness)
-                            .align(Alignment.BottomCenter)
-                            .background(if (disableMaterialColors) Color.White else Color(0xFFFFD54F), RoundedCornerShape(2.dp))
-                    )
-                }
-            }
-        }
+            brightness = currentBrightness,
+            disableMaterialColors = disableMaterialColors,
+            modifier = Modifier.align(Alignment.CenterEnd),
+        )
 
         // Subtitle Settings full-screen overlay
         if (showSubtitleSettings) {
