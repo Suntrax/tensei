@@ -1583,24 +1583,9 @@ fun PlayerScreen(
                                 }
 
                                 // Resize button
-                                Surface(
-                                    shape = RoundedCornerShape(14.dp),
-                                    color = Color.Black.copy(alpha = 0.5f),
+                                ResizeButton(
                                     onClick = { resizeModeIndex = (resizeModeIndex + 1) % resizeModes.size }
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.Center
-                                    ) {
-                                        Icon(
-                                            Icons.Default.AspectRatio,
-                                            "Change aspect ratio",
-                                            tint = Color.White,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                }
+                                )
 
                                 // Player settings button
                                 Box {
@@ -2049,108 +2034,23 @@ fun PlayerScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             // Playback speed selector on the left
-                            Box {
-                                Surface(
-                                    shape = RoundedCornerShape(14.dp),
-                                    color = Color.Black.copy(alpha = 0.5f),
-                                    onClick = { showSpeedMenu = true }
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Speed,
-                                            contentDescription = "Playback speed",
-                                            tint = Color.White,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                        Text(
-                                            text = "${currentSpeed}x",
-                                            style = MaterialTheme.typography.labelMedium,
-                                            color = Color.White
-                                        )
-                                    }
-                                }
-
-                                DropdownMenu(
-                                    expanded = showSpeedMenu,
-                                    onDismissRequest = { showSpeedMenu = false }
-                                ) {
-                                    speedOptions.forEach { speed ->
-                                        DropdownMenuItem(
-                                            text = {
-                                                Text(
-                                                    text = "${speed}x",
-                                                    color = if (currentSpeed == speed) MaterialTheme.colorScheme.primary else Color.White
-                                                )
-                                            },
-                                            onClick = {
-                                                currentSpeed = speed
-                                                exoPlayer.setPlaybackSpeed(speed)
-                                                showSpeedMenu = false
-                                            },
-                                            leadingIcon = if (currentSpeed == speed) {
-                                                { Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary) }
-                                            } else null
-                                        )
-                                    }
-                                }
-                            }
+                            PlaybackSpeedSelector(
+                                currentSpeed = currentSpeed,
+                                showMenu = showSpeedMenu,
+                                onShowMenuChange = { showSpeedMenu = it },
+                                onSpeedChange = { speed ->
+                                    currentSpeed = speed
+                                    exoPlayer.setPlaybackSpeed(speed)
+                                },
+                            )
 
                             // Autoplay + Fullscreen (linked)
-                            Row(
-                                modifier = Modifier
-                                    .background(Color.Black.copy(alpha = 0.5f), shape = RoundedCornerShape(14.dp)),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Surface(
-                                    onClick = { onAutoPlayNextEpisodeChanged?.invoke(!autoPlayNextEpisode) },
-                                    color = Color.Transparent
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(start = 12.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Text(
-                                            text = "Autoplay",
-                                            color = Color.White,
-                                            style = MaterialTheme.typography.labelSmall
-                                        )
-                                        Box(modifier = Modifier.size(20.dp), contentAlignment = Alignment.Center) {
-                                            Switch(
-                                                checked = autoPlayNextEpisode,
-                                                onCheckedChange = { onAutoPlayNextEpisodeChanged?.invoke(it) },
-                                                modifier = Modifier.scale(0.5f),
-                                                colors = SwitchDefaults.colors(
-                                                    checkedTrackColor = Color.White,
-                                                    checkedThumbColor = Color.Black,
-                                                    uncheckedTrackColor = Color.White.copy(alpha = 0.3f),
-                                                    uncheckedThumbColor = Color.White
-                                                )
-                                            )
-                                        }
-                                    }
-                                }
-                                Surface(
-                                    onClick = { toggleFullscreen() },
-                                    color = Color.Transparent
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(start = 6.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(
-                                            imageVector = if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
-                                            contentDescription = if (isFullscreen) "Exit fullscreen" else "Enter fullscreen",
-                                            tint = Color.White,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                }
-                            }
+                            AutoplayFullscreenRow(
+                                autoPlayNextEpisode = autoPlayNextEpisode,
+                                isFullscreen = isFullscreen,
+                                onAutoPlayChange = { onAutoPlayNextEpisodeChanged?.invoke(it) },
+                                onFullscreenToggle = { toggleFullscreen() },
+                            )
                         }
                     }
                 }
