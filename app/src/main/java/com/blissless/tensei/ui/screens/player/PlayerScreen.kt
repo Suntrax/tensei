@@ -146,6 +146,8 @@ import java.util.Locale
 import kotlin.math.abs
 import kotlin.time.Duration.Companion.milliseconds
 import androidx.core.content.edit
+import com.blissless.tensei.util.toast
+import com.blissless.tensei.util.longToast
 
 @RequiresApi(Build.VERSION_CODES.R)
 @OptIn(UnstableApi::class)
@@ -543,7 +545,7 @@ fun PlayerScreen(
                             onClearPlaybackPosition?.invoke(animeId, currentEpisode)
                             if (autoPlayNextEpisode && onNextEpisode != null && !isChangingServer) {
                                 if (isLatestEpisode) {
-                                    Toast.makeText(context, "Latest episode watched", Toast.LENGTH_SHORT).show()
+                                    context.toast("Latest episode watched")
                                 } else {
                                     onNextEpisode.invoke()
                                 }
@@ -652,7 +654,7 @@ fun PlayerScreen(
         if (isFallbackStream && !hasShownFallbackToast && videoUrl.isNotEmpty()) {
             hasShownFallbackToast = true
             val message = if (requestedCategory == "dub") "Dub not available, playing sub" else "Sub not available, playing dub"
-            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+            context.longToast(message)
         }
     }
 
@@ -853,7 +855,7 @@ fun PlayerScreen(
             if (isInCredits) {
                 if (autoSkipEnding && !hasSkippedOutro && !isManuallySeeking) {
                     if (isLatestEpisode) {
-                        Toast.makeText(context, "Latest episode watched", Toast.LENGTH_SHORT).show()
+                        context.toast("Latest episode watched")
                     } else {
                         onNextEpisode.invoke()
                     }

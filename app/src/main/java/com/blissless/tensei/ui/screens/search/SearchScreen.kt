@@ -102,6 +102,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
 import java.util.Locale
+import com.blissless.tensei.util.toast
+import com.blissless.tensei.util.longToast
 
 val ALL_GENRES = listOf(
     "Action", "Adventure", "Comedy", "Drama", "Fantasy", "Horror",
@@ -575,7 +577,7 @@ fun SearchScreen(
                     val detailedData = viewModel.fetchDetailedAnimeData(relation.id)
                     if (detailedData != null) {
                         selectedAnime = ExploreAnime(id = relation.id, title = detailedData.title, titleEnglish = detailedData.titleEnglish, cover = detailedData.cover, banner = detailedData.banner, episodes = detailedData.episodes, latestEpisode = detailedData.latestEpisode, averageScore = detailedData.averageScore, genres = detailedData.genres, year = detailedData.year, format = detailedData.format)
-                    } else Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
+                    } else context.toast("Anime not found")
                 }
             },
             onCharacterClick = onCharacterClick, onStaffClick = onStaffClick,

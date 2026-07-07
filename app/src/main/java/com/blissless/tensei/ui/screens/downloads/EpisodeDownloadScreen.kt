@@ -101,6 +101,8 @@ import kotlin.coroutines.resume
 import com.blissless.tensei.viewmodel.fetchMagnetForEpisode
 import com.blissless.tensei.viewmodel.playEpisodeWithExtension
 import com.blissless.tensei.util.ErrorHandler
+import com.blissless.tensei.util.toast
+import com.blissless.tensei.util.longToast
 
 private const val TAG = "AnimeDownload"
 
@@ -482,7 +484,7 @@ fun EpisodeDownloadDialog(
         }
         if (existingActive || isDownloading) {
             Log.e(TAG, "startDownload: a download batch is already active — aborting")
-            Toast.makeText(context, "A download is already in progress", Toast.LENGTH_SHORT).show()
+            context.toast("A download is already in progress")
             return
         }
 
@@ -492,7 +494,7 @@ fun EpisodeDownloadDialog(
         val episodes = getEpisodesToDownload()
         if (episodes.isEmpty()) {
             Log.e(TAG, "startDownload: no episodes selected — aborting")
-            Toast.makeText(context, "No episodes selected", Toast.LENGTH_SHORT).show()
+            context.toast("No episodes selected")
             return
         }
         Log.e(TAG, "startDownload: downloading ${episodes.size} episodes: $episodes")
@@ -550,7 +552,7 @@ fun EpisodeDownloadDialog(
                         showFailureDetail = msg
                     } else {
                         Log.e(TAG, "Torrent download batch complete: all $completedCount episodes done")
-                        Toast.makeText(context, "Downloaded $completedCount episodes", Toast.LENGTH_SHORT).show()
+                        context.toast("Downloaded $completedCount episodes")
                     }
                 }
             } catch (_: CancellationException) {
@@ -596,7 +598,7 @@ fun EpisodeDownloadDialog(
                 showFailureDetail = msg
             } else {
                 Log.i(TAG, "Download batch complete: all $done episodes downloaded successfully")
-                Toast.makeText(context, "Downloaded $done episodes", Toast.LENGTH_SHORT).show()
+                context.toast("Downloaded $done episodes")
             }
         }
     }

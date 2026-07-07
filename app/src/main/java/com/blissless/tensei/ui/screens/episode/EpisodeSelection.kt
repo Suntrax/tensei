@@ -112,6 +112,8 @@ import com.blissless.tensei.viewmodel.fetchMagnetEpisodes
 import com.blissless.tensei.viewmodel.loadAvailableMagnetExtensions
 import com.blissless.tensei.viewmodel.setDefaultMagnetExtension
 import com.blissless.tensei.viewmodel.setStreamMethod
+import com.blissless.tensei.util.toast
+import com.blissless.tensei.util.longToast
 
 @Composable
 fun EpisodeSelectionDialog(
@@ -172,7 +174,7 @@ fun EpisodeSelectionDialog(
                                 if (hasAired) {
                                     onEpisodeSelect(episodeNum, null)
                                 } else {
-                                    Toast.makeText(context, "Episode has not aired yet", Toast.LENGTH_SHORT).show()
+                                    context.toast("Episode has not aired yet")
                                 }
                             }
                         )
@@ -825,7 +827,7 @@ fun RichEpisodeScreen(
                                     }
                                     onEpisodeSelect(episodeNum, title)
                                 } else {
-                                    Toast.makeText(context, "Episode not aired yet", Toast.LENGTH_SHORT).show()
+                                    context.toast("Episode not aired yet")
                                 }
                             }
                         )
@@ -855,7 +857,7 @@ fun RichEpisodeScreen(
                                     }
                                     onEpisodeSelect(episodeNum, "Episode $episodeNum")
                                 } else {
-                                    Toast.makeText(context, "Episode not aired yet", Toast.LENGTH_SHORT).show()
+                                    context.toast("Episode not aired yet")
                                 }
                             }
                         )
@@ -965,7 +967,7 @@ private fun SimpleRichEpisodeCard(
                     onSelect()
                     onPlay()
                 } else {
-                    Toast.makeText(context, "Episode has not aired yet", Toast.LENGTH_SHORT).show()
+                    context.toast("Episode has not aired yet")
                 }
             }
         ) {
@@ -1121,7 +1123,7 @@ private fun RichTmdbEpisodeCard(
                     onSelect()
                     onPlay()
                 } else {
-                    Toast.makeText(context, "Episode has not aired yet", Toast.LENGTH_SHORT).show()
+                    context.toast("Episode has not aired yet")
                 }
             }
         ) {

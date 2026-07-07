@@ -72,6 +72,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.blissless.tensei.util.toast
+import com.blissless.tensei.util.longToast
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -100,7 +102,7 @@ fun ExtensionsScreen(
 
     LaunchedEffect(uiState.refreshMessage) {
         uiState.refreshMessage?.let {
-            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+            context.toast(it)
             viewModel.clearRefreshMessage()
         }
     }
@@ -429,7 +431,7 @@ private fun RepoCard(
             IconButton(onClick = {
                 val clipboard = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 clipboard.setPrimaryClip(ClipData.newPlainText("Repo URL", repoState.url))
-                Toast.makeText(ctx, "URL copied", Toast.LENGTH_SHORT).show()
+                ctx.toast("URL copied")
             }) {
                 Icon(Icons.Default.ContentCopy, contentDescription = "Copy URL", modifier = Modifier.size(18.dp))
             }
@@ -445,7 +447,7 @@ private fun openAppSettings(context: Context, packageName: String) {
         data = "package:$packageName".toUri()
         flags = Intent.FLAG_ACTIVITY_NEW_TASK
     }
-    Toast.makeText(context, "Opening app settings...", Toast.LENGTH_SHORT).show()
+    context.toast("Opening app settings...")
     context.startActivity(intent)
 }
 

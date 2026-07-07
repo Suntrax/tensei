@@ -89,6 +89,8 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.absoluteValue
 import kotlin.time.Duration.Companion.milliseconds
+import com.blissless.tensei.util.toast
+import com.blissless.tensei.util.longToast
 
 val DayNames = listOf("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
 val DayAbbreviations = listOf("Su", "Mo", "Tu", "We", "Th", "Fr", "Sa")
@@ -192,7 +194,7 @@ fun ScheduleScreen(
 
     LaunchedEffect(currentlyWatching, planningToWatch, completed, onHold, dropped, aniListFavorites) { listVersion++ }
     LaunchedEffect(isFavoriteRateLimited) {
-        if (isFavoriteRateLimited) Toast.makeText(context, "Please wait before toggling again", Toast.LENGTH_SHORT).show()
+        if (isFavoriteRateLimited) context.toast("Please wait before toggling again")
     }
 
     LaunchedEffect(isLoading) { if (!isLoading && isRefreshing) isRefreshing = false }
@@ -486,7 +488,7 @@ fun ScheduleScreen(
             onUpdateStatus = { if (it != null) viewModel.addExploreAnimeToList(selectedAnime!!, it) },
             onRemove = { viewModel.removeAnimeFromList(selectedAnime!!.id) },
             onRelationClick = { relation ->
-                try { scope.launch { try { delay(100.milliseconds); val d = viewModel.fetchDetailedAnimeData(relation.id); if (d != null) selectedAnime = ExploreAnime(id = relation.id, title = d.title, titleEnglish = d.titleEnglish, cover = d.cover, banner = d.banner, episodes = d.episodes, latestEpisode = d.latestEpisode, averageScore = d.averageScore, genres = d.genres, year = d.year, format = d.format) else Toast.makeText(context, "Anime not found - ID: ${relation.id}", Toast.LENGTH_SHORT).show() } catch (e: Exception) { Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show() } } } catch (e: Exception) { Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show() }
+                try { scope.launch { try { delay(100.milliseconds); val d = viewModel.fetchDetailedAnimeData(relation.id); if (d != null) selectedAnime = ExploreAnime(id = relation.id, title = d.title, titleEnglish = d.titleEnglish, cover = d.cover, banner = d.banner, episodes = d.episodes, latestEpisode = d.latestEpisode, averageScore = d.averageScore, genres = d.genres, year = d.year, format = d.format) else context.toast("Anime not found - ID: ${relation.id}") } catch (e: Exception) { context.toast("Error: ${e.message}") } } } catch (e: Exception) { context.toast("Error: ${e.message}") }
             },
             onCharacterClick = onCharacterClick, onStaffClick = onStaffClick,
             onViewAllCast = { onViewAllCast(selectedAnime!!.id, selectedAnime!!.title) },

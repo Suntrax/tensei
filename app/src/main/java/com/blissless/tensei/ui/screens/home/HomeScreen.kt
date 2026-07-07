@@ -106,6 +106,8 @@ import kotlin.time.Duration.Companion.milliseconds
 // Extension functions on MainViewModel (defined in com.blissless.tensei.viewmodel)
 import com.blissless.tensei.viewmodel.loadAvailableMagnetExtensions
 import com.blissless.tensei.viewmodel.removeContinueWatchingEntry
+import com.blissless.tensei.util.toast
+import com.blissless.tensei.util.longToast
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -526,7 +528,7 @@ fun HomeScreen(
                                     if (anime != null) {
                                         val released = anime.latestEpisode ?: anime.totalEpisodes
                                         if (anime.latestEpisode != null && entry.episode > released) {
-                                            Toast.makeText(context, "Episode not aired yet", Toast.LENGTH_SHORT).show()
+                                            context.toast("Episode not aired yet")
                                         } else {
                                             onPlayEpisode(anime, entry.episode, null)
                                         }
@@ -763,7 +765,7 @@ fun HomeScreen(
                         val nextEp = anime.progress + 1
                         val released = anime.latestEpisode ?: anime.totalEpisodes
                         if (anime.latestEpisode != null && nextEp > released) {
-                            Toast.makeText(context, "Episode not aired yet", Toast.LENGTH_SHORT).show()
+                            context.toast("Episode not aired yet")
                         } else {
                             onPlayEpisode(anime, nextEp, null)
                         }
@@ -979,10 +981,10 @@ fun HomeScreen(
                                 malId = detailedData.malId
                             )
                         } else {
-                            Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
+                            context.toast("Anime not found")
                         }
                     } catch (_: Exception) {
-                        Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
+                        context.toast("Anime not found")
                     }
                 }
             },

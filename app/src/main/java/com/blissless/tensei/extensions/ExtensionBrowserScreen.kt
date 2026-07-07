@@ -27,6 +27,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.blissless.tensei.util.toast
+import com.blissless.tensei.util.longToast
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -113,7 +115,7 @@ fun ExtensionBrowserScreen(
                         onClick = {
                             val clipboard = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                             clipboard.setPrimaryClip(ClipData.newPlainText("Repo URL", repoState.url))
-                            Toast.makeText(ctx, "URL copied", Toast.LENGTH_SHORT).show()
+                            ctx.toast("URL copied")
                         }
                     ) {
                         Icon(Icons.Default.ContentCopy, contentDescription = "Copy URL")

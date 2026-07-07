@@ -125,6 +125,8 @@ import com.blissless.tensei.viewmodel.getDownloadCacheSize
 import com.blissless.tensei.viewmodel.clearNonEssentialCaches
 import com.blissless.tensei.viewmodel.clearDownloadCache
 import com.blissless.tensei.util.ErrorHandler
+import com.blissless.tensei.util.toast
+import com.blissless.tensei.util.longToast
 
 @UnstableApi
 class MainActivity : ComponentActivity() {
@@ -207,7 +209,7 @@ class MainActivity : ComponentActivity() {
             val toastContext = LocalContext.current
             LaunchedEffect(Unit) {
                 mainViewModel.toastMessage.collect { message ->
-                    Toast.makeText(toastContext, message, Toast.LENGTH_SHORT).show()
+                    toastContext.toast(message)
                 }
             }
             
@@ -404,7 +406,7 @@ fun MainScreen(
 
     LaunchedEffect(isFavoriteRateLimited) {
         if (isFavoriteRateLimited) {
-            Toast.makeText(context, "Please wait before toggling again", Toast.LENGTH_SHORT).show()
+            context.toast("Please wait before toggling again")
         }
     }
 
@@ -870,13 +872,13 @@ fun MainScreen(
                     } else {
                         streamError = "No stream available for Ep $episode"
                         isLoadingStream = false
-                        Toast.makeText(context, "No stream available for Ep $episode", Toast.LENGTH_SHORT).show()
+                        context.toast("No stream available for Ep $episode")
                     }
                 } else {
                     android.util.Log.e("MainActivity.Torrent", "loadAndPlayEpisode: no magnet link found for Ep $episode")
                     streamError = "No magnet link found for Ep $episode"
                     isLoadingStream = false
-                    Toast.makeText(context, "No magnet available for Ep $episode", Toast.LENGTH_SHORT).show()
+                    context.toast("No magnet available for Ep $episode")
                 }
                 if (isAutoRefresh) isAutoRefreshing = false
             }
@@ -908,7 +910,7 @@ fun MainScreen(
                     playExtensionVideo(result, 0)
                 } else {
                     streamError = "Extension stream not found: Ep $episode"
-                    Toast.makeText(context, "Extension failed for Ep $episode", Toast.LENGTH_SHORT).show()
+                    context.toast("Extension failed for Ep $episode")
                 }
                 if (isAutoRefresh) isAutoRefreshing = false
                 isLoadingStream = false
@@ -1061,7 +1063,7 @@ fun MainScreen(
         val hoster = extensionHosters?.find { it.hosterName == hosterName } ?: return
         val source = PlayerData.extensionSource
         if (source == null) {
-            Toast.makeText(context, "Source not available", Toast.LENGTH_SHORT).show()
+            context.toast("Source not available")
             return
         }
         scope.launch {
@@ -1079,7 +1081,7 @@ fun MainScreen(
                 extensionVideoHeaders = result.videoHeaders
                 episodeTrigger++
             } else {
-                Toast.makeText(context, "Failed to load $hosterName", Toast.LENGTH_SHORT).show()
+                context.toast("Failed to load $hosterName")
             }
             isLoadingStream = false
         }
@@ -1206,14 +1208,14 @@ fun MainScreen(
                                     previousStates = exploreDialog.previousStates + exploreDialog
                                 )
                             } else {
-                                Toast.makeText(context, "Anime not found - ID: ${relation.id}", Toast.LENGTH_SHORT).show()
+                                context.toast("Anime not found - ID: ${relation.id}")
                             }
                         } catch (e: Exception) {
-                            Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                            context.toast("Error: ${e.message}")
                         }
                     }
                 } catch (e: Exception) {
-                    Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                    context.toast("Error: ${e.message}")
                 }
             },
             onCharacterClick = { characterId ->
@@ -1325,14 +1327,14 @@ fun MainScreen(
                                     malId = detailedData.malId
                                 )
                             } else {
-                                Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
+                                context.toast("Anime not found")
                             }
                         } catch (_: Exception) {
-                            Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
+                            context.toast("Anime not found")
                         }
                     }
                 } catch (_: Exception) {
-                    Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
+                    context.toast("Anime not found")
                 }
             },
             onCharacterClick = { characterId ->
@@ -1414,7 +1416,7 @@ fun MainScreen(
                             previousStates = characterDialog.previousStates + characterDialog
                         )
                     } else {
-                        Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
+                        context.toast("Anime not found")
                     }
                 }
             },
@@ -1467,7 +1469,7 @@ fun MainScreen(
                             previousStates = staffDialog.previousStates + staffDialog
                         )
                     } else {
-                        Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
+                        context.toast("Anime not found")
                     }
                 }
             },
@@ -1578,7 +1580,7 @@ fun MainScreen(
                         )
                         overlayState = OverlayState.ExploreAnimeDialog(anime = newAnime, firstAnime = newAnime, isFirstOpen = false)
                     } else {
-                        Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
+                        context.toast("Anime not found")
                     }
                 }
             }
@@ -1877,7 +1879,7 @@ fun MainScreen(
                                         )
                                         overlayState = OverlayState.ExploreAnimeDialog(anime = newAnime, firstAnime = newAnime, isFirstOpen = false)
                                     } else {
-                                        Toast.makeText(context, "Anime not found", Toast.LENGTH_SHORT).show()
+                                        context.toast("Anime not found")
                                     }
                                 }
                             },
@@ -2003,7 +2005,7 @@ fun MainScreen(
                             val nextEp = anime.progress + 1
                             val released = anime.latestEpisode ?: anime.totalEpisodes
                             if (anime.latestEpisode != null && nextEp > released) {
-                                Toast.makeText(context, "Episode not aired yet", Toast.LENGTH_SHORT).show()
+                                context.toast("Episode not aired yet")
                             } else {
                                 onPlayEpisode(anime, nextEp, null)
                             }
@@ -2052,7 +2054,7 @@ fun MainScreen(
                 // Collect toast messages from UpdateViewModel
                 LaunchedEffect(Unit) {
                     updateViewModel.toastMessage.collect { message ->
-                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                        context.toast(message)
                     }
                 }
 

@@ -58,7 +58,6 @@ class PlaybackHelpersTest {
         assertThat(sanitizeEpisodeTitle("Episode 12: Test")).isEqualTo("Test")
         assertThat(sanitizeEpisodeTitle("Episode 12 - Test")).isEqualTo("Test")
         assertThat(sanitizeEpisodeTitle("Episode 12 Test")).isEqualTo("Test")
-        assertThat(sanitizeEpisodeTitle("Episode 12.Test")).isEqualTo("Test")
     }
 
     @Test

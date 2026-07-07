@@ -139,6 +139,8 @@ import com.blissless.tensei.viewmodel.getDownloadCacheSize
 import com.blissless.tensei.viewmodel.clearNonEssentialCaches
 import com.blissless.tensei.viewmodel.clearDownloadCache
 import com.blissless.tensei.util.ErrorHandler
+import com.blissless.tensei.util.toast
+import com.blissless.tensei.util.longToast
 
 @Composable
 fun SettingsScreen(
@@ -1014,7 +1016,7 @@ private fun DownloadsSettingsPage(
                 }
                 TextButton(onClick = {
                     if (isIgnoringBattery) {
-                        Toast.makeText(context, "Battery optimization is already disabled", Toast.LENGTH_SHORT).show()
+                        context.toast("Battery optimization is already disabled")
                     } else {
                         try {
                             val intent = android.content.Intent(
@@ -1325,7 +1327,7 @@ private fun CacheSettingsPage(
                             downloadCacheSize = 0L
                         }
                         showClearCacheConfirmation = null
-                        Toast.makeText(context, "Cache cleared", Toast.LENGTH_SHORT).show()
+                        context.toast("Cache cleared")
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) { Text("Clear") }

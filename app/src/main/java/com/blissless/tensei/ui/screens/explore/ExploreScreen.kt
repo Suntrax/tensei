@@ -61,6 +61,8 @@ import com.blissless.tensei.ui.screens.details.DetailedAnimeScreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
+import com.blissless.tensei.util.toast
+import com.blissless.tensei.util.longToast
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -270,7 +272,7 @@ fun ExploreScreen(
                         }
                     }
                 } catch (e: Exception) {
-                    Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                    context.toast("Error: ${e.message}")
                 }
             },
             onCharacterClick = onCharacterClick,

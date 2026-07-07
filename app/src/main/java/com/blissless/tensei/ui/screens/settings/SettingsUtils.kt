@@ -1,7 +1,6 @@
 package com.blissless.tensei.ui.screens.settings
 
 import android.content.Context
-import java.util.Locale
 
 /**
  * Utility functions for the Settings screen.
@@ -27,7 +26,7 @@ internal fun formatFileSize(bytes: Long): String {
         bytes < 1024 -> "$bytes B"
         bytes < 1024 * 1024 -> "${bytes / 1024} KB"
         bytes < 1024 * 1024 * 1024 -> "${bytes / (1024 * 1024)} MB"
-        else -> String.format(Locale.getDefault(), "%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0))
+        else -> String.format(java.util.Locale.US, "%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0))
     }
 }
 
