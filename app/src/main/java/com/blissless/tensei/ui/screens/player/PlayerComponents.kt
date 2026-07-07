@@ -20,7 +20,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.BrightnessHigh
+import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -223,6 +225,62 @@ internal fun BrightnessOverlay(
                         .fillMaxHeight(brightness)
                         .align(Alignment.BottomCenter)
                         .background(accentColor, RoundedCornerShape(2.dp))
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Skip intro/outro buttons shown during playback.
+ *
+ * Displays floating buttons on the right side of the player when
+ * skip timestamps are available. The "Skip Ending" button becomes
+ * "Next Episode" when there's a next episode and credits are at the end.
+ *
+ * @param showSkipOpening Whether to show the skip opening button
+ * @param showSkipEnding  Whether to show the skip ending button
+ * @param isLatestEpisode Whether this is the latest aired episode
+ * @param creditsAtEnd    Whether credits are at the end of the video
+ * @param isChangingServer Whether the server is currently changing
+ * @param onSkipOpening   Called when skip opening is tapped
+ * @param onSkipEnding    Called when skip ending is tapped
+ * @param modifier        Modifier for positioning
+ */
+@androidx.compose.runtime.Composable
+internal fun SkipButtonsOverlay(
+    showSkipOpening: Boolean,
+    showSkipEnding: Boolean,
+    isLatestEpisode: Boolean,
+    creditsAtEnd: Boolean,
+    isChangingServer: Boolean,
+    onSkipOpening: () -> Unit,
+    onSkipEnding: () -> Unit,
+    modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier,
+) {
+    androidx.compose.animation.AnimatedVisibility(
+        visible = showSkipOpening || showSkipEnding,
+        enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.scaleIn(initialScale = 0.8f),
+        exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.scaleOut(targetScale = 0.8f),
+        modifier = modifier
+    ) {
+        androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp)) {
+            if (showSkipOpening) {
+                SkipIconButton(
+                    icon = androidx.compose.material.icons.Icons.Default.FastForward,
+                    label = "Skip\nOpening",
+                    backgroundColor = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.6f),
+                    iconTint = androidx.compose.ui.graphics.Color.White,
+                    onClick = onSkipOpening
+                )
+            }
+            if (showSkipEnding) {
+                SkipIconButton(
+                    icon = androidx.compose.material.icons.Icons.Default.SkipNext,
+                    label = if (isLatestEpisode || !creditsAtEnd) "Skip\nEnding" else "Next\nEpisode",
+                    backgroundColor = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.6f),
+                    iconTint = androidx.compose.ui.graphics.Color.White,
+                    onClick = onSkipEnding
                 )
             }
         }

@@ -256,6 +256,10 @@ fun PlayerScreen(
             activity?.let { act ->
                 @Suppress("DEPRECATION") act.window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
                 act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                // Restore system brightness when exiting the player
+                act.window.attributes = act.window.attributes.apply {
+                    screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+                }
             }
         }
     }
@@ -390,6 +394,10 @@ fun PlayerScreen(
                 val controller = WindowCompat.getInsetsController(window, window.decorView)
                 controller.show(WindowInsetsCompat.Type.systemBars())
                 WindowCompat.setDecorFitsSystemWindows(window, true)
+                // Restore system brightness when leaving the player
+                window.attributes = window.attributes.apply {
+                    screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+                }
             }
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
@@ -1776,48 +1784,34 @@ fun PlayerScreen(
                 }
 
                 // Skip Opening/Ending buttons - outside controls visibility so they don't get darkened
-                AnimatedVisibility(
-                    visible = showSkipOpeningButton || showSkipEndingButton,
-                    enter = fadeIn() + scaleIn(initialScale = 0.8f),
-                    exit = fadeOut() + scaleOut(targetScale = 0.8f),
-                    modifier = Modifier.align(Alignment.CenterEnd).padding(end = 16.dp)
-                ) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        if (showSkipOpeningButton) {
-                            SkipIconButton(
-                                icon = Icons.Default.FastForward,
-                                label = "Skip\nOpening",
-                                backgroundColor = Color.Black.copy(alpha = 0.6f),
-                                iconTint = Color.White,
-                                onClick = {
-                                    val ts = effectiveTimestamps
-                                    if (ts.introEnd != null) {
-                                        exoPlayer.seekTo(ts.introEnd * 1000L)
-                                        exoPlayer.play()
-                                        hasSkippedIntro = true
-                                    }
-                                }
-                            )
+                SkipButtonsOverlay(
+                    showSkipOpening = showSkipOpeningButton,
+                    showSkipEnding = showSkipEndingButton,
+                    isLatestEpisode = isLatestEpisode,
+                    creditsAtEnd = creditsAtEnd,
+                    isChangingServer = isChangingServer,
+                    onSkipOpening = {
+                        val ts = effectiveTimestamps
+                        if (ts.introEnd != null) {
+                            exoPlayer.seekTo(ts.introEnd * 1000L)
+                            // Only resume playback if the player was already playing
+                            if (exoPlayer.isPlaying) {
+                                exoPlayer.play()
+                            }
+                            hasSkippedIntro = true
                         }
-                        if (showSkipEndingButton) {
-                            SkipIconButton(
-                                icon = Icons.Default.SkipNext,
-                                label = if (isLatestEpisode || !creditsAtEnd) "Skip\nEnding" else "Next\nEpisode",
-                                backgroundColor = Color.Black.copy(alpha = 0.6f),
-                                iconTint = Color.White,
-                                onClick = {
-                                    if (isLatestEpisode || !creditsAtEnd) {
-                                        if (exoPlayer.duration > 0) {
-                                            exoPlayer.seekTo(exoPlayer.duration)
-                                        }
-                                    } else if (!isChangingServer) {
-                                        onNextEpisode?.invoke()
-                                    }
-                                }
-                            )
+                    },
+                    onSkipEnding = {
+                        if (isLatestEpisode || !creditsAtEnd) {
+                            if (exoPlayer.duration > 0) {
+                                exoPlayer.seekTo(exoPlayer.duration)
+                            }
+                        } else if (!isChangingServer) {
+                            onNextEpisode?.invoke()
                         }
-                    }
-                }
+                    },
+                    modifier = Modifier.align(Alignment.CenterEnd).padding(end = 16.dp),
+                )
 
                 if (isLoadingStream || isChangingServer) {
                     PlayerLoadingIndicator(modifier = Modifier.align(Alignment.Center).offset(y = 64.dp))
