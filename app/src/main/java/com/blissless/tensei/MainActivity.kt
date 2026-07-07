@@ -417,57 +417,67 @@ fun MainScreen(
 
     val isLoadingHome by viewModel.isLoadingHome.collectAsState()
 
-    var showPlayer by remember { mutableStateOf(false) }
-    var isAutoRefreshing by remember { mutableStateOf(false) }
-    var pendingSeekPosition by remember { mutableStateOf<Long?>(null) }
-    var currentVideoUrl by remember { mutableStateOf<String?>(null) }
-    var currentReferer by remember { mutableStateOf("https://megacloud.tv/") }
-    var currentSubtitleUrl by remember { mutableStateOf<String?>(null) }
-    var currentAnime by remember { mutableStateOf<AnimeMedia?>(null) }
-    var currentEpisode by remember { mutableIntStateOf(0) }
-    var totalEpisodes by remember { mutableIntStateOf(0) }
-    var isLoadingStream by remember { mutableStateOf(false) }
-    var loadingJob by remember { mutableStateOf<Job?>(null) }
-    var streamError by remember { mutableStateOf<String?>(null) }
-    var currentServerAttempt by remember { mutableStateOf<String?>(null) }
-    var currentServerAttemptIsFallback by remember { mutableStateOf(false) }
-    var currentEpisodeInfo by remember { mutableStateOf<EpisodeStreams?>(null) }
-    var currentEpisodeTitle by remember { mutableStateOf<String?>(null) }
-    var hasPrefetchedNextOnTracking by remember { mutableStateOf(false) }
-    var currentCategory by remember { mutableStateOf("sub") }
-    var currentServerName by remember { mutableStateOf("") }
-    var currentServerIndex by remember { mutableIntStateOf(0) }
-    var isFallbackStream by remember { mutableStateOf(false) }
-    var requestedCategory by remember { mutableStateOf("sub") }
-    var actualCategory by remember { mutableStateOf("sub") }
-    var isManualServerChange by remember { mutableStateOf(false) }
-    var isChangingEpisode by remember { mutableStateOf(false) }
-    var episodeTrigger by remember { mutableIntStateOf(0) }
-    var currentQualityOptions by remember { mutableStateOf<List<QualityOption>>(emptyList()) }
-    var currentQuality by remember { mutableStateOf("Auto") }
-    var savedPlaybackPosition by remember { mutableLongStateOf(0L) }
-    var extensionVideos by remember { mutableStateOf<List<Video>?>(null) }
-    var extensionHosters by remember { mutableStateOf<List<eu.kanade.tachiyomi.animesource.model.Hoster>?>(null) }
-    var showExtHosterDialog by remember { mutableStateOf(false) }
-    var showExtVideoDialog by remember { mutableStateOf(false) }
-    var pendingExtResult by remember { mutableStateOf<MainViewModel.ExtensionStreamResult?>(null) }
-    var isExtensionFlow by remember { mutableStateOf(false) }
-    var extensionOkHttpClient by remember { mutableStateOf<okhttp3.OkHttpClient?>(null) }
-    var extensionVideoHeaders by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
-    var extensionSourcePackage by remember { mutableStateOf("") }
-    var extensionEpisodeUrl by remember { mutableStateOf("") }
-    var extensionEpisodeNumber by remember { mutableIntStateOf(0) }
-    var extensionServers by remember { mutableStateOf(emptyList<ServerInfo>()) }
-    var extensionName by remember { mutableStateOf("") }
-    var currentSubtitleTracks by remember { mutableStateOf<List<eu.kanade.tachiyomi.animesource.model.Track>>(emptyList()) }
-    var cachedExtensionNext by remember { mutableStateOf<MainViewModel.ExtensionStreamResult?>(null) }
-    val episodeCache = remember { mutableMapOf<Int, MainViewModel.ExtensionStreamResult>() }
-    var currentTorrentListener by remember { mutableStateOf<TorrentEngine.EngineListener?>(null) }
-    var showNoExtDialog by remember { mutableStateOf(false) }
-    var animekaiIntroStart by remember { mutableStateOf<Int?>(null) }
-    var animekaiIntroEnd by remember { mutableStateOf<Int?>(null) }
-    var animekaiOutroStart by remember { mutableStateOf<Int?>(null) }
-    var animekaiOutroEnd by remember { mutableStateOf<Int?>(null) }
+    // ─── Playback state holder ─────────────────────────────────────────────
+    // All playback state lives in PlaybackStateHolder. Local properties below
+    // are direct aliases (via property delegates) — reading/writing them
+    // reads/writes the holder. No sync needed, single source of truth.
+    val torrentEngine = remember { (context.applicationContext as TenseiApplication).torrentEngine }
+    val playback = remember(viewModel, scope, torrentEngine, context) {
+        com.blissless.tensei.playback.PlaybackStateHolder(viewModel, scope, torrentEngine, context)
+    }
+    val torrentStreamServer = playback.torrentStreamServer
+
+    var showPlayer by playback::showPlayer
+    var isAutoRefreshing by playback::isAutoRefreshing
+    var pendingSeekPosition by playback::pendingSeekPosition
+    var currentVideoUrl by playback::currentVideoUrl
+    var currentReferer by playback::currentReferer
+    var currentSubtitleUrl by playback::currentSubtitleUrl
+    var currentAnime by playback::currentAnime
+    var currentEpisode by playback::currentEpisode
+    var totalEpisodes by playback::totalEpisodes
+    var isLoadingStream by playback::isLoadingStream
+    var loadingJob by playback::loadingJob
+    var streamError by playback::streamError
+    var currentServerAttempt by playback::currentServerAttempt
+    var currentServerAttemptIsFallback by playback::currentServerAttemptIsFallback
+    var currentEpisodeInfo by playback::currentEpisodeInfo
+    var currentEpisodeTitle by playback::currentEpisodeTitle
+    var hasPrefetchedNextOnTracking by playback::hasPrefetchedNextOnTracking
+    var currentCategory by playback::currentCategory
+    var currentServerName by playback::currentServerName
+    var currentServerIndex by playback::currentServerIndex
+    var isFallbackStream by playback::isFallbackStream
+    var requestedCategory by playback::requestedCategory
+    var actualCategory by playback::actualCategory
+    var isManualServerChange by playback::isManualServerChange
+    var isChangingEpisode by playback::isChangingEpisode
+    var episodeTrigger by playback::episodeTrigger
+    var currentQualityOptions by playback::currentQualityOptions
+    var currentQuality by playback::currentQuality
+    var savedPlaybackPosition by playback::savedPlaybackPosition
+    var extensionVideos by playback::extensionVideos
+    var extensionHosters by playback::extensionHosters
+    var showExtHosterDialog by playback::showExtHosterDialog
+    var showExtVideoDialog by playback::showExtVideoDialog
+    var pendingExtResult by playback::pendingExtResult
+    var isExtensionFlow by playback::isExtensionFlow
+    var extensionOkHttpClient by playback::extensionOkHttpClient
+    var extensionVideoHeaders by playback::extensionVideoHeaders
+    var extensionSourcePackage by playback::extensionSourcePackage
+    var extensionEpisodeUrl by playback::extensionEpisodeUrl
+    var extensionEpisodeNumber by playback::extensionEpisodeNumber
+    var extensionServers by playback::extensionServers
+    var extensionName by playback::extensionName
+    var currentSubtitleTracks by playback::currentSubtitleTracks
+    var cachedExtensionNext by playback::cachedExtensionNext
+    var showNoExtDialog by playback::showNoExtDialog
+    var animekaiIntroStart by playback::animekaiIntroStart
+    var animekaiIntroEnd by playback::animekaiIntroEnd
+    var animekaiOutroStart by playback::animekaiOutroStart
+    var animekaiOutroEnd by playback::animekaiOutroEnd
+    val episodeCache = playback.episodeCache
+    var currentTorrentListener by playback::currentTorrentListener
 
     var overlayState by remember { mutableStateOf<OverlayState>(OverlayState.None) }
     var scheduleDialogOpen by remember { mutableStateOf(false) }
@@ -527,128 +537,11 @@ fun MainScreen(
         }
     }
 
-    // ─── Playback state holder ─────────────────────────────────────────────
-    // PlaybackStateHolder holds the methods; local state vars are the source
-    // of truth for the UI. Before calling playback methods, we sync local ->
-    // holder. After calling, we sync holder -> local.
-    val torrentEngine = remember { (context.applicationContext as TenseiApplication).torrentEngine }
-    val playback = remember(viewModel, scope, torrentEngine, context) {
-        com.blissless.tensei.playback.PlaybackStateHolder(viewModel, scope, torrentEngine, context)
-    }
-    val torrentStreamServer = playback.torrentStreamServer
 
-    // Sync local state -> playback holder (call before playback methods)
-    fun syncToPlayback() {
-        playback.showPlayer = showPlayer
-        playback.isAutoRefreshing = isAutoRefreshing
-        playback.pendingSeekPosition = pendingSeekPosition
-        playback.currentVideoUrl = currentVideoUrl
-        playback.currentReferer = currentReferer
-        playback.currentSubtitleUrl = currentSubtitleUrl
-        playback.currentAnime = currentAnime
-        playback.currentEpisode = currentEpisode
-        playback.totalEpisodes = totalEpisodes
-        playback.isLoadingStream = isLoadingStream
-        playback.streamError = streamError
-        playback.currentEpisodeInfo = currentEpisodeInfo
-        playback.currentEpisodeTitle = currentEpisodeTitle
-        playback.hasPrefetchedNextOnTracking = hasPrefetchedNextOnTracking
-        playback.currentCategory = currentCategory
-        playback.currentServerName = currentServerName
-        playback.currentServerIndex = currentServerIndex
-        playback.isFallbackStream = isFallbackStream
-        playback.requestedCategory = requestedCategory
-        playback.actualCategory = actualCategory
-        playback.isManualServerChange = isManualServerChange
-        playback.isChangingEpisode = isChangingEpisode
-        playback.episodeTrigger = episodeTrigger
-        playback.currentQualityOptions = currentQualityOptions
-        playback.currentQuality = currentQuality
-        playback.savedPlaybackPosition = savedPlaybackPosition
-        playback.extensionVideos = extensionVideos
-        playback.extensionHosters = extensionHosters
-        playback.showExtHosterDialog = showExtHosterDialog
-        playback.showExtVideoDialog = showExtVideoDialog
-        playback.pendingExtResult = pendingExtResult
-        playback.isExtensionFlow = isExtensionFlow
-        playback.extensionOkHttpClient = extensionOkHttpClient
-        playback.extensionVideoHeaders = extensionVideoHeaders
-        playback.extensionSourcePackage = extensionSourcePackage
-        playback.extensionEpisodeUrl = extensionEpisodeUrl
-        playback.extensionEpisodeNumber = extensionEpisodeNumber
-        playback.extensionServers = extensionServers
-        playback.extensionName = extensionName
-        playback.currentSubtitleTracks = currentSubtitleTracks
-        playback.cachedExtensionNext = cachedExtensionNext
-        playback.showNoExtDialog = showNoExtDialog
-        playback.animekaiIntroStart = animekaiIntroStart
-        playback.animekaiIntroEnd = animekaiIntroEnd
-        playback.animekaiOutroStart = animekaiOutroStart
-        playback.animekaiOutroEnd = animekaiOutroEnd
-    }
-
-    // Sync playback holder -> local state (call after playback methods)
-    fun syncFromPlayback() {
-        showPlayer = playback.showPlayer
-        isAutoRefreshing = playback.isAutoRefreshing
-        pendingSeekPosition = playback.pendingSeekPosition
-        currentVideoUrl = playback.currentVideoUrl
-        currentReferer = playback.currentReferer
-        currentSubtitleUrl = playback.currentSubtitleUrl
-        currentAnime = playback.currentAnime
-        currentEpisode = playback.currentEpisode
-        totalEpisodes = playback.totalEpisodes
-        isLoadingStream = playback.isLoadingStream
-        streamError = playback.streamError
-        currentEpisodeInfo = playback.currentEpisodeInfo
-        currentEpisodeTitle = playback.currentEpisodeTitle
-        hasPrefetchedNextOnTracking = playback.hasPrefetchedNextOnTracking
-        currentCategory = playback.currentCategory
-        currentServerName = playback.currentServerName
-        currentServerIndex = playback.currentServerIndex
-        isFallbackStream = playback.isFallbackStream
-        requestedCategory = playback.requestedCategory
-        actualCategory = playback.actualCategory
-        isManualServerChange = playback.isManualServerChange
-        isChangingEpisode = playback.isChangingEpisode
-        episodeTrigger = playback.episodeTrigger
-        currentQualityOptions = playback.currentQualityOptions
-        currentQuality = playback.currentQuality
-        savedPlaybackPosition = playback.savedPlaybackPosition
-        extensionVideos = playback.extensionVideos
-        extensionHosters = playback.extensionHosters
-        showExtHosterDialog = playback.showExtHosterDialog
-        showExtVideoDialog = playback.showExtVideoDialog
-        pendingExtResult = playback.pendingExtResult
-        isExtensionFlow = playback.isExtensionFlow
-        extensionOkHttpClient = playback.extensionOkHttpClient
-        extensionVideoHeaders = playback.extensionVideoHeaders
-        extensionSourcePackage = playback.extensionSourcePackage
-        extensionEpisodeUrl = playback.extensionEpisodeUrl
-        extensionEpisodeNumber = playback.extensionEpisodeNumber
-        extensionServers = playback.extensionServers
-        extensionName = playback.extensionName
-        currentSubtitleTracks = playback.currentSubtitleTracks
-        cachedExtensionNext = playback.cachedExtensionNext
-        showNoExtDialog = playback.showNoExtDialog
-        animekaiIntroStart = playback.animekaiIntroStart
-        animekaiIntroEnd = playback.animekaiIntroEnd
-        animekaiOutroStart = playback.animekaiOutroStart
-        animekaiOutroEnd = playback.animekaiOutroEnd
-    }
-
-    // Playback methods — simple synchronous ones delegate to holder
+    // Playback methods — delegate to holder (no sync needed, state is shared via property delegates)
     fun sanitizeEpisodeTitle(title: String?): String? = playback.sanitizeEpisodeTitle(title)
-    fun invalidateCurrentStreamCache() {
-        syncToPlayback()
-        playback.invalidateCurrentStreamCache()
-        syncFromPlayback()
-    }
-    fun onPlaybackError() {
-        syncToPlayback()
-        playback.onPlaybackError()
-        syncFromPlayback()
-    }
+    fun invalidateCurrentStreamCache() = playback.invalidateCurrentStreamCache()
+    fun onPlaybackError() = playback.onPlaybackError()
 
     // Async playback methods — inlined here because they launch coroutines
     // that write state asynchronously. The sync pattern doesn't work for
