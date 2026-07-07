@@ -26,9 +26,11 @@ import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.BrightnessHigh
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.FastForward
+import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.Button
@@ -279,7 +281,7 @@ internal fun SkipButtonsOverlay(
         androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp)) {
             if (showSkipOpening) {
                 SkipIconButton(
-                    icon = androidx.compose.material.icons.Icons.Default.FastForward,
+                    icon = Icons.Default.FastForward,
                     label = "Skip\nOpening",
                     backgroundColor = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.6f),
                     iconTint = androidx.compose.ui.graphics.Color.White,
@@ -466,6 +468,154 @@ internal fun ResizeButton(
                 tint = Color.White,
                 modifier = Modifier.size(18.dp)
             )
+        }
+    }
+}
+
+/**
+ * Player settings button with swipe gesture toggle dropdown.
+ *
+ * Shows a gear icon that opens a dropdown with toggles for:
+ * - Swipe for Volume (left or right side based on swap)
+ * - Swipe for Brightness (opposite side)
+ * - Swap Sides
+ *
+ * @param showMenu         Whether the dropdown is expanded
+ * @param onShowMenuChange Called to show/hide the menu
+ * @param swipeVolume      Whether volume swipe is enabled
+ * @param swipeBrightness  Whether brightness swipe is enabled
+ * @param swipeSwap        Whether sides are swapped
+ * @param onSwipeVolumeChange Called when volume toggle changes
+ * @param onSwipeBrightnessChange Called when brightness toggle changes
+ * @param onSwipeSwapChange Called when swap toggle changes
+ */
+@Composable
+internal fun PlayerSettingsButton(
+    showMenu: Boolean,
+    onShowMenuChange: (Boolean) -> Unit,
+    swipeVolume: Boolean,
+    swipeBrightness: Boolean,
+    swipeSwap: Boolean,
+    onSwipeVolumeChange: (Boolean) -> Unit,
+    onSwipeBrightnessChange: (Boolean) -> Unit,
+    onSwipeSwapChange: (Boolean) -> Unit,
+) {
+    Box {
+        Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = Color.Black.copy(alpha = 0.5f),
+            onClick = { onShowMenuChange(true) }
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    Icons.Default.Settings,
+                    "Player Settings",
+                    tint = Color.White,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+        androidx.compose.material3.DropdownMenu(
+            expanded = showMenu,
+            onDismissRequest = { onShowMenuChange(false) },
+            modifier = Modifier.background(Color(0xFF1A1A1A)).width(220.dp)
+        ) {
+            androidx.compose.material3.DropdownMenuItem(
+                text = {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Swipe for Volume (${if (swipeSwap) "Right" else "Left"})", color = Color.White)
+                        Switch(
+                            checked = swipeVolume,
+                            onCheckedChange = onSwipeVolumeChange,
+                            colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary)
+                        )
+                    }
+                },
+                onClick = { onSwipeVolumeChange(!swipeVolume) }
+            )
+            androidx.compose.material3.DropdownMenuItem(
+                text = {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Swipe for Brightness (${if (swipeSwap) "Left" else "Right"})", color = Color.White)
+                        Switch(
+                            checked = swipeBrightness,
+                            onCheckedChange = onSwipeBrightnessChange,
+                            colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary)
+                        )
+                    }
+                },
+                onClick = { onSwipeBrightnessChange(!swipeBrightness) }
+            )
+            androidx.compose.material3.DropdownMenuItem(
+                text = {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Swap Sides", color = Color.White)
+                        Switch(
+                            checked = swipeSwap,
+                            onCheckedChange = onSwipeSwapChange,
+                            colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary)
+                        )
+                    }
+                },
+                onClick = { onSwipeSwapChange(!swipeSwap) }
+            )
+        }
+    }
+}
+
+/**
+ * Skip indicator overlay shown when the user double-taps to seek.
+ *
+ * Shows a rewind or forward icon with the accumulated skip time text.
+ *
+ * @param visible    Whether the indicator is shown
+ * @param isForward  Whether this is a forward skip (vs rewind)
+ * @param text       The accumulated skip time text (e.g. "+10s")
+ * @param modifier   Modifier for positioning
+ */
+@Composable
+internal fun SkipIndicatorOverlay(
+    visible: Boolean,
+    isForward: Boolean,
+    text: String,
+    modifier: Modifier = Modifier,
+) {
+    androidx.compose.animation.AnimatedVisibility(
+        visible = visible,
+        enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.scaleIn(initialScale = 0.8f),
+        exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.scaleOut(targetScale = 0.8f),
+        modifier = modifier
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(
+                modifier = Modifier.size(56.dp).background(Color.Black.copy(alpha = 0.6f), androidx.compose.foundation.shape.CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    if (isForward) Icons.Default.FastForward else Icons.Default.FastRewind,
+                    if (isForward) "Forward" else "Rewind",
+                    tint = Color.White,
+                    modifier = Modifier.size(32.dp)
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(text, color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
         }
     }
 }

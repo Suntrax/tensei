@@ -372,7 +372,6 @@ fun MainScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val extViewModel: ExtensionsViewModel = viewModel()
-    val torrentStreamServer = remember { mutableStateOf<TorrentStreamServer?>(null) }
     val extUiState by extViewModel.uiState.collectAsState()
 
     val startupScreen by viewModel.startupScreen.collectAsState()
@@ -404,12 +403,6 @@ fun MainScreen(
     val playbackDurations by viewModel.playbackDurations.collectAsState()
     val startedAt by viewModel.startedAt.collectAsState()
 
-    LaunchedEffect(isFavoriteRateLimited) {
-        if (isFavoriteRateLimited) {
-            context.toast("Please wait before toggling again")
-        }
-    }
-
     val autoSkipOpening by viewModel.autoSkipOpening.collectAsState(initial = false)
     val autoSkipEnding by viewModel.autoSkipEnding.collectAsState(initial = false)
     val autoPlayNextEpisode by viewModel.autoPlayNextEpisode.collectAsState(initial = false)
@@ -423,28 +416,6 @@ fun MainScreen(
     val swipeSwap by viewModel.swipeSwap.collectAsState(initial = false)
 
     val isLoadingHome by viewModel.isLoadingHome.collectAsState()
-    LaunchedEffect(isLoadingHome) {
-        if (!isLoadingHome && 0 !in preloadedPages) {
-            preloadedPages = preloadedPages + 0
-        }
-    }
-
-    var isLoggedInKey by remember { mutableIntStateOf(0) }
-    LaunchedEffect(isLoggedIn) {
-        isLoggedInKey++
-    }
-
-    LaunchedEffect(currentPage) {
-        if (currentPage !in preloadedPages) {
-            preloadedPages = preloadedPages + currentPage
-            when (currentPage) {
-                0 -> { viewModel.fetchAiringSchedule() }
-                1 -> { }
-                2 -> { viewModel.refreshHome() }
-                3 -> { }
-            }
-        }
-    }
 
     var showPlayer by remember { mutableStateOf(false) }
     var isAutoRefreshing by remember { mutableStateOf(false) }
@@ -460,52 +431,21 @@ fun MainScreen(
     var streamError by remember { mutableStateOf<String?>(null) }
     var currentServerAttempt by remember { mutableStateOf<String?>(null) }
     var currentServerAttemptIsFallback by remember { mutableStateOf(false) }
-
     var currentEpisodeInfo by remember { mutableStateOf<EpisodeStreams?>(null) }
     var currentEpisodeTitle by remember { mutableStateOf<String?>(null) }
     var hasPrefetchedNextOnTracking by remember { mutableStateOf(false) }
-
-    LaunchedEffect(currentEpisode) {
-        hasPrefetchedNextOnTracking = false
-    }
-
     var currentCategory by remember { mutableStateOf("sub") }
     var currentServerName by remember { mutableStateOf("") }
     var currentServerIndex by remember { mutableIntStateOf(0) }
-
     var isFallbackStream by remember { mutableStateOf(false) }
     var requestedCategory by remember { mutableStateOf("sub") }
     var actualCategory by remember { mutableStateOf("sub") }
     var isManualServerChange by remember { mutableStateOf(false) }
     var isChangingEpisode by remember { mutableStateOf(false) }
     var episodeTrigger by remember { mutableIntStateOf(0) }
-
-    // Quality state
     var currentQualityOptions by remember { mutableStateOf<List<QualityOption>>(emptyList()) }
     var currentQuality by remember { mutableStateOf("Auto") }
-
     var savedPlaybackPosition by remember { mutableLongStateOf(0L) }
-
-    var overlayState by remember { mutableStateOf<OverlayState>(OverlayState.None) }
-    
-    var scheduleDialogOpen by remember { mutableStateOf(false) }
-    
-    var showSearchScreen by remember { mutableStateOf(false) }
-    
-    var detailedAnimeFromMal by remember { mutableStateOf<DetailedAnimeData?>(null) }
-
-    // Extension flow state
-    var showNoExtDialog by remember { mutableStateOf(false) }
-    var showSettings by remember { mutableStateOf(false) }
-    var pendingSettingsGroup by remember { mutableStateOf<String?>(null) }
-    
-    LaunchedEffect(Unit) {
-        viewModel.openExtensionsEvents.collect {
-            showSettings = true
-            pendingSettingsGroup = "extensions"
-        }
-    }
-    
     var extensionVideos by remember { mutableStateOf<List<Video>?>(null) }
     var extensionHosters by remember { mutableStateOf<List<eu.kanade.tachiyomi.animesource.model.Hoster>?>(null) }
     var showExtHosterDialog by remember { mutableStateOf(false) }
@@ -522,58 +462,28 @@ fun MainScreen(
     var currentSubtitleTracks by remember { mutableStateOf<List<eu.kanade.tachiyomi.animesource.model.Track>>(emptyList()) }
     var cachedExtensionNext by remember { mutableStateOf<MainViewModel.ExtensionStreamResult?>(null) }
     val episodeCache = remember { mutableMapOf<Int, MainViewModel.ExtensionStreamResult>() }
-    
-    // Callback to show detailed anime from MAL history using AniList API
-    val onShowDetailedAnimeFromMal: (Int) -> Unit = { malId ->
-        kotlinx.coroutines.MainScope().launch {
-            val detailedData = viewModel.fetchDetailedAnimeDataByMalId(malId)
-            detailedAnimeFromMal = detailedData
-        }
-    }
-    
-    // Animekai timestamps (PRIMARY source)
+    var currentTorrentListener by remember { mutableStateOf<TorrentEngine.EngineListener?>(null) }
+    var showNoExtDialog by remember { mutableStateOf(false) }
     var animekaiIntroStart by remember { mutableStateOf<Int?>(null) }
     var animekaiIntroEnd by remember { mutableStateOf<Int?>(null) }
     var animekaiOutroStart by remember { mutableStateOf<Int?>(null) }
     var animekaiOutroEnd by remember { mutableStateOf<Int?>(null) }
 
-        var showStatusListScreen by remember { mutableStateOf(false) }
-        var statusListTitle by remember { mutableStateOf("") }
-    var statusListType by remember { mutableStateOf("") }
-    var statusListIcon by remember { mutableStateOf<ImageVector?>(null) }
-    var statusListAnime by remember { mutableStateOf<List<AnimeMedia>>(emptyList()) }
-
+    var overlayState by remember { mutableStateOf<OverlayState>(OverlayState.None) }
+    var scheduleDialogOpen by remember { mutableStateOf(false) }
+    var showSearchScreen by remember { mutableStateOf(false) }
+    var detailedAnimeFromMal by remember { mutableStateOf<DetailedAnimeData?>(null) }
+    var showNoExtDialog2 by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
+    var pendingSettingsGroup by remember { mutableStateOf<String?>(null) }
     var selectedAnimeState by remember { mutableStateOf<AnimeMedia?>(null) }
     var showDetailedAnimeScreen by remember { mutableStateOf(false) }
     var currentCardBounds by remember { mutableStateOf<MainViewModel.CardBounds?>(null) }
-
-    val mainAct = context as? MainActivity
-    LaunchedEffect(Unit) {
-        mainAct?.widgetClicks?.collect { animeId ->
-            if (animeId <= 0) return@collect
-            val detailedData = viewModel.fetchDetailedAnimeData(animeId)
-            if (detailedData != null) {
-                selectedAnimeState = AnimeMedia(
-                    id = detailedData.id,
-                    title = detailedData.title,
-                    titleEnglish = detailedData.titleEnglish,
-                    cover = detailedData.cover,
-                    banner = detailedData.banner,
-                    progress = 0,
-                    totalEpisodes = detailedData.episodes,
-                    latestEpisode = detailedData.latestEpisode,
-                    status = detailedData.status ?: "",
-                    averageScore = detailedData.averageScore,
-                    genres = detailedData.genres,
-                    listStatus = "",
-                    listEntryId = 0,
-                    year = detailedData.year,
-                    malId = detailedData.malId
-                )
-                showDetailedAnimeScreen = true
-            }
-        }
-    }
+    var showStatusListScreen by remember { mutableStateOf(false) }
+    var statusListTitle by remember { mutableStateOf("") }
+    var statusListType by remember { mutableStateOf("") }
+    var statusListIcon by remember { mutableStateOf<ImageVector?>(null) }
+    var statusListAnime by remember { mutableStateOf<List<AnimeMedia>>(emptyList()) }
 
     val animeStatusMap = remember(currentlyWatching, planningToWatch, completed, onHold, dropped) {
         val map = mutableMapOf<Int, String>()
@@ -600,39 +510,164 @@ fun MainScreen(
         val firstAnime = currentDialog?.firstAnime ?: previousAnime ?: anime
         val isFirstOpen = currentDialog == null
         val prevStates = if (currentDialog != null) currentDialog.previousStates + currentDialog else emptyList()
-        // Clear the card bounds when opening the detailed screen to hide the source card
         viewModel.clearExploreAnimeCardBounds()
         viewModel.clearHomeAnimeCardBounds()
         overlayState = OverlayState.ExploreAnimeDialog(anime = anime, firstAnime = firstAnime, isFirstOpen = isFirstOpen, previousStates = prevStates)
     }
-    
-    // Wrapper for callbacks that expect single parameter
 
-    // Callback to pop the navigation stack (when closing from ExploreScreen inline dialog or system back)
     val onClearAnimeStack: () -> Unit = {
         val prev = overlayState.previousStates
         overlayState = if (prev.isNotEmpty()) prev.last() else OverlayState.None
     }
 
-    fun sanitizeEpisodeTitle(title: String?): String? = com.blissless.tensei.ui.screens.player.sanitizeEpisodeTitle(title)
-
-    fun playExtensionVideo(result: MainViewModel.ExtensionStreamResult, index: Int) {
-        result.videos.forEachIndexed { _, _ ->
+    val onShowDetailedAnimeFromMal: (Int) -> Unit = { malId ->
+        kotlinx.coroutines.MainScope().launch {
+            val detailedData = viewModel.fetchDetailedAnimeDataByMalId(malId)
+            detailedAnimeFromMal = detailedData
         }
+    }
+
+    // ─── Playback state holder ─────────────────────────────────────────────
+    // PlaybackStateHolder holds the methods; local state vars are the source
+    // of truth for the UI. Before calling playback methods, we sync local ->
+    // holder. After calling, we sync holder -> local.
+    val torrentEngine = remember { (context.applicationContext as TenseiApplication).torrentEngine }
+    val playback = remember(viewModel, scope, torrentEngine, context) {
+        com.blissless.tensei.playback.PlaybackStateHolder(viewModel, scope, torrentEngine, context)
+    }
+    val torrentStreamServer = playback.torrentStreamServer
+
+    // Sync local state -> playback holder (call before playback methods)
+    fun syncToPlayback() {
+        playback.showPlayer = showPlayer
+        playback.isAutoRefreshing = isAutoRefreshing
+        playback.pendingSeekPosition = pendingSeekPosition
+        playback.currentVideoUrl = currentVideoUrl
+        playback.currentReferer = currentReferer
+        playback.currentSubtitleUrl = currentSubtitleUrl
+        playback.currentAnime = currentAnime
+        playback.currentEpisode = currentEpisode
+        playback.totalEpisodes = totalEpisodes
+        playback.isLoadingStream = isLoadingStream
+        playback.streamError = streamError
+        playback.currentEpisodeInfo = currentEpisodeInfo
+        playback.currentEpisodeTitle = currentEpisodeTitle
+        playback.hasPrefetchedNextOnTracking = hasPrefetchedNextOnTracking
+        playback.currentCategory = currentCategory
+        playback.currentServerName = currentServerName
+        playback.currentServerIndex = currentServerIndex
+        playback.isFallbackStream = isFallbackStream
+        playback.requestedCategory = requestedCategory
+        playback.actualCategory = actualCategory
+        playback.isManualServerChange = isManualServerChange
+        playback.isChangingEpisode = isChangingEpisode
+        playback.episodeTrigger = episodeTrigger
+        playback.currentQualityOptions = currentQualityOptions
+        playback.currentQuality = currentQuality
+        playback.savedPlaybackPosition = savedPlaybackPosition
+        playback.extensionVideos = extensionVideos
+        playback.extensionHosters = extensionHosters
+        playback.showExtHosterDialog = showExtHosterDialog
+        playback.showExtVideoDialog = showExtVideoDialog
+        playback.pendingExtResult = pendingExtResult
+        playback.isExtensionFlow = isExtensionFlow
+        playback.extensionOkHttpClient = extensionOkHttpClient
+        playback.extensionVideoHeaders = extensionVideoHeaders
+        playback.extensionSourcePackage = extensionSourcePackage
+        playback.extensionEpisodeUrl = extensionEpisodeUrl
+        playback.extensionEpisodeNumber = extensionEpisodeNumber
+        playback.extensionServers = extensionServers
+        playback.extensionName = extensionName
+        playback.currentSubtitleTracks = currentSubtitleTracks
+        playback.cachedExtensionNext = cachedExtensionNext
+        playback.showNoExtDialog = showNoExtDialog
+        playback.animekaiIntroStart = animekaiIntroStart
+        playback.animekaiIntroEnd = animekaiIntroEnd
+        playback.animekaiOutroStart = animekaiOutroStart
+        playback.animekaiOutroEnd = animekaiOutroEnd
+    }
+
+    // Sync playback holder -> local state (call after playback methods)
+    fun syncFromPlayback() {
+        showPlayer = playback.showPlayer
+        isAutoRefreshing = playback.isAutoRefreshing
+        pendingSeekPosition = playback.pendingSeekPosition
+        currentVideoUrl = playback.currentVideoUrl
+        currentReferer = playback.currentReferer
+        currentSubtitleUrl = playback.currentSubtitleUrl
+        currentAnime = playback.currentAnime
+        currentEpisode = playback.currentEpisode
+        totalEpisodes = playback.totalEpisodes
+        isLoadingStream = playback.isLoadingStream
+        streamError = playback.streamError
+        currentEpisodeInfo = playback.currentEpisodeInfo
+        currentEpisodeTitle = playback.currentEpisodeTitle
+        hasPrefetchedNextOnTracking = playback.hasPrefetchedNextOnTracking
+        currentCategory = playback.currentCategory
+        currentServerName = playback.currentServerName
+        currentServerIndex = playback.currentServerIndex
+        isFallbackStream = playback.isFallbackStream
+        requestedCategory = playback.requestedCategory
+        actualCategory = playback.actualCategory
+        isManualServerChange = playback.isManualServerChange
+        isChangingEpisode = playback.isChangingEpisode
+        episodeTrigger = playback.episodeTrigger
+        currentQualityOptions = playback.currentQualityOptions
+        currentQuality = playback.currentQuality
+        savedPlaybackPosition = playback.savedPlaybackPosition
+        extensionVideos = playback.extensionVideos
+        extensionHosters = playback.extensionHosters
+        showExtHosterDialog = playback.showExtHosterDialog
+        showExtVideoDialog = playback.showExtVideoDialog
+        pendingExtResult = playback.pendingExtResult
+        isExtensionFlow = playback.isExtensionFlow
+        extensionOkHttpClient = playback.extensionOkHttpClient
+        extensionVideoHeaders = playback.extensionVideoHeaders
+        extensionSourcePackage = playback.extensionSourcePackage
+        extensionEpisodeUrl = playback.extensionEpisodeUrl
+        extensionEpisodeNumber = playback.extensionEpisodeNumber
+        extensionServers = playback.extensionServers
+        extensionName = playback.extensionName
+        currentSubtitleTracks = playback.currentSubtitleTracks
+        cachedExtensionNext = playback.cachedExtensionNext
+        showNoExtDialog = playback.showNoExtDialog
+        animekaiIntroStart = playback.animekaiIntroStart
+        animekaiIntroEnd = playback.animekaiIntroEnd
+        animekaiOutroStart = playback.animekaiOutroStart
+        animekaiOutroEnd = playback.animekaiOutroEnd
+    }
+
+    // Playback methods — simple synchronous ones delegate to holder
+    fun sanitizeEpisodeTitle(title: String?): String? = playback.sanitizeEpisodeTitle(title)
+    fun invalidateCurrentStreamCache() {
+        syncToPlayback()
+        playback.invalidateCurrentStreamCache()
+        syncFromPlayback()
+    }
+    fun onPlaybackError() {
+        syncToPlayback()
+        playback.onPlaybackError()
+        syncFromPlayback()
+    }
+
+    // Async playback methods — inlined here because they launch coroutines
+    // that write state asynchronously. The sync pattern doesn't work for
+    // async methods because syncFromPlayback() would run before the
+    // coroutine completes.
+    fun playExtensionVideo(result: MainViewModel.ExtensionStreamResult, index: Int) {
+        result.videos.forEachIndexed { _, _ -> }
         val video = result.videos.find { it.videoUrl == result.url }
             ?: result.videos.getOrNull(index)
             ?: return
         streamError = null
         currentEpisodeTitle = sanitizeEpisodeTitle(result.episode?.name) ?: "Episode $currentEpisode"
-        // Use result.url (which may have been resolved from proxy to real URL), fallback to video.videoUrl
         currentVideoUrl = result.url.ifEmpty { video.videoUrl }
         currentReferer = result.referer
         val preferredLang = viewModel.defaultSubtitleLang.value
         val sortedTracks = com.blissless.tensei.ui.screens.player.sortSubtitleTracks(video.subtitleTracks, preferredLang)
         currentSubtitleTracks = sortedTracks
         currentSubtitleUrl = sortedTracks.firstOrNull()?.url
-        sortedTracks.forEachIndexed { _, _ ->
-        }
+        sortedTracks.forEachIndexed { _, _ -> }
         extensionName = result.source?.name ?: ""
         currentServerName = result.hosters?.firstOrNull()?.hosterName ?: extensionName.ifEmpty { "Extension" }
         val hasDubHoster = result.hosters?.any { it.hosterName.contains("dub", ignoreCase = true) } == true
@@ -645,17 +680,14 @@ fun MainScreen(
         isExtensionFlow = false
         extensionOkHttpClient = result.extensionClient
         extensionVideoHeaders = result.videoHeaders
-        extensionServers = (result.hosters ?: emptyList()).map { hoster ->
-            ServerInfo(name = hoster.hosterName, url = hoster.hosterUrl)
-        }
+        extensionServers = com.blissless.tensei.ui.screens.player.buildServerList(result.hosters)
         showPlayer = true
-        // After starting DUB playback, fetch SUB subtitles in background
         if (currentCategory == "dub" && result.source != null && result.episode != null) {
             val src = result.source
             val ep = result.episode
             scope.launch {
                 val episodeVideos = withContext(Dispatchers.IO) {
-                    try { src.getVideoList(ep) } catch (e: Throwable) { ErrorHandler.report("MainActivity", "operation failed, returning empty list", e); emptyList() }
+                    try { src.getVideoList(ep) } catch (e: Throwable) { com.blissless.tensei.util.ErrorHandler.report("MainActivity", "getVideoList failed", e); emptyList() }
                 }
                 val subVideo = episodeVideos.find {
                     it.videoTitle.contains("sub", ignoreCase = true) && !it.videoTitle.contains("dub", ignoreCase = true) && it.subtitleTracks.isNotEmpty()
@@ -663,8 +695,7 @@ fun MainScreen(
                     !it.videoTitle.contains("dub", ignoreCase = true) && it.subtitleTracks.isNotEmpty()
                 }
                 if (subVideo != null) {
-                    subVideo.subtitleTracks.forEachIndexed { _, _ ->
-                    }
+                    subVideo.subtitleTracks.forEachIndexed { _, _ -> }
                     currentSubtitleTracks = currentSubtitleTracks + subVideo.subtitleTracks
                     if (currentSubtitleUrl == null) {
                         currentSubtitleUrl = currentSubtitleTracks.firstOrNull()?.url
@@ -674,8 +705,6 @@ fun MainScreen(
         }
     }
 
-    var currentTorrentListener by remember { mutableStateOf<TorrentEngine.EngineListener?>(null) }
-
     fun playTorrent(magnetUri: String, anime: AnimeMedia, episode: Int) {
         android.util.Log.i("MainActivity.Torrent", "playTorrent: START anime='${anime.title}' ep=$episode magnet=${magnetUri.take(60)}...")
         isLoadingStream = true
@@ -683,91 +712,41 @@ fun MainScreen(
         torrentStreamServer.value?.stop()
         torrentStreamServer.value = null
 
-        val engine = (context.applicationContext as TenseiApplication).torrentEngine
-        android.util.Log.d("MainActivity.Torrent", "playTorrent: engine.isRunning=${engine.isRunning.get()}")
-        if (!engine.isRunning.get()) {
-            android.util.Log.d("MainActivity.Torrent", "playTorrent: starting engine")
-            engine.start()
-        }
-        android.util.Log.d("MainActivity.Torrent", "playTorrent: removing any previous torrent")
+        val engine = torrentEngine
+        if (!engine.isRunning.get()) engine.start()
         engine.removeCurrentTorrent()
 
         val server = TorrentStreamServer(engine.saveDir)
         torrentStreamServer.value = server
-        android.util.Log.d("MainActivity.Torrent", "playTorrent: created TorrentStreamServer (saveDir=${engine.saveDir.absolutePath})")
 
         currentTorrentListener?.let { engine.removeListener(it) }
         val listener = object : TorrentEngine.EngineListener {
             override fun onMetadataReceived(meta: com.blissless.tensei.torrent.TorrentMeta) {
-                android.util.Log.i("MainActivity.Torrent", "onMetadataReceived: name='${meta.name}' files=${meta.files.size}")
                 scope.launch {
                     try {
                         val videoExts = setOf("mkv", "mp4", "webm", "avi", "mov", "m4v")
-                        val videoFiles = meta.files.filter { f ->
-                            f.name.substringAfterLast('.', "").lowercase() in videoExts
-                        }
+                        val videoFiles = meta.files.filter { f -> f.name.substringAfterLast('.', "").lowercase() in videoExts }
                         val epPattern = Regex("(?:^|[._ \\[\\]()-])0*${episode}(?:\$|[._ \\[\\]()-])", RegexOption.IGNORE_CASE)
-                        val matched = videoFiles.filter { f ->
-                            epPattern.containsMatchIn(f.name) || epPattern.containsMatchIn(f.path)
-                        }
-                        val fileIndex = if (matched.isNotEmpty()) {
-                            android.util.Log.d("MainActivity.Torrent", "onMetadataReceived: matched ep $episode -> '${matched.maxBy { it.size }.name}'")
-                            matched.maxBy { it.size }.index
-                        } else {
-                            android.util.Log.w("MainActivity.Torrent", "onMetadataReceived: no pattern match for ep $episode, sample files:")
-                            videoFiles.take(10).forEach { f ->
-                                android.util.Log.w("MainActivity.Torrent", "  video file: [${f.index}] '${f.name}'")
-                            }
-                            android.util.Log.w("MainActivity.Torrent", "onMetadataReceived: trying fallback contains match")
-                            val fallbackMatched = videoFiles.filter { f ->
-                                f.name.contains("$episode") || f.path.contains("$episode")
-                            }
-                            android.util.Log.d("MainActivity.Torrent", "onMetadataReceived: fallback matched ${fallbackMatched.size} files")
-                            fallbackMatched.maxByOrNull { it.size }?.index ?: run {
-                                android.util.Log.w("MainActivity.Torrent", "onMetadataReceived: fallback also failed, using largest")
-                                engine.getLargestVideoFileIndex()
-                            }
-                        }
+                        val matched = videoFiles.filter { f -> epPattern.containsMatchIn(f.name) || epPattern.containsMatchIn(f.path) }
+                        val fileIndex = if (matched.isNotEmpty()) matched.maxBy { it.size }.index
+                        else videoFiles.filter { f -> f.name.contains("$episode") || f.path.contains("$episode") }
+                            .maxByOrNull { it.size }?.index ?: engine.getLargestVideoFileIndex()
                         engine.startDownload(fileIndex)
                         val port = server.start()
-                        android.util.Log.d("MainActivity.Torrent", "onMetadataReceived: stream server started on port $port")
                         val filePath = engine.getFileSavePath(fileIndex)
-                        if (filePath == null) {
-                            android.util.Log.e("MainActivity.Torrent", "onMetadataReceived: getFileSavePath returned null, aborting")
-                            streamError = "Could not resolve torrent file path"
-                            isLoadingStream = false
-                            return@launch
-                        }
+                        if (filePath == null) { streamError = "Could not resolve torrent file path"; isLoadingStream = false; return@launch }
                         val saveDirPath = engine.saveDir.absolutePath + File.separator
                         val fileName = if (filePath.startsWith(saveDirPath)) filePath.removePrefix(saveDirPath) else filePath.substringAfterLast(File.separator)
-                        android.util.Log.d("MainActivity.Torrent", "onMetadataReceived: filePath='$filePath' fileName='$fileName'")
                         server.setTotalFileSize(engine.getFileSize(fileIndex))
                         server.setPieceSize(engine.getPieceSize())
                         server.setPieceChecker { i -> engine.havePiece(i) }
                         server.setSafeBytesProvider { engine.getContiguousDownloadedBytes() }
-
-                        // Wait for enough contiguous data from the start before handing
-                        // the URL to ExoPlayer. ExoPlayer's read timeout + retry
-                        // mechanism handles temporary unavailability for seeks beyond
-                        // the buffered zone (e.g., MKV cues at tail).
                         val minBytes = 8L * 1024 * 1024
-                        android.util.Log.d("MainActivity.Torrent", "onMetadataReceived: waiting for ${minBytes / 1024 / 1024}MB contiguous...")
                         val waitDeadline = System.nanoTime() + 120_000_000_000L
-                        var waited = false
                         while (System.nanoTime() < waitDeadline) {
-                            val contiguous = engine.getContiguousDownloadedBytes()
-                            if (contiguous >= minBytes) {
-                                android.util.Log.d("MainActivity.Torrent", "onMetadataReceived: ${contiguous / 1024 / 1024}MB contiguous — starting playback")
-                                break
-                            }
-                            waited = true
+                            if (engine.getContiguousDownloadedBytes() >= minBytes) break
                             delay(500)
                         }
-                        if (waited) {
-                            val finalContiguous = engine.getContiguousDownloadedBytes()
-                            android.util.Log.i("MainActivity.Torrent", "onMetadataReceived: waited, contiguous=${finalContiguous / 1024 / 1024}MB")
-                        }
-
                         currentVideoUrl = "http://127.0.0.1:$port/$fileName"
                         currentReferer = ""
                         currentEpisodeTitle = sanitizeEpisodeTitle(anime.title) ?: "Episode $episode"
@@ -780,88 +759,50 @@ fun MainScreen(
                         isExtensionFlow = false
                         showPlayer = true
                         isLoadingStream = false
-                        android.util.Log.i("MainActivity.Torrent", "onMetadataReceived: player URL=$currentVideoUrl — handing off to player")
                     } catch (e: Exception) {
-                        android.util.Log.e("MainActivity.Torrent", "onMetadataReceived: FAILED", e)
                         streamError = "Failed to start streaming: ${e.message}"
                         isLoadingStream = false
                     }
                 }
             }
-            override fun onProgress(downloaded: Long, total: Long) {
-                if (total > 0) {
-                    android.util.Log.v("MainActivity.Torrent", "onProgress: $downloaded/$total (${(downloaded * 100 / total)}%)")
-                }
-            }
-            override fun onFinished() {
-                android.util.Log.i("MainActivity.Torrent", "onFinished: torrent download complete")
-            }
-            override fun onError(message: String) {
-                android.util.Log.e("MainActivity.Torrent", "onError: $message")
-                scope.launch {
-                    streamError = message
-                    isLoadingStream = false
-                }
-            }
+            override fun onProgress(downloaded: Long, total: Long) {}
+            override fun onFinished() {}
+            override fun onError(message: String) { scope.launch { streamError = message; isLoadingStream = false } }
         }
         engine.addListener(listener)
         currentTorrentListener = listener
-
-        android.util.Log.d("MainActivity.Torrent", "playTorrent: calling engine.addTorrentFromMagnet()")
         engine.addTorrentFromMagnet(magnetUri)
-        android.util.Log.d("MainActivity.Torrent", "playTorrent: magnet submitted, waiting for metadata...")
     }
 
     fun loadAndPlayEpisode(anime: AnimeMedia, episode: Int, isAutoRefresh: Boolean = false) {
-        Log.d(TAG_TORRENT, "loadAndPlayEpisode: anime=${anime.id} ep=$episode autoRefresh=$isAutoRefresh")
-        if (!isAutoRefresh) {
-            isAutoRefreshing = false
-            pendingSeekPosition = null
-        }
+        if (!isAutoRefresh) { isAutoRefreshing = false; pendingSeekPosition = null }
         currentAnime = anime
         currentEpisode = episode
         totalEpisodes = anime.totalEpisodes
         streamError = null
         savedPlaybackPosition = viewModel.getPlaybackPosition(anime.id, episode)
-        if (!isAutoRefresh) {
-            showPlayer = false
-        }
+        if (!isAutoRefresh) showPlayer = false
 
         val streamMethod = viewModel.streamMethod.value
-        android.util.Log.d("MainActivity.Torrent", "loadAndPlayEpisode: anime='${anime.title}' ep=$episode streamMethod='$streamMethod'")
         if (streamMethod == "magnet") {
-            if (isAutoRefresh && isAutoRefreshing) {
-                android.util.Log.d("MainActivity.Torrent", "loadAndPlayEpisode: already auto-refreshing, ignoring")
-                return
-            }
+            if (isAutoRefresh && isAutoRefreshing) return
             if (isAutoRefresh) isAutoRefreshing = true
-            android.util.Log.i("MainActivity.Torrent", "loadAndPlayEpisode: using magnet stream method")
             isExtensionFlow = false
             isLoadingStream = true
             scope.launch {
                 yield()
-                android.util.Log.d("MainActivity.Torrent", "loadAndPlayEpisode: checking cache for magnet (animeId=${anime.id})")
                 val cached = viewModel.getMagnetForEpisode(anime.id, episode)
-                android.util.Log.d("MainActivity.Torrent", "loadAndPlayEpisode: cache lookup result=${cached != null}")
-                val magnetUri = withContext(Dispatchers.IO) {
-                    cached ?: viewModel.fetchMagnetForEpisode(anime, episode)
-                }
-                android.util.Log.i("MainActivity.Torrent", "loadAndPlayEpisode: fetch result=${magnetUri != null} magnet=${magnetUri?.take(60)}")
+                val magnetUri = withContext(Dispatchers.IO) { cached ?: viewModel.fetchMagnetForEpisode(anime, episode) }
                 if (magnetUri != null && magnetUri.isNotEmpty()) {
-                    android.util.Log.d("MainActivity.Torrent", "loadAndPlayEpisode: magnet found, calling playTorrent")
                     playTorrent(magnetUri, anime, episode)
                 } else if (magnetUri != null) {
-                    android.util.Log.d("MainActivity.Torrent", "loadAndPlayEpisode: empty magnet, trying stream URL")
                     val streamResult = viewModel.fetchStreamUrlForEpisode(anime, episode, viewModel.preferredCategory.value)
-                    android.util.Log.i("MainActivity.Torrent", "loadAndPlayEpisode: streamUrl result=${streamResult != null}")
                     if (streamResult != null) {
                         currentVideoUrl = streamResult.url
                         currentReferer = streamResult.headers["Referer"] ?: ""
                         currentEpisodeTitle = sanitizeEpisodeTitle(anime.title) ?: "Episode $episode"
                         currentSubtitleTracks = streamResult.subtitles
-                        currentSubtitleUrl = streamResult.subtitles.firstOrNull { s ->
-                            s.lang.contains("english", ignoreCase = true) || s.lang.contains("en", ignoreCase = true)
-                        }?.url ?: streamResult.subtitles.firstOrNull()?.url
+                        currentSubtitleUrl = streamResult.subtitles.firstOrNull { s -> s.lang.contains("english", ignoreCase = true) || s.lang.contains("en", ignoreCase = true) }?.url ?: streamResult.subtitles.firstOrNull()?.url
                         currentQualityOptions = emptyList()
                         currentQuality = "Auto"
                         currentServerName = "Tensei"
@@ -875,7 +816,6 @@ fun MainScreen(
                         context.toast("No stream available for Ep $episode")
                     }
                 } else {
-                    android.util.Log.e("MainActivity.Torrent", "loadAndPlayEpisode: no magnet link found for Ep $episode")
                     streamError = "No magnet link found for Ep $episode"
                     isLoadingStream = false
                     context.toast("No magnet available for Ep $episode")
@@ -904,9 +844,9 @@ fun MainScreen(
                     extensionSourcePackage = extPackage
                     extensionEpisodeNumber = episode
                     extensionEpisodeUrl = result.episode?.url ?: ""
-                    PlayerData.extensionSource = result.source
-                    PlayerData.extensionEpisode = result.episode
-                    PlayerData.allHosters = result.hosters ?: emptyList()
+                    com.blissless.tensei.stream.PlayerData.extensionSource = result.source
+                    com.blissless.tensei.stream.PlayerData.extensionEpisode = result.episode
+                    com.blissless.tensei.stream.PlayerData.allHosters = result.hosters ?: emptyList()
                     playExtensionVideo(result, 0)
                 } else {
                     streamError = "Extension stream not found: Ep $episode"
@@ -919,7 +859,6 @@ fun MainScreen(
         }
 
         showNoExtDialog = true
-        return
     }
 
     suspend fun getTmdbEpisodeTitle(anime: AnimeMedia, episode: Int): String {
@@ -932,8 +871,53 @@ fun MainScreen(
             val tmdbEpisodes = viewModel.fetchTmdbEpisodes(anime.title, anime.id, anime.year, anime.format)
             val title = tmdbEpisodes.find { it.episode == episode }?.title
             sanitizeEpisodeTitle(title) ?: "Episode $episode"
-        } catch (_: Exception) {
-            "Episode $episode"
+        } catch (_: Exception) { "Episode $episode" }
+    }
+
+    fun fetchAndCacheEpisode(ep: Int) {
+        if (currentAnime == null) return
+        val pkg = extensionSourcePackage.ifEmpty { viewModel.defaultExtensionPackage.value }
+        if (pkg.isEmpty()) return
+        scope.launch {
+            if (episodeCache.containsKey(ep)) return@launch
+            val result = viewModel.playEpisodeWithExtension(currentAnime!!, ep, pkg)
+            if (result != null) episodeCache[ep] = result
+        }
+    }
+
+    fun prefetchExtensionNextEpisode() {
+        if (currentAnime == null) return
+        scope.launch {
+            val nextEp = currentEpisode + 1
+            val pkg = extensionSourcePackage.ifEmpty { viewModel.defaultExtensionPackage.value }
+            if (pkg.isEmpty()) return@launch
+            val result = viewModel.playEpisodeWithExtension(currentAnime!!, nextEp, pkg)
+            if (result != null) { cachedExtensionNext = result; episodeCache[nextEp] = result }
+        }
+    }
+
+    fun handleExtensionServerChange(hosterName: String) {
+        val hoster = extensionHosters?.find { it.hosterName == hosterName } ?: return
+        val source = com.blissless.tensei.stream.PlayerData.extensionSource
+        if (source == null) { context.toast("Source not available"); return }
+        scope.launch {
+            isLoadingStream = true
+            val result = viewModel.fetchExtensionHosterVideos(source, hoster)
+            if (result != null) {
+                currentVideoUrl = result.url
+                currentReferer = result.referer
+                currentSubtitleUrl = result.subtitleUrl
+                currentServerName = hosterName
+                currentCategory = if (hosterName.contains("dub", ignoreCase = true) || result.videoTitle.contains("dub", ignoreCase = true)) "dub" else "sub"
+                currentQualityOptions = com.blissless.tensei.ui.screens.player.buildQualityOptions(result.videos)
+                currentQuality = result.videoTitle
+                extensionOkHttpClient = result.extensionClient
+                extensionVideoHeaders = result.videoHeaders
+                episodeTrigger++
+            } else {
+                context.toast("Failed to load $hosterName")
+            }
+            isLoadingStream = false
         }
     }
 
@@ -950,42 +934,11 @@ fun MainScreen(
         }
     }
 
-    fun fetchAndCacheEpisode(ep: Int) {
-        if (currentAnime == null) return
-        val pkg = extensionSourcePackage.ifEmpty { viewModel.defaultExtensionPackage.value }
-        if (pkg.isEmpty()) return
-        scope.launch {
-            if (episodeCache.containsKey(ep)) return@launch
-            val result = viewModel.playEpisodeWithExtension(currentAnime!!, ep, pkg)
-            if (result != null) {
-                episodeCache[ep] = result
-            }
-        }
-    }
-
-    fun prefetchExtensionNextEpisode() {
-        if (currentAnime == null) return
-        scope.launch {
-            val nextEp = currentEpisode + 1
-            val pkg = extensionSourcePackage.ifEmpty { viewModel.defaultExtensionPackage.value }
-            if (pkg.isEmpty()) return@launch
-            val result = viewModel.playEpisodeWithExtension(currentAnime!!, nextEp, pkg)
-            if (result != null) {
-                cachedExtensionNext = result
-                episodeCache[nextEp] = result
-            }
-        }
-    }
-
     val onPreviousEpisode: () -> Unit = {
-        android.util.Log.d("EpisodeNav", "onPreviousEpisode clicked: currentEp=$currentEpisode isChanging=$isChangingEpisode anime=${currentAnime?.id}")
         if (!isChangingEpisode && currentAnime != null && currentEpisode > 1) {
             isChangingEpisode = true
-
             val prevEp = currentEpisode - 1
             val cached = episodeCache[prevEp]
-            android.util.Log.d("EpisodeNav", "onPreviousEpisode: prevEp=$prevEp cached=${cached != null} extSrcPkg='$extensionSourcePackage' defaultExtPkg='${viewModel.defaultExtensionPackage.value}' streamMethod='${viewModel.streamMethod.value}'")
-
             if (cached != null) {
                 currentEpisode = prevEp
                 savedPlaybackPosition = viewModel.getPlaybackPosition(currentAnime!!.id, prevEp)
@@ -1007,9 +960,6 @@ fun MainScreen(
                 prefetchExtensionNextEpisode()
                 fetchAndCacheEpisode(prevEp - 1)
             } else {
-                // Cache miss — delegate to loadAndPlayEpisode which handles
-                // both magnet and direct extension stream methods.
-                // Use isAutoRefresh=true to avoid hiding the player.
                 isChangingEpisode = false
                 isAutoRefreshing = false
                 loadAndPlayEpisode(currentAnime!!, prevEp, isAutoRefresh = true)
@@ -1018,14 +968,10 @@ fun MainScreen(
     }
 
     val onNextEpisode: () -> Unit = {
-        android.util.Log.d("EpisodeNav", "onNextEpisode clicked: currentEp=$currentEpisode isChanging=$isChangingEpisode anime=${currentAnime?.id}")
         if (!isChangingEpisode && currentAnime != null) {
             isChangingEpisode = true
-
             val nextEp = currentEpisode + 1
             val cached = cachedExtensionNext ?: episodeCache[nextEp]
-            android.util.Log.d("EpisodeNav", "onNextEpisode: nextEp=$nextEp cached=${cached != null} extSrcPkg='$extensionSourcePackage' defaultExtPkg='${viewModel.defaultExtensionPackage.value}'")
-
             if (cached != null) {
                 cachedExtensionNext = null
                 currentEpisode = nextEp
@@ -1049,9 +995,6 @@ fun MainScreen(
                 prefetchExtensionNextEpisode()
                 fetchAndCacheEpisode(nextEp - 1)
             } else {
-                // Cache miss — delegate to loadAndPlayEpisode which handles
-                // both magnet and direct extension stream methods.
-                // Use isAutoRefresh=true to avoid hiding the player.
                 isChangingEpisode = false
                 isAutoRefreshing = false
                 loadAndPlayEpisode(currentAnime!!, nextEp, isAutoRefresh = true)
@@ -1059,50 +1002,6 @@ fun MainScreen(
         }
     }
 
-    fun handleExtensionServerChange(hosterName: String) {
-        val hoster = extensionHosters?.find { it.hosterName == hosterName } ?: return
-        val source = PlayerData.extensionSource
-        if (source == null) {
-            context.toast("Source not available")
-            return
-        }
-        scope.launch {
-            isLoadingStream = true
-            val result = viewModel.fetchExtensionHosterVideos(source, hoster)
-            if (result != null) {
-                currentVideoUrl = result.url
-                currentReferer = result.referer
-                currentSubtitleUrl = result.subtitleUrl
-                currentServerName = hosterName
-                currentCategory = if (hosterName.contains("dub", ignoreCase = true) || result.videoTitle.contains("dub", ignoreCase = true)) "dub" else "sub"
-                currentQualityOptions = com.blissless.tensei.ui.screens.player.buildQualityOptions(result.videos)
-                currentQuality = result.videoTitle
-                extensionOkHttpClient = result.extensionClient
-                extensionVideoHeaders = result.videoHeaders
-                episodeTrigger++
-            } else {
-                context.toast("Failed to load $hosterName")
-            }
-            isLoadingStream = false
-        }
-    }
-
-    fun invalidateCurrentStreamCache() {
-        currentAnime?.let { anime ->
-            viewModel.invalidateStreamCache(anime.id, currentEpisode, currentCategory)
-            viewModel.clearAnimeExtensionStreamCaches(anime.id)
-            currentVideoUrl?.let { viewModel.removeFromVideoCache(it) }
-        }
-    }
-
-    fun onPlaybackError() {
-        // Invalidate the cache for this stream
-        invalidateCurrentStreamCache()
-
-        currentAnime?.let { _ ->
-
-        }
-    }
 
     val exploreDialog = overlayState as? OverlayState.ExploreAnimeDialog
     if (exploreDialog != null) {

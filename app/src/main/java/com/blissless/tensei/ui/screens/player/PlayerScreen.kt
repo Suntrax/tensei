@@ -1367,7 +1367,7 @@ fun PlayerScreen(
                                         Row(
                                             modifier = Modifier
                                                 .defaultMinSize(minWidth = 44.dp)
-                                                .padding(horizontal = 12.dp, vertical = 12.dp),
+                                                .padding(horizontal = 12.dp, vertical = 16.dp),
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                                             ) {
@@ -1588,83 +1588,16 @@ fun PlayerScreen(
                                 )
 
                                 // Player settings button
-                                Box {
-                                    Surface(
-                                        shape = RoundedCornerShape(14.dp),
-                                        color = Color.Black.copy(alpha = 0.5f),
-                                        onClick = { showPlayerSettings = true }
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.Center
-                                        ) {
-                                            Icon(
-                                                Icons.Default.Settings,
-                                                "Player Settings",
-                                                tint = Color.White,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                        }
-                                    }
-                                    DropdownMenu(
-                                        expanded = showPlayerSettings,
-                                        onDismissRequest = { showPlayerSettings = false },
-                                        modifier = Modifier.background(Color(0xFF1A1A1A)).width(220.dp)
-                                    ) {
-                                        DropdownMenuItem(
-                                            text = {
-                                                Row(
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
-                                                    Text("Swipe for Volume (${if (swipeSwap) "Right" else "Left"})", color = Color.White)
-                                                    Switch(
-                                                        checked = swipeVolume,
-                                                        onCheckedChange = { onSwipeVolumeChange?.invoke(it) },
-                                                        colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary)
-                                                    )
-                                                }
-                                            },
-                                            onClick = { onSwipeVolumeChange?.invoke(!swipeVolume) }
-                                        )
-                                        DropdownMenuItem(
-                                            text = {
-                                                Row(
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
-                                                    Text("Swipe for Brightness (${if (swipeSwap) "Left" else "Right"})", color = Color.White)
-                                                    Switch(
-                                                        checked = swipeBrightness,
-                                                        onCheckedChange = { onSwipeBrightnessChange?.invoke(it) },
-                                                        colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary)
-                                                    )
-                                                }
-                                            },
-                                            onClick = { onSwipeBrightnessChange?.invoke(!swipeBrightness) }
-                                        )
-                                        DropdownMenuItem(
-                                            text = {
-                                                Row(
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
-                                                    Text("Swap Sides", color = Color.White)
-                                                    Switch(
-                                                        checked = swipeSwap,
-                                                        onCheckedChange = { onSwipeSwapChange?.invoke(it) },
-                                                        colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary)
-                                                    )
-                                                }
-                                            },
-                                            onClick = { onSwipeSwapChange?.invoke(!swipeSwap) }
-                                        )
-                                    }
-                                }
+                                PlayerSettingsButton(
+                                    showMenu = showPlayerSettings,
+                                    onShowMenuChange = { showPlayerSettings = it },
+                                    swipeVolume = swipeVolume,
+                                    swipeBrightness = swipeBrightness,
+                                    swipeSwap = swipeSwap,
+                                    onSwipeVolumeChange = { onSwipeVolumeChange?.invoke(it) },
+                                    onSwipeBrightnessChange = { onSwipeBrightnessChange?.invoke(it) },
+                                    onSwipeSwapChange = { onSwipeSwapChange?.invoke(it) },
+                                )
 
                             }
                         }
@@ -1731,41 +1664,19 @@ fun PlayerScreen(
                         }
                     }
 
-                    AnimatedVisibility(
+                    SkipIndicatorOverlay(
                         visible = showSkipIndicator && !skipIsForward,
-                        enter = fadeIn() + scaleIn(initialScale = 0.8f),
-                        exit = fadeOut() + scaleOut(targetScale = 0.8f),
-                        modifier = Modifier.align(Alignment.CenterStart).offset(x = (-120).dp)
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Box(
-                                modifier = Modifier.size(56.dp).background(Color.Black.copy(alpha = 0.6f), CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Default.FastRewind, "Rewind", tint = Color.White, modifier = Modifier.size(32.dp))
-                            }
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(skipIndicatorText, color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                        }
-                    }
+                        isForward = false,
+                        text = skipIndicatorText,
+                        modifier = Modifier.align(Alignment.CenterStart).offset(x = (-120).dp),
+                    )
 
-                    AnimatedVisibility(
+                    SkipIndicatorOverlay(
                         visible = showSkipIndicator && skipIsForward,
-                        enter = fadeIn() + scaleIn(initialScale = 0.8f),
-                        exit = fadeOut() + scaleOut(targetScale = 0.8f),
-                        modifier = Modifier.align(Alignment.CenterEnd).offset(x = 120.dp)
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Box(
-                                modifier = Modifier.size(56.dp).background(Color.Black.copy(alpha = 0.6f), CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Default.FastForward, "Forward", tint = Color.White, modifier = Modifier.size(32.dp))
-                            }
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(skipIndicatorText, color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                        }
-                    }
+                        isForward = true,
+                        text = skipIndicatorText,
+                        modifier = Modifier.align(Alignment.CenterEnd).offset(x = 120.dp),
+                    )
                 }
 
                 // Skip Opening/Ending buttons - outside controls visibility so they don't get darkened
@@ -2058,19 +1969,21 @@ fun PlayerScreen(
         }
 
         // Volume Overlay Indicator (on top of controls)
+        // When swipeSwap is true, volume shows on the right; otherwise left
         VolumeOverlay(
             visible = showVolumeOverlay,
             volume = playerVolume,
             disableMaterialColors = disableMaterialColors,
-            modifier = Modifier.align(Alignment.CenterStart),
+            modifier = Modifier.align(if (swipeSwap) Alignment.CenterEnd else Alignment.CenterStart),
         )
 
         // Brightness Overlay Indicator (on top of controls)
+        // When swipeSwap is true, brightness shows on the left; otherwise right
         BrightnessOverlay(
             visible = showBrightnessOverlay,
             brightness = currentBrightness,
             disableMaterialColors = disableMaterialColors,
-            modifier = Modifier.align(Alignment.CenterEnd),
+            modifier = Modifier.align(if (swipeSwap) Alignment.CenterStart else Alignment.CenterEnd),
         )
 
         // Subtitle Settings full-screen overlay
