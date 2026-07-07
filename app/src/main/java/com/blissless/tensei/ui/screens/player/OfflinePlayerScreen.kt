@@ -948,24 +948,9 @@ fun OfflinePlayerScreen(
                                 }
                             }
                             // Resize button only (no server selectors)
-                            Surface(
-                                shape = RoundedCornerShape(14.dp),
-                                color = Color.Black.copy(alpha = 0.5f),
+                            ResizeButton(
                                 onClick = { resizeModeIndex = (resizeModeIndex + 1) % resizeModes.size }
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center
-                                ) {
-                                    Icon(
-                                        Icons.Default.AspectRatio,
-                                        "Change aspect ratio",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                            }
+                            )
 
                             // Player settings button
                             var showPlayerSettings by remember { mutableStateOf(false) }
@@ -1630,92 +1615,20 @@ fun OfflinePlayerScreen(
                 }
 
                 // Volume overlay
-                AnimatedVisibility(
+                VolumeOverlay(
                     visible = showVolumeOverlay,
-                    enter = fadeIn(animationSpec = tween(200)) + slideInVertically { it / 4 },
-                    exit = fadeOut(animationSpec = tween(300)),
-                    modifier = Modifier.align(Alignment.CenterStart)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .padding(start = 16.dp)
-                            .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(16.dp))
-                            .padding(12.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.VolumeUp,
-                            contentDescription = "Volume",
-                            tint = Color.White,
-                            modifier = Modifier.size(22.dp)
-                        )
-                        Text(
-                            text = "${(playerVolume * 100).toInt()}%",
-                            color = Color.White,
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Box(
-                            modifier = Modifier
-                                .width(4.dp)
-                                .height(80.dp)
-                                .background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(2.dp))
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .fillMaxHeight(playerVolume)
-                                    .align(Alignment.BottomCenter)
-                                    .background(Color.White, RoundedCornerShape(2.dp))
-                            )
-                        }
-                    }
-                }
+                    volume = playerVolume,
+                    disableMaterialColors = true,
+                    modifier = Modifier.align(Alignment.CenterStart),
+                )
 
                 // Brightness overlay
-                AnimatedVisibility(
+                BrightnessOverlay(
                     visible = showBrightnessOverlay,
-                    enter = fadeIn(animationSpec = tween(200)) + slideInVertically { it / 4 },
-                    exit = fadeOut(animationSpec = tween(300)),
-                    modifier = Modifier.align(Alignment.CenterEnd)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .padding(end = 16.dp)
-                            .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(16.dp))
-                            .padding(12.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.BrightnessHigh,
-                            contentDescription = "Brightness",
-                            tint = Color(0xFFFFD54F),
-                            modifier = Modifier.size(22.dp)
-                        )
-                        Text(
-                            text = "${(currentBrightness * 100).toInt()}%",
-                            color = Color.White,
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Box(
-                            modifier = Modifier
-                                .width(4.dp)
-                                .height(80.dp)
-                                .background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(2.dp))
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .fillMaxHeight(currentBrightness)
-                                    .align(Alignment.BottomCenter)
-                                    .background(Color(0xFFFFD54F), RoundedCornerShape(2.dp))
-                            )
-                        }
-                    }
-                }
+                    brightness = currentBrightness,
+                    disableMaterialColors = true,
+                    modifier = Modifier.align(Alignment.CenterEnd),
+                )
             }
 
             // Subtitle Settings Dialog overlay
