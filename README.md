@@ -26,7 +26,7 @@ A modern anime list manager and tracker for Android.
 
 ## Installation
 
-Download the APK from [Releases](https://github.com/YOUR_USERNAME/tensei/releases) and install.
+Download the APK from [Releases](https://github.com/Suntrax/tensei/releases) and install.
 
 ## Tech Stack
 
