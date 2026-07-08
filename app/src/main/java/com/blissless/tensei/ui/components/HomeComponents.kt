@@ -728,6 +728,7 @@ fun ContinueWatchingEpisodeCard(
             .width(240.dp)
             .height(140.dp)
             .clip(RoundedCornerShape(18.dp))
+            .clickable { onPlayClick() }
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             AsyncImage(
@@ -792,9 +793,7 @@ fun ContinueWatchingEpisodeCard(
                     }
                 }
 
-                Column(
-                    modifier = Modifier.clickable { onPlayClick() }
-                ) {
+                Column {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
