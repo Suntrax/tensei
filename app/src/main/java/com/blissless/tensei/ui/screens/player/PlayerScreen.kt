@@ -323,6 +323,8 @@ fun PlayerScreen(
     var hasSkippedOutro by remember(videoUrl) { mutableStateOf(false) }
     var showSkipOpeningButton by remember(videoUrl) { mutableStateOf(false) }
     var showSkipEndingButton by remember(videoUrl) { mutableStateOf(false) }
+    var introEnteredTime by remember(videoUrl) { mutableLongStateOf(0L) }
+    var creditsEnteredTime by remember(videoUrl) { mutableLongStateOf(0L) }
     var hasFetchedTimestamps by remember(videoUrl) { mutableStateOf(false) }
     var actualEpisodeLength by remember(videoUrl) { mutableStateOf<Int?>(null) }
 
@@ -571,6 +573,8 @@ fun PlayerScreen(
         hasRestoredPosition = false
         hasSkippedIntro = false
         hasSkippedOutro = false
+        introEnteredTime = 0L
+        creditsEnteredTime = 0L
         hasTriggeredPrefetch = false
         isChangingServer = false
         hasPlaybackStarted = false
@@ -840,7 +844,7 @@ fun PlayerScreen(
         hasFetchedTimestamps = true
     }
 
-    LaunchedEffect(currentPosition, effectiveTimestamps, hasError, isManuallySeeking, isChangingServer, isDragging) {
+    LaunchedEffect(currentPosition, effectiveTimestamps, hasError, isManuallySeeking, isChangingServer, isDragging, isPlaying, controlsVisible) {
         if (hasError || isChangingServer || isDragging) return@LaunchedEffect
 
         val ts = effectiveTimestamps
@@ -853,8 +857,23 @@ fun PlayerScreen(
                     exoPlayer.seekTo(ts.introEnd * 1000L)
                     hasSkippedIntro = true
                 }
-                showSkipOpeningButton = !autoSkipOpening
+                if (!autoSkipOpening) {
+                    if (introEnteredTime == 0L) {
+                        introEnteredTime = System.currentTimeMillis()
+                        Log.d("SkipButton", "enterIntro: pos=$posSeconds t=${introEnteredTime}")
+                    }
+                    val elapsed = System.currentTimeMillis() - introEnteredTime
+                    val shouldShow = controlsVisible || !isPlaying || elapsed < 5000
+                    Log.d("SkipButton", "opening: pos=$posSeconds introTime=$elapsed controls=$controlsVisible isPlaying=$isPlaying show=$shouldShow")
+                    showSkipOpeningButton = shouldShow
+                } else {
+                    showSkipOpeningButton = false
+                }
             } else {
+                if (introEnteredTime != 0L) {
+                    Log.d("SkipButton", "exitIntro: pos=$posSeconds")
+                }
+                introEnteredTime = 0L
                 showSkipOpeningButton = false
             }
         }
@@ -870,8 +889,23 @@ fun PlayerScreen(
                     }
                     hasSkippedOutro = true
                 }
-                showSkipEndingButton = true // Always show skip ending button
+                if (!autoSkipEnding) {
+                    if (creditsEnteredTime == 0L) {
+                        creditsEnteredTime = System.currentTimeMillis()
+                        Log.d("SkipButton", "enterCredits: pos=$posSeconds t=${creditsEnteredTime}")
+                    }
+                    val elapsed = System.currentTimeMillis() - creditsEnteredTime
+                    val shouldShow = controlsVisible || !isPlaying || elapsed < 5000
+                    Log.d("SkipButton", "ending: pos=$posSeconds creditsTime=$elapsed controls=$controlsVisible isPlaying=$isPlaying show=$shouldShow")
+                    showSkipEndingButton = shouldShow
+                } else {
+                    showSkipEndingButton = false
+                }
             } else {
+                if (creditsEnteredTime != 0L) {
+                    Log.d("SkipButton", "exitCredits: pos=$posSeconds")
+                }
+                creditsEnteredTime = 0L
                 showSkipEndingButton = false
             }
         }
@@ -886,7 +920,6 @@ fun PlayerScreen(
             }
         }
     }
-
     LaunchedEffect(showControls, isPlaying, isDragging, hasError, showServerMenu, showQualityMenu, showSpeedMenu, showSubtitleMenu, showPlayerSettings, isManuallySeeking) {
         if (showControls && isPlaying && !isDragging && !hasError && !showServerMenu && !showQualityMenu && !showSpeedMenu && !showSubtitleMenu && !showPlayerSettings && !isManuallySeeking) {
             delay(2000.milliseconds)
@@ -1680,36 +1713,6 @@ fun PlayerScreen(
                     )
                 }
 
-                // Skip Opening/Ending buttons - outside controls visibility so they don't get darkened
-                SkipButtonsOverlay(
-                    showSkipOpening = showSkipOpeningButton,
-                    showSkipEnding = showSkipEndingButton,
-                    isLatestEpisode = isLatestEpisode,
-                    creditsAtEnd = creditsAtEnd,
-                    isChangingServer = isChangingServer,
-                    onSkipOpening = {
-                        val ts = effectiveTimestamps
-                        if (ts.introEnd != null) {
-                            exoPlayer.seekTo(ts.introEnd * 1000L)
-                            // Only resume playback if the player was already playing
-                            if (exoPlayer.isPlaying) {
-                                exoPlayer.play()
-                            }
-                            hasSkippedIntro = true
-                        }
-                    },
-                    onSkipEnding = {
-                        if (isLatestEpisode || !creditsAtEnd) {
-                            if (exoPlayer.duration > 0) {
-                                exoPlayer.seekTo(exoPlayer.duration)
-                            }
-                        } else if (!isChangingServer) {
-                            onNextEpisode?.invoke()
-                        }
-                    },
-                    modifier = Modifier.align(Alignment.CenterEnd).padding(end = 16.dp),
-                )
-
                 if (isLoadingStream || isChangingServer) {
                     PlayerLoadingIndicator(modifier = Modifier.align(Alignment.Center).offset(y = 64.dp))
                 }
@@ -1968,6 +1971,35 @@ fun PlayerScreen(
                 }
             }
         }
+
+        // Skip Opening/Ending buttons - outside controls AnimatedVisibility so they're visible even when UI is hidden
+        SkipButtonsOverlay(
+            showSkipOpening = showSkipOpeningButton,
+            showSkipEnding = showSkipEndingButton,
+            isLatestEpisode = isLatestEpisode,
+            creditsAtEnd = creditsAtEnd,
+            isChangingServer = isChangingServer,
+            onSkipOpening = {
+                val ts = effectiveTimestamps
+                if (ts.introEnd != null) {
+                    exoPlayer.seekTo(ts.introEnd * 1000L)
+                    if (exoPlayer.isPlaying) {
+                        exoPlayer.play()
+                    }
+                    hasSkippedIntro = true
+                }
+            },
+            onSkipEnding = {
+                if (isLatestEpisode || !creditsAtEnd) {
+                    if (exoPlayer.duration > 0) {
+                        exoPlayer.seekTo(exoPlayer.duration)
+                    }
+                } else if (!isChangingServer) {
+                    onNextEpisode?.invoke()
+                }
+            },
+            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 16.dp),
+        )
 
         // Volume Overlay Indicator (on top of controls)
         // When swipeSwap is true, volume shows on the right; otherwise left
