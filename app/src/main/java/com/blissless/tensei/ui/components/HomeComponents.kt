@@ -756,13 +756,13 @@ fun ContinueWatchingEpisodeCard(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(14.dp),
+                    .padding(start = 8.dp, end = 8.dp, bottom = 14.dp, top = 8.dp),
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.Top
                 ) {
                     Surface(
                         shape = RoundedCornerShape(8.dp),
