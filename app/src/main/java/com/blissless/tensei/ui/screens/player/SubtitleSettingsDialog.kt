@@ -48,6 +48,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -256,7 +257,10 @@ private fun SubtitleSettingsContent(
     var showRenameDialog by remember { mutableStateOf(false) }
     var renameText by remember { mutableStateOf("") }
     var hasChanges by remember { mutableStateOf(false) }
+    var showSaved by remember { mutableStateOf(false) }
     var activePanel by remember { mutableStateOf<Panel?>(null) }
+
+    LaunchedEffect(showSaved) { if (showSaved) { kotlinx.coroutines.delay(2000); showSaved = false } }
 
     // Sync fullSettings when the external profile changes
     LaunchedEffect(activeProfileIndex) {
@@ -438,10 +442,8 @@ private fun SubtitleSettingsContent(
                     renameText = profiles.getOrNull(activeProfileIndex)?.profileName ?: ""
                     showRenameDialog = true
                 }
-                ToolbarIconButton(Icons.Default.Save, "Save") {
-                    commitDrag()
-                    onSave()
-                    hasChanges = false
+                ToolbarIconButton(if (showSaved) Icons.Default.Check else Icons.Default.Save, "Save") {
+                    if (!showSaved) { commitDrag(); onSave(); hasChanges = false; showSaved = true }
                 }
                 ToolbarIconButton(Icons.Default.Close, "Close") {
                     if (hasChanges) showCloseConfirm = true
@@ -527,13 +529,10 @@ private fun SubtitleSettingsContent(
                             )
                             Panel.Outline -> OutlinePanel(
                                 enabled = fullSettings.enableOutline,
-                                onToggle = { uiChange { fullSettings = fullSettings.copy(enableOutline = it) } },
-                                width = fullSettings.outlineWidth,
-                                onWidthChange = { uiChange { fullSettings = fullSettings.copy(outlineWidth = it) } },
+                                onToggle = { uiChange { fullSettings = fullSettings.copy(enableOutline = it, outlineWidth = 2f) } },
                                 color = fullSettings.outlineColor,
                                 onColorChange = { uiChange { fullSettings = fullSettings.copy(outlineColor = it) } },
-                                onResetAll = { uiChange { fullSettings = fullSettings.copy(enableOutline = true, outlineWidth = Defaults.FULL_SETTINGS.outlineWidth, outlineColor = Defaults.FULL_SETTINGS.outlineColor) } },
-                                onResetWidth = { uiChange { fullSettings = fullSettings.copy(outlineWidth = Defaults.FULL_SETTINGS.outlineWidth) } },
+                                onResetAll = { uiChange { fullSettings = fullSettings.copy(enableOutline = true, outlineWidth = 2f, outlineColor = Defaults.FULL_SETTINGS.outlineColor) } },
                                 onResetColor = { uiChange { fullSettings = fullSettings.copy(outlineColor = Defaults.FULL_SETTINGS.outlineColor) } },
                                 onDismiss = { activePanel = null }
                             )

@@ -112,12 +112,9 @@ internal fun TextSizePanel(
 internal fun OutlinePanel(
     enabled: Boolean,
     onToggle: (Boolean) -> Unit,
-    width: Float,
-    onWidthChange: (Float) -> Unit,
     color: Long,
     onColorChange: (Long) -> Unit,
     onResetAll: () -> Unit,
-    onResetWidth: () -> Unit,
     onResetColor: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -129,14 +126,6 @@ internal fun OutlinePanel(
         Spacer(Modifier.height(8.dp))
         ToggleRow(label = "Enable Outline", checked = enabled, onCheckedChange = onToggle)
         if (enabled) {
-            Spacer(Modifier.height(8.dp))
-            SliderRow(
-                label = "Width",
-                value = width,
-                onValueChange = onWidthChange,
-                valueRange = 1f..2f,
-                displayValue = "${width.toInt()} dp"
-            )
             Spacer(Modifier.height(12.dp))
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
