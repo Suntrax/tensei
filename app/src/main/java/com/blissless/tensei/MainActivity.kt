@@ -1454,6 +1454,7 @@ fun MainScreen(
                     val trackingPercent = viewModel.trackingPercentage.value
                     if (percentage >= trackingPercent && anime.id > 0) {
                         viewModel.updateAnimeProgress(anime.id, currentEpisode)
+                        viewModel.clearPlaybackPosition(anime.id, currentEpisode)
                         if (!hasPrefetchedNextOnTracking && currentEpisode < released) {
                             hasPrefetchedNextOnTracking = true
                             prefetchExtensionNextEpisode()
@@ -1506,6 +1507,7 @@ fun MainScreen(
                 extensionName = extensionName,
                 onExtensionServerChange = { hosterName -> handleExtensionServerChange(hosterName) },
                 onPrefetchNextExtensionEpisode = { prefetchExtensionNextEpisode() },
+                isTorrentStream = torrentStreamServer.value != null,
             )
         }
 

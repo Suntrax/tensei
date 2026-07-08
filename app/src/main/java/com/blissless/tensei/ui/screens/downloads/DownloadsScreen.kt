@@ -178,7 +178,7 @@ fun DownloadsScreen(
             val animeId = group.episodes.firstOrNull()?.animeId ?: return@mapNotNull null
             val watchedEpisodes = group.episodes.filter { ep ->
                 val key = "${animeId}_${ep.episode}_offline"
-                (playbackPositions[key] ?: 0L) > 0L
+                (playbackPositions[key] ?: 0L) >= 5000L
             }
             if (watchedEpisodes.isEmpty()) return@mapNotNull null
             val maxWatchedEp = watchedEpisodes.maxOf { it.episode }

@@ -212,7 +212,7 @@ fun HomeScreen(
     val continueWatchingEpisodes = remember(allAnime, playbackPositions, startedAt) {
         val seen = mutableSetOf<String>()
         playbackPositions.filter { (key, pos) ->
-            pos > 0L && !key.endsWith("_offline")
+            pos >= 5000L && !key.endsWith("_offline")
         }.mapNotNull { (key, pos) ->
             val parts = key.split("_")
             if (parts.size >= 2) {

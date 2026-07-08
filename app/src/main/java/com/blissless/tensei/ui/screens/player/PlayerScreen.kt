@@ -213,6 +213,7 @@ fun PlayerScreen(
     onExtensionServerChange: ((hosterName: String) -> Unit)? = null,
     onPrefetchNextExtensionEpisode: (() -> Unit)? = null,
     onAutoPlayNextEpisodeChanged: ((Boolean) -> Unit)? = null,
+    isTorrentStream: Boolean = false,
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
@@ -494,7 +495,7 @@ fun PlayerScreen(
                         // restarts the entire torrent download. Instead, retry the seek
                         // so ExoPlayer reconnects to the TorrentStreamServer after more
                         // data has downloaded.
-                        if (isInitialLoading && videoUrl.startsWith("http://127.0.0.1:")) {
+                        if (isInitialLoading && isTorrentStream) {
                             Log.d("PlayerScreen", "onPlayerError: torrent stream error, retrying seek instead of auto-refresh")
                             seekRetryCount = 1
                             hasError = false
