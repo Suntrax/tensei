@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,14 +18,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,10 +30,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlin.math.roundToInt
 
 /**
  * Setting panels for the Subtitle Settings dialog.
@@ -137,8 +134,8 @@ internal fun OutlinePanel(
                 label = "Width",
                 value = width,
                 onValueChange = onWidthChange,
-                valueRange = 1f..6f,
-                displayValue = "${width.toInt()} px"
+                valueRange = 1f..2f,
+                displayValue = "${width.toInt()} dp"
             )
             Spacer(Modifier.height(12.dp))
             Row(
@@ -342,160 +339,61 @@ internal fun FontColorPanel(
     }
 }
 
+internal val FONT_PRESETS = listOf(
+    "Default" to FontFamily.SansSerif,
+    "Serif" to FontFamily.Serif,
+    "Monospace" to FontFamily.Monospace,
+    "Sans Serif Light" to FontFamily.SansSerif,
+    "Cursive" to FontFamily.Cursive
+)
+
 @Composable
-internal fun AdvancedPanel(
-    verticalPosition: Float,
-    onVerticalChange: (Float) -> Unit,
-    horizontalPosition: Float,
-    onHorizontalChange: (Float) -> Unit,
-    maxWidthRatio: Float,
-    onMaxWidthChange: (Float) -> Unit,
-    delayMs: Int,
-    onDelayChange: (Int) -> Unit,
-    rotation: Float,
-    onRotationChange: (Float) -> Unit,
-    onResetAll: () -> Unit,
-    onResetVertical: () -> Unit,
-    onResetHorizontal: () -> Unit,
-    onResetMaxWidth: () -> Unit,
-    onResetDelay: () -> Unit,
-    onResetRotation: () -> Unit,
+internal fun FontFamilyPanel(
+    currentFont: String,
+    onFontChange: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 24.dp)
-            .verticalScroll(rememberScrollState())
+        modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)
     ) {
-        PanelHeader(title = "Advanced Settings", onDismiss = onDismiss, onReset = onResetAll)
+        PanelHeader(title = "Font Family", onDismiss = onDismiss)
         SectionDivider()
-        Spacer(Modifier.height(8.dp))
-
-        Text(
-            text = "Position",
-            color = Color.White.copy(alpha = 0.5f),
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-            letterSpacing = 1.sp,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
-        )
-        Row(
+        Spacer(Modifier.height(12.dp))
+        Column(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Text("Vertical", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
-            Spacer(Modifier.weight(1f))
-            ResetTextButton(onClick = onResetVertical)
-        }
-        SliderRow(
-            label = "",
-            value = verticalPosition,
-            onValueChange = onVerticalChange,
-            valueRange = 0.05f..0.95f,
-            displayValue = "${(verticalPosition * 100).toInt()}%"
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("Horizontal", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
-            Spacer(Modifier.weight(1f))
-            ResetTextButton(onClick = onResetHorizontal)
-        }
-        SliderRow(
-            label = "",
-            value = horizontalPosition,
-            onValueChange = onHorizontalChange,
-            valueRange = 0.05f..0.95f,
-            displayValue = "${(horizontalPosition * 100).toInt()}%"
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("Max Width", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
-            Spacer(Modifier.weight(1f))
-            ResetTextButton(onClick = onResetMaxWidth)
-        }
-        SliderRow(
-            label = "",
-            value = maxWidthRatio,
-            onValueChange = onMaxWidthChange,
-            valueRange = 0.3f..1f,
-            displayValue = "${(maxWidthRatio * 100).toInt()}%"
-        )
-
-        Spacer(Modifier.height(8.dp))
-        SectionDivider()
-        Spacer(Modifier.height(8.dp))
-
-        Text(
-            text = "Timing",
-            color = Color.White.copy(alpha = 0.5f),
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-            letterSpacing = 1.sp,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("Delay", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
-            Spacer(Modifier.weight(1f))
-            ResetTextButton(onClick = onResetDelay)
-        }
-        SliderRow(
-            label = "",
-            value = (delayMs / 1000f).coerceIn(-10f, 10f),
-            onValueChange = { onDelayChange((it * 1000).roundToInt()) },
-            valueRange = -10f..10f,
-            displayValue = "${delayMs} ms"
-        )
-
-        Spacer(Modifier.height(8.dp))
-        SectionDivider()
-        Spacer(Modifier.height(8.dp))
-
-        Text(
-            text = "Rotation",
-            color = Color.White.copy(alpha = 0.5f),
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-            letterSpacing = 1.sp,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("Angle: ${rotation.toInt()}°", color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp)
-            Spacer(Modifier.weight(1f))
-            ResetTextButton(onClick = onResetRotation)
-        }
-        Spacer(Modifier.height(8.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            listOf(0f, 45f, 90f, 135f, 180f, 270f).forEach { ang ->
+            FONT_PRESETS.forEach { (name, family) ->
                 Surface(
-                    onClick = { onRotationChange(ang) },
+                    onClick = { onFontChange(name) },
                     shape = chipShape,
-                    color = if (rotation == ang) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+                    color = if (name == currentFont) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
                     else Color.White.copy(alpha = 0.06f)
                 ) {
-                    Text(
-                        text = "${ang.toInt()}°",
-                        color = if (rotation == ang) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.6f),
-                        fontSize = 13.sp,
-                        fontWeight = if (rotation == ang) FontWeight.SemiBold else FontWeight.Normal,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = name,
+                            color = if (name == currentFont) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.8f),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.width(120.dp)
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            text = "The quick brown fox",
+                            fontFamily = if (name == "Sans Serif Light") FontFamily.SansSerif else family,
+                            fontWeight = if (name == "Sans Serif Light") FontWeight.Light else FontWeight.Normal,
+                            fontSize = 16.sp,
+                            color = Color.White.copy(alpha = 0.9f)
+                        )
+                    }
                 }
             }
         }
+        Spacer(Modifier.height(8.dp))
     }
 }
 

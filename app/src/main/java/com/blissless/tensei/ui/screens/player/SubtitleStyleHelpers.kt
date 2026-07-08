@@ -1,6 +1,7 @@
 package com.blissless.tensei.ui.screens.player
 
 import android.content.Context
+import android.graphics.Typeface
 import android.view.View
 import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
@@ -72,13 +73,20 @@ fun applySubtitleStyle(subtitleView: androidx.media3.ui.SubtitleView, settings: 
         CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW -> (settings.shadowColor and 0xFFFFFFFFL).toInt()
         else -> (settings.outlineColor and 0xFFFFFFFFL).toInt()
     }
+    val typeface = when (settings.fontFamily) {
+        "Serif" -> Typeface.SERIF
+        "Monospace" -> Typeface.MONOSPACE
+        "Cursive" -> Typeface.create("cursive", Typeface.NORMAL)
+        "Sans Serif Light" -> Typeface.create("sans-serif-light", Typeface.NORMAL)
+        else -> null
+    }
     val style = CaptionStyleCompat(
         (settings.fontColor and 0xFFFFFFFFL).toInt(),
         (settings.backgroundColor and 0xFFFFFFFFL).toInt(),
         android.graphics.Color.TRANSPARENT,
         edgeType,
         edgeColor,
-        null
+        typeface
     )
     subtitleView.setStyle(style)
     subtitleView.setFixedTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, settings.fontSize)

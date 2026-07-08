@@ -32,15 +32,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.RotateRight
-import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.BlurOn
 import androidx.compose.material.icons.filled.BorderColor
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.FitScreen
 import androidx.compose.material.icons.filled.FormatColorFill
 import androidx.compose.material.icons.filled.FormatColorText
 import androidx.compose.material.icons.filled.FormatSize
@@ -58,6 +54,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -72,20 +69,25 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -93,10 +95,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.blissless.tensei.data.models.SubtitleSettings
-import kotlin.math.atan2
-import kotlin.math.cos
 import kotlin.math.roundToInt
-import kotlin.math.sin
 
 internal const val LOREM_IPSUM = "The quick brown fox jumps over the lazy dog.\nThis is a second line for testing."
 
@@ -127,8 +126,6 @@ internal val BG_SUB_PRESETS = listOf(
     0x40FFFFFFL, 0x80FFFFFFL, 0xFF000000L, 0xFFFFFFFFL
 )
 
-enum class ResizeMode { Fit16x9, Stretch }
-
 data class SubtitleFullSettings(
     val fontSize: Float = 22f,
     val fontColor: Long = 0xFFFFFFFFL,
@@ -145,7 +142,7 @@ data class SubtitleFullSettings(
     val horizontalPosition: Float = 0.5f,
     val maxWidthRatio: Float = 0.95f,
     val delayMs: Int = 0,
-    val rotation: Float = 0f,
+    val fontFamily: String = "Default",
     val profileName: String = "Default"
 ) {
     fun toLegacy(): SubtitleSettings = SubtitleSettings(
@@ -159,7 +156,7 @@ data class SubtitleFullSettings(
         shadowOffsetX = shadowOffsetX,
         shadowOffsetY = shadowOffsetY,
         shadowColor = shadowColor,
-        rotation = rotation,
+        fontFamily = fontFamily,
         backgroundColor = backgroundColor,
         verticalPosition = verticalPosition,
         horizontalPosition = horizontalPosition,
@@ -180,7 +177,6 @@ private val PanelSurface = Color(0xFF121220)
 private val panelShape = RoundedCornerShape(20.dp, 20.dp, 0.dp, 0.dp)
 private val cardShape = RoundedCornerShape(14.dp)
 internal val chipShape = RoundedCornerShape(10.dp)
-private val toolbarShape = RoundedCornerShape(16.dp)
 
 // ---------------------------------------------------------------------------
 // Entry point
@@ -247,7 +243,7 @@ private fun SubtitleSettingsContent(
             horizontalPosition = currentSettings.horizontalPosition,
             maxWidthRatio = currentSettings.maxWidthRatio,
             delayMs = currentSettings.delayMs,
-            rotation = currentSettings.rotation,
+            fontFamily = currentSettings.fontFamily,
             profileName = currentSettings.profileName
         )
     ) }
@@ -255,8 +251,6 @@ private fun SubtitleSettingsContent(
     var selectedTemplateIndex by remember { mutableIntStateOf(0) }
     var dragOffsetX by remember { mutableFloatStateOf(0f) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
-    var resizeMode by remember { mutableStateOf(ResizeMode.Fit16x9) }
-    var showRotationWheel by remember { mutableStateOf(false) }
     var showResetConfirm by remember { mutableStateOf(false) }
     var showCloseConfirm by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf(false) }
@@ -283,7 +277,7 @@ private fun SubtitleSettingsContent(
             horizontalPosition = p.horizontalPosition,
             maxWidthRatio = p.maxWidthRatio,
             delayMs = p.delayMs,
-            rotation = p.rotation,
+            fontFamily = p.fontFamily,
             profileName = p.profileName
         )
         dragOffsetX = 0f
@@ -345,18 +339,15 @@ private fun SubtitleSettingsContent(
             val cw = size.width
             val ch = size.height
             val aspect = 16f / 9f
-            val dest = when (resizeMode) {
-                ResizeMode.Fit16x9 -> {
-                    val curr = cw / ch
-                    if (curr > aspect) {
-                        val w = ch * aspect
-                        RectF((cw - w) / 2, 0f, (cw + w) / 2, ch)
-                    } else {
-                        val h = cw / aspect
-                        RectF(0f, (ch - h) / 2, cw, (ch + h) / 2)
-                    }
+            val dest = run {
+                val curr = cw / ch
+                if (curr > aspect) {
+                    val w = ch * aspect
+                    RectF((cw - w) / 2, 0f, (cw + w) / 2, ch)
+                } else {
+                    val h = cw / aspect
+                    RectF(0f, (ch - h) / 2, cw, (ch + h) / 2)
                 }
-                ResizeMode.Stretch -> RectF(0f, 0f, cw, ch)
             }
             drawRect(
                 brush = gradient,
@@ -365,22 +356,17 @@ private fun SubtitleSettingsContent(
             )
         }
 
-        val destRect = remember(actualWidth, actualHeight, resizeMode) {
+        val destRect = remember(actualWidth, actualHeight) {
             val cw = actualWidth.toFloat()
             val ch = actualHeight.toFloat()
             val aspect = 16f / 9f
-            when (resizeMode) {
-                ResizeMode.Fit16x9 -> {
-                    val curr = cw / ch
-                    if (curr > aspect) {
-                        val w = ch * aspect
-                        RectF((cw - w) / 2, 0f, (cw + w) / 2, ch)
-                    } else {
-                        val h = cw / aspect
-                        RectF(0f, (ch - h) / 2, cw, (ch + h) / 2)
-                    }
-                }
-                ResizeMode.Stretch -> RectF(0f, 0f, cw, ch)
+            val curr = cw / ch
+            if (curr > aspect) {
+                val w = ch * aspect
+                RectF((cw - w) / 2, 0f, (cw + w) / 2, ch)
+            } else {
+                val h = cw / aspect
+                RectF(0f, (ch - h) / 2, cw, (ch + h) / 2)
             }
         }
 
@@ -395,8 +381,9 @@ private fun SubtitleSettingsContent(
         ) {
             Row(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box {
@@ -447,52 +434,27 @@ private fun SubtitleSettingsContent(
                     }
                 }
 
+                ToolbarIconButton(Icons.Default.Edit, "Rename") {
+                    renameText = profiles.getOrNull(activeProfileIndex)?.profileName ?: ""
+                    showRenameDialog = true
+                }
+                ToolbarIconButton(Icons.Default.Save, "Save") {
+                    commitDrag()
+                    onSave()
+                    hasChanges = false
+                }
+                ToolbarIconButton(Icons.Default.Close, "Close") {
+                    if (hasChanges) showCloseConfirm = true
+                    else onDismiss()
+                }
+                ToolbarIconButton(Icons.Default.RestartAlt, "Reset") {
+                    showResetConfirm = true
+                }
+
                 Spacer(Modifier.weight(1f))
 
-                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                    ToolbarIconButton(Icons.Default.Edit, "Rename") {
-                        renameText = profiles.getOrNull(activeProfileIndex)?.profileName ?: ""
-                        showRenameDialog = true
-                    }
-                    ToolbarIconButton(Icons.Default.Save, "Save") {
-                        commitDrag()
-                        onSave()
-                        hasChanges = false
-                    }
-                    ToolbarIconButton(Icons.Default.Close, "Close") {
-                        if (hasChanges) showCloseConfirm = true
-                        else onDismiss()
-                    }
-                    ToolbarIconButton(Icons.Default.RestartAlt, "Reset") {
-                        showResetConfirm = true
-                    }
-                }
-            }
-        }
-
-        // ── Bottom toolbar (floating pill) ──────────────────────────────────
-        Surface(
-            color = Color.Black.copy(alpha = 0.65f),
-            shape = toolbarShape,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 24.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
                 BottomToolbarButton(Icons.Default.Palette, "Template", activePanel == Panel.Template) {
                     activePanel = if (activePanel == Panel.Template) null else Panel.Template
-                }
-                BottomToolbarButton(
-                    if (resizeMode == ResizeMode.Fit16x9) Icons.Default.FitScreen else Icons.Default.AspectRatio,
-                    "Resize"
-                ) {
-                    resizeMode = if (resizeMode == ResizeMode.Fit16x9) ResizeMode.Stretch else ResizeMode.Fit16x9
                 }
                 BottomToolbarButton(Icons.Default.FormatSize, "Size", activePanel == Panel.TextSize) {
                     activePanel = if (activePanel == Panel.TextSize) null else Panel.TextSize
@@ -509,8 +471,8 @@ private fun SubtitleSettingsContent(
                 BottomToolbarButton(Icons.Default.FormatColorText, "Color", activePanel == Panel.FontColor) {
                     activePanel = if (activePanel == Panel.FontColor) null else Panel.FontColor
                 }
-                BottomToolbarButton(Icons.Default.Tune, "Advanced", activePanel == Panel.Advanced) {
-                    activePanel = if (activePanel == Panel.Advanced) null else Panel.Advanced
+                BottomToolbarButton(Icons.Default.Tune, "Font", activePanel == Panel.FontFamily) {
+                    activePanel = if (activePanel == Panel.FontFamily) null else Panel.FontFamily
                 }
             }
         }
@@ -520,7 +482,6 @@ private fun SubtitleSettingsContent(
         val baseY = fullSettings.verticalPosition * actualHeight
         SubtitlePreview(
             settings = fullSettings,
-            rotation = fullSettings.rotation,
             offsetX = baseX + dragOffsetX,
             offsetY = baseY + dragOffsetY,
             onDrag = { dx, dy, bw, bh ->
@@ -532,9 +493,6 @@ private fun SubtitleSettingsContent(
                 dragOffsetY = newOy - by
             },
             onDragEnd = ::commitDrag,
-            onTap = { showRotationWheel = !showRotationWheel },
-            showRotateWheel = showRotationWheel,
-            onRotate = { uiChange { fullSettings = fullSettings.copy(rotation = it) } },
             modifier = Modifier.fillMaxSize()
         )
 
@@ -609,23 +567,9 @@ private fun SubtitleSettingsContent(
                                 onReset = { uiChange { fullSettings = fullSettings.copy(fontColor = Defaults.FULL_SETTINGS.fontColor) } },
                                 onDismiss = { activePanel = null }
                             )
-                            Panel.Advanced -> AdvancedPanel(
-                                verticalPosition = fullSettings.verticalPosition,
-                                onVerticalChange = { uiChange { fullSettings = fullSettings.copy(verticalPosition = it) } },
-                                horizontalPosition = fullSettings.horizontalPosition,
-                                onHorizontalChange = { uiChange { fullSettings = fullSettings.copy(horizontalPosition = it) } },
-                                maxWidthRatio = fullSettings.maxWidthRatio,
-                                onMaxWidthChange = { uiChange { fullSettings = fullSettings.copy(maxWidthRatio = it) } },
-                                delayMs = fullSettings.delayMs,
-                                onDelayChange = { uiChange { fullSettings = fullSettings.copy(delayMs = it) } },
-                                rotation = fullSettings.rotation,
-                                onRotationChange = { uiChange { fullSettings = fullSettings.copy(rotation = it) } },
-                                onResetAll = { uiChange { fullSettings = fullSettings.copy(verticalPosition = Defaults.FULL_SETTINGS.verticalPosition, horizontalPosition = Defaults.FULL_SETTINGS.horizontalPosition, maxWidthRatio = Defaults.FULL_SETTINGS.maxWidthRatio, delayMs = Defaults.FULL_SETTINGS.delayMs, rotation = Defaults.FULL_SETTINGS.rotation) } },
-                                onResetVertical = { uiChange { fullSettings = fullSettings.copy(verticalPosition = Defaults.FULL_SETTINGS.verticalPosition) } },
-                                onResetHorizontal = { uiChange { fullSettings = fullSettings.copy(horizontalPosition = Defaults.FULL_SETTINGS.horizontalPosition) } },
-                                onResetMaxWidth = { uiChange { fullSettings = fullSettings.copy(maxWidthRatio = Defaults.FULL_SETTINGS.maxWidthRatio) } },
-                                onResetDelay = { uiChange { fullSettings = fullSettings.copy(delayMs = Defaults.FULL_SETTINGS.delayMs) } },
-                                onResetRotation = { uiChange { fullSettings = fullSettings.copy(rotation = Defaults.FULL_SETTINGS.rotation) } },
+                            Panel.FontFamily -> FontFamilyPanel(
+                                currentFont = fullSettings.fontFamily,
+                                onFontChange = { uiChange { fullSettings = fullSettings.copy(fontFamily = it) } },
                                 onDismiss = { activePanel = null }
                             )
                         }
@@ -677,7 +621,7 @@ private fun SubtitleSettingsContent(
 }
 
 private enum class Panel {
-    Template, TextSize, Outline, Shadow, Bg, FontColor, Advanced
+    Template, TextSize, Outline, Shadow, Bg, FontColor, FontFamily
 }
 
 // Reusable UI components moved to SubtitleSettingsComponents.kt
@@ -686,7 +630,7 @@ private enum class Panel {
 
 // Panels moved to SubtitleSettingsPanels.kt
 // (TemplatePanel, TextSizePanel, OutlinePanel, ShadowPanel, BgPanel,
-//  FontColorPanel, AdvancedPanel)
+//  FontColorPanel, FontFamilyPanel)
 
 // ===========================================================================
 // CONFIRMATION / RENAME OVERLAYS
@@ -838,29 +782,32 @@ private fun RenameOverlay(
 @Composable
 private fun SubtitlePreview(
     settings: SubtitleFullSettings,
-    rotation: Float,
     offsetX: Float,
     offsetY: Float,
     onDrag: (Float, Float, Int, Int) -> Unit,
     onDragEnd: () -> Unit = {},
-    onTap: () -> Unit,
-    showRotateWheel: Boolean,
-    onRotate: (Float) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val textColor = if (settings.fontColor == 0x00000000L) Color.White else Color(settings.fontColor)
     val bgColor = Color(settings.backgroundColor)
     val outlineColor = Color(settings.outlineColor)
 
-    val dropShadow = if (settings.enableShadow) {
-        Shadow(
-            color = Color(settings.shadowColor),
-            offset = Offset(settings.shadowOffsetX, settings.shadowOffsetY),
-            blurRadius = settings.shadowBlur
-        )
-    } else null
+    val fontFamily = when (settings.fontFamily) {
+        "Serif" -> FontFamily.Serif
+        "Monospace" -> FontFamily.Monospace
+        "Sans Serif Light" -> FontFamily.SansSerif
+        "Cursive" -> FontFamily.Cursive
+        else -> FontFamily.SansSerif
+    }
+    val fontWeight = if (settings.fontFamily == "Sans Serif Light") FontWeight.Light else FontWeight.Normal
+
     var boxWidth by remember { mutableIntStateOf(0) }
     var boxHeight by remember { mutableIntStateOf(0) }
+    val textMeasurer = rememberTextMeasurer()
+    val defaultStyle = LocalTextStyle.current
+    val shadowColor = Color(settings.shadowColor).copy(alpha = 0.35f)
+    val shadowOffsetPx = with(LocalDensity.current) { Offset(settings.shadowOffsetX.dp.toPx(), settings.shadowOffsetY.dp.toPx()) }
+    val outlineWidthPx = with(LocalDensity.current) { settings.outlineWidth.dp.toPx() }
 
     Box(modifier = modifier.fillMaxSize()) {
         Box(
@@ -876,9 +823,6 @@ private fun SubtitlePreview(
             Box(
                 modifier = Modifier
                     .pointerInput(Unit) {
-                        detectTapGestures { onTap() }
-                    }
-                    .pointerInput(Unit) {
                         detectDragGestures(
                             onDragEnd = onDragEnd,
                             onDragCancel = onDragEnd,
@@ -891,7 +835,6 @@ private fun SubtitlePreview(
             ) {
                 Box(
                     modifier = Modifier
-                        .graphicsLayer { rotationZ = rotation }
                         .background(
                             if (settings.backgroundColor == 0x00000000L) Color.Transparent else bgColor,
                             RoundedCornerShape(4.dp)
@@ -900,100 +843,52 @@ private fun SubtitlePreview(
                     Box(
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
-                        if (settings.enableOutline) {
-                            Text(
-                                text = LOREM_IPSUM,
-                                color = outlineColor,
-                                fontSize = settings.fontSize.sp,
-                                textAlign = TextAlign.Center,
-                                maxLines = 2,
-                                style = TextStyle(shadow = Shadow(color = outlineColor, offset = Offset.Zero, blurRadius = settings.outlineWidth))
-                            )
-                        }
                         Text(
                             text = LOREM_IPSUM,
                             color = textColor,
                             fontSize = settings.fontSize.sp,
+                            fontFamily = fontFamily,
+                            fontWeight = fontWeight,
                             textAlign = TextAlign.Center,
                             maxLines = 2,
-                            style = TextStyle(shadow = dropShadow)
+                            modifier = Modifier.drawWithContent {
+                                val textWidth = size.width.toInt()
+                                val base = defaultStyle.merge(
+                                    TextStyle(
+                                        fontSize = settings.fontSize.sp,
+                                        fontFamily = fontFamily,
+                                        fontWeight = fontWeight,
+                                        textAlign = TextAlign.Center
+                                    )
+                                )
+                                if (settings.enableShadow) {
+                                    val shadowLayout = textMeasurer.measure(
+                                        text = AnnotatedString(LOREM_IPSUM),
+                                        style = base.copy(color = shadowColor),
+                                        constraints = Constraints(maxWidth = textWidth),
+                                        maxLines = 2
+                                    )
+                                    drawText(shadowLayout, topLeft = shadowOffsetPx)
+                                }
+                                if (settings.enableOutline) {
+                                    val outlineLayout = textMeasurer.measure(
+                                        text = AnnotatedString(LOREM_IPSUM),
+                                        style = base.copy(
+                                            color = outlineColor,
+                                            drawStyle = Stroke(width = outlineWidthPx)
+                                        ),
+                                        constraints = Constraints(maxWidth = textWidth),
+                                        maxLines = 2
+                                    )
+                                    drawText(outlineLayout)
+                                }
+                                drawContent()
+                            }
                         )
                     }
                 }
-
-                if (showRotateWheel) {
-                    RotationWheel(
-                        currentAngle = rotation,
-                        onAngleChange = onRotate,
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .offset(x = 4.dp, y = (-4).dp)
-                            .size(40.dp)
-                    )
-                }
             }
         }
-    }
-}
-
-// ===========================================================================
-// Rotation Wheel
-// ===========================================================================
-@Composable
-private fun RotationWheel(
-    currentAngle: Float,
-    onAngleChange: (Float) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val primaryColor = MaterialTheme.colorScheme.primary
-    var center by remember { mutableStateOf(Offset.Zero) }
-    Box(
-        modifier = modifier
-            .background(Color.White.copy(alpha = 0.15f), CircleShape)
-            .border(1.dp, Color.White.copy(alpha = 0.2f), CircleShape)
-            .pointerInput(Unit) {
-                detectDragGestures(
-                    onDragStart = { offset -> center = Offset(size.width / 2f, size.height / 2f) },
-                    onDrag = { change, _ ->
-                        change.consume()
-                        val touchPos = change.position
-                        val delta = touchPos - center
-                        val angle = Math.toDegrees(atan2(delta.y.toDouble(), delta.x.toDouble())).toFloat()
-                        var normalized = (angle + 90) % 360
-                        if (normalized < 0) normalized += 360
-                        val displayAngle = if (normalized <= 180) normalized else normalized - 360
-                        onAngleChange(displayAngle)
-                    }
-                )
-            },
-        contentAlignment = Alignment.Center
-    ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val cx = size.width / 2f
-            val cy = size.height / 2f
-            val radius = size.width / 3f
-            val angleRad = Math.toRadians(currentAngle.toDouble() + 90)
-            val lineEndX = cx + (radius * cos(angleRad)).toFloat()
-            val lineEndY = cy + (radius * sin(angleRad)).toFloat()
-            drawCircle(
-                color = Color.White.copy(alpha = 0.4f),
-                radius = radius,
-                center = Offset(cx, cy),
-                style = Stroke(width = 2.dp.toPx())
-            )
-            drawLine(
-                color = primaryColor,
-                start = Offset(cx, cy),
-                end = Offset(lineEndX, lineEndY),
-                strokeWidth = 2.dp.toPx()
-            )
-        }
-        Icon(
-            Icons.AutoMirrored.Filled.RotateRight,
-            contentDescription = "Rotate",
-            modifier = Modifier.size(16.dp),
-            tint = Color.White.copy(alpha = 0.6f)
-        )
     }
 }
 

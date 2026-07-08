@@ -14,6 +14,7 @@ data class SubtitleSettings(
     val shadowOffsetX: Float = 2f,
     val shadowOffsetY: Float = 2f,
     val shadowColor: Long = 0xFF000000L,
+    val fontFamily: String = "Default",
     val rotation: Float = 0f,
     val delayMs: Int = 0,
     val verticalPosition: Float = 0.9f,
