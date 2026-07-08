@@ -120,9 +120,9 @@ suspend fun MainViewModel.playEpisodeWithExtension(
                     )
                 },
                 hosters = cached.hosters?.map { Hoster(hosterUrl = it.hosterUrl, hosterName = it.hosterName) },
-                extensionClient = if (cachedIsOurProxy) cacheClient else null,
+                extensionClient = cacheClient,  // always use extension client for proper headers/cookies
                 videoHeaders = cacheHeaders,
-                source = if (cachedIsOurProxy) cacheSource else null,
+                source = cacheSource,
                 episode = null,
             )
         }
@@ -454,7 +454,7 @@ suspend fun MainViewModel.playEpisodeWithExtension(
             val resultClient = if (resultIsOurProxy) {
                 extensionClient  // our proxy URL needs the client for forwarding
             } else {
-                null  // direct or other proxy URL: use DefaultHttpDataSource
+                extensionClient  // direct URL: still use extension client for proper headers/cookies
             }
             MainViewModel.ExtensionStreamResult(
                 url = effectiveVideoUrl,
@@ -560,7 +560,7 @@ suspend fun MainViewModel.fetchExtensionHosterVideos(
                 try { NetworkHelper.getInstance().client } catch (e: Exception) { ErrorHandler.report(MainViewModel.TAG, "operation failed, returning null", e); null }
             }
             val isOurProxy = effectiveVideoUrl.contains("127.0.0.1:${LocalProxyServer.PROXY_PORT}") || effectiveVideoUrl.contains("localhost:${LocalProxyServer.PROXY_PORT}")
-            val resultClient = if (isOurProxy) extensionClient else null
+            val resultClient = extensionClient  // always use extension client for proper headers/cookies
 
             val preferredLang = defaultSubtitleLang.value
             val sortedSubs = bestVideo.subtitleTracks.sortedByDescending { t ->

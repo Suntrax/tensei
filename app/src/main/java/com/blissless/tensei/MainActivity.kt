@@ -554,10 +554,15 @@ fun MainScreen(
     // async methods because syncFromPlayback() would run before the
     // coroutine completes.
     fun playExtensionVideo(result: MainViewModel.ExtensionStreamResult, index: Int) {
+        android.util.Log.d("Playback", "playExtensionVideo: url=${result.url.take(80)} client=${result.extensionClient != null} referer='${result.referer.take(60)}' headers=${result.videoHeaders} videos=${result.videos.size}")
         result.videos.forEachIndexed { _, _ -> }
         val video = result.videos.find { it.videoUrl == result.url }
             ?: result.videos.getOrNull(index)
-            ?: return
+        if (video == null) {
+            android.util.Log.w("Playback", "playExtensionVideo: no matching video found, returning early")
+            return
+        }
+        android.util.Log.d("Playback", "playExtensionVideo: matched video ${video.videoUrl.take(80)}")
         streamError = null
         currentEpisodeTitle = sanitizeEpisodeTitle(result.episode?.name) ?: "Episode $currentEpisode"
         currentVideoUrl = result.url.ifEmpty { video.videoUrl }
@@ -674,6 +679,8 @@ fun MainScreen(
     }
 
     fun loadAndPlayEpisode(anime: AnimeMedia, episode: Int, isAutoRefresh: Boolean = false) {
+        val streamMethod = viewModel.streamMethod.value
+        android.util.Log.d("Playback", "loadAndPlayEpisode: anime=${anime.id} ep=$episode method=$streamMethod autoRefresh=$isAutoRefresh")
         if (!isAutoRefresh) { isAutoRefreshing = false; pendingSeekPosition = null }
         currentAnime = anime
         currentEpisode = episode
@@ -681,8 +688,6 @@ fun MainScreen(
         streamError = null
         savedPlaybackPosition = viewModel.getPlaybackPosition(anime.id, episode)
         if (!isAutoRefresh) showPlayer = false
-
-        val streamMethod = viewModel.streamMethod.value
         if (streamMethod == "magnet") {
             if (isAutoRefresh && isAutoRefreshing) return
             if (isAutoRefresh) isAutoRefreshing = true
@@ -692,10 +697,14 @@ fun MainScreen(
                 yield()
                 val cached = viewModel.getMagnetForEpisode(anime.id, episode)
                 val magnetUri = withContext(Dispatchers.IO) { cached ?: viewModel.fetchMagnetForEpisode(anime, episode) }
+                android.util.Log.d("Playback", "loadAndPlayEpisode: magnetUri=${magnetUri?.take(60)} isEmpty=${magnetUri?.isEmpty()}")
                 if (magnetUri != null && magnetUri.isNotEmpty()) {
+                    android.util.Log.d("Playback", "loadAndPlayEpisode: calling playTorrent")
                     playTorrent(magnetUri, anime, episode)
                 } else if (magnetUri != null) {
+                    android.util.Log.d("Playback", "loadAndPlayEpisode: empty magnet, trying stream URL")
                     val streamResult = viewModel.fetchStreamUrlForEpisode(anime, episode, viewModel.preferredCategory.value)
+                    android.util.Log.d("Playback", "loadAndPlayEpisode: streamResult=${streamResult != null} url=${streamResult?.url?.take(60)} headers=${streamResult?.headers}")
                     if (streamResult != null) {
                         currentVideoUrl = streamResult.url
                         currentReferer = streamResult.headers["Referer"] ?: ""
@@ -707,6 +716,10 @@ fun MainScreen(
                         currentServerName = "Tensei"
                         currentServerIndex = 0
                         isExtensionFlow = false
+                        // Pass the stream result headers + a default OkHttpClient so ExoPlayer
+                        // can authenticate with the streaming server (avoids 403 errors)
+                        extensionVideoHeaders = streamResult.headers
+                        extensionOkHttpClient = try { eu.kanade.tachiyomi.network.NetworkHelper.getInstance().client } catch (_: Exception) { null }
                         showPlayer = true
                         isLoadingStream = false
                     } else {
@@ -715,9 +728,9 @@ fun MainScreen(
                         context.toast("No stream available for Ep $episode")
                     }
                 } else {
-                    streamError = "No magnet link found for Ep $episode"
+                    streamError = "No Tensei link found for Ep $episode"
                     isLoadingStream = false
-                    context.toast("No magnet available for Ep $episode")
+                    context.toast("No Tensei link available for Ep $episode")
                 }
                 if (isAutoRefresh) isAutoRefreshing = false
             }
