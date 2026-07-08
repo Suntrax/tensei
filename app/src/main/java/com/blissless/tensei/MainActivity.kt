@@ -704,22 +704,46 @@ fun MainScreen(
                 } else if (magnetUri != null) {
                     android.util.Log.d("Playback", "loadAndPlayEpisode: empty magnet, trying stream URL")
                     val streamResult = viewModel.fetchStreamUrlForEpisode(anime, episode, viewModel.preferredCategory.value)
-                    android.util.Log.d("Playback", "loadAndPlayEpisode: streamResult=${streamResult != null} url=${streamResult?.url?.take(60)} headers=${streamResult?.headers}")
+                    android.util.Log.d("Playback", "loadAndPlayEpisode: streamResult=${streamResult != null} url=${streamResult?.url?.take(60)} headers=${streamResult?.headers} streams=${streamResult?.streams?.size}")
                     if (streamResult != null) {
-                        currentVideoUrl = streamResult.url
-                        currentReferer = streamResult.headers["Referer"] ?: ""
+                        // Use the preferred stream from the streams array if available
+                        val preferredLang = viewModel.preferredCategory.value // "sub" or "dub"
+                        val preferredStream = streamResult.streams.firstOrNull { it.lang == preferredLang }
+                            ?: streamResult.streams.firstOrNull { it.isDefault }
+                            ?: streamResult.streams.firstOrNull()
+                        val playUrl = preferredStream?.url ?: streamResult.url
+                        val playHeaders = preferredStream?.headers ?: streamResult.headers
+                        val playSubs = preferredStream?.subtitles ?: streamResult.subtitles
+
+                        currentVideoUrl = playUrl
+                        currentReferer = playHeaders["Referer"] ?: ""
                         currentEpisodeTitle = sanitizeEpisodeTitle(anime.title) ?: "Episode $episode"
-                        currentSubtitleTracks = streamResult.subtitles
-                        currentSubtitleUrl = streamResult.subtitles.firstOrNull { s -> s.lang.contains("english", ignoreCase = true) || s.lang.contains("en", ignoreCase = true) }?.url ?: streamResult.subtitles.firstOrNull()?.url
+                        currentSubtitleTracks = playSubs
+                        currentSubtitleUrl = playSubs.firstOrNull { s -> s.lang.contains("english", ignoreCase = true) || s.lang.contains("en", ignoreCase = true) }?.url ?: playSubs.firstOrNull()?.url
                         currentQualityOptions = emptyList()
                         currentQuality = "Auto"
-                        currentServerName = "Tensei"
+                        currentServerName = preferredStream?.lang?.uppercase() ?: "Tensei"
                         currentServerIndex = 0
+                        currentCategory = preferredStream?.lang ?: preferredLang
                         isExtensionFlow = false
-                        // Pass the stream result headers + a default OkHttpClient so ExoPlayer
-                        // can authenticate with the streaming server (avoids 403 errors)
-                        extensionVideoHeaders = streamResult.headers
+                        // Pass the stream result headers + OkHttpClient so ExoPlayer can authenticate
+                        extensionVideoHeaders = playHeaders
                         extensionOkHttpClient = try { eu.kanade.tachiyomi.network.NetworkHelper.getInstance().client } catch (_: Exception) { null }
+                        // Populate server list from streams array so the server selector shows
+                        extensionHosters = streamResult.streams.map { s ->
+                            eu.kanade.tachiyomi.animesource.model.Hoster(
+                                hosterUrl = s.url,
+                                hosterName = s.lang.uppercase()
+                            )
+                        }
+                        extensionServers = streamResult.streams.map { s ->
+                            com.blissless.tensei.data.models.ServerInfo(
+                                name = s.lang.uppercase(),
+                                url = s.url
+                            )
+                        }
+                        // Store all streams for server switching
+                        com.blissless.tensei.stream.PlayerData.allHosters = extensionHosters ?: emptyList()
                         showPlayer = true
                         isLoadingStream = false
                     } else {
@@ -811,7 +835,20 @@ fun MainScreen(
     fun handleExtensionServerChange(hosterName: String) {
         val hoster = extensionHosters?.find { it.hosterName == hosterName } ?: return
         val source = com.blissless.tensei.stream.PlayerData.extensionSource
-        if (source == null) { context.toast("Source not available"); return }
+
+        if (source == null) {
+            // Tensei stream — switch between sub/dub using the stored stream URLs
+            val serverInfo = extensionServers.find { it.name == hosterName }
+            if (serverInfo != null) {
+                currentVideoUrl = serverInfo.url
+                currentServerName = hosterName
+                currentCategory = hosterName.lowercase()
+                episodeTrigger++
+            }
+            return
+        }
+
+        // Extension source — use fetchExtensionHosterVideos
         scope.launch {
             isLoadingStream = true
             val result = viewModel.fetchExtensionHosterVideos(source, hoster)
@@ -848,69 +885,17 @@ fun MainScreen(
 
     val onPreviousEpisode: () -> Unit = {
         if (!isChangingEpisode && currentAnime != null && currentEpisode > 1) {
-            isChangingEpisode = true
-            val prevEp = currentEpisode - 1
-            val cached = episodeCache[prevEp]
-            if (cached != null) {
-                currentEpisode = prevEp
-                savedPlaybackPosition = viewModel.getPlaybackPosition(currentAnime!!.id, prevEp)
-                currentEpisodeTitle = sanitizeEpisodeTitle(cached.episode?.name) ?: "Episode $prevEp"
-                currentVideoUrl = cached.url
-                currentReferer = cached.referer
-                currentSubtitleUrl = cached.subtitleUrl
-                currentSubtitleTracks = cached.videos.firstOrNull()?.subtitleTracks ?: emptyList()
-                currentServerName = if (!cached.hosters.isNullOrEmpty()) cached.hosters.first().hosterName else "Extension"
-                currentCategory = "sub"
-                currentQualityOptions = com.blissless.tensei.ui.screens.player.buildQualityOptions(cached.videos)
-                currentQuality = cached.videoTitle
-                extensionOkHttpClient = cached.extensionClient
-                extensionVideoHeaders = cached.videoHeaders
-                extensionHosters = cached.hosters
-                extensionServers = com.blissless.tensei.ui.screens.player.buildServerList(cached.hosters)
-                episodeTrigger++
-                isChangingEpisode = false
-                prefetchExtensionNextEpisode()
-                fetchAndCacheEpisode(prevEp - 1)
-            } else {
-                isChangingEpisode = false
-                isAutoRefreshing = false
-                loadAndPlayEpisode(currentAnime!!, prevEp, isAutoRefresh = true)
-            }
+            isChangingEpisode = false
+            isAutoRefreshing = false
+            loadAndPlayEpisode(currentAnime!!, currentEpisode - 1, isAutoRefresh = true)
         }
     }
 
     val onNextEpisode: () -> Unit = {
         if (!isChangingEpisode && currentAnime != null) {
-            isChangingEpisode = true
-            val nextEp = currentEpisode + 1
-            val cached = cachedExtensionNext ?: episodeCache[nextEp]
-            if (cached != null) {
-                cachedExtensionNext = null
-                currentEpisode = nextEp
-                savedPlaybackPosition = viewModel.getPlaybackPosition(currentAnime!!.id, nextEp)
-                currentEpisodeTitle = sanitizeEpisodeTitle(cached.episode?.name) ?: "Episode $nextEp"
-                currentVideoUrl = cached.url
-                currentReferer = cached.referer
-                currentSubtitleUrl = cached.subtitleUrl
-                currentSubtitleTracks = cached.videos.firstOrNull()?.subtitleTracks ?: emptyList()
-                currentServerName = if (!cached.hosters.isNullOrEmpty()) cached.hosters.first().hosterName else "Extension"
-                currentCategory = "sub"
-                currentQualityOptions = com.blissless.tensei.ui.screens.player.buildQualityOptions(cached.videos)
-                currentQuality = cached.videoTitle
-                extensionOkHttpClient = cached.extensionClient
-                extensionVideoHeaders = cached.videoHeaders
-                extensionHosters = cached.hosters
-                extensionServers = com.blissless.tensei.ui.screens.player.buildServerList(cached.hosters)
-                episodeCache[nextEp] = cached
-                episodeTrigger++
-                isChangingEpisode = false
-                prefetchExtensionNextEpisode()
-                fetchAndCacheEpisode(nextEp - 1)
-            } else {
-                isChangingEpisode = false
-                isAutoRefreshing = false
-                loadAndPlayEpisode(currentAnime!!, nextEp, isAutoRefresh = true)
-            }
+            isChangingEpisode = false
+            isAutoRefreshing = false
+            loadAndPlayEpisode(currentAnime!!, currentEpisode + 1, isAutoRefresh = true)
         }
     }
 

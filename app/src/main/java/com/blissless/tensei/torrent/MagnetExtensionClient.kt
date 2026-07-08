@@ -19,6 +19,15 @@ data class DetectedMagnetExtension(
 data class StreamUrlResult(
     val url: String,
     val headers: Map<String, String> = emptyMap(),
+    val subtitles: List<Track> = emptyList(),
+    val streams: List<StreamEntry> = emptyList()
+)
+
+data class StreamEntry(
+    val lang: String,
+    val isDefault: Boolean,
+    val url: String,
+    val headers: Map<String, String> = emptyMap(),
     val subtitles: List<Track> = emptyList()
 )
 
@@ -156,7 +165,41 @@ class MagnetExtensionClient(private val context: Context) {
                     }
                 }
                 Log.d(TAG, "fetchStreamUrl: ${subtitles.size} subtitle tracks")
-                StreamUrlResult(url, headers, subtitles)
+
+                // Parse the streams array (both sub+dub, user preference first)
+                val streams = mutableListOf<StreamEntry>()
+                json.optJSONArray("streams")?.let { arr ->
+                    for (i in 0 until arr.length()) {
+                        val stream = arr.optJSONObject(i) ?: continue
+                        val streamUrl = stream.optString("url", null)?.ifBlank { null } ?: continue
+                        val streamLang = stream.optString("lang", "")
+                        val isDefault = stream.optBoolean("default", false)
+                        val streamHeaders = mutableMapOf<String, String>()
+                        stream.optJSONObject("headers")?.let { h ->
+                            val iter = h.keys()
+                            while (iter.hasNext()) {
+                                val key = iter.next()
+                                val value = h.optString(key, "")
+                                if (value.isNotBlank()) streamHeaders[key] = value
+                            }
+                        }
+                        val streamSubs = mutableListOf<Track>()
+                        stream.optJSONArray("subtitles")?.let { subArr ->
+                            for (j in 0 until subArr.length()) {
+                                val sub = subArr.optJSONObject(j) ?: continue
+                                val subUrl = sub.optString("url", null)?.ifBlank { null } ?: continue
+                                val subLang = sub.optString("label", sub.optString("language", ""))
+                                if (subLang.isNotBlank()) {
+                                    streamSubs.add(Track(subUrl, subLang))
+                                }
+                            }
+                        }
+                        streams.add(StreamEntry(streamLang, isDefault, streamUrl, streamHeaders, streamSubs))
+                    }
+                }
+                Log.d(TAG, "fetchStreamUrl: ${streams.size} streams (langs: ${streams.map { it.lang }})")
+
+                StreamUrlResult(url, headers, subtitles, streams)
             }
         } catch (e: Exception) {
             Log.e(TAG, "fetchStreamUrl: parse failed", e)
