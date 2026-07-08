@@ -92,6 +92,7 @@ import com.blissless.tensei.viewmodel.setAutoPlayNextEpisode
 import com.blissless.tensei.viewmodel.setSwipeVolume
 import com.blissless.tensei.viewmodel.setSwipeBrightness
 import com.blissless.tensei.viewmodel.setSwipeSwap
+import com.blissless.tensei.util.ErrorHandler
 
 @OptIn(UnstableApi::class)
 @SuppressLint("UnstableApiUsage")
@@ -351,7 +352,7 @@ fun DownloadsScreen(
                                             android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS
                                         )
                                         context.startActivity(intent)
-                                    } catch (_: Exception) {}
+                                    } catch (e: Exception) { ErrorHandler.ignore("DownloadsScreen", "best-effort operation failed", e) }
                                 }) {
                                     Text("Fix", fontWeight = FontWeight.Bold)
                                 }
@@ -614,7 +615,7 @@ fun DownloadsScreen(
                 try {
                     val episodes = viewModel.fetchTmdbEpisodes(selectedAnime!!.animeName, animeId)
                     viewModel.cacheTmdbEpisodes(animeId, episodes)
-                } catch (_: Exception) {}
+                } catch (e: Exception) { ErrorHandler.ignore("DownloadsScreen", "best-effort operation failed", e) }
             }
         }
         BackHandler { if (playingDownload == null) selectedAnime = null }

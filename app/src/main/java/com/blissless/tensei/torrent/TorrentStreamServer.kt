@@ -110,7 +110,7 @@ class TorrentStreamServer(private val saveDir: File) {
                 val waitDeadline = System.nanoTime() + 60_000_000_000L
                 while (System.nanoTime() < waitDeadline && running) {
                     if (file.exists()) break
-                    try { Thread.sleep(200) } catch (_: InterruptedException) { break }
+                    try { Thread.sleep(200) } catch (e: InterruptedException) { ErrorHandler.ignore("TorrentStreamServer", "interrupted", e); break }
                 }
                 if (!file.exists()) {
                     Log.e(TAG, "handleClient: file STILL not found after 60s wait: ${file.absolutePath}")
@@ -199,7 +199,7 @@ class TorrentStreamServer(private val saveDir: File) {
                             Log.d(TAG, "handleClient: stalled at pos=$pos (safe=$currentSafe), waiting indefinitely...")
                             stalled = true
                         }
-                        try { Thread.sleep(500) } catch (_: InterruptedException) { break }
+                        try { Thread.sleep(500) } catch (e: InterruptedException) { ErrorHandler.ignore("TorrentStreamServer", "interrupted", e); break }
                         continue
                     }
                     if (stalled) {

@@ -24,6 +24,7 @@ import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
+import com.blissless.tensei.util.ErrorHandler
 
 data class UpdateUiState(
     val isChecking: Boolean = false,
@@ -73,7 +74,7 @@ class UpdateViewModel(application: Application) : AndroidViewModel(application) 
                 description = "Update download progress"
             }
             notificationManager.createNotificationChannel(channel)
-        } catch (_: Exception) {}
+        } catch (e: Exception) { ErrorHandler.ignore("UpdateViewModel", "best-effort operation failed", e) }
     }
 
     private fun showDownloadNotification(progress: Int) {

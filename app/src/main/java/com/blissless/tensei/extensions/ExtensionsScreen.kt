@@ -96,7 +96,8 @@ fun ExtensionsScreen(
     // Collect toast messages from the ViewModel
     LaunchedEffect(Unit) {
         viewModel.toastMessage.collect { (message, duration) ->
-            Toast.makeText(context, message, duration).show()
+            if (duration == android.widget.Toast.LENGTH_LONG) context.longToast(message)
+            else context.toast(message)
         }
     }
 

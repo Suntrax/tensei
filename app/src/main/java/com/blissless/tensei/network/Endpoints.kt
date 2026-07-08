@@ -166,4 +166,10 @@ object Endpoints {
     object Dailymotion {
         fun watchUrl(videoId: String): String = "https://www.dailymotion.com/video/$videoId"
     }
+
+    /**
+     * Default referer for streaming. Used as the initial value for the
+     * player's referer state when no extension-specific referer is set.
+     */
+    const val DEFAULT_REFERER = "https://megacloud.tv/"
 }

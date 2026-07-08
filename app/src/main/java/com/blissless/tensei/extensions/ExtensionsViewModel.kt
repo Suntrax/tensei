@@ -32,6 +32,7 @@ import java.io.File
 import java.util.concurrent.TimeUnit
 import kotlin.time.Duration.Companion.milliseconds
 import androidx.core.content.edit
+import com.blissless.tensei.util.ErrorHandler
 
 data class ExtensionsUiState(
     val isLoading: Boolean = true,
@@ -96,7 +97,7 @@ class ExtensionsViewModel(application: Application) : AndroidViewModel(applicati
                 }
                 notificationManager.createNotificationChannel(channel)
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) { ErrorHandler.ignore("ExtensionsViewModel", "best-effort operation failed", e) }
     }
 
     fun loadExtensions(isManualRefresh: Boolean = false) {
@@ -208,7 +209,7 @@ class ExtensionsViewModel(application: Application) : AndroidViewModel(applicati
                     info.versionCode.toLong()
                 }
                 if (currentCode >= targetVersionCode) return true
-            } catch (_: PackageManager.NameNotFoundException) { }
+            } catch (e: PackageManager.NameNotFoundException) { ErrorHandler.ignore("ExtensionsViewModel", "best-effort operation failed", e) }
             kotlinx.coroutines.delay(1000.milliseconds)
         }
         return false
@@ -273,7 +274,7 @@ class ExtensionsViewModel(application: Application) : AndroidViewModel(applicati
                 // Wait for extensions to be detected before checking for updates
                 delay(500)
                 checkForExtensionUpdates()
-            } catch (_: Exception) { }
+            } catch (e: Exception) { ErrorHandler.ignore("ExtensionsViewModel", "best-effort operation failed", e) }
         }
     }
 

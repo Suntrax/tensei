@@ -124,6 +124,7 @@ import java.util.Locale
 import kotlin.math.abs
 import kotlin.time.Duration.Companion.milliseconds
 import androidx.core.net.toUri
+import com.blissless.tensei.util.ErrorHandler
 
 @UnstableApi
 @Composable
@@ -503,7 +504,7 @@ fun OfflinePlayerScreen(
                 if (timestamps != null && timestamps.hasTimestamps()) {
                     episodeTimestamps = timestamps
                 }
-            } catch (_: Exception) { }
+            } catch (e: Exception) { ErrorHandler.ignore("OfflinePlayerScreen", "best-effort operation failed", e) }
         }
         isFetchingTimestamps = false
         hasFetchedTimestamps = true

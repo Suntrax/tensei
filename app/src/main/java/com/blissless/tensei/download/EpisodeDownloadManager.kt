@@ -40,6 +40,7 @@ import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import androidx.core.content.edit
+import com.blissless.tensei.util.ErrorHandler
 
 @UnstableApi
 class EpisodeDownloadManager(private val context: Context) {
@@ -845,7 +846,7 @@ class EpisodeDownloadManager(private val context: Context) {
                     }
                 }
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) { ErrorHandler.ignore("EpisodeDownloadManager", "best-effort operation failed", e) }
         val dirUri = DocumentsContract.createDocument(cr, DocumentsContract.buildDocumentUriUsingTree(treeUri, docId), DocumentsContract.Document.MIME_TYPE_DIR, name)
         if (dirUri != null) return DocumentsContract.getDocumentId(dirUri)
         return null
@@ -864,7 +865,7 @@ class EpisodeDownloadManager(private val context: Context) {
                     }
                 }
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) { ErrorHandler.ignore("EpisodeDownloadManager", "best-effort operation failed", e) }
         return null
     }
 

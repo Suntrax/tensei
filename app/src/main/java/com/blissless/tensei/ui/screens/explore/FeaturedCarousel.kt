@@ -71,6 +71,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
+import com.blissless.tensei.util.ErrorHandler
 
 @Composable
 fun FeaturedCarousel(
@@ -134,7 +135,7 @@ fun FeaturedCarousel(
                     try {
                         val targetPage = pagerState.currentPage + 1
                         pagerState.animateScrollToPage(targetPage)
-                    } catch (_: Exception) {}
+                    } catch (e: Exception) { ErrorHandler.ignore("FeaturedCarousel", "best-effort operation failed", e) }
                 }
                 autoScrollJob?.join()
                 

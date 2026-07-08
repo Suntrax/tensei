@@ -7,6 +7,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.CaptionStyleCompat
 import com.blissless.tensei.data.models.SubtitleProfileData
 import com.blissless.tensei.data.models.SubtitleSettings
+import com.blissless.tensei.util.ErrorHandler
 
 /**
  * Subtitle styling and profile persistence helpers.
@@ -38,7 +39,7 @@ fun loadSubtitleProfileData(context: Context): SubtitleProfileData {
             val data = json.decodeFromString(SubtitleProfileData.serializer(), saved)
             return if (activeIndex in data.profiles.indices) data.copy(activeProfileIndex = activeIndex)
             else data
-        } catch (_: Exception) { }
+        } catch (e: Exception) { ErrorHandler.ignore("SubtitleStyleHelpers", "best-effort operation failed", e) }
     }
     return SubtitleProfileData()
 }

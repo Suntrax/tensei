@@ -418,10 +418,8 @@ fun MainScreen(
     val isLoadingHome by viewModel.isLoadingHome.collectAsState()
 
     // ─── Playback state ────────────────────────────────────────────────────
-    // State is in local remember{} vars (required for Compose recomposition tracking).
-    // PlaybackStateHolder exists as a future refactoring target but is not used
-    // for state — Compose property delegates (by playback::xxx) don't trigger
-    // recomposition because they bypass the State.value tracking.
+    // State is in local remember{} vars (required for Compose recomposition
+    // tracking — Compose property delegates bypass State.value tracking).
     val torrentEngine = remember { (context.applicationContext as TenseiApplication).torrentEngine }
     val torrentStreamServer = remember { mutableStateOf<TorrentStreamServer?>(null) }
 
@@ -429,7 +427,7 @@ fun MainScreen(
     var isAutoRefreshing by remember { mutableStateOf(false) }
     var pendingSeekPosition by remember { mutableStateOf<Long?>(null) }
     var currentVideoUrl by remember { mutableStateOf<String?>(null) }
-    var currentReferer by remember { mutableStateOf("https://megacloud.tv/") }
+    var currentReferer by remember { mutableStateOf(com.blissless.tensei.network.Endpoints.DEFAULT_REFERER) }
     var currentSubtitleUrl by remember { mutableStateOf<String?>(null) }
     var currentAnime by remember { mutableStateOf<AnimeMedia?>(null) }
     var currentEpisode by remember { mutableIntStateOf(0) }
@@ -536,7 +534,7 @@ fun MainScreen(
     }
 
 
-    // Playback methods — inlined (PlaybackStateHolder not used for state, see comment above)
+    // Playback helper methods (state is inlined in this composable above)
     fun sanitizeEpisodeTitle(title: String?): String? = com.blissless.tensei.ui.screens.player.sanitizeEpisodeTitle(title)
     fun invalidateCurrentStreamCache() {
         currentAnime?.let { anime ->

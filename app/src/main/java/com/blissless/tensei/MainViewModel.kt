@@ -633,8 +633,7 @@ class MainViewModel : ViewModel() {
                 .build()
             connectivityCallback = networkCallback
             connectivityManager?.registerNetworkCallback(networkRequest, networkCallback)
-        } catch (_: Exception) {
-        }
+        } catch (e: Exception) { ErrorHandler.ignore(TAG, "registerConnectivityCallback failed (best-effort)", e) }
     }
 
     private fun loadMalUserData() {
@@ -1624,8 +1623,7 @@ class MainViewModel : ViewModel() {
             try {
                 val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
                 connectivityManager?.unregisterNetworkCallback(callback)
-            } catch (_: Exception) {
-            }
+            } catch (e: Exception) { ErrorHandler.ignore(TAG, "unregisterNetworkCallback failed (best-effort)", e) }
         }
     }
 }

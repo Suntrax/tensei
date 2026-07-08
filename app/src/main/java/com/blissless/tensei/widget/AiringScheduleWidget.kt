@@ -148,7 +148,7 @@ object AiringScheduleWidget : GlanceAppWidget() {
                         val opts = BitmapFactory.Options().apply { inSampleSize = 2 }
                         val bm = BitmapFactory.decodeFile(file.absolutePath, opts)
                         if (bm != null) cache[entry.id] = bm
-                    } catch (_: Exception) { }
+                    } catch (e: Exception) { ErrorHandler.ignore("AiringScheduleWidget", "best-effort operation failed", e) }
                 }
             }
             cache
@@ -631,7 +631,7 @@ object WidgetScheduleFetcher {
                 val adult = m.optBoolean("isAdult", false)
                 val cal = Calendar.getInstance().apply { timeInMillis = s.getLong("airingAt") * 1000L }
                 r.add(WidgetAiringEntry(m.getInt("id"), title, s.getInt("episode"), s.getLong("airingAt"), ta, cover, score, cal.get(Calendar.DAY_OF_WEEK) - 1, status, adult, titleEn, titleRo, genres))
-            } catch (_: Exception) { }
+            } catch (e: Exception) { ErrorHandler.ignore("AiringScheduleWidget", "best-effort operation failed", e) }
         }
         return r
     }

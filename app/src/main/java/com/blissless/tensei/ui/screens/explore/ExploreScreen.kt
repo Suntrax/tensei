@@ -260,15 +260,10 @@ fun ExploreScreen(
                                     format = detailedData.format
                                 )
                             } else {
-                                Toast.makeText(
-                                    context,
-                                    "Anime not found - ID: ${relation.id}",
-                                    Toast.LENGTH_SHORT
-                                ).show()
+                                context.toast("Anime not found - ID: ${relation.id}")
                             }
                         } catch (e: Exception) {
-                            Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT)
-                                .show()
+                            context.toast("Error: ${e.message}")
                         }
                     }
                 } catch (e: Exception) {
