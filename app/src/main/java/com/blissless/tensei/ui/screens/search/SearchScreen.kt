@@ -640,7 +640,7 @@ private fun SearchResultCard(
                 AsyncImage(
                     model = ImageRequest.Builder(context).data(anime.cover).memoryCacheKey(anime.cover).diskCacheKey(anime.cover).crossfade(false).build(),
                     contentDescription = anime.title,
-                    contentScale = ContentScale.Fit,
+                    contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxWidth().aspectRatio(2f/3f).clip(RoundedCornerShape(12.dp))
                 )
                 if (displayScore != null) {
