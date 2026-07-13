@@ -163,6 +163,7 @@ class PlaybackStateHolder(
      */
     fun fetchAndCacheEpisode(ep: Int) {
         if (currentAnime == null) return
+        if (viewModel.streamMethod.value == "magnet") return
         val pkg = extensionSourcePackage.ifEmpty { viewModel.defaultExtensionPackage.value }
         if (pkg.isEmpty()) return
         scope.launch {
@@ -180,6 +181,7 @@ class PlaybackStateHolder(
      */
     fun prefetchExtensionNextEpisode() {
         if (currentAnime == null) return
+        if (viewModel.streamMethod.value == "magnet") return
         scope.launch {
             val nextEp = currentEpisode + 1
             val pkg = extensionSourcePackage.ifEmpty { viewModel.defaultExtensionPackage.value }
@@ -511,6 +513,8 @@ class PlaybackStateHolder(
                         currentQuality = "Auto"
                         currentServerName = "Tensei"
                         currentServerIndex = 0
+                        extensionVideoHeaders = streamResult.headers
+                        extensionOkHttpClient = try { eu.kanade.tachiyomi.network.NetworkHelper.getInstance().trustAllClient } catch (_: Exception) { null }
                         isExtensionFlow = false
                         showPlayer = true
                         isLoadingStream = false

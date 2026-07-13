@@ -98,6 +98,8 @@ import com.blissless.tensei.data.models.MediaTag
 import com.blissless.tensei.data.models.isAdultContent
 import com.blissless.tensei.data.models.toDetailedAnimeData
 import com.blissless.tensei.ui.screens.details.DetailedAnimeScreen
+import com.blissless.tensei.ui.theme.StatusColors
+import com.blissless.tensei.ui.theme.StatusLabels
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
@@ -508,6 +510,7 @@ fun SearchScreen(
                     items(filteredResults, key = { it.id }) { anime ->
                         SearchResultCard(
                             anime = anime,
+                            listStatus = savedAnimeMap[anime.id],
                             preferEnglishTitles = preferEnglishTitles,
                             onClick = {
                                 keyboardController?.hide()
@@ -623,6 +626,7 @@ fun SearchScreen(
 @Composable
 private fun SearchResultCard(
     anime: ExploreAnime,
+    listStatus: String? = null,
     preferEnglishTitles: Boolean,
     onClick: () -> Unit
 ) {
@@ -643,6 +647,24 @@ private fun SearchResultCard(
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxWidth().aspectRatio(2f/3f).clip(RoundedCornerShape(12.dp))
                 )
+                if (listStatus != null) {
+                    val statusColor = StatusColors[listStatus] ?: Color.Transparent
+                    if (statusColor != Color.Transparent) {
+                        Surface(
+                            modifier = Modifier.align(Alignment.TopEnd).padding(6.dp),
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color.Black.copy(alpha = 0.6f)
+                        ) {
+                            Text(
+                                StatusLabels[listStatus] ?: listStatus,
+                                color = statusColor,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
                 if (displayScore != null) {
                     Row(
                         modifier = Modifier.align(Alignment.BottomStart).padding(6.dp).background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp),

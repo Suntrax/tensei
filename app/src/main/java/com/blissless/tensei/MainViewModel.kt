@@ -1017,7 +1017,8 @@ class MainViewModel : ViewModel() {
             year = media.startDate?.year ?: media.seasonYear,
             malId = media.idMal,
             isAdult = media.isAdult,
-            format = media.format
+            format = media.format,
+            status = media.status
         )
     }
 

@@ -107,15 +107,17 @@ class MagnetExtensionClient(private val context: Context) {
         }
     }
 
-    fun fetchStreamUrl(authority: String, anilistId: Int, episode: Int, lang: String): StreamUrlResult? {
+    fun fetchStreamUrl(authority: String, anilistId: Int, episode: Int, lang: String, animeName: String = "", animeRomaji: String = ""): StreamUrlResult? {
         val providerUri = Uri.parse("content://$authority/$SCRAPE_PATH")
         val queryUri = providerUri.buildUpon()
             .appendQueryParameter("anilistId", anilistId.toString())
             .appendQueryParameter("episode", episode.toString())
             .appendQueryParameter("lang", lang)
+            .apply { if (animeName.isNotBlank()) appendQueryParameter("anime", animeName) }
+            .apply { if (animeRomaji.isNotBlank()) appendQueryParameter("animeRomaji", animeRomaji) }
             .build()
 
-        Log.d(TAG, "fetchStreamUrl: authority=$authority anilistId=$anilistId episode=$episode lang=$lang uri=$queryUri")
+        Log.d(TAG, "fetchStreamUrl: authority=$authority anilistId=$anilistId episode=$episode lang=$lang anime='$animeName' animeRomaji='$animeRomaji' uri=$queryUri")
 
         var cursor: Cursor? = null
         val jsonData: String? = try {

@@ -25,7 +25,8 @@ data class ExploreAnime(
     val year: Int? = null,
     val malId: Int? = null,
     val format: String? = null,
-    val isAdult: Boolean = false
+    val isAdult: Boolean = false,
+    val status: String? = null
 )
 
 @Serializable

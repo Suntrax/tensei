@@ -62,6 +62,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.blissless.tensei.data.models.ExploreAnime
 import com.blissless.tensei.ui.theme.StatusColors
+import com.blissless.tensei.ui.theme.StatusLabels
 import java.util.Locale
 import kotlin.math.absoluteValue
 

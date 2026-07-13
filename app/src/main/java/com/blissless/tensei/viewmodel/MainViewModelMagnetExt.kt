@@ -173,7 +173,9 @@ suspend fun MainViewModel.fetchMagnetForEpisode(anime: AnimeMedia, episode: Int)
 }
 
 suspend fun MainViewModel.fetchStreamUrlForEpisode(anime: AnimeMedia, episode: Int, lang: String): StreamUrlResult? {
-    Log.d(MainViewModel.TAG, "fetchStreamUrlForEpisode: anime=${anime.id} ep=$episode lang=$lang")
+    val engName = anime.titleEnglish ?: ""
+    val romajiName = anime.title ?: ""
+    Log.d(MainViewModel.TAG, "fetchStreamUrlForEpisode: anime=${anime.id} ep=$episode lang=$lang eng='$engName' romaji='$romajiName'")
     ensureMagnetClient()
     val authority = defaultMagnetExtension.value
         ?: _availableMagnetExtensions.value.firstOrNull()?.second
@@ -182,6 +184,6 @@ suspend fun MainViewModel.fetchStreamUrlForEpisode(anime: AnimeMedia, episode: I
         return null
     }
     return withContext(Dispatchers.IO) {
-        magnetExtensionClient?.fetchStreamUrl(authority, anime.id, episode, lang)
+        magnetExtensionClient?.fetchStreamUrl(authority, anime.id, episode, lang, engName, romajiName)
     }
 }

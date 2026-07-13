@@ -726,7 +726,7 @@ fun MainScreen(
                         isExtensionFlow = false
                         // Pass the stream result headers + OkHttpClient so ExoPlayer can authenticate
                         extensionVideoHeaders = playHeaders
-                        extensionOkHttpClient = try { eu.kanade.tachiyomi.network.NetworkHelper.getInstance().client } catch (_: Exception) { null }
+                        extensionOkHttpClient = try { eu.kanade.tachiyomi.network.NetworkHelper.getInstance().trustAllClient } catch (_: Exception) { null }
                         // Populate server list from streams array so the server selector shows
                         extensionHosters = streamResult.streams.map { s ->
                             eu.kanade.tachiyomi.animesource.model.Hoster(
@@ -810,6 +810,7 @@ fun MainScreen(
 
     fun fetchAndCacheEpisode(ep: Int) {
         if (currentAnime == null) return
+        if (viewModel.streamMethod.value == "magnet") return
         val pkg = extensionSourcePackage.ifEmpty { viewModel.defaultExtensionPackage.value }
         if (pkg.isEmpty()) return
         scope.launch {
@@ -821,6 +822,7 @@ fun MainScreen(
 
     fun prefetchExtensionNextEpisode() {
         if (currentAnime == null) return
+        if (viewModel.streamMethod.value == "magnet") return
         scope.launch {
             val nextEp = currentEpisode + 1
             val pkg = extensionSourcePackage.ifEmpty { viewModel.defaultExtensionPackage.value }
