@@ -514,7 +514,7 @@ class PlaybackStateHolder(
                         currentServerName = "Tensei"
                         currentServerIndex = 0
                         extensionVideoHeaders = streamResult.headers
-                        extensionOkHttpClient = try { eu.kanade.tachiyomi.network.NetworkHelper.getInstance().trustAllClient } catch (_: Exception) { null }
+                        extensionOkHttpClient = null
                         isExtensionFlow = false
                         showPlayer = true
                         isLoadingStream = false

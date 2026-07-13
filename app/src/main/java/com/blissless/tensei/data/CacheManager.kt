@@ -94,6 +94,11 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
         } else if (extensionClient != null) {
             OkHttpDataSource.Factory(extensionClient)
                 .setDefaultRequestProperties(mapOf("Referer" to referer))
+        } else if (extensionHeaders.isNotEmpty()) {
+            DefaultHttpDataSource.Factory()
+                .setConnectTimeoutMs(20000)
+                .setReadTimeoutMs(60000)
+                .setDefaultRequestProperties(extensionHeaders)
         } else {
             DefaultHttpDataSource.Factory()
                 .setConnectTimeoutMs(20000)

@@ -424,6 +424,12 @@ fun PlayerScreen(
             Log.d("PlayerScreen", "Using extension OkHttpClient with Referer: $referer")
             androidx.media3.datasource.okhttp.OkHttpDataSource.Factory(extensionOkHttpClient)
                 .setDefaultRequestProperties(mapOf("Referer" to referer))
+        } else if (extensionVideoHeaders.isNotEmpty()) {
+            Log.d("PlayerScreen", "Using DefaultHttpDataSource with headers: $extensionVideoHeaders")
+            DefaultHttpDataSource.Factory()
+                .setConnectTimeoutMs(20000)
+                .setReadTimeoutMs(20000)
+                .setDefaultRequestProperties(extensionVideoHeaders)
         } else {
             Log.d("PlayerScreen", "Using default DataSource with Referer: $referer")
             DefaultHttpDataSource.Factory()

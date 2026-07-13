@@ -724,9 +724,9 @@ fun MainScreen(
                         currentServerIndex = 0
                         currentCategory = preferredStream?.lang ?: preferredLang
                         isExtensionFlow = false
-                        // Pass the stream result headers + OkHttpClient so ExoPlayer can authenticate
+                        // Pass headers for DefaultHttpDataSource (trust-all SSL via SSLContext.setDefault)
                         extensionVideoHeaders = playHeaders
-                        extensionOkHttpClient = try { eu.kanade.tachiyomi.network.NetworkHelper.getInstance().trustAllClient } catch (_: Exception) { null }
+                        extensionOkHttpClient = null
                         // Populate server list from streams array so the server selector shows
                         extensionHosters = streamResult.streams.map { s ->
                             eu.kanade.tachiyomi.animesource.model.Hoster(
