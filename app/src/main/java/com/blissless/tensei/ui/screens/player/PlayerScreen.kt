@@ -425,17 +425,31 @@ fun PlayerScreen(
             androidx.media3.datasource.okhttp.OkHttpDataSource.Factory(extensionOkHttpClient)
                 .setDefaultRequestProperties(mapOf("Referer" to referer))
         } else if (extensionVideoHeaders.isNotEmpty()) {
-            Log.d("PlayerScreen", "Using DefaultHttpDataSource with headers: $extensionVideoHeaders")
-            DefaultHttpDataSource.Factory()
-                .setConnectTimeoutMs(20000)
-                .setReadTimeoutMs(20000)
-                .setDefaultRequestProperties(extensionVideoHeaders)
+            val trustClient = try { eu.kanade.tachiyomi.network.NetworkHelper.getInstance().trustAllClient } catch (_: Exception) { null }
+            if (trustClient != null) {
+                Log.d("PlayerScreen", "Using trustAllClient (HTTP/1.1) with headers: $extensionVideoHeaders")
+                androidx.media3.datasource.okhttp.OkHttpDataSource.Factory(trustClient)
+                    .setDefaultRequestProperties(extensionVideoHeaders)
+            } else {
+                Log.d("PlayerScreen", "Using DefaultHttpDataSource with headers: $extensionVideoHeaders")
+                DefaultHttpDataSource.Factory()
+                    .setConnectTimeoutMs(20000)
+                    .setReadTimeoutMs(20000)
+                    .setDefaultRequestProperties(extensionVideoHeaders)
+            }
         } else {
-            Log.d("PlayerScreen", "Using default DataSource with Referer: $referer")
-            DefaultHttpDataSource.Factory()
-                .setConnectTimeoutMs(20000)
-                .setReadTimeoutMs(20000)
-                .setDefaultRequestProperties(mapOf("Referer" to referer))
+            val trustClient = try { eu.kanade.tachiyomi.network.NetworkHelper.getInstance().trustAllClient } catch (_: Exception) { null }
+            if (trustClient != null) {
+                Log.d("PlayerScreen", "Using trustAllClient (HTTP/1.1) with Referer: $referer")
+                androidx.media3.datasource.okhttp.OkHttpDataSource.Factory(trustClient)
+                    .setDefaultRequestProperties(mapOf("Referer" to referer))
+            } else {
+                Log.d("PlayerScreen", "Using DefaultHttpDataSource with Referer: $referer")
+                DefaultHttpDataSource.Factory()
+                    .setConnectTimeoutMs(20000)
+                    .setReadTimeoutMs(20000)
+                    .setDefaultRequestProperties(mapOf("Referer" to referer))
+            }
         }
 
         val dataSourceFactory = cacheDataSourceFactory ?: upstreamFactory

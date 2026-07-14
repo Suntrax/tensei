@@ -88,6 +88,10 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
     fun getCacheDataSourceFactory(referer: String, extensionClient: OkHttpClient? = null, extensionHeaders: Map<String, String> = emptyMap()): CacheDataSource.Factory? {
         val cache = videoCache ?: return null
         
+        val trustClient = try {
+            eu.kanade.tachiyomi.network.NetworkHelper.getInstance().trustAllClient
+        } catch (_: Exception) { null }
+
         val httpDataSourceFactory = if (extensionClient != null && extensionHeaders.isNotEmpty()) {
             OkHttpDataSource.Factory(extensionClient)
                 .setDefaultRequestProperties(extensionHeaders)
@@ -95,14 +99,12 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
             OkHttpDataSource.Factory(extensionClient)
                 .setDefaultRequestProperties(mapOf("Referer" to referer))
         } else if (extensionHeaders.isNotEmpty()) {
-            DefaultHttpDataSource.Factory()
-                .setConnectTimeoutMs(20000)
-                .setReadTimeoutMs(60000)
+            android.util.Log.d("CacheManager", "Using trustAllClient (HTTP/1.1) with headers: $extensionHeaders")
+            OkHttpDataSource.Factory(trustClient!!)
                 .setDefaultRequestProperties(extensionHeaders)
         } else {
-            DefaultHttpDataSource.Factory()
-                .setConnectTimeoutMs(20000)
-                .setReadTimeoutMs(60000)
+            android.util.Log.d("CacheManager", "Using trustAllClient (HTTP/1.1) with Referer: $referer")
+            OkHttpDataSource.Factory(trustClient!!)
                 .setDefaultRequestProperties(mapOf("Referer" to referer))
         }
         

@@ -9,6 +9,7 @@ import com.blissless.tensei.MainViewModel
 import com.blissless.tensei.data.models.EpisodeStreams
 import com.blissless.tensei.data.models.QualityOption
 import com.blissless.tensei.data.models.ServerInfo
+import com.blissless.tensei.torrent.StreamEntry
 import com.blissless.tensei.torrent.TorrentEngine
 import com.blissless.tensei.util.toast
 // Extension functions on MainViewModel (defined in com.blissless.tensei.viewmodel)
@@ -104,6 +105,7 @@ class PlaybackStateHolder(
     var extensionEpisodeUrl by mutableStateOf("")
     var extensionEpisodeNumber by mutableIntStateOf(0)
     var extensionServers by mutableStateOf(emptyList<ServerInfo>())
+    var extensionStreamEntries by mutableStateOf<List<StreamEntry>>(emptyList())
     var extensionName by mutableStateOf("")
     var currentSubtitleTracks by mutableStateOf<List<Track>>(emptyList())
     var cachedExtensionNext by mutableStateOf<MainViewModel.ExtensionStreamResult?>(null)
@@ -221,7 +223,19 @@ class PlaybackStateHolder(
         val hoster = extensionHosters?.find { it.hosterName == hosterName } ?: return
         val source = com.blissless.tensei.stream.PlayerData.extensionSource
         if (source == null) {
-            context.toast("Source not available")
+            // Tensei stream — switch between servers using the stored stream entries
+            val serverInfo = extensionServers.find { it.name == hosterName }
+            if (serverInfo != null) {
+                currentVideoUrl = serverInfo.url
+                currentServerName = hosterName
+                currentCategory = if (hosterName.contains("DUB", ignoreCase = true)) "dub" else "sub"
+                val entry = extensionStreamEntries.find { it.url == serverInfo.url }
+                if (entry != null) {
+                    extensionVideoHeaders = entry.headers
+                    currentReferer = entry.headers["Referer"] ?: ""
+                }
+                episodeTrigger++
+            }
             return
         }
         scope.launch {
@@ -511,10 +525,31 @@ class PlaybackStateHolder(
                         }?.url ?: streamResult.subtitles.firstOrNull()?.url
                         currentQualityOptions = emptyList()
                         currentQuality = "Auto"
-                        currentServerName = "Tensei"
+                        extensionServers = streamResult.streams.mapIndexed { idx, entry ->
+                            val domain = try { java.net.URL(entry.url).host } catch (_: Exception) { "" }
+                            val provider = when {
+                                domain.contains("uwucdn") -> "uwucdn"
+                                domain.contains("wixmp") -> "wixmp"
+                                domain.contains("miruro") -> "miruro"
+                                domain.isNotEmpty() -> domain.substringBefore(".")
+                                else -> "server${idx + 1}"
+                            }
+                            ServerInfo(
+                                name = "${entry.lang.uppercase()} ($provider)",
+                                url = entry.url
+                            )
+                        }
+                        extensionStreamEntries = streamResult.streams
+                        val defaultStream = streamResult.streams.find { it.isDefault }
+                        currentServerName = if (defaultStream != null) {
+                            val idx = streamResult.streams.indexOf(defaultStream)
+                            extensionServers.getOrNull(idx)?.name ?: "Tensei"
+                        } else "Tensei"
                         currentServerIndex = 0
                         extensionVideoHeaders = streamResult.headers
-                        extensionOkHttpClient = null
+                        extensionOkHttpClient = try {
+                            eu.kanade.tachiyomi.network.NetworkHelper.getInstance().trustAllClient
+                        } catch (_: Exception) { null }
                         isExtensionFlow = false
                         showPlayer = true
                         isLoadingStream = false

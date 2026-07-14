@@ -70,6 +70,7 @@ import com.blissless.tensei.data.models.ExploreAnime
 import com.blissless.tensei.data.models.LocalAnimeEntry
 import com.blissless.tensei.data.models.QualityOption
 import com.blissless.tensei.data.models.ServerInfo
+import com.blissless.tensei.torrent.StreamEntry
 import com.blissless.tensei.data.models.toDetailedAnimeData
 import com.blissless.tensei.extensions.ExtensionsViewModel
 import com.blissless.tensei.stream.PlayerData
@@ -464,6 +465,7 @@ fun MainScreen(
     var extensionEpisodeUrl by remember { mutableStateOf("") }
     var extensionEpisodeNumber by remember { mutableIntStateOf(0) }
     var extensionServers by remember { mutableStateOf(emptyList<ServerInfo>()) }
+    var extensionStreamEntries by remember { mutableStateOf<List<StreamEntry>>(emptyList()) }
     var extensionName by remember { mutableStateOf("") }
     var currentSubtitleTracks by remember { mutableStateOf<List<eu.kanade.tachiyomi.animesource.model.Track>>(emptyList()) }
     var cachedExtensionNext by remember { mutableStateOf<MainViewModel.ExtensionStreamResult?>(null) }
@@ -734,12 +736,21 @@ fun MainScreen(
                                 hosterName = s.lang.uppercase()
                             )
                         }
-                        extensionServers = streamResult.streams.map { s ->
+                        extensionServers = streamResult.streams.mapIndexed { idx, s ->
+                            val domain = try { java.net.URL(s.url).host } catch (_: Exception) { "" }
+                            val provider = when {
+                                domain.contains("uwucdn") -> "uwucdn"
+                                domain.contains("wixmp") -> "wixmp"
+                                domain.contains("miruro") -> "miruro"
+                                domain.isNotEmpty() -> domain.substringBefore(".")
+                                else -> "server${idx + 1}"
+                            }
                             com.blissless.tensei.data.models.ServerInfo(
-                                name = s.lang.uppercase(),
+                                name = "${s.lang.uppercase()} ($provider)",
                                 url = s.url
                             )
                         }
+                        extensionStreamEntries = streamResult.streams
                         // Store all streams for server switching
                         com.blissless.tensei.stream.PlayerData.allHosters = extensionHosters ?: emptyList()
                         showPlayer = true
@@ -842,7 +853,12 @@ fun MainScreen(
             if (serverInfo != null) {
                 currentVideoUrl = serverInfo.url
                 currentServerName = hosterName
-                currentCategory = hosterName.lowercase()
+                currentCategory = if (hosterName.contains("DUB", ignoreCase = true)) "dub" else "sub"
+                val streamEntry = extensionStreamEntries.find { it.url == serverInfo.url }
+                if (streamEntry != null) {
+                    extensionVideoHeaders = streamEntry.headers
+                    currentReferer = streamEntry.headers["Referer"] ?: ""
+                }
                 episodeTrigger++
             }
             return
@@ -1498,6 +1514,7 @@ fun MainScreen(
                     extensionVideoHeaders = emptyMap()
                     extensionHosters = null
                     extensionServers = emptyList()
+                    extensionStreamEntries = emptyList()
                     cachedExtensionNext = null
                     PlayerData.extensionSource = null
                     PlayerData.extensionEpisode = null
@@ -1528,6 +1545,7 @@ fun MainScreen(
                     extensionVideoHeaders = emptyMap()
                     extensionHosters = null
                     extensionServers = emptyList()
+                    extensionStreamEntries = emptyList()
                     cachedExtensionNext = null
                     PlayerData.extensionSource = null
                     PlayerData.extensionEpisode = null
