@@ -226,6 +226,8 @@ fun PlayerScreen(
     var isManuallySeeking by remember { mutableStateOf(false) }
     var seekRetryCount by remember { mutableIntStateOf(0) }
     var isInitialLoading by remember { mutableStateOf(false) }
+    val autoRetryServers = remember { mutableSetOf<String>() }
+    var pendingAutoRetry by remember { mutableStateOf<String?>(null) }
 
     var resizeModeIndex by remember { mutableIntStateOf(0) }
     val resizeModes = listOf(
@@ -474,6 +476,7 @@ fun PlayerScreen(
                     }
 
                     override fun onPlayerError(error: PlaybackException) {
+                        Log.e("PlayerScreen", "onPlayerError: code=${error.errorCode} isChangingServer=$isChangingServer isInitialLoading=$isInitialLoading url=${videoUrl.take(80)}")
                         if (isChangingServer) {
                             return
                         }
@@ -527,11 +530,35 @@ fun PlayerScreen(
                             return
                         }
 
+                        // Auto-retry: try next untried server before anything else
+                        if (onExtensionServerChange != null && extensionServers.isNotEmpty()) {
+                            autoRetryServers.add(currentServerName)
+                            fun srvCat(name: String): String = when {
+                                name.contains("dub", ignoreCase = true) -> "dub"
+                                name.contains("sub", ignoreCase = true) -> "sub"
+                                else -> "other"
+                            }
+                            val curCat = srvCat(currentServerName)
+                            val remaining = extensionServers.filter {
+                                it.name !in autoRetryServers && it.name != currentServerName
+                            }
+                            val sameCat = remaining.filter { srvCat(it.name) == curCat }
+                            val otherCat = remaining.filter { srvCat(it.name) != curCat }
+                            val nextServer = (sameCat + otherCat).firstOrNull()
+                            if (nextServer != null) {
+                                Log.d("PlayerScreen", "Auto-retrying server: ${nextServer.name} (tried: $autoRetryServers)")
+                                pendingAutoRetry = nextServer.name
+                                return
+                            }
+                            Log.w("PlayerScreen", "All extension servers exhausted")
+                        }
+
                         // Auto-refresh for initial load / re-entry failure (stale cached URL).
                         // isAutoRefreshing in MainActivity prevents infinite refreshes.
                         if (isInitialLoading && onRefreshStream != null) {
                             onInvalidateStreamCache?.invoke()
                             onRefreshStream.invoke()
+                            return
                         }
 
                         Log.e("PlayerScreen", "SURFACING ERROR TO USER: code=${error.errorCode} msg=${error.message} isManuallySeeking=$isManuallySeeking seekRetryCount=$seekRetryCount isInitialLoading=$isInitialLoading")
@@ -559,6 +586,7 @@ fun PlayerScreen(
                             isBuffering = false
                             hasPlaybackStarted = true
                             isInitialLoading = false
+                            autoRetryServers.clear()
                             if (pendingQualityChange != null && savedPositionForQuality > 0) {
                                 val wasPlaying = playWhenReady
                                 val currentItem = currentMediaItem
@@ -1022,6 +1050,21 @@ fun PlayerScreen(
         onServerChange?.invoke(serverName, category)
     }
 
+    LaunchedEffect(pendingAutoRetry) {
+        val target = pendingAutoRetry ?: return@LaunchedEffect
+        pendingAutoRetry = null
+        Log.d("PlayerScreen", "Executing auto-retry for server: $target")
+        isChangingServer = true
+        hasPlaybackStarted = false
+        hasError = false
+        playbackError = null
+        if (extensionServers.isNotEmpty()) {
+            onExtensionServerChange?.invoke(target)
+        } else {
+            handleServerChange(target, currentCategory)
+        }
+    }
+
     fun handlePlaybackError() {
         onInvalidateStreamCache?.invoke()
         onPlaybackError?.invoke()
@@ -1465,6 +1508,8 @@ fun PlayerScreen(
                                                             isSelected = server.name == currentServerName,
                                                             onClick = {
                                                                 showServerMenu = false
+                                                                autoRetryServers.clear()
+                                                                pendingAutoRetry = null
                                                                 onExtensionServerChange?.invoke(server.name)
                                                             }
                                                         )
@@ -1479,6 +1524,8 @@ fun PlayerScreen(
                                                             isSelected = server.name == currentServerName,
                                                             onClick = {
                                                                 showServerMenu = false
+                                                                autoRetryServers.clear()
+                                                                pendingAutoRetry = null
                                                                 onExtensionServerChange?.invoke(server.name)
                                                             }
                                                         )
@@ -1493,6 +1540,8 @@ fun PlayerScreen(
                                                             isSelected = server.name == currentServerName,
                                                             onClick = {
                                                                 showServerMenu = false
+                                                                autoRetryServers.clear()
+                                                                pendingAutoRetry = null
                                                                 onExtensionServerChange?.invoke(server.name)
                                                             }
                                                         )
@@ -1738,18 +1787,41 @@ fun PlayerScreen(
                 }
 
                 if (hasError && playbackError != null) {
-                    val canTryNextServer = onServerChange != null && let {
-                        val servers = if (currentCategory == "sub") subServers else dubServers
-                        servers.size > 1
+                    val hasMoreServers = if (extensionServers.isNotEmpty()) {
+                        extensionServers.any { it.name !in autoRetryServers && it.name != currentServerName }
+                    } else {
+                        onServerChange != null && let {
+                            val servers = if (currentCategory == "sub") subServers else dubServers
+                            servers.size > 1
+                        }
                     }
                     StreamErrorOverlay(
                         errorMessage = playbackError ?: "Unknown error",
-                        showTryNextServer = canTryNextServer,
+                        showTryNextServer = hasMoreServers,
                         onTryNextServer = {
-                            val servers = if (currentCategory == "sub") subServers else dubServers
-                            val currentIndex = servers.indexOfFirst { it.name == currentServerName }
-                            val nextIndex = (currentIndex + 1) % servers.size
-                            handleServerChange(servers[nextIndex].name, currentCategory)
+                            if (extensionServers.isNotEmpty()) {
+                                autoRetryServers.add(currentServerName)
+                                fun srvCat2(name: String): String = when {
+                                    name.contains("dub", ignoreCase = true) -> "dub"
+                                    name.contains("sub", ignoreCase = true) -> "sub"
+                                    else -> "other"
+                                }
+                                val curCat = srvCat2(currentServerName)
+                                val remaining = extensionServers.filter {
+                                    it.name !in autoRetryServers && it.name != currentServerName
+                                }
+                                val sameCat = remaining.filter { srvCat2(it.name) == curCat }
+                                val otherCat = remaining.filter { srvCat2(it.name) != curCat }
+                                val next = (sameCat + otherCat).firstOrNull()
+                                if (next != null) {
+                                    pendingAutoRetry = next.name
+                                }
+                            } else {
+                                val servers = if (currentCategory == "sub") subServers else dubServers
+                                val currentIndex = servers.indexOfFirst { it.name == currentServerName }
+                                val nextIndex = (currentIndex + 1) % servers.size
+                                handleServerChange(servers[nextIndex].name, currentCategory)
+                            }
                         },
                         modifier = Modifier.align(Alignment.Center),
                     )
