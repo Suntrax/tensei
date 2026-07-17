@@ -7,11 +7,9 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
 import android.util.Log
-import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
-import android.widget.Toast
 import androidx.annotation.OptIn
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.AnimatedVisibility
@@ -33,6 +31,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -43,31 +42,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.AspectRatio
-import androidx.compose.material.icons.filled.BrightnessHigh
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ClosedCaption
-import androidx.compose.material.icons.filled.FastForward
-import androidx.compose.material.icons.filled.FastRewind
-import androidx.compose.material.icons.filled.Fullscreen
-import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
-import androidx.compose.material.icons.filled.Speed
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -76,8 +62,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -96,7 +80,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -108,6 +91,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.edit
 import androidx.core.net.toUri
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -127,7 +111,6 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
-import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
 import androidx.media3.ui.SubtitleView
 import com.blissless.tensei.api.AnimeSkipService
@@ -137,6 +120,8 @@ import com.blissless.tensei.data.models.ServerInfo
 import com.blissless.tensei.data.models.SubtitleProfileData
 import com.blissless.tensei.data.models.SubtitleSettings
 import com.blissless.tensei.data.models.Timestamp
+import com.blissless.tensei.util.longToast
+import com.blissless.tensei.util.toast
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -145,9 +130,6 @@ import kotlinx.coroutines.withContext
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.time.Duration.Companion.milliseconds
-import androidx.core.content.edit
-import com.blissless.tensei.util.toast
-import com.blissless.tensei.util.longToast
 
 @RequiresApi(Build.VERSION_CODES.R)
 @OptIn(UnstableApi::class)
@@ -533,6 +515,7 @@ fun PlayerScreen(
                         // Auto-retry: try next untried server before anything else
                         if (onExtensionServerChange != null && extensionServers.isNotEmpty()) {
                             autoRetryServers.add(currentServerName)
+                            extensionServers.find { it.url == videoUrl }?.let { autoRetryServers.add(it.name) }
                             fun srvCat(name: String): String = when {
                                 name.contains("dub", ignoreCase = true) -> "dub"
                                 name.contains("sub", ignoreCase = true) -> "sub"
@@ -540,7 +523,7 @@ fun PlayerScreen(
                             }
                             val curCat = srvCat(currentServerName)
                             val remaining = extensionServers.filter {
-                                it.name !in autoRetryServers && it.name != currentServerName
+                                it.name !in autoRetryServers && it.url != videoUrl
                             }
                             val sameCat = remaining.filter { srvCat(it.name) == curCat }
                             val otherCat = remaining.filter { srvCat(it.name) != curCat }
@@ -1788,7 +1771,7 @@ fun PlayerScreen(
 
                 if (hasError && playbackError != null) {
                     val hasMoreServers = if (extensionServers.isNotEmpty()) {
-                        extensionServers.any { it.name !in autoRetryServers && it.name != currentServerName }
+                        extensionServers.any { it.name !in autoRetryServers && it.url != videoUrl }
                     } else {
                         onServerChange != null && let {
                             val servers = if (currentCategory == "sub") subServers else dubServers
@@ -1801,6 +1784,7 @@ fun PlayerScreen(
                         onTryNextServer = {
                             if (extensionServers.isNotEmpty()) {
                                 autoRetryServers.add(currentServerName)
+                                extensionServers.find { it.url == videoUrl }?.let { autoRetryServers.add(it.name) }
                                 fun srvCat2(name: String): String = when {
                                     name.contains("dub", ignoreCase = true) -> "dub"
                                     name.contains("sub", ignoreCase = true) -> "sub"
@@ -1808,7 +1792,7 @@ fun PlayerScreen(
                                 }
                                 val curCat = srvCat2(currentServerName)
                                 val remaining = extensionServers.filter {
-                                    it.name !in autoRetryServers && it.name != currentServerName
+                                    it.name !in autoRetryServers && it.url != videoUrl
                                 }
                                 val sameCat = remaining.filter { srvCat2(it.name) == curCat }
                                 val otherCat = remaining.filter { srvCat2(it.name) != curCat }
