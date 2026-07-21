@@ -581,10 +581,15 @@ fun PlayerScreen(
             }
     }
 
-    DisposableEffect(Unit) {
+    DisposableEffect(exoPlayer) {
         onDispose {
             exoPlayer.stop()
             exoPlayer.release()
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
             onSavePosition?.invoke(currentPosition, duration)
             activity?.window?.let { window ->
                 window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
