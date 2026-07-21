@@ -28,13 +28,11 @@ rxjava = "1.3.8"
 kotlinxSerializationJsonOkio = "1.11.0"
 workRuntimeKtxVersion = "2.11.2"
 libtorrent4j = "2.1.0-39"
+anitorrent = "0.2.0"
 
 [libraries]
-libtorrent4j-core = { module = "org.libtorrent4j:libtorrent4j", version.ref = "libtorrent4j" }
-libtorrent4j-android-arm64 = { module = "org.libtorrent4j:libtorrent4j-android-arm64", version.ref = "libtorrent4j" }
-libtorrent4j-android-arm = { module = "org.libtorrent4j:libtorrent4j-android-arm", version.ref = "libtorrent4j" }
-libtorrent4j-android-x86 = { module = "org.libtorrent4j:libtorrent4j-android-x86", version.ref = "libtorrent4j" }
-libtorrent4j-android-x8664 = { module = "org.libtorrent4j:libtorrent4j-android-x86_64", version.ref = "libtorrent4j" }
+anitorrent-native = { module = "org.openani.anitorrent:anitorrent-native", version.ref = "anitorrent" }
+anitorrent-native-android = { module = "org.openani.anitorrent:anitorrent-native-android", version.ref = "anitorrent" }
 androidx-compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended", version.ref = "materialIconsExtended" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "coreSplashscreen" }

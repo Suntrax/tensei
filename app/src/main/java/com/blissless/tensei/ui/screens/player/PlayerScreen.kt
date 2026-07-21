@@ -1041,6 +1041,8 @@ fun PlayerScreen(
         hasPlaybackStarted = false
         hasError = false
         playbackError = null
+        exoPlayer.stop()
+        exoPlayer.clearMediaItems()
         if (extensionServers.isNotEmpty()) {
             onExtensionServerChange?.invoke(target)
         } else {
@@ -1485,7 +1487,7 @@ fun PlayerScreen(
                                                 val extDubServers = extensionServers.filter { it.name.contains("dub", ignoreCase = true) && !it.name.contains("sub", ignoreCase = true) }
                                                 if (extSubServers.isNotEmpty()) {
                                                     Text("SUB", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
-                                                    extSubServers.forEach { server ->
+                                                     extSubServers.forEach { server ->
                                                         ServerSelectorButton(
                                                             serverName = server.name,
                                                             isSelected = server.name == currentServerName,
@@ -1493,6 +1495,8 @@ fun PlayerScreen(
                                                                 showServerMenu = false
                                                                 autoRetryServers.clear()
                                                                 pendingAutoRetry = null
+                                                                exoPlayer.stop()
+                                                                exoPlayer.clearMediaItems()
                                                                 onExtensionServerChange?.invoke(server.name)
                                                             }
                                                         )
@@ -1501,7 +1505,7 @@ fun PlayerScreen(
                                                 }
                                                 if (extDubServers.isNotEmpty()) {
                                                     Text("DUB", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
-                                                    extDubServers.forEach { server ->
+                                                     extDubServers.forEach { server ->
                                                         ServerSelectorButton(
                                                             serverName = server.name,
                                                             isSelected = server.name == currentServerName,
@@ -1509,6 +1513,8 @@ fun PlayerScreen(
                                                                 showServerMenu = false
                                                                 autoRetryServers.clear()
                                                                 pendingAutoRetry = null
+                                                                exoPlayer.stop()
+                                                                exoPlayer.clearMediaItems()
                                                                 onExtensionServerChange?.invoke(server.name)
                                                             }
                                                         )
@@ -1517,7 +1523,7 @@ fun PlayerScreen(
                                                 }
                                                 if (extSubServers.isEmpty() && extDubServers.isEmpty()) {
                                                     Text(extensionName.ifEmpty { "EXT" }, color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
-                                                    extensionServers.forEach { server ->
+                                                     extensionServers.forEach { server ->
                                                         ServerSelectorButton(
                                                             serverName = server.name,
                                                             isSelected = server.name == currentServerName,
@@ -1525,6 +1531,8 @@ fun PlayerScreen(
                                                                 showServerMenu = false
                                                                 autoRetryServers.clear()
                                                                 pendingAutoRetry = null
+                                                                exoPlayer.stop()
+                                                                exoPlayer.clearMediaItems()
                                                                 onExtensionServerChange?.invoke(server.name)
                                                             }
                                                         )

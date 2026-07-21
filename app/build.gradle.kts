@@ -22,8 +22,8 @@ android {
         applicationId = "com.blissless.tensei"
         minSdk = 26
         targetSdk = 37
-        versionCode = 10
-        versionName = "1.0.9"
+        versionCode = 11
+        versionName = "1.1.0"
 
         val anilistApiKey = localProperties.getProperty("CLIENT_ID_ANILIST")
         val tmdbApiKey = localProperties.getProperty("TMDB_API_KEY")
@@ -164,11 +164,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.json.okio)
     implementation(libs.jsoup.v1181)
     implementation(libs.androidx.preference.ktx)
-    implementation(libs.libtorrent4j.core)
-    implementation(libs.libtorrent4j.android.arm64)
-    implementation(libs.libtorrent4j.android.arm)
-    implementation(libs.libtorrent4j.android.x86)
-    implementation(libs.libtorrent4j.android.x8664)
+    implementation(libs.anitorrent.native)
 
     // ─── Unit testing ─────────────────────────────────────────────────────
     testImplementation("junit:junit:4.13.2")

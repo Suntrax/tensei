@@ -116,6 +116,7 @@ class PlaybackStateHolder(
 
     // ─── Torrent state ────────────────────────────────────────────────────
     var currentTorrentListener by mutableStateOf<TorrentEngine.EngineListener?>(null)
+    private var metadataTimeoutJob: Job? = null
 
     // ─── Timestamps (Animekai / AniSkip) ─────────────────────────────────
     var animekaiIntroStart by mutableStateOf<Int?>(null)
@@ -408,6 +409,8 @@ class PlaybackStateHolder(
         val listener = object : TorrentEngine.EngineListener {
             override fun onMetadataReceived(meta: com.blissless.tensei.torrent.TorrentMeta) {
                 android.util.Log.i("Playback", "onMetadataReceived: name='${meta.name}' files=${meta.files.size}")
+                metadataTimeoutJob?.cancel()
+                metadataTimeoutJob = null
                 scope.launch {
                     try {
                         val videoExts = setOf("mkv", "mp4", "webm", "avi", "mov", "m4v")
@@ -502,6 +505,8 @@ class PlaybackStateHolder(
             }
             override fun onError(message: String) {
                 android.util.Log.e("Playback", "onError: $message")
+                metadataTimeoutJob?.cancel()
+                metadataTimeoutJob = null
                 scope.launch {
                     streamError = message
                     isLoadingStream = false
@@ -514,6 +519,19 @@ class PlaybackStateHolder(
         android.util.Log.d("Playback", "playTorrent: calling engine.addTorrentFromMagnet()")
         engine.addTorrentFromMagnet(magnetUri)
         android.util.Log.d("Playback", "playTorrent: magnet submitted, waiting for metadata...")
+
+        metadataTimeoutJob?.cancel()
+        metadataTimeoutJob = scope.launch {
+            delay(METADATA_TIMEOUT_MS)
+            if (isLoadingStream && streamError == null) {
+                android.util.Log.e("Playback", "playTorrent: metadata timeout after ${METADATA_TIMEOUT_MS}ms")
+                streamError = "Torrent metadata timed out — the torrent may have no seeders or your network may be unreachable."
+                isLoadingStream = false
+                engine.removeCurrentTorrent()
+                currentTorrentListener?.let { engine.removeListener(it) }
+                currentTorrentListener = null
+            }
+        }
     }
 
     /**
@@ -742,5 +760,9 @@ class PlaybackStateHolder(
                 loadAndPlayEpisode(currentAnime!!, nextEp, isAutoRefresh = true)
             }
         }
+    }
+
+    companion object {
+        private const val METADATA_TIMEOUT_MS = 60_000L
     }
 }
