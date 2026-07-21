@@ -373,23 +373,6 @@ fun PlayerScreen(
         activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
     }
 
-    DisposableEffect(Unit) {
-        onDispose {
-            onSavePosition?.invoke(currentPosition, duration)
-            activity?.window?.let { window ->
-                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                val controller = WindowCompat.getInsetsController(window, window.decorView)
-                controller.show(WindowInsetsCompat.Type.systemBars())
-                WindowCompat.setDecorFitsSystemWindows(window, true)
-                // Restore system brightness when leaving the player
-                window.attributes = window.attributes.apply {
-                    screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
-                }
-            }
-            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-        }
-    }
-
     val exoPlayer = remember(context, bufferAheadSeconds, referer, serverChangeTrigger, videoUrl, extensionOkHttpClient, extensionVideoHeaders) {
         val bufferAheadMs = bufferAheadSeconds * 1000
         val maxBufferMs = maxOf(bufferAheadMs + 60000, 180000)
@@ -596,6 +579,25 @@ fun PlayerScreen(
                     }
                 })
             }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            exoPlayer.stop()
+            exoPlayer.release()
+            onSavePosition?.invoke(currentPosition, duration)
+            activity?.window?.let { window ->
+                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                val controller = WindowCompat.getInsetsController(window, window.decorView)
+                controller.show(WindowInsetsCompat.Type.systemBars())
+                WindowCompat.setDecorFitsSystemWindows(window, true)
+                // Restore system brightness when leaving the player
+                window.attributes = window.attributes.apply {
+                    screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+                }
+            }
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
     }
 
     LaunchedEffect(videoUrl, serverChangeTrigger) {
