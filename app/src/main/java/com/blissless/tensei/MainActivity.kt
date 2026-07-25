@@ -1,12 +1,11 @@
 package com.blissless.tensei
 
+// Extension functions on MainViewModel (defined in com.blissless.tensei.viewmodel)
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -27,8 +26,6 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
@@ -70,15 +67,15 @@ import com.blissless.tensei.data.models.ExploreAnime
 import com.blissless.tensei.data.models.LocalAnimeEntry
 import com.blissless.tensei.data.models.QualityOption
 import com.blissless.tensei.data.models.ServerInfo
-import com.blissless.tensei.torrent.StreamEntry
 import com.blissless.tensei.data.models.toDetailedAnimeData
+import com.blissless.tensei.data.calculateRecursiveOffset
 import com.blissless.tensei.extensions.ExtensionsViewModel
 import com.blissless.tensei.playback.buildTenseiServerList
 import com.blissless.tensei.playback.pickTenseiSubtitleUrl
 import com.blissless.tensei.playback.selectPreferredTenseiStream
 import com.blissless.tensei.stream.PlayerData
+import com.blissless.tensei.torrent.StreamEntry
 import com.blissless.tensei.torrent.TorrentEngine
-import com.blissless.tensei.torrent.TorrentMeta
 import com.blissless.tensei.torrent.TorrentStreamServer
 import com.blissless.tensei.ui.screens.airing.ScheduleScreen
 import com.blissless.tensei.ui.screens.cast.AllCastScreen
@@ -98,39 +95,32 @@ import com.blissless.tensei.ui.screens.status.StatusListScreen
 import com.blissless.tensei.ui.theme.AppTheme
 import com.blissless.tensei.ui.theme.ThemeMode
 import com.blissless.tensei.update.UpdateViewModel
+import com.blissless.tensei.util.toast
+import com.blissless.tensei.viewmodel.clearAnimeExtensionStreamCaches
+import com.blissless.tensei.viewmodel.clearPlaybackPosition
+import com.blissless.tensei.viewmodel.fetchExtensionHosterVideos
+import com.blissless.tensei.viewmodel.fetchMagnetForEpisode
+import com.blissless.tensei.viewmodel.fetchStreamUrlForEpisode
+import com.blissless.tensei.viewmodel.getCacheDataSourceFactory
+import com.blissless.tensei.viewmodel.getMagnetForEpisode
+import com.blissless.tensei.viewmodel.getPlaybackPosition
+import com.blissless.tensei.viewmodel.invalidateStreamCache
+import com.blissless.tensei.viewmodel.playEpisodeWithExtension
+import com.blissless.tensei.viewmodel.removeFromVideoCache
+import com.blissless.tensei.viewmodel.savePlaybackPosition
+import com.blissless.tensei.viewmodel.setAutoPlayNextEpisode
+import com.blissless.tensei.viewmodel.setSwipeBrightness
+import com.blissless.tensei.viewmodel.setSwipeSwap
+import com.blissless.tensei.viewmodel.setSwipeVolume
 import eu.kanade.tachiyomi.animesource.model.Video
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.yield
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 import java.io.File
 import kotlin.time.Duration.Companion.milliseconds
-// Extension functions on MainViewModel (defined in com.blissless.tensei.viewmodel)
-import com.blissless.tensei.viewmodel.getPlaybackPosition
-import com.blissless.tensei.viewmodel.savePlaybackPosition
-import com.blissless.tensei.viewmodel.clearPlaybackPosition
-import com.blissless.tensei.viewmodel.getMagnetForEpisode
-import com.blissless.tensei.viewmodel.fetchMagnetForEpisode
-import com.blissless.tensei.viewmodel.fetchStreamUrlForEpisode
-import com.blissless.tensei.viewmodel.playEpisodeWithExtension
-import com.blissless.tensei.viewmodel.fetchExtensionHosterVideos
-import com.blissless.tensei.viewmodel.invalidateStreamCache
-import com.blissless.tensei.viewmodel.clearAnimeExtensionStreamCaches
-import com.blissless.tensei.viewmodel.removeFromVideoCache
-import com.blissless.tensei.viewmodel.setAutoPlayNextEpisode
-import com.blissless.tensei.viewmodel.setSwipeVolume
-import com.blissless.tensei.viewmodel.setSwipeBrightness
-import com.blissless.tensei.viewmodel.setSwipeSwap
-import com.blissless.tensei.viewmodel.getCacheDataSourceFactory
-import com.blissless.tensei.viewmodel.getVideoCacheSize
-import com.blissless.tensei.viewmodel.getDownloadCacheSize
-import com.blissless.tensei.viewmodel.clearNonEssentialCaches
-import com.blissless.tensei.viewmodel.clearDownloadCache
-import com.blissless.tensei.util.ErrorHandler
-import com.blissless.tensei.util.toast
-import com.blissless.tensei.util.longToast
 
 @UnstableApi
 class MainActivity : ComponentActivity() {
@@ -474,6 +464,7 @@ fun MainScreen(
     var cachedExtensionNext by remember { mutableStateOf<MainViewModel.ExtensionStreamResult?>(null) }
     val episodeCache = remember { mutableMapOf<Int, MainViewModel.ExtensionStreamResult>() }
     var currentTorrentListener by remember { mutableStateOf<TorrentEngine.EngineListener?>(null) }
+    var currentTorrentFileSize by remember { mutableLongStateOf(0L) }
     var showNoExtDialog by remember { mutableStateOf(false) }
     var animekaiIntroStart by remember { mutableStateOf<Int?>(null) }
     var animekaiIntroEnd by remember { mutableStateOf<Int?>(null) }
@@ -612,8 +603,7 @@ fun MainScreen(
         }
     }
 
-    fun playTorrent(magnetUri: String, anime: AnimeMedia, episode: Int) {
-        android.util.Log.i("MainActivity.Torrent", "playTorrent: START anime='${anime.title}' ep=$episode magnet=${magnetUri.take(60)}...")
+    fun playTorrent(magnetUri: String, anime: AnimeMedia, episode: Int, extensionSubtitles: List<eu.kanade.tachiyomi.animesource.model.Track> = emptyList(), episodeOffset: Int = 0) {
         isLoadingStream = true
         streamError = null
         torrentStreamServer.value?.stop()
@@ -633,36 +623,69 @@ fun MainScreen(
                     try {
                         val videoExts = setOf("mkv", "mp4", "webm", "avi", "mov", "m4v")
                         val videoFiles = meta.files.filter { f -> f.name.substringAfterLast('.', "").lowercase() in videoExts }
-                        val epPattern = Regex("(?:^|[._ \\[\\]()-])0*${episode}(?:\$|[._ \\[\\]()-])", RegexOption.IGNORE_CASE)
-                        val matched = videoFiles.filter { f -> epPattern.containsMatchIn(f.name) || epPattern.containsMatchIn(f.path) }
-                        val fileIndex = if (matched.isNotEmpty()) matched.maxBy { it.size }.index
-                        else videoFiles.filter { f -> f.name.contains("$episode") || f.path.contains("$episode") }
-                            .maxByOrNull { it.size }?.index ?: engine.getLargestVideoFileIndex()
+
+                        val fileIndex = if (videoFiles.size == 1) {
+                            videoFiles.first().index
+                        } else {
+                            var epPattern = Regex("(?:^|[Ee._ \\[\\]()-])0*${episode}(?:[Ee._ \\[\\]()-]|$)", RegexOption.IGNORE_CASE)
+                            var nameMatched = videoFiles.filter { f -> epPattern.containsMatchIn(f.name) }
+                            var matched = if (nameMatched.isNotEmpty()) nameMatched
+                                else videoFiles.filter { f -> epPattern.containsMatchIn(f.path) }
+
+                            if (matched.isEmpty() && episodeOffset > 0) {
+                                val adjustedEp = episode + episodeOffset
+                                android.util.Log.i("MainActivity", "playTorrent: trying offset-adjusted ep=$adjustedEp (original=$episode + offset=$episodeOffset)")
+                                epPattern = Regex("(?:^|[Ee._ \\[\\]()-])0*${adjustedEp}(?:[Ee._ \\[\\]()-]|$)", RegexOption.IGNORE_CASE)
+                                val offsetNameMatched = videoFiles.filter { f -> epPattern.containsMatchIn(f.name) }
+                                matched = if (offsetNameMatched.isNotEmpty()) offsetNameMatched
+                                    else videoFiles.filter { f -> epPattern.containsMatchIn(f.path) }
+                            }
+
+                            if (matched.isNotEmpty()) {
+                                if (matched.size > 1) {
+                                    val dirs = matched.map { f -> f.path.substringBeforeLast('/', "").substringBeforeLast('\\', "") }.distinct()
+                                    if (dirs.size > 1) matched.sortedBy { it.path }.first().index
+                                    else matched.maxBy { it.size }.index
+                                } else matched.first().index
+                            } else {
+                                val nameContains = videoFiles.filter { f -> f.name.contains("$episode") }
+                                val containsMatched = if (nameContains.isNotEmpty()) nameContains
+                                    else videoFiles.filter { f -> f.path.contains("$episode") }
+                                containsMatched.maxByOrNull { it.size }?.index ?: engine.getLargestVideoFileIndex()
+                            }
+                        }
+
                         engine.startDownload(fileIndex)
                         val port = server.start()
                         val filePath = engine.getFileSavePath(fileIndex)
                         if (filePath == null) { streamError = "Could not resolve torrent file path"; isLoadingStream = false; return@launch }
                         val saveDirPath = engine.saveDir.absolutePath + File.separator
                         val fileName = if (filePath.startsWith(saveDirPath)) filePath.removePrefix(saveDirPath) else filePath.substringAfterLast(File.separator)
-                        server.setTotalFileSize(engine.getFileSize(fileIndex))
+
+                        val fileFirstPiece = engine.getFileFirstPiece(fileIndex)
+                        val fileSize = engine.getFileSize(fileIndex)
+                        server.setTotalFileSize(fileSize)
                         server.setPieceSize(engine.getPieceSize())
-                        server.setPieceChecker { i -> engine.havePiece(i) }
+                        server.setPieceChecker { fileRelativePiece -> engine.havePiece(fileRelativePiece + fileFirstPiece) }
                         server.setSafeBytesProvider { engine.getContiguousDownloadedBytes() }
-                        val minBytes = 8L * 1024 * 1024
+
+                        val minBytes = 2L * 1024 * 1024
                         val waitDeadline = System.nanoTime() + 120_000_000_000L
                         while (System.nanoTime() < waitDeadline) {
                             if (engine.getContiguousDownloadedBytes() >= minBytes) break
                             delay(500)
                         }
+
                         currentVideoUrl = "http://127.0.0.1:$port/$fileName"
                         currentReferer = ""
                         currentEpisodeTitle = sanitizeEpisodeTitle(anime.title) ?: "Episode $episode"
-                        currentSubtitleTracks = emptyList()
-                        currentSubtitleUrl = null
+                        currentSubtitleTracks = extensionSubtitles
+                        currentSubtitleUrl = pickTenseiSubtitleUrl(extensionSubtitles)
                         currentQualityOptions = emptyList()
                         currentQuality = "Auto"
                         currentServerName = "Torrent"
                         currentServerIndex = 0
+                        currentTorrentFileSize = fileSize
                         isExtensionFlow = false
                         showPlayer = true
                         isLoadingStream = false
@@ -704,7 +727,26 @@ fun MainScreen(
             android.util.Log.d("Playback", "loadAndPlayEpisodeTensei: magnetUri=${magnetUri?.take(60)} isEmpty=${magnetUri?.isEmpty()}")
             if (magnetUri != null && magnetUri.isNotEmpty()) {
                 android.util.Log.d("Playback", "loadAndPlayEpisodeTensei: calling playTorrent")
-                playTorrent(magnetUri, anime, episode)
+                val episodeOffset = try {
+                    withContext(Dispatchers.IO) {
+                        viewModel.repository.calculateRecursiveOffset(anime.id)
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("Playback", "loadAndPlayEpisodeTensei: failed to calculate episode offset", e)
+                    0
+                }
+                android.util.Log.i("Playback", "loadAndPlayEpisodeTensei: episodeOffset=$episodeOffset for anime='${anime.title}' (id=${anime.id})")
+
+                val streamResult = withContext(Dispatchers.IO) {
+                    try {
+                        viewModel.fetchStreamUrlForEpisode(anime, episode, viewModel.preferredCategory.value)
+                    } catch (e: Exception) {
+                        android.util.Log.w("Playback", "loadAndPlayEpisodeTensei: fetchStreamUrlForEpisode failed", e)
+                        null
+                    }
+                }
+                android.util.Log.i("Playback", "loadAndPlayEpisodeTensei: streamResult url=${streamResult?.url?.take(60)} subtitles=${streamResult?.subtitles?.size ?: 0}")
+                playTorrent(magnetUri, anime, episode, streamResult?.subtitles ?: emptyList(), episodeOffset)
             } else if (magnetUri != null) {
                 android.util.Log.d("Playback", "loadAndPlayEpisodeTensei: empty magnet, trying stream URL")
                 val streamResult = viewModel.fetchStreamUrlForEpisode(anime, episode, viewModel.preferredCategory.value)
@@ -1606,6 +1648,10 @@ fun MainScreen(
                 onExtensionServerChange = { hosterName -> handleExtensionServerChange(hosterName) },
                 onPrefetchNextExtensionEpisode = { prefetchExtensionNextEpisode() },
                 isTorrentStream = torrentStreamServer.value != null,
+                onTorrentSeek = if (torrentStreamServer.value != null) { posMs, durMs ->
+                    val fileSize = currentTorrentFileSize
+                    if (fileSize > 0) torrentEngine.prioritizeForSeek(posMs, fileSize, durMs)
+                } else null,
             )
         }
 

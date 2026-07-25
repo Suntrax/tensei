@@ -1718,26 +1718,30 @@ fun DetailedAnimeScreen(
                 showStatusDialog = false
             },
             onUpdate = { status: String, progress: Int? ->
-                effectiveOnUpdateStatus(status)
                 if (progress != null) {
-                    effectiveOnUpdateProgress(progress)
-                    displayProgress = progress
-                }
-                if (!isLoggedIn && progress != null) {
-                    viewModel.setLocalAnimeStatus(
-                        anime.id,
-                        LocalAnimeEntry(
-                            id = anime.id,
-                            status = status,
-                            progress = progress,
-                            totalEpisodes = anime.episodes,
-                    title = anime.title,
-                            cover = anime.cover,
-                            banner = anime.banner,
-                            year = anime.year,
-                            averageScore = anime.averageScore
+                    if (isLoggedIn) {
+                        viewModel.updateAnimeStatus(anime.id, status, progress)
+                    } else {
+                        effectiveOnUpdateStatus(status)
+                        effectiveOnUpdateProgress(progress)
+                        viewModel.setLocalAnimeStatus(
+                            anime.id,
+                            LocalAnimeEntry(
+                                id = anime.id,
+                                status = status,
+                                progress = progress,
+                                totalEpisodes = anime.episodes,
+                                title = anime.title,
+                                cover = anime.cover,
+                                banner = anime.banner,
+                                year = anime.year,
+                                averageScore = anime.averageScore
+                            )
                         )
-                    )
+                    }
+                    displayProgress = progress
+                } else {
+                    effectiveOnUpdateStatus(status)
                 }
                 showStatusDialog = false
             }

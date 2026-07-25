@@ -104,6 +104,9 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.TrackGroup
+import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.cache.CacheDataSource
@@ -130,6 +133,21 @@ import kotlinx.coroutines.withContext
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.time.Duration.Companion.milliseconds
+
+private fun subtitleMimeType(url: String): String {
+    val ext = url.substringAfterLast('.', "").substringBefore('?').lowercase()
+    return when (ext) {
+        "srt" -> MimeTypes.APPLICATION_SUBRIP
+        "ass", "ssa" -> MimeTypes.TEXT_SSA
+        else -> MimeTypes.TEXT_VTT
+    }
+}
+
+private data class EmbeddedSubtitleTrack(
+    val trackGroup: TrackGroup,
+    val trackIndex: Int,
+    val label: String,
+)
 
 @RequiresApi(Build.VERSION_CODES.R)
 @OptIn(UnstableApi::class)
@@ -196,6 +214,7 @@ fun PlayerScreen(
     onPrefetchNextExtensionEpisode: (() -> Unit)? = null,
     onAutoPlayNextEpisodeChanged: ((Boolean) -> Unit)? = null,
     isTorrentStream: Boolean = false,
+    onTorrentSeek: ((positionMs: Long, durationMs: Long) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
@@ -268,6 +287,8 @@ fun PlayerScreen(
     var showSubtitleSettings by remember { mutableStateOf(false) }
     var subtitleProfileData by remember { mutableStateOf(loadSubtitleProfileData(context)) }
     var subtitleViewRef by remember { mutableStateOf<SubtitleView?>(null) }
+    var embeddedSubtitleTracks by remember { mutableStateOf<List<EmbeddedSubtitleTrack>>(emptyList()) }
+    var selectedEmbeddedTrackIndex by remember { mutableIntStateOf(-1) }
     var accumulatedSkipMs by remember { mutableLongStateOf(0L) }
     var lastTapTime by remember { mutableLongStateOf(0L) }
 
@@ -440,6 +461,30 @@ fun PlayerScreen(
                         isBuffering = isPlaying && reason != Player.PLAYBACK_SUPPRESSION_REASON_NONE
                     }
 
+                    override fun onTracksChanged(tracks: Tracks) {
+                        val discovered = mutableListOf<EmbeddedSubtitleTrack>()
+                        for (groupIndex in 0 until tracks.groups.size) {
+                            val group = tracks.groups[groupIndex]
+                            if (group.type == C.TRACK_TYPE_TEXT) {
+                                for (trackIndex in 0 until group.length) {
+                                    val format = group.getTrackFormat(trackIndex)
+                                    val label = format.label
+                                        ?: format.language
+                                        ?: "Track ${discovered.size + 1}"
+                                    discovered.add(
+                                        EmbeddedSubtitleTrack(
+                                            trackGroup = group.mediaTrackGroup,
+                                            trackIndex = trackIndex,
+                                            label = label,
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                        embeddedSubtitleTracks = discovered
+                        Log.d("PlayerScreen", "onTracksChanged: discovered ${discovered.size} embedded subtitle tracks: ${discovered.map { it.label }}")
+                    }
+
                     override fun onPlayerError(error: PlaybackException) {
                         Log.e("PlayerScreen", "onPlayerError: code=${error.errorCode} isChangingServer=$isChangingServer isInitialLoading=$isInitialLoading url=${videoUrl.take(80)}")
                         if (isChangingServer) {
@@ -460,23 +505,29 @@ fun PlayerScreen(
                             playbackError = null
                             isBuffering = true
                             val seekPos = currentPosition
-                            Log.w("PlayerScreen", "onPlayerError: retry #$seekRetryCount seekPos=$seekPos error=${error.errorCode}: ${error.message?.take(100)}")
-                            val item = currentMediaItem
-                            val isHls = item?.localConfiguration?.mimeType == MimeTypes.APPLICATION_M3U8
-                            if (isHls && seekPos > 0) {
-                                Log.d("PlayerScreen", "onPlayerError: retry#$seekRetryCount HLS seekTo=$seekPos")
+                            Log.w("PlayerScreen", "onPlayerError: retry #$seekRetryCount seekPos=$seekPos isTorrentStream=$isTorrentStream error=${error.errorCode}: ${error.message?.take(100)}")
+                            if (isTorrentStream && seekPos > 0) {
+                                Log.d("PlayerScreen", "onPlayerError: retry#$seekRetryCount torrent seekTo=$seekPos (TorrentStreamServer handles Range)")
+                                onTorrentSeek?.invoke(seekPos, this@apply.duration)
                                 seekTo(seekPos)
-                            } else if (seekPos > 0 && item != null) {
-                                val itemUri = item.localConfiguration?.uri?.toString()?.take(100) ?: "unknown"
-                                Log.d("PlayerScreen", "onPlayerError: retry#$seekRetryCount clipped uri=$itemUri seekPos=$seekPos")
-                                val clippedItem = item.buildUpon()
-                                    .setClipStartPositionMs(seekPos)
-                                    .build()
-                                setMediaItem(clippedItem)
-                                prepare()
                             } else {
-                                Log.d("PlayerScreen", "onPlayerError: retry#$seekRetryCount prepare() only")
-                                prepare()
+                                val item = currentMediaItem
+                                val isHls = item?.localConfiguration?.mimeType == MimeTypes.APPLICATION_M3U8
+                                if (isHls && seekPos > 0) {
+                                    Log.d("PlayerScreen", "onPlayerError: retry#$seekRetryCount HLS seekTo=$seekPos")
+                                    seekTo(seekPos)
+                                } else if (seekPos > 0 && item != null) {
+                                    val itemUri = item.localConfiguration?.uri?.toString()?.take(100) ?: "unknown"
+                                    Log.d("PlayerScreen", "onPlayerError: retry#$seekRetryCount clipped uri=$itemUri seekPos=$seekPos")
+                                    val clippedItem = item.buildUpon()
+                                        .setClipStartPositionMs(seekPos)
+                                        .build()
+                                    setMediaItem(clippedItem)
+                                    prepare()
+                                } else {
+                                    Log.d("PlayerScreen", "onPlayerError: retry#$seekRetryCount prepare() only")
+                                    prepare()
+                                }
                             }
                             return
                         }
@@ -486,11 +537,12 @@ fun PlayerScreen(
                         // so ExoPlayer reconnects to the TorrentStreamServer after more
                         // data has downloaded.
                         if (isInitialLoading && isTorrentStream) {
-                            Log.d("PlayerScreen", "onPlayerError: torrent stream error, retrying seek instead of auto-refresh")
+                            Log.d("PlayerScreen", "onPlayerError: torrent stream initial-load error, re-prepare (error=${error.errorCode})")
                             seekRetryCount = 1
                             hasError = false
                             playbackError = null
                             isBuffering = true
+                            onTorrentSeek?.invoke(currentPosition, this@apply.duration)
                             prepare()
                             return
                         }
@@ -636,14 +688,14 @@ fun PlayerScreen(
             subtitleTracks.mapIndexed { index, track ->
                 val flags = if (index == selectedSubtitleIndex) C.SELECTION_FLAG_DEFAULT else 0
                 MediaItem.SubtitleConfiguration.Builder(track.url.toUri())
-                    .setMimeType(MimeTypes.TEXT_VTT)
+                    .setMimeType(subtitleMimeType(track.url))
                     .setLanguage(track.lang)
                     .setSelectionFlags(flags)
                     .build()
             }
         } else if (subtitleUrl != null) {
             listOf(MediaItem.SubtitleConfiguration.Builder(subtitleUrl.toUri())
-                .setMimeType(MimeTypes.TEXT_VTT)
+                .setMimeType(subtitleMimeType(subtitleUrl))
                 .setLanguage("en")
                 .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
                 .build())
@@ -717,12 +769,18 @@ fun PlayerScreen(
     }
 
     fun seekToPosition(position: Long) {
-        Log.d("PlayerScreen", "seekToPosition: pos=$position bufferedPos=$bufferedPosition maxBufferedPos=$maxBufferedPosition duration=${exoPlayer.duration} isManuallySeeking=$isManuallySeeking")
+        Log.d("PlayerScreen", "seekToPosition: pos=$position bufferedPos=$bufferedPosition maxBufferedPos=$maxBufferedPosition duration=${exoPlayer.duration} isManuallySeeking=$isManuallySeeking isTorrentStream=$isTorrentStream")
         hasError = false
         playbackError = null
         isBuffering = true
         maxBufferedPosition = position
         bufferedPosition = position
+        if (isTorrentStream) {
+            Log.d("PlayerScreen", "seekToPosition: torrent stream — calling onTorrentSeek then seekTo($position), TorrentStreamServer handles Range requests")
+            onTorrentSeek?.invoke(position, exoPlayer.duration)
+            exoPlayer.seekTo(position)
+            return
+        }
         val item = exoPlayer.currentMediaItem
         val isHls = item?.localConfiguration?.mimeType == MimeTypes.APPLICATION_M3U8
         Log.d("PlayerScreen", "seekToPosition: isHls=$isHls mime=${item?.localConfiguration?.mimeType}")
@@ -1071,14 +1129,14 @@ fun PlayerScreen(
             subtitleTracks.mapIndexed { index, track ->
                 val flags = if (index == selectedSubtitleIndex) C.SELECTION_FLAG_DEFAULT else 0
                 MediaItem.SubtitleConfiguration.Builder(track.url.toUri())
-                    .setMimeType(MimeTypes.TEXT_VTT)
+                    .setMimeType(subtitleMimeType(track.url))
                     .setLanguage(track.lang)
                     .setSelectionFlags(flags)
                     .build()
             }
         } else if (subtitlesEnabled && subtitleUrl != null) {
             listOf(MediaItem.SubtitleConfiguration.Builder(subtitleUrl.toUri())
-                .setMimeType(MimeTypes.TEXT_VTT)
+                .setMimeType(subtitleMimeType(subtitleUrl))
                 .setLanguage("en")
                 .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
                 .build())
@@ -1088,10 +1146,26 @@ fun PlayerScreen(
         val newItem = currentItem.buildUpon()
             .setSubtitleConfigurations(subtitleConfigs)
             .build()
+        if (!enable) {
+            exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters.buildUpon()
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                .build()
+        } else {
+            selectedEmbeddedTrackIndex = -1
+        }
         exoPlayer.stop()
         exoPlayer.setMediaItem(newItem, position)
         exoPlayer.prepare()
         exoPlayer.playWhenReady = playWhenReady
+    }
+
+    fun selectEmbeddedSubtitle(player: ExoPlayer, track: EmbeddedSubtitleTrack) {
+        val override = TrackSelectionOverride(track.trackGroup, listOf(track.trackIndex))
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+            .setOverrideForType(override)
+            .build()
+        Log.d("PlayerScreen", "selectEmbeddedSubtitle: selected '${track.label}' group=${track.trackGroup} idx=${track.trackIndex}")
     }
 
     fun getActiveSubtitleSettings(): SubtitleSettings {
@@ -1579,7 +1653,9 @@ fun PlayerScreen(
                                 }
 
                                 // CC/Subtitles button
-                                if (subtitleTracks.isNotEmpty() || subtitleUrl != null) {
+                                val hasExternalSubs = subtitleTracks.isNotEmpty() || subtitleUrl != null
+                                val hasEmbeddedSubs = embeddedSubtitleTracks.isNotEmpty()
+                                if (hasExternalSubs || hasEmbeddedSubs) {
                                     Box {
                                         Surface(
                                             shape = RoundedCornerShape(14.dp),
@@ -1647,25 +1723,52 @@ fun PlayerScreen(
                                                     text = { Text("Off", color = if (!subtitlesEnabled) MaterialTheme.colorScheme.primary else Color.White) },
                                                     onClick = {
                                                         if (subtitlesEnabled) rebuildWithSubtitles(false)
+                                                        selectedEmbeddedTrackIndex = -1
+                                                        exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters.buildUpon()
+                                                            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                                                            .build()
                                                         showSubtitleMenu = false
                                                     },
                                                     leadingIcon = if (!subtitlesEnabled) { { Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary) } } else null
                                                 )
-                                                val trackList = subtitleTracks.ifEmpty {
+                                                val externalTrackList = subtitleTracks.ifEmpty {
                                                     if (subtitleUrl != null) listOf(eu.kanade.tachiyomi.animesource.model.Track(subtitleUrl, "en"))
                                                     else emptyList()
                                                 }
-                                                trackList.forEachIndexed { index, track ->
-                                                    val isSelected = subtitlesEnabled && index == selectedSubtitleIndex
-                                                    DropdownMenuItem(
-                                                        text = { Text(track.lang.uppercase(), color = if (isSelected) MaterialTheme.colorScheme.primary else Color.White) },
-                                                        onClick = {
-                                                            selectedSubtitleIndex = index
-                                                            rebuildWithSubtitles(true)
-                                                            showSubtitleMenu = false
-                                                        },
-                                                        leadingIcon = if (isSelected) { { Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary) } } else null
-                                                    )
+                                                if (externalTrackList.isNotEmpty()) {
+                                                    Text("External", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+                                                    externalTrackList.forEachIndexed { index, track ->
+                                                        val isSelected = subtitlesEnabled && selectedSubtitleIndex == index && selectedEmbeddedTrackIndex < 0
+                                                        DropdownMenuItem(
+                                                            text = { Text(track.lang.uppercase(), color = if (isSelected) MaterialTheme.colorScheme.primary else Color.White) },
+                                                            onClick = {
+                                                                selectedSubtitleIndex = index
+                                                                selectedEmbeddedTrackIndex = -1
+                                                                rebuildWithSubtitles(true)
+                                                                showSubtitleMenu = false
+                                                            },
+                                                            leadingIcon = if (isSelected) { { Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary) } } else null
+                                                        )
+                                                    }
+                                                }
+                                                if (embeddedSubtitleTracks.isNotEmpty()) {
+                                                    if (externalTrackList.isNotEmpty()) {
+                                                        HorizontalDivider(color = Color.Gray.copy(alpha = 0.3f))
+                                                    }
+                                                    Text("Embedded", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+                                                    embeddedSubtitleTracks.forEachIndexed { index, track ->
+                                                        val isSelected = subtitlesEnabled && selectedEmbeddedTrackIndex == index
+                                                        DropdownMenuItem(
+                                                            text = { Text(track.label, color = if (isSelected) MaterialTheme.colorScheme.primary else Color.White) },
+                                                            onClick = {
+                                                                selectEmbeddedSubtitle(exoPlayer, track)
+                                                                selectedEmbeddedTrackIndex = index
+                                                                subtitlesEnabled = true
+                                                                showSubtitleMenu = false
+                                                            },
+                                                            leadingIcon = if (isSelected) { { Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary) } } else null
+                                                        )
+                                                    }
                                                 }
                                                 HorizontalDivider(color = Color.Gray.copy(alpha = 0.3f))
                                                 DropdownMenuItem(

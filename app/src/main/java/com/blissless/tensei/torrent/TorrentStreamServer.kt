@@ -192,18 +192,24 @@ class TorrentStreamServer(private val saveDir: File) {
                         if (pieceChecker?.invoke(p) == true) {
                             val pieceEnd = ((p + 1) * pieceSize).coerceAtMost(fileLength)
                             canRead = minOf(remaining, pieceEnd - pos)
-                        } else { canRead = 0L }
+                        } else {
+                            canRead = 0L
+                            if (!stalled) {
+                                Log.d(TAG, "handleClient: piece $p not yet available (checker returned false)")
+                            }
+                        }
                     }
                     if (canRead <= 0) {
                         if (!stalled) {
-                            Log.d(TAG, "handleClient: stalled at pos=$pos (safe=$currentSafe), waiting indefinitely...")
+                            val p = (pos / pieceSize).toInt()
+                            Log.w(TAG, "handleClient: STALLED at byte=$pos (piece=$p, safe=${safeBytes()}), waiting for download...")
                             stalled = true
                         }
                         try { Thread.sleep(500) } catch (e: InterruptedException) { ErrorHandler.ignore("TorrentStreamServer", "interrupted", e); break }
                         continue
                     }
                     if (stalled) {
-                        Log.d(TAG, "handleClient: resumed at pos=$pos, canRead=$canRead")
+                        Log.d(TAG, "handleClient: RESUMED at byte=$pos, canRead=$canRead")
                         stalled = false
                     }
                     waitStart = System.nanoTime()

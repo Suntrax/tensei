@@ -293,9 +293,9 @@ fun EpisodeDownloadDialog(
                     val videoFiles = meta.files.filter { f ->
                         f.name.substringAfterLast('.', "").lowercase() in videoExts
                     }
-                    val matched = videoFiles.filter { f ->
-                        epPattern.containsMatchIn(f.name) || epPattern.containsMatchIn(f.path)
-                    }
+                    val nameMatched = videoFiles.filter { f -> epPattern.containsMatchIn(f.name) }
+                    val matched = if (nameMatched.isNotEmpty()) nameMatched
+                        else videoFiles.filter { f -> epPattern.containsMatchIn(f.path) }
                     val idx = if (matched.isNotEmpty()) {
                         matched.maxBy { it.size }.index
                     } else {

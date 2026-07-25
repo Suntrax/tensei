@@ -25,6 +25,7 @@ import com.blissless.tensei.viewmodel.fetchExtensionHosterVideos
 import com.blissless.tensei.viewmodel.getMagnetForEpisode
 import com.blissless.tensei.viewmodel.fetchMagnetForEpisode
 import com.blissless.tensei.viewmodel.fetchStreamUrlForEpisode
+import com.blissless.tensei.data.calculateRecursiveOffset
 import eu.kanade.tachiyomi.animesource.model.Hoster
 import eu.kanade.tachiyomi.animesource.model.Track
 import eu.kanade.tachiyomi.animesource.model.Video
@@ -116,6 +117,7 @@ class PlaybackStateHolder(
 
     // ─── Torrent state ────────────────────────────────────────────────────
     var currentTorrentListener by mutableStateOf<TorrentEngine.EngineListener?>(null)
+    var currentTorrentFileSize by mutableLongStateOf(0L)
     private var metadataTimeoutJob: Job? = null
 
     // ─── Timestamps (Animekai / AniSkip) ─────────────────────────────────
@@ -384,31 +386,40 @@ class PlaybackStateHolder(
     /**
      * Starts torrent playback for a magnet URI. Sets up the torrent engine,
      * stream server, and waits for enough data before handing off to the player.
+     *
+     * Handles both scenarios:
+     * - Single magnet containing all episodes (picks the file matching [episode])
+     * - Per-episode magnet (picks the video file directly or largest video)
      */
-    fun playTorrent(magnetUri: String, anime: com.blissless.tensei.data.models.AnimeMedia, episode: Int) {
-        android.util.Log.i("Playback", "playTorrent: START anime='${anime.title}' ep=$episode magnet=${magnetUri.take(60)}...")
+    fun playTorrent(magnetUri: String, anime: com.blissless.tensei.data.models.AnimeMedia, episode: Int, extensionSubtitles: List<Track> = emptyList(), episodeOffset: Int = 0) {
+        android.util.Log.i("Playback", "playTorrent: START anime='${anime.title}' ep=$episode offset=$episodeOffset magnet=${magnetUri.take(80)} subtitles=${extensionSubtitles.size}")
         isLoadingStream = true
         streamError = null
         torrentStreamServer.value?.stop()
         torrentStreamServer.value = null
 
         val engine = torrentEngine
-        android.util.Log.d("Playback", "playTorrent: engine.isRunning=${engine.isRunning.get()}")
-        if (!engine.isRunning.get()) {
-            android.util.Log.d("Playback", "playTorrent: starting engine")
+        val wasRunning = engine.isRunning.get()
+        if (!wasRunning) {
+            android.util.Log.d("Playback", "playTorrent: starting torrent engine")
             engine.start()
+        } else {
+            android.util.Log.d("Playback", "playTorrent: engine already running")
         }
-        android.util.Log.d("Playback", "playTorrent: removing any previous torrent")
         engine.removeCurrentTorrent()
 
         val server = com.blissless.tensei.torrent.TorrentStreamServer(engine.saveDir)
         torrentStreamServer.value = server
-        android.util.Log.d("Playback", "playTorrent: created TorrentStreamServer (saveDir=${engine.saveDir.absolutePath})")
+        android.util.Log.d("Playback", "playTorrent: server created, saveDir=${engine.saveDir.absolutePath}")
 
         currentTorrentListener?.let { engine.removeListener(it) }
         val listener = object : TorrentEngine.EngineListener {
             override fun onMetadataReceived(meta: com.blissless.tensei.torrent.TorrentMeta) {
-                android.util.Log.i("Playback", "onMetadataReceived: name='${meta.name}' files=${meta.files.size}")
+                android.util.Log.i("Playback", "=== onMetadataReceived ===")
+                android.util.Log.i("Playback", "  name='${meta.name}' totalFiles=${meta.files.size} ep=$episode")
+                meta.files.forEach { f ->
+                    android.util.Log.d("Playback", "  file[${f.index}] '${f.name}' (${f.size} bytes) path='${f.path}'")
+                }
                 metadataTimeoutJob?.cancel()
                 metadataTimeoutJob = null
                 scope.launch {
@@ -417,94 +428,95 @@ class PlaybackStateHolder(
                         val videoFiles = meta.files.filter { f ->
                             f.name.substringAfterLast('.', "").lowercase() in videoExts
                         }
-                        val epPattern = Regex("(?:^|[._ \\[\\]()-])0*${episode}(?:\$|[._ \\[\\]()-])", RegexOption.IGNORE_CASE)
-                        val matched = videoFiles.filter { f ->
-                            epPattern.containsMatchIn(f.name) || epPattern.containsMatchIn(f.path)
-                        }
-                        val fileIndex = if (matched.isNotEmpty()) {
-                            android.util.Log.d("Playback", "onMetadataReceived: matched ep $episode -> '${matched.maxBy { it.size }.name}'")
-                            matched.maxBy { it.size }.index
-                        } else {
-                            android.util.Log.w("Playback", "onMetadataReceived: no pattern match for ep $episode, sample files:")
-                            videoFiles.take(10).forEach { f ->
-                                android.util.Log.w("Playback", "  video file: [${f.index}] '${f.name}'")
-                            }
-                            android.util.Log.w("Playback", "onMetadataReceived: trying fallback contains match")
-                            val fallbackMatched = videoFiles.filter { f ->
-                                f.name.contains("$episode") || f.path.contains("$episode")
-                            }
-                            android.util.Log.d("Playback", "onMetadataReceived: fallback matched ${fallbackMatched.size} files")
-                            fallbackMatched.maxByOrNull { it.size }?.index ?: run {
-                                android.util.Log.w("Playback", "onMetadataReceived: fallback also failed, using largest")
-                                engine.getLargestVideoFileIndex()
-                            }
-                        }
+                        android.util.Log.d("Playback", "  videoFiles after filter: ${videoFiles.size}/${meta.files.size}")
+                        val fileIndex = selectFileForEpisode(videoFiles, episode, meta.files.size, episodeOffset)
+                        android.util.Log.i("Playback", "  selected fileIndex=$fileIndex")
+
+                        android.util.Log.d("Playback", "  calling engine.startDownload($fileIndex)")
                         engine.startDownload(fileIndex)
                         val port = server.start()
-                        android.util.Log.d("Playback", "onMetadataReceived: stream server started on port $port")
+                        android.util.Log.i("Playback", "  server started on port=$port")
                         val filePath = engine.getFileSavePath(fileIndex)
                         if (filePath == null) {
-                            android.util.Log.e("Playback", "onMetadataReceived: getFileSavePath returned null, aborting")
+                            android.util.Log.e("Playback", "  getFileSavePath returned null for fileIndex=$fileIndex")
                             streamError = "Could not resolve torrent file path"
                             isLoadingStream = false
                             return@launch
                         }
                         val saveDirPath = engine.saveDir.absolutePath + File.separator
                         val fileName = if (filePath.startsWith(saveDirPath)) filePath.removePrefix(saveDirPath) else filePath.substringAfterLast(File.separator)
-                        android.util.Log.d("Playback", "onMetadataReceived: filePath='$filePath' fileName='$fileName'")
-                        server.setTotalFileSize(engine.getFileSize(fileIndex))
-                        server.setPieceSize(engine.getPieceSize())
-                        server.setPieceChecker { i -> engine.havePiece(i) }
+                        android.util.Log.i("Playback", "  filePath='$filePath' fileName='$fileName'")
+
+                        val fileSize = engine.getFileSize(fileIndex)
+                        val fileFirstPiece = engine.getFileFirstPiece(fileIndex)
+                        val numPieces = engine.getNumPieces()
+                        val pieceSize = engine.getPieceSize()
+                        android.util.Log.i("Playback", "  fileSize=$fileSize firstPiece=$fileFirstPiece numPieces=$numPieces pieceSize=$pieceSize")
+                        server.setTotalFileSize(fileSize)
+                        server.setPieceSize(pieceSize)
+                        server.setPieceChecker { fileRelativePiece ->
+                            val globalPiece = fileRelativePiece + fileFirstPiece
+                            val have = engine.havePiece(globalPiece)
+                            have
+                        }
                         server.setSafeBytesProvider { engine.getContiguousDownloadedBytes() }
 
-                        val minBytes = 8L * 1024 * 1024
-                        android.util.Log.d("Playback", "onMetadataReceived: waiting for ${minBytes / 1024 / 1024}MB contiguous...")
+                        val minBytes = 2L * 1024 * 1024
+                        android.util.Log.i("Playback", "  waiting for ${minBytes / 1024 / 1024}MB contiguous data...")
+                        val waitStart = System.currentTimeMillis()
                         val waitDeadline = System.nanoTime() + 120_000_000_000L
-                        var waited = false
+                        var lastLogTime = 0L
                         while (System.nanoTime() < waitDeadline) {
                             val contiguous = engine.getContiguousDownloadedBytes()
+                            val elapsed = System.currentTimeMillis() - waitStart
+                            if (elapsed - lastLogTime > 3000) {
+                                android.util.Log.d("Playback", "  waiting: ${contiguous / 1024}KB contiguous after ${elapsed}ms")
+                                lastLogTime = elapsed
+                            }
                             if (contiguous >= minBytes) {
-                                android.util.Log.d("Playback", "onMetadataReceived: ${contiguous / 1024 / 1024}MB contiguous — starting playback")
+                                android.util.Log.i("Playback", "  ${contiguous / 1024}KB contiguous after ${elapsed}ms — starting playback")
                                 break
                             }
-                            waited = true
                             delay(500)
                         }
-                        if (waited) {
-                            val finalContiguous = engine.getContiguousDownloadedBytes()
-                            android.util.Log.i("Playback", "onMetadataReceived: waited, contiguous=${finalContiguous / 1024 / 1024}MB")
+                        val finalContiguous = engine.getContiguousDownloadedBytes()
+                        val elapsed = System.currentTimeMillis() - waitStart
+                        if (finalContiguous < minBytes) {
+                            android.util.Log.w("Playback", "  wait timed out after ${elapsed}ms — only ${finalContiguous / 1024}KB contiguous, proceeding anyway")
                         }
 
                         currentVideoUrl = "http://127.0.0.1:$port/$fileName"
                         currentReferer = ""
                         currentEpisodeTitle = sanitizeEpisodeTitle(anime.title) ?: "Episode $episode"
-                        currentSubtitleTracks = emptyList()
-                        currentSubtitleUrl = null
+                        currentSubtitleTracks = extensionSubtitles
+                        currentSubtitleUrl = pickTenseiSubtitleUrl(extensionSubtitles)
+                        android.util.Log.i("Playback", "playTorrent: subtitles set: tracks=${extensionSubtitles.size} url=${currentSubtitleUrl?.take(80)}")
+                        extensionSubtitles.forEach { t ->
+                            android.util.Log.d("Playback", "  torrent-sub: lang='${t.lang}' url=${t.url.take(80)}")
+                        }
                         currentQualityOptions = emptyList()
                         currentQuality = "Auto"
                         currentServerName = "Torrent"
                         currentServerIndex = 0
+                        currentTorrentFileSize = fileSize
                         isExtensionFlow = false
                         showPlayer = true
                         isLoadingStream = false
-                        android.util.Log.i("Playback", "onMetadataReceived: player URL=$currentVideoUrl — handing off to player")
+                        android.util.Log.i("Playback", "=== playTorrent READY === url=$currentVideoUrl fileSize=$fileSize")
                     } catch (e: Exception) {
-                        android.util.Log.e("Playback", "onMetadataReceived: FAILED", e)
+                        android.util.Log.e("Playback", "playTorrent: onMetadataReceived FAILED", e)
                         streamError = "Failed to start streaming: ${e.message}"
                         isLoadingStream = false
                     }
                 }
             }
             override fun onProgress(downloaded: Long, total: Long) {
-                if (total > 0) {
-                    android.util.Log.v("Playback", "onProgress: $downloaded/$total (${(downloaded * 100 / total)}%)")
-                }
+                android.util.Log.d("Playback", "onProgress: ${downloaded * 100 / total}% ($downloaded/$total)")
             }
             override fun onFinished() {
                 android.util.Log.i("Playback", "onFinished: torrent download complete")
             }
             override fun onError(message: String) {
-                android.util.Log.e("Playback", "onError: $message")
                 metadataTimeoutJob?.cancel()
                 metadataTimeoutJob = null
                 scope.launch {
@@ -516,15 +528,12 @@ class PlaybackStateHolder(
         engine.addListener(listener)
         currentTorrentListener = listener
 
-        android.util.Log.d("Playback", "playTorrent: calling engine.addTorrentFromMagnet()")
         engine.addTorrentFromMagnet(magnetUri)
-        android.util.Log.d("Playback", "playTorrent: magnet submitted, waiting for metadata...")
 
         metadataTimeoutJob?.cancel()
         metadataTimeoutJob = scope.launch {
             delay(METADATA_TIMEOUT_MS)
             if (isLoadingStream && streamError == null) {
-                android.util.Log.e("Playback", "playTorrent: metadata timeout after ${METADATA_TIMEOUT_MS}ms")
                 streamError = "Torrent metadata timed out — the torrent may have no seeders or your network may be unreachable."
                 isLoadingStream = false
                 engine.removeCurrentTorrent()
@@ -532,6 +541,139 @@ class PlaybackStateHolder(
                 currentTorrentListener = null
             }
         }
+    }
+
+    /**
+     * Selects the correct file index from a torrent for a given episode number.
+     *
+     * Handles both scenarios:
+     * - **Single magnet with all episodes**: Matches episode number against file names/paths
+     * - **Per-episode magnet**: If only one video file, uses it; otherwise falls back to largest
+     */
+    private fun selectFileForEpisode(
+        videoFiles: List<com.blissless.tensei.torrent.TorrentFileEntry>,
+        episode: Int,
+        totalFiles: Int,
+        episodeOffset: Int = 0,
+    ): Int {
+        android.util.Log.i("Playback", "selectFileForEpisode: ep=$episode offset=$episodeOffset totalFiles=$totalFiles videoFiles=${videoFiles.size}")
+        videoFiles.forEach { f ->
+            android.util.Log.d("Playback", "  candidate[${f.index}] '${f.name}' (${f.size} bytes) path='${f.path}'")
+        }
+        if (videoFiles.isEmpty()) {
+            android.util.Log.w("Playback", "selectFileForEpisode: NO video files found, returning 0")
+            return 0
+        }
+
+        if (videoFiles.size == 1) {
+            android.util.Log.d("Playback", "selectFileForEpisode: single video file, using '${videoFiles.first().name}'")
+            return videoFiles.first().index
+        }
+
+        val epPattern = Regex("(?:^|[Ee._ \\[\\]()-])0*${episode}(?:[Ee._ \\[\\]()-]|$)", RegexOption.IGNORE_CASE)
+        android.util.Log.d("Playback", "selectFileForEpisode: regex pattern='${epPattern.pattern}'")
+        val nameMatched = videoFiles.filter { f -> epPattern.containsMatchIn(f.name) }
+        android.util.Log.d("Playback", "selectFileForEpisode: regex name-matched ${nameMatched.size} files")
+        nameMatched.forEach { f ->
+            android.util.Log.d("Playback", "  regex-name-match[${f.index}] '${f.name}'")
+        }
+        val matched = if (nameMatched.isNotEmpty()) {
+            nameMatched
+        } else {
+            android.util.Log.d("Playback", "selectFileForEpisode: no name matches, falling back to path matching")
+            videoFiles.filter { f -> epPattern.containsMatchIn(f.path) }
+        }
+        android.util.Log.d("Playback", "selectFileForEpisode: regex matched ${matched.size} files (after path fallback)")
+        matched.forEach { f ->
+            android.util.Log.d("Playback", "  regex-match[${f.index}] '${f.name}'")
+        }
+        if (matched.isNotEmpty()) {
+            if (matched.size > 1) {
+                val dirs = matched.map { f -> f.path.substringBeforeLast('/', "").substringBeforeLast('\\', "") }.distinct()
+                android.util.Log.d("Playback", "selectFileForEpisode: ${matched.size} matches across ${dirs.size} dirs: $dirs")
+                if (dirs.size > 1) {
+                    val sorted = matched.sortedBy { it.path }
+                    android.util.Log.i("Playback", "selectFileForEpisode: multi-dir match, sorted paths:")
+                    sorted.forEach { android.util.Log.d("Playback", "  '${it.path}'") }
+                    val selected = sorted.first()
+                    android.util.Log.i("Playback", "selectFileForEpisode: MULTI-DIR -> file[${selected.index}] '${selected.name}' path='${selected.path}'")
+                    return selected.index
+                }
+            }
+            val selected = matched.maxBy { it.size }
+            android.util.Log.i("Playback", "selectFileForEpisode: REGEX MATCH -> file[${selected.index}] '${selected.name}' (${selected.size} bytes)")
+            return selected.index
+        }
+
+        android.util.Log.w("Playback", "selectFileForEpisode: no regex match for ep $episode")
+
+        if (episodeOffset > 0) {
+            val adjustedEp = episode + episodeOffset
+            android.util.Log.i("Playback", "selectFileForEpisode: trying offset-adjusted ep=$adjustedEp (original=$episode + offset=$episodeOffset)")
+            val offsetPattern = Regex("(?:^|[Ee._ \\[\\]()-])0*${adjustedEp}(?:[Ee._ \\[\\]()-]|$)", RegexOption.IGNORE_CASE)
+            val offsetNameMatched = videoFiles.filter { f -> offsetPattern.containsMatchIn(f.name) }
+            val offsetMatched = if (offsetNameMatched.isNotEmpty()) {
+                offsetNameMatched
+            } else {
+                videoFiles.filter { f -> offsetPattern.containsMatchIn(f.path) }
+            }
+            android.util.Log.d("Playback", "selectFileForEpisode: offset regex matched ${offsetMatched.size} files")
+            offsetMatched.forEach { f ->
+                android.util.Log.d("Playback", "  offset-match[${f.index}] '${f.name}'")
+            }
+            if (offsetMatched.isNotEmpty()) {
+                if (offsetMatched.size > 1) {
+                    val dirs = offsetMatched.map { f -> f.path.substringBeforeLast('/', "").substringBeforeLast('\\', "") }.distinct()
+                    if (dirs.size > 1) {
+                        val sorted = offsetMatched.sortedBy { it.path }
+                        val selected = sorted.first()
+                        android.util.Log.i("Playback", "selectFileForEpisode: OFFSET MULTI-DIR -> file[${selected.index}] '${selected.name}' path='${selected.path}'")
+                        return selected.index
+                    }
+                }
+                val selected = offsetMatched.maxBy { it.size }
+                android.util.Log.i("Playback", "selectFileForEpisode: OFFSET REGEX MATCH -> file[${selected.index}] '${selected.name}' (${selected.size} bytes)")
+                return selected.index
+            }
+
+            val offsetNameContains = videoFiles.filter { f -> f.name.contains("$adjustedEp") }
+            val offsetContains = if (offsetNameContains.isNotEmpty()) {
+                offsetNameContains
+            } else {
+                videoFiles.filter { f -> f.path.contains("$adjustedEp") }
+            }
+            if (offsetContains.isNotEmpty()) {
+                val selected = offsetContains.maxBy { it.size }
+                android.util.Log.i("Playback", "selectFileForEpisode: OFFSET CONTAINS -> file[${selected.index}] '${selected.name}'")
+                return selected.index
+            }
+        }
+
+        val nameFallbackMatched = videoFiles.filter { f -> f.name.contains("$episode") }
+        val fallbackMatched = if (nameFallbackMatched.isNotEmpty()) {
+            nameFallbackMatched
+        } else {
+            videoFiles.filter { f -> f.path.contains("$episode") }
+        }
+        android.util.Log.d("Playback", "selectFileForEpisode: fallback 'contains' matched ${fallbackMatched.size} files")
+        if (fallbackMatched.isNotEmpty()) {
+            if (fallbackMatched.size > 1) {
+                val dirs = fallbackMatched.map { f -> f.path.substringBeforeLast('/', "").substringBeforeLast('\\', "") }.distinct()
+                if (dirs.size > 1) {
+                    val sorted = fallbackMatched.sortedBy { it.path }
+                    val selected = sorted.first()
+                    android.util.Log.i("Playback", "selectFileForEpisode: FALLBACK MULTI-DIR -> file[${selected.index}] '${selected.name}' path='${selected.path}'")
+                    return selected.index
+                }
+            }
+            val selected = fallbackMatched.maxBy { it.size }
+            android.util.Log.i("Playback", "selectFileForEpisode: FALLBACK CONTAINS -> file[${selected.index}] '${selected.name}'")
+            return selected.index
+        }
+
+        val largest = videoFiles.maxByOrNull { it.size }
+        android.util.Log.w("Playback", "selectFileForEpisode: ALL MATCHING FAILED — using largest '${largest?.name}' (index=${largest?.index})")
+        return largest?.index ?: 0
     }
 
     /**
@@ -596,8 +738,30 @@ class PlaybackStateHolder(
             }
             android.util.Log.i("Playback", "loadAndPlayEpisodeTensei: fetch result=${magnetUri != null} magnet=${magnetUri?.take(60)}")
             if (magnetUri != null && magnetUri.isNotEmpty()) {
-                android.util.Log.d("Playback", "loadAndPlayEpisodeTensei: magnet found, calling playTorrent")
-                playTorrent(magnetUri, anime, episode)
+                android.util.Log.d("Playback", "loadAndPlayEpisodeTensei: magnet found, calculating episode offset for multi-season torrents")
+                val episodeOffset = try {
+                    withContext(Dispatchers.IO) {
+                        viewModel.repository.calculateRecursiveOffset(anime.id)
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("Playback", "loadAndPlayEpisodeTensei: failed to calculate episode offset", e)
+                    0
+                }
+                android.util.Log.i("Playback", "loadAndPlayEpisodeTensei: episodeOffset=$episodeOffset for anime='${anime.title}' (id=${anime.id})")
+
+                val streamResult = withContext(Dispatchers.IO) {
+                    try {
+                        viewModel.fetchStreamUrlForEpisode(anime, episode, viewModel.preferredCategory.value)
+                    } catch (e: Exception) {
+                        android.util.Log.w("Playback", "loadAndPlayEpisodeTensei: fetchStreamUrlForEpisode failed, subtitles may be unavailable", e)
+                        null
+                    }
+                }
+                android.util.Log.i("Playback", "loadAndPlayEpisodeTensei: streamResult url=${streamResult?.url?.take(60)} subtitles=${streamResult?.subtitles?.size ?: 0}")
+                streamResult?.subtitles?.forEach { t ->
+                    android.util.Log.d("Playback", "  subtitle: lang='${t.lang}' url=${t.url.take(80)}")
+                }
+                playTorrent(magnetUri, anime, episode, streamResult?.subtitles ?: emptyList(), episodeOffset)
             } else if (magnetUri != null) {
                 android.util.Log.d("Playback", "loadAndPlayEpisodeTensei: empty magnet, trying stream URL")
                 val streamResult = viewModel.fetchStreamUrlForEpisode(anime, episode, viewModel.preferredCategory.value)
