@@ -87,14 +87,12 @@ class MangaRepository {
     suspend fun fetchExploreSections(): Map<String, List<MangaExploreMedia>> {
         val query = """
             query {
-                trending: Page(page: 1, perPage: 20) { media(sort: TRENDING_DESC, type: MANGA, isAdult: false) { id idMal title { romaji english } coverImage { extraLarge large } bannerImage chapters volumes status averageScore genres seasonYear startDate { year month day } isAdult format } }
-                popular: Page(page: 1, perPage: 20) { media(sort: POPULARITY_DESC, type: MANGA, isAdult: false) { id idMal title { romaji english } coverImage { extraLarge large } bannerImage chapters volumes status averageScore genres seasonYear startDate { year month day } isAdult format } }
-                topRated: Page(page: 1, perPage: 20) { media(sort: SCORE_DESC, type: MANGA, isAdult: false) { id idMal title { romaji english } coverImage { extraLarge large } bannerImage chapters volumes status averageScore genres seasonYear startDate { year month day } isAdult format } }
-                action: Page(page: 1, perPage: 20) { media(genre: "Action", sort: SCORE_DESC, type: MANGA, isAdult: false) { id idMal title { romaji english } coverImage { extraLarge large } bannerImage chapters volumes status averageScore genres seasonYear startDate { year month day } isAdult format } }
-                romance: Page(page: 1, perPage: 20) { media(genre: "Romance", sort: SCORE_DESC, type: MANGA, isAdult: false) { id idMal title { romaji english } coverImage { extraLarge large } bannerImage chapters volumes status averageScore genres seasonYear startDate { year month day } isAdult format } }
-                comedy: Page(page: 1, perPage: 20) { media(genre: "Comedy", sort: SCORE_DESC, type: MANGA, isAdult: false) { id idMal title { romaji english } coverImage { extraLarge large } bannerImage chapters volumes status averageScore genres seasonYear startDate { year month day } isAdult format } }
-                fantasy: Page(page: 1, perPage: 20) { media(genre: "Fantasy", sort: SCORE_DESC, type: MANGA, isAdult: false) { id idMal title { romaji english } coverImage { extraLarge large } bannerImage chapters volumes status averageScore genres seasonYear startDate { year month day } isAdult format } }
-                scifi: Page(page: 1, perPage: 20) { media(genre: "Sci-Fi", sort: SCORE_DESC, type: MANGA, isAdult: false) { id idMal title { romaji english } coverImage { extraLarge large } bannerImage chapters volumes status averageScore genres seasonYear startDate { year month day } isAdult format } }
+                popular: Page(page: 1, perPage: 12) { media(sort: POPULARITY_DESC, type: MANGA, isAdult: false) { id idMal title { romaji english } coverImage { extraLarge large } bannerImage chapters volumes status averageScore genres seasonYear startDate { year month day } isAdult format } }
+                topRated: Page(page: 1, perPage: 12) { media(sort: SCORE_DESC, type: MANGA, isAdult: false) { id idMal title { romaji english } coverImage { extraLarge large } bannerImage chapters volumes status averageScore genres seasonYear startDate { year month day } isAdult format } }
+                favourites: Page(page: 1, perPage: 12) { media(sort: FAVOURITES_DESC, type: MANGA, isAdult: false) { id idMal title { romaji english } coverImage { extraLarge large } bannerImage chapters volumes status averageScore genres seasonYear startDate { year month day } isAdult format } }
+                action: Page(page: 1, perPage: 12) { media(genre: "Action", sort: POPULARITY_DESC, type: MANGA, isAdult: false) { id idMal title { romaji english } coverImage { extraLarge large } bannerImage chapters volumes status averageScore genres seasonYear startDate { year month day } isAdult format } }
+                romance: Page(page: 1, perPage: 12) { media(genre: "Romance", sort: POPULARITY_DESC, type: MANGA, isAdult: false) { id idMal title { romaji english } coverImage { extraLarge large } bannerImage chapters volumes status averageScore genres seasonYear startDate { year month day } isAdult format } }
+                fantasy: Page(page: 1, perPage: 12) { media(genre: "Fantasy", sort: POPULARITY_DESC, type: MANGA, isAdult: false) { id idMal title { romaji english } coverImage { extraLarge large } bannerImage chapters volumes status averageScore genres seasonYear startDate { year month day } isAdult format } }
             }
         """.trimIndent()
         val raw = executeQuery(query) ?: return emptyMap()
@@ -127,6 +125,7 @@ class MangaRepository {
                     characters { nodes { id name { full native } image { large } } }
                     staff { edges { node { id name { full native } image { large } } role } }
                     recommendations { nodes { mediaRecommendation { id idMal title { romaji english } coverImage { extraLarge } chapters volumes averageScore format } } }
+                    rankings { id rank type context primary }
                     synonyms externalLinks { url site }
                 }
             }
@@ -193,6 +192,7 @@ class MangaRepository {
                 )
             } ?: emptyList(),
             synonymTitles = media.synonyms ?: emptyList(),
+            rankings = media.rankings ?: emptyList(),
             externalLinks = media.externalLinks ?: emptyList()
         )
     }

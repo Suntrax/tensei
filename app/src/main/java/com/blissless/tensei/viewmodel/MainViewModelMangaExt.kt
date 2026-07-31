@@ -85,32 +85,58 @@ fun MainViewModel.selectExtension(authority: String?) {
 
 private suspend fun MainViewModel.fetchExtensionChapterList(mangaTitle: String): List<ExtensionChapter>? {
     val authority = _selectedExtensionAuthority.value ?: return null
-    return try {
-        val uri = Uri.parse("content://$authority/chapters")
-            .buildUpon()
-            .appendQueryParameter("manga", mangaTitle)
-            .appendQueryParameter("anime", mangaTitle)
-            .build()
-        val cursor = context.contentResolver.query(uri, null, null, null, null) ?: return null
-        cursor.use { c ->
-            if (!c.moveToFirst()) return@use null
-            val col = c.getColumnIndex("data")
-            if (col < 0) return@use null
-            val jsonData = c.getString(col)
-            val json = JSONObject(jsonData)
-            val chaptersArr = json.optJSONArray("chapters") ?: return@use null
-            (0 until chaptersArr.length()).map { i ->
-                val ch = chaptersArr.getJSONObject(i)
-                ExtensionChapter(
-                    number = ch.optString("number", ""),
-                    title = ch.optString("title", ""),
-                    id = ch.optString("id", ""),
-                    index = ch.optInt("index", i),
-                    pageCount = ch.optInt("pageCount", 0)
-                )
+    if (mangaTitle.isBlank()) return null
+    return withContext(Dispatchers.IO) {
+        try {
+            val uri = Uri.parse("content://$authority/chapters")
+                .buildUpon()
+                .appendQueryParameter("manga", mangaTitle)
+                .appendQueryParameter("anime", mangaTitle)
+                .build()
+            android.util.Log.d("MangaExt", "fetchExtensionChapterList: title='$mangaTitle' authority='$authority'")
+            val cursor = context.contentResolver.query(uri, null, null, null, null)
+            if (cursor == null) {
+                android.util.Log.w("MangaExt", "Extension returned null cursor")
+                return@withContext null
             }
+            cursor.use { c ->
+                if (!c.moveToFirst()) {
+                    android.util.Log.w("MangaExt", "Extension returned no rows")
+                    return@withContext null
+                }
+                val col = c.getColumnIndex("data")
+                if (col < 0) {
+                    android.util.Log.w("MangaExt", "Missing 'data' column")
+                    return@withContext null
+                }
+                val jsonData = c.getString(col)
+                val json = JSONObject(jsonData)
+                if (json.has("error")) {
+                    android.util.Log.w("MangaExt", "Extension error: ${json.getString("error")}")
+                    return@withContext null
+                }
+                val chaptersArr = json.optJSONArray("chapters") ?: return@withContext null
+                val chapters = mutableListOf<ExtensionChapter>()
+                for (i in 0 until chaptersArr.length()) {
+                    val ch = chaptersArr.optJSONObject(i) ?: continue
+                    chapters.add(
+                        ExtensionChapter(
+                            number = ch.optString("number", ""),
+                            title = ch.optString("title", ""),
+                            id = ch.optString("id", ""),
+                            index = ch.optInt("index", i),
+                            pageCount = ch.optInt("pageCount", 0)
+                        )
+                    )
+                }
+                android.util.Log.d("MangaExt", "Extension returned ${chapters.size} chapters for '$mangaTitle'")
+                chapters
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("MangaExt", "fetchExtensionChapterList failed for '$mangaTitle': ${e.message}")
+            null
         }
-    } catch (_: Exception) { null }
+    }
 }
 
 private fun MainViewModel.fetchExtensionChapterImages(mangaTitle: String, chapterParam: String, authority: String): List<String>? {
@@ -161,6 +187,9 @@ val MainViewModel.mangaChapterImages: StateFlow<List<String>?> get() = _mangaCha
 private val _mangaDexId = MutableStateFlow<String?>(null)
 val MainViewModel.mangaDexId: StateFlow<String?> get() = _mangaDexId.asStateFlow()
 
+private val _mangaExtensionTitle = MutableStateFlow<String?>(null)
+val MainViewModel.mangaExtensionTitle: StateFlow<String?> get() = _mangaExtensionTitle.asStateFlow()
+
 private val _isLoadingManga = MutableStateFlow(false)
 val MainViewModel.isLoadingManga: StateFlow<Boolean> get() = _isLoadingManga.asStateFlow()
 
@@ -208,13 +237,11 @@ fun MainViewModel.searchManga(query: String, page: Int = 1, onResult: (List<Mang
     }
 }
 
-fun MainViewModel.fetchMangaExplore() {
-    viewModelScope.launch {
-        _isLoadingManga.value = true
-        val sections = mangaRepository?.fetchExploreSections() ?: emptyMap()
-        _mangaExploreSections.value = sections
-        _isLoadingManga.value = false
-    }
+suspend fun MainViewModel.fetchMangaExplore() {
+    _isLoadingManga.value = true
+    val sections = mangaRepository?.fetchExploreSections() ?: emptyMap()
+    _mangaExploreSections.value = sections
+    _isLoadingManga.value = false
 }
 
 suspend fun MainViewModel.fetchMangaLists(): Boolean {
@@ -229,16 +256,14 @@ suspend fun MainViewModel.fetchMangaLists(): Boolean {
 
 // ─── Detail ──────────────────────────────────────────────────────────
 
-fun MainViewModel.fetchMangaDetail(mangaId: Int) {
-    viewModelScope.launch {
-        _isLoadingManga.value = true
-        val detail = mangaRepository?.fetchMangaDetail(mangaId)
-        _mangaDetail.value = detail
-        if (detail != null) {
-            mangaTrackManager?.updateMangaInfo(mangaId, detail.title, detail.cover)
-        }
-        _isLoadingManga.value = false
+suspend fun MainViewModel.fetchMangaDetail(mangaId: Int) {
+    _isLoadingManga.value = true
+    val detail = mangaRepository?.fetchMangaDetail(mangaId)
+    _mangaDetail.value = detail
+    if (detail != null) {
+        mangaTrackManager?.updateMangaInfo(mangaId, detail.title, detail.cover)
     }
+    _isLoadingManga.value = false
 }
 
 fun MainViewModel.clearMangaDetail() {
@@ -246,63 +271,79 @@ fun MainViewModel.clearMangaDetail() {
     _mangaChapters.value = emptyList()
     _mangaChapterImages.value = null
     _mangaDexId.value = null
+    _mangaExtensionTitle.value = null
 }
 
 // ─── Chapters ────────────────────────────────────────────────────────
 
-fun MainViewModel.loadMangaChapters(mangaId: Int, title: String) {
-    viewModelScope.launch {
-        _isLoadingMangaChapters.value = true
+suspend fun MainViewModel.loadMangaChapters(mangaId: Int, title: String) {
+    _isLoadingMangaChapters.value = true
 
-        val detail = _mangaDetail.value
-        var chapters = emptyList<MangaChapter>()
+    val detail = _mangaDetail.value
+    var chapters = emptyList<MangaChapter>()
 
-        // Try extension first
-        val extChapters = fetchExtensionChapterList(title)
+    // Try extension first — try multiple title variants for better matching
+    val titlesToTry = listOfNotNull(
+        title,
+        detail?.titleEnglish?.takeIf { it.isNotBlank() },
+        detail?.title?.takeIf { it.isNotBlank() },
+    ).distinct()
+
+    var extChapters: List<ExtensionChapter>? = null
+    var matchedTitle: String? = null
+    for (t in titlesToTry) {
+        extChapters = fetchExtensionChapterList(t)
         if (extChapters != null && extChapters.isNotEmpty()) {
-            chapters = extChapters.sortedBy { it.index }.mapIndexed { idx, ch ->
+            matchedTitle = t
+            break
+        }
+    }
+
+    if (extChapters != null && extChapters.isNotEmpty()) {
+        _mangaExtensionTitle.value = matchedTitle
+        chapters = extChapters.sortedBy { it.index }.mapIndexed { idx, ch ->
+            MangaChapter(
+                url = "ext:${ch.id}",
+                title = if (ch.title.isNotBlank()) "Chapter ${ch.number}: ${ch.title}" else "Chapter ${ch.number}",
+                chapterId = "ext:${ch.id}",
+                chapterNumber = ch.number.toFloatOrNull() ?: idx.toFloat()
+            )
+        }
+    } else {
+        _mangaExtensionTitle.value = null
+        // Fallback to MangaDex
+        val mangaDexId = mangaDexManager?.findMangaByAniListId(title, mangaId)
+        _mangaDexId.value = mangaDexId
+        if (mangaDexId != null) {
+            val aggregate = mangaDexManager?.fetchAggregate(mangaDexId)
+            chapters = mangaDexManager?.buildChapterList(aggregate) ?: emptyList()
+        }
+
+        if (chapters.isEmpty() && detail != null && detail.chapters > 0) {
+            chapters = (1..detail.chapters).map { i ->
                 MangaChapter(
-                    url = "ext:${ch.id}",
-                    title = if (ch.title.isNotBlank()) "Chapter ${ch.number}: ${ch.title}" else "Chapter ${ch.number}",
-                    chapterId = ch.id,
-                    chapterNumber = ch.number.toFloatOrNull() ?: idx.toFloat()
+                    url = "",
+                    title = "Ch. $i",
+                    chapterId = "",
+                    chapterNumber = i.toFloat()
                 )
-            }
-        } else {
-            // Fallback to MangaDex
-            val mangaDexId = mangaDexManager?.findMangaByAniListId(title, mangaId)
-            _mangaDexId.value = mangaDexId
-            if (mangaDexId != null) {
-                val aggregate = mangaDexManager?.fetchAggregate(mangaDexId)
-                chapters = mangaDexManager?.buildChapterList(aggregate) ?: emptyList()
-            }
-
-            if (chapters.isEmpty() && detail != null) {
-                chapters = (1..detail.chapters).map { i ->
-                    MangaChapter(
-                        url = "",
-                        title = "Ch. $i",
-                        chapterId = "",
-                        chapterNumber = i.toFloat()
-                    )
-                }
-            }
-
-            if (mangaDexId != null) {
-                mangaTrackManager?.updateMangaDexId(mangaId, mangaDexId)
             }
         }
 
-        _mangaChapters.value = chapters
-
-        mangaTrackManager?.updateTotalChapters(
-            mangaId,
-            chapters.size,
-            detail?.volumes
-        )
-
-        _isLoadingMangaChapters.value = false
+        if (mangaDexId != null) {
+            mangaTrackManager?.updateMangaDexId(mangaId, mangaDexId)
+        }
     }
+
+    _mangaChapters.value = chapters
+
+    mangaTrackManager?.updateTotalChapters(
+        mangaId,
+        chapters.size,
+        detail?.volumes
+    )
+
+    _isLoadingMangaChapters.value = false
 }
 
 // ─── Chapter Images ──────────────────────────────────────────────────
@@ -315,13 +356,16 @@ fun MainViewModel.loadChapterImages(chapterId: String, useDataSaver: Boolean = f
             return@launch
         }
 
-        val images = if (chapterId.startsWith("ext:") && mangaTitle != null) {
+        val images = if (chapterId.startsWith("ext:")) {
             val authority = _selectedExtensionAuthority.value
             if (authority != null) {
                 val id = chapterId.removePrefix("ext:")
-                withContext(Dispatchers.IO) {
-                    fetchExtensionChapterImages(mangaTitle, id, authority)
-                }
+                val extTitle = _mangaExtensionTitle.value ?: mangaTitle
+                if (extTitle != null) {
+                    withContext(Dispatchers.IO) {
+                        fetchExtensionChapterImages(extTitle, id, authority)
+                    }
+                } else null
             } else null
         } else {
             withContext(Dispatchers.IO) {

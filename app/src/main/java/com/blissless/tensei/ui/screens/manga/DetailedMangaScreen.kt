@@ -5,11 +5,16 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,6 +41,12 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Label
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
+import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Description
@@ -44,23 +55,17 @@ import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.BookmarkBorder
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.Cancel
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.DownloadDone
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -76,29 +81,39 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import com.blissless.tensei.MainViewModel
 import com.blissless.tensei.data.models.MangaChapter
 import com.blissless.tensei.data.models.MangaCharacterNode
@@ -106,8 +121,13 @@ import com.blissless.tensei.data.models.MangaDetail
 import com.blissless.tensei.data.models.MangaMedia
 import com.blissless.tensei.data.models.MangaRelation
 import com.blissless.tensei.data.models.MangaStaffEdge
-import com.blissless.tensei.data.models.MangaExploreMedia
+import com.blissless.tensei.data.models.MangaRankingEntry
 import com.blissless.tensei.data.models.TagData
+import com.blissless.tensei.ui.screens.details.GenresCard
+import com.blissless.tensei.ui.screens.details.SynopsisCard
+import com.blissless.tensei.ui.screens.details.TagsCard
+import com.blissless.tensei.ui.theme.StatusColors
+import com.blissless.tensei.ui.theme.StatusLabels
 import com.blissless.tensei.viewmodel.clearMangaDetail
 import com.blissless.tensei.viewmodel.fetchMangaDetail
 import com.blissless.tensei.viewmodel.loadMangaChapters
@@ -115,14 +135,17 @@ import com.blissless.tensei.viewmodel.mangaChapters
 import com.blissless.tensei.viewmodel.mangaDetail
 import com.blissless.tensei.viewmodel.isLoadingManga
 import com.blissless.tensei.viewmodel.isLoadingMangaChapters
+import com.blissless.tensei.viewmodel.toggleAniListFavorite
 import com.blissless.tensei.viewmodel.updateMangaStatus
-import com.blissless.tensei.viewmodel.markMangaChapterRead
-import com.blissless.tensei.viewmodel.isChapterDownloaded
-import com.blissless.tensei.viewmodel.deleteMangaChapter
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.util.Locale
+import kotlin.math.absoluteValue
 import kotlin.math.roundToInt
+import kotlin.time.Duration.Companion.milliseconds
 
-@androidx.compose.runtime.Composable
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 fun DetailedMangaScreen(
     manga: MangaMedia,
     viewModel: MainViewModel,
@@ -154,19 +177,19 @@ fun DetailedMangaScreen(
     val isLoadingChapters by viewModel.isLoadingMangaChapters.collectAsState()
 
     var showStatusDialog by remember { mutableStateOf(false) }
-    var showChapterList by remember { mutableStateOf(false) }
+    var showDownloadDialog by remember { mutableStateOf(false) }
+    var selectedTagForDescription by remember { mutableStateOf<TagData?>(null) }
+    var fullscreenImageUrl by remember { mutableStateOf<String?>(null) }
 
+    var autoOpenedChapters by remember { mutableStateOf(false) }
     if (autoShowChapters) {
         LaunchedEffect(chapters, isLoadingChapters) {
-            if (!isLoadingChapters && chapters.isNotEmpty() && !showChapterList) {
-                showChapterList = true
+            if (!isLoadingChapters && chapters.isNotEmpty() && !autoOpenedChapters) {
+                autoOpenedChapters = true
+                onStartReader(-1)
             }
         }
     }
-    var showDownloadDialog by remember { mutableStateOf(false) }
-    var selectedChapter by remember { mutableStateOf<MangaChapter?>(null) }
-
-    var fullscreenImageUrl by remember { mutableStateOf<String?>(null) }
 
     var displayProgress by remember { mutableIntStateOf(currentProgress ?: manga.progress) }
     LaunchedEffect(currentProgress, manga.progress) {
@@ -195,6 +218,7 @@ fun DetailedMangaScreen(
             dismissSlideOffset.snapTo(0f)
             dismissSlideOffset.animateTo(targetValue = 1000f, animationSpec = tween(150, easing = LinearEasing))
             onDismiss()
+            onSwipeToClose()
         }
     }
 
@@ -207,162 +231,948 @@ fun DetailedMangaScreen(
     val statusProgress = displayProgress
     val totalCh = manga.totalChapters
 
-    Dialog(
-        onDismissRequest = { dismissWithAnimation() },
-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
-    ) {
-        Surface(
-            modifier = Modifier
-                .fillMaxSize()
-                .offset { IntOffset(0, (slideOffset.value + dismissSlideOffset.value).roundToInt()) }
-                .graphicsLayer { this.alpha = alpha },
-            color = if (isOled) Color.Black else MaterialTheme.colorScheme.background
-        ) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                val listState = rememberLazyListState()
+    val displayData = detail ?: manga.asDetail()
 
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    // Header
-                    item {
-                        MangaDetailHeader(
-                            detail = detail,
-                            manga = manga,
-                            isOled = isOled,
-                            onCopyTitle = { text ->
-                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                clipboard.setPrimaryClip(ClipData.newPlainText("manga_title", text))
-                            },
-                            onFullscreenImage = { url -> fullscreenImageUrl = url }
-                        )
+    val statusDisplay = when (displayData.status) {
+        "RELEASING" -> "Publishing"
+        "FINISHED" -> "Finished"
+        "NOT_YET_RELEASED" -> "Not Yet Published"
+        "CANCELLED" -> "Cancelled"
+        "HIATUS" -> "Hiatus"
+        else -> displayData.status ?: "Unknown"
+    }
+
+    val formatDisplay = when (displayData.format) {
+        "MANGA" -> "Manga"
+        "NOVEL" -> "Light Novel"
+        "ONE_SHOT" -> "One Shot"
+        "DOUJIN" -> "Doujin"
+        "MANHWA" -> "Manhwa"
+        "MANHUA" -> "Manhua"
+        "OEL" -> "OEL Manga"
+        else -> displayData.format ?: "Unknown"
+    }
+
+    val windowInfo = LocalWindowInfo.current
+    val screenHeightPx = windowInfo.containerSize.height.toFloat()
+    val dismissThreshold = screenHeightPx / 2f
+    val offsetY = remember { Animatable(0f) }
+
+    val lazyListState = rememberLazyListState(
+        initialFirstVisibleItemIndex = 0,
+        initialFirstVisibleItemScrollOffset = 0
+    )
+
+    var isAtTop by remember { mutableStateOf(true) }
+
+    LaunchedEffect(lazyListState) {
+        snapshotFlow { lazyListState.firstVisibleItemIndex to lazyListState.firstVisibleItemScrollOffset }
+            .collect { (index, offset) ->
+                isAtTop = index == 0 && offset == 0
+            }
+    }
+
+    val nestedScrollConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                val currentOffset = offsetY.value
+                if (currentOffset > 0) {
+                    if (available.y < 0) {
+                        scope.launch { offsetY.snapTo((currentOffset + available.y).coerceAtLeast(0f)) }
+                        return available
                     }
+                    if (available.y > 0) {
+                        scope.launch { offsetY.snapTo(currentOffset + available.y) }
+                        return available
+                    }
+                }
+                if (isAtTop && currentOffset <= 10f && available.y > 0) {
+                    scope.launch { offsetY.snapTo(available.y) }
+                    return available
+                }
+                return Offset.Zero
+            }
 
-                    // Action Buttons
-                    item {
-                        MangaActionButtons(
-                            detail = detail,
-                            chapters = chapters,
-                            isLoading = isLoading,
-                            isLoadingChapters = isLoadingChapters,
-                            currentStatus = statusToCheck,
-                            currentProgress = statusProgress,
-                            displayProgress = displayProgress,
-                            totalChapters = totalCh,
-                            isFavorite = isFavorite,
-                            onStartReader = {
-                                val startIndex = displayProgress.coerceAtLeast(1) - 1
-                                onStartReader(startIndex.coerceAtMost(chapters.lastIndex).coerceAtLeast(0))
-                            },
-                            onShowStatusMenu = { showStatusDialog = true },
-                            onShowChapterList = { showChapterList = true },
-                            onFavoriteClick = { },
-                            onShareClick = {
-                                detail?.siteUrl?.let { url ->
-                                    val share = Intent(Intent.ACTION_SEND).apply {
-                                        type = "text/plain"
-                                        putExtra(Intent.EXTRA_TEXT, url)
-                                    }
-                                    context.startActivity(Intent.createChooser(share, "Share"))
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                val currentOffset = offsetY.value
+                if (currentOffset == 0f) return Velocity.Zero
+                val shouldDismiss = currentOffset > dismissThreshold || available.y > 500f
+                if (shouldDismiss && isAtTop) {
+                    dismissWithAnimation()
+                } else {
+                    scope.launch { offsetY.animateTo(0f, spring(stiffness = Spring.StiffnessMediumLow)) }
+                }
+                return available
+            }
+        }
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false, dismissOnBackPress = true, dismissOnClickOutside = false)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .offset { IntOffset(0, (slideOffset.value + dismissSlideOffset.value).roundToInt()) }
+                    .graphicsLayer { this.alpha = alpha }
+                    .offset { IntOffset(0, offsetY.value.roundToInt()) }
+                    .background(if (isOled) Color.Black else MaterialTheme.colorScheme.background)
+                    .nestedScroll(nestedScrollConnection)
+            ) {
+                // Banner
+                if (!displayData.banner.isNullOrEmpty() || displayData.cover.isNotEmpty()) {
+                val bannerImage = displayData.banner ?: displayData.cover
+                Box(modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp)
+                    .clickable { fullscreenImageUrl = bannerImage }
+                ) {
+                    AsyncImage(
+                        model = bannerImage, contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize().graphicsLayer { this.alpha = 0.4f }
+                    )
+                    Box(
+                        modifier = Modifier.fillMaxSize().background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Transparent, Color.Black.copy(alpha = 0.2f), Color.Black.copy(alpha = 0.85f)
+                                )
+                            )
+                        )
+                    )
+                }
+            }
+
+            // Share button
+            IconButton(
+                onClick = {
+                    val shareText = buildString {
+                        append(displayData.title)
+                        append("\n\n")
+                        append("https://anilist.co/manga/${displayData.id}")
+                    }
+                    val sendIntent = Intent().apply {
+                        action = Intent.ACTION_SEND
+                        putExtra(Intent.EXTRA_TEXT, shareText)
+                        type = "text/plain"
+                    }
+                    context.startActivity(Intent.createChooser(sendIntent, null))
+                },
+                modifier = Modifier
+                    .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp, end = 16.dp)
+                    .align(Alignment.TopEnd)
+                    .size(40.dp)
+                    .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                    .zIndex(10f)
+            ) {
+                Icon(Icons.Default.Share, contentDescription = "Share", tint = Color.White, modifier = Modifier.size(24.dp))
+            }
+
+            // Close button
+            IconButton(
+                onClick = { dismissWithAnimation() },
+                modifier = Modifier
+                    .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp, start = 16.dp)
+                    .align(Alignment.TopStart)
+                    .size(40.dp)
+                    .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                    .zIndex(10f)
+            ) {
+                Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(24.dp))
+            }
+
+            // Top bar pill
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp)
+                    .width(40.dp).height(4.dp)
+                    .background(Color.White.copy(alpha = 0.3f), RoundedCornerShape(2.dp)).zIndex(5f)
+            )
+
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 60.dp)
+                        .zIndex(10f),
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            val statusBarsPadding = WindowInsets.statusBars.asPaddingValues()
+            val navigationBarsPadding = WindowInsets.navigationBars.asPaddingValues()
+            val density = LocalDensity.current
+
+            LazyColumn(
+                state = lazyListState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    top = 140.dp + statusBarsPadding.calculateTopPadding(),
+                    bottom = 32.dp + navigationBarsPadding.calculateBottomPadding()
+                )
+            ) {
+                // Cover + Title section
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Box {
+                            Box(
+                                modifier = Modifier
+                                    .width(140.dp).height(200.dp)
+                            ) {
+                                Surface(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clickable { fullscreenImageUrl = displayData.cover },
+                                    shape = RoundedCornerShape(16.dp),
+                                    shadowElevation = 16.dp,
+                                    color = Color.Transparent
+                                ) {
+                                    AsyncImage(
+                                        model = displayData.cover, contentDescription = displayData.title,
+                                        contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().clickable {
+                                            fullscreenImageUrl = displayData.cover
+                                        }
+                                    )
                                 }
                             }
+                        }
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable {
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                clipboard.setPrimaryClip(ClipData.newPlainText("Manga Title", displayData.title))
+                            }.padding(vertical = 4.dp)) {
+                                Text(
+                                    text = displayData.title, style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold, maxLines = 10, overflow = TextOverflow.Clip,
+                                    color = MaterialTheme.colorScheme.onBackground,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(16.dp).padding(start = 4.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+                            }
+                            if (!displayData.titleEnglish.isNullOrEmpty() && displayData.titleEnglish != displayData.title) {
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable {
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    clipboard.setPrimaryClip(ClipData.newPlainText("Manga Title", displayData.titleEnglish))
+                                }.padding(vertical = 4.dp)) {
+                                    Text(
+                                        text = displayData.titleEnglish, style = MaterialTheme.typography.bodyMedium,
+                                        maxLines = 10, overflow = TextOverflow.Clip,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+                            if (!displayData.titleNative.isNullOrEmpty()) {
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable {
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    clipboard.setPrimaryClip(ClipData.newPlainText("Manga Title", displayData.titleNative))
+                                }.padding(vertical = 4.dp)) {
+                                    Text(
+                                        text = displayData.titleNative, style = MaterialTheme.typography.bodySmall,
+                                        maxLines = 10, overflow = TextOverflow.Clip,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                displayData.averageScore?.let { score ->
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.background(Color(0xFFFFD700).copy(alpha = 0.2f), RoundedCornerShape(8.dp))
+                                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                                    ) {
+                                        Icon(Icons.Default.Star, null, tint = Color(0xFFFFD700), modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            String.format(Locale.US, "%.1f", score / 10.0),
+                                            style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color(0xFFFFD700)
+                                        )
+                                    }
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = when (displayData.status) {
+                                        "RELEASING" -> Color(0xFF4CAF50).copy(alpha = 0.2f)
+                                        "FINISHED" -> Color(0xFF2196F3).copy(alpha = 0.2f)
+                                        "NOT_YET_RELEASED" -> Color(0xFFFFC107).copy(alpha = 0.2f)
+                                        "CANCELLED" -> Color(0xFFF44336).copy(alpha = 0.2f)
+                                        else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                    }
+                                ) {
+                                    Text(
+                                        statusDisplay, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold,
+                                        color = when (displayData.status) {
+                                            "RELEASING" -> Color(0xFF4CAF50)
+                                            "FINISHED" -> Color(0xFF2196F3)
+                                            "NOT_YET_RELEASED" -> Color(0xFFFFC107)
+                                            "CANCELLED" -> Color(0xFFF44336)
+                                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                if (displayData.year != null) {
+                                    Text(displayData.year.toString(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                if (displayData.year != null && displayData.format != null) {
+                                    Text("\u2022", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+                                }
+                                displayData.format?.let {
+                                    Text(formatDisplay, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                val chapterCount = displayData.chapters.takeIf { it > 0 }
+                                if (chapterCount != null) {
+                                    Text("\u2022", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+                                    Text("$chapterCount ch.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Chapter Button (replaces WatchNowButton)
+                item {
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Card(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                    ) {
+                        Box(modifier = Modifier.padding(12.dp)) {
+                            Button(
+                                onClick = { onStartReader(-1) },
+                                modifier = Modifier.fillMaxWidth().height(48.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                enabled = chapters.isNotEmpty() && !isLoadingChapters,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    disabledContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                                )
+                            ) {
+                                Icon(Icons.Default.PlayArrow, null, Modifier.size(20.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    if (displayProgress > 0) "Read Now" else "Start Reading",
+                                    fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Status Card (Add to List / Change + Favorite)
+                item {
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Card(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                                            Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Text(
+                                        "Add to List",
+                                        style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                                if (statusToCheck != null) {
+                                    val statusColor = StatusColors[statusToCheck] ?: MaterialTheme.colorScheme.primary
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        Surface(shape = RoundedCornerShape(6.dp), color = statusColor.copy(alpha = 0.12f)) {
+                                            Text(
+                                                text = StatusLabels[statusToCheck] ?: statusToCheck,
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = statusColor, fontWeight = FontWeight.SemiBold,
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                            )
+                                        }
+                                        if (totalCh > 0) {
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text(text = "$statusProgress", style = MaterialTheme.typography.titleMedium,
+                                                    fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                                Text(text = " / $totalCh", style = MaterialTheme.typography.titleMedium,
+                                                    fontWeight = FontWeight.Light, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(16.dp))
+                            if (statusToCheck != null) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Button(
+                                        onClick = { showStatusDialog = true },
+                                        modifier = Modifier.weight(1f).height(44.dp),
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                                    ) {
+                                        Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("Change", fontWeight = FontWeight.SemiBold)
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    OutlinedButton(
+                                        onClick = {
+                                            if (isLoggedIn) {
+                                                viewModel.toggleAniListFavorite(manga.id, null)
+                                            } else {
+                                                viewModel.toggleOfflineFavorite(manga.id, manga.title, manga.cover, manga.banner, manga.year, manga.averageScore)
+                                            }
+                                        },
+                                        modifier = Modifier.height(44.dp),
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            containerColor = if (isFavorite) Color(0xFFFF1744).copy(alpha = 0.15f) else Color.Transparent,
+                                            contentColor = if (isFavorite) Color(0xFFFF1744) else MaterialTheme.colorScheme.onSurface
+                                        ),
+                                        border = BorderStroke(1.5.dp,
+                                            if (isFavorite) Color(0xFFFF1744) else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                                        )
+                                    ) {
+                                        Icon(
+                                            if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                                            null, Modifier.size(20.dp),
+                                            tint = if (isFavorite) Color(0xFFFF1744) else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                }
+                            } else {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Button(
+                                        onClick = { showStatusDialog = true },
+                                        modifier = Modifier.weight(1f).height(44.dp),
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                                    ) {
+                                        Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("Add to List", fontWeight = FontWeight.SemiBold)
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    OutlinedButton(
+                                        onClick = {
+                                            if (isLoggedIn) {
+                                                viewModel.toggleAniListFavorite(manga.id, null)
+                                            } else {
+                                                viewModel.toggleOfflineFavorite(manga.id, manga.title, manga.cover, manga.banner, manga.year, manga.averageScore)
+                                            }
+                                        },
+                                        modifier = Modifier.height(44.dp),
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            containerColor = if (isFavorite) Color(0xFFFF1744).copy(alpha = 0.15f) else Color.Transparent,
+                                            contentColor = if (isFavorite) Color(0xFFFF1744) else MaterialTheme.colorScheme.onSurface
+                                        ),
+                                        border = BorderStroke(1.5.dp,
+                                            if (isFavorite) Color(0xFFFF1744) else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                                        )
+                                    ) {
+                                        Icon(
+                                            if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                                            null, Modifier.size(20.dp),
+                                            tint = if (isFavorite) Color(0xFFFF1744) else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Info Card (manga specs)
+                item {
+                    Spacer(modifier = Modifier.height(20.dp))
+                    MangaInfoCard(displayData = displayData, statusDisplay = statusDisplay)
+                }
+
+                // Genres
+                if (displayData.genres.isNotEmpty()) {
+                    item {
+                        Spacer(modifier = Modifier.height(20.dp))
+                        GenresCard(genres = displayData.genres)
+                    }
+                }
+
+                // Tags
+                if (displayData.tags.isNotEmpty()) {
+                    item {
+                        Spacer(modifier = Modifier.height(20.dp))
+                        TagsCard(
+                            tags = displayData.tags,
+                            showAllTags = showAllTags,
+                            onTagClick = { selectedTagForDescription = it },
+                            onToggleShowAll = { showAllTags = !showAllTags },
                         )
                     }
+                }
 
-                    // Synopsis
-                    detail?.description?.let { desc ->
-                        item {
-                            MangaSynopsisSection(desc, showFullDescription, { showFullDescription = !showFullDescription })
-                        }
-                    }
-
-                    // Characters
-                    val characters = detail?.characters?.nodes
-                    if (characters != null && characters.isNotEmpty()) {
-                        item {
-                            MangaCharactersSection(
-                                characters = characters,
-                                onCharacterClick = onCharacterClick
-                            )
-                        }
-                    }
-
-                    // Staff
-                    val staff = detail?.staff?.edges
-                    if (staff != null && staff.isNotEmpty()) {
-                        item {
-                            MangaStaffSection(
-                                staff = staff,
-                                onStaffClick = onStaffClick
-                            )
-                        }
-                    }
-
-                    // Relations
-                    val relations = detail?.relations
-                    if (relations != null && relations.isNotEmpty()) {
-                        item {
-                            MangaRelationsSection(
-                                relations = relations,
-                                onRelationClick = onRelationClick
-                            )
-                        }
-                    }
-
-                    // Genres
-                    val genres = detail?.genres ?: manga.genres
-                    if (genres.isNotEmpty()) {
-                        item {
-                            MangaGenresSection(genres = genres, isOled = isOled)
-                        }
-                    }
-
-                    // Tags
-                    val tags = detail?.tags
-                    if (tags != null && tags.isNotEmpty()) {
-                        item {
-                            MangaTagsSection(tags = tags, showAll = showAllTags, onToggle = { showAllTags = !showAllTags })
-                        }
-                    }
-
-                    // Recommendations
-                    val recommendations = detail?.recommendations
-                    if (recommendations != null && recommendations.isNotEmpty()) {
-                        item {
-                            MangaRecommendationsSection(
-                                recommendations = recommendations,
-                                preferEnglishTitles = preferEnglishTitles,
-                                onMangaClick = { rec -> navigateToMangaDetail(rec.id) }
-                            )
-                        }
-                    }
-
-                    // External Links
-                    val extLinks = detail?.externalLinks
-                    if (extLinks != null && extLinks.isNotEmpty()) {
-                        item {
-                            MangaExternalLinksSection(links = extLinks)
-                        }
-                    }
-
-                    // Bottom spacer
+                // Synopsis
+                if (!displayData.description.isNullOrEmpty()) {
                     item {
-                        Spacer(modifier = Modifier.height(80.dp))
+                        Spacer(modifier = Modifier.height(20.dp))
+                        SynopsisCard(
+                            description = displayData.description,
+                            showFullDescription = showFullDescription,
+                            onToggleShowFull = { showFullDescription = !showFullDescription },
+                        )
                     }
                 }
 
-                // Dismiss button
-                IconButton(
-                    onClick = { dismissWithAnimation() },
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 4.dp, start = 4.dp)
-                        .background(Color.Black.copy(alpha = 0.3f), CircleShape)
-                        .size(40.dp)
-                ) {
-                    Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+                // Relations
+                val relations = displayData.relations
+                if (relations.isNotEmpty()) {
+                    item {
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                            shape = RoundedCornerShape(20.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f))
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(38.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(
+                                                Brush.linearGradient(
+                                                    listOf(
+                                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
+                                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)
+                                                    )
+                                                )
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Default.Link, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column {
+                                        Text("Relations", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                        Text("Connected series", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), letterSpacing = 0.5.sp)
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(12.dp))
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    itemsIndexed(items = relations, key = { _, r -> r.id }) { _, relation ->
+                                        Column(
+                                            modifier = Modifier
+                                                .width(110.dp)
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .clickable { onRelationClick(relation) }
+                                                .padding(4.dp)
+                                        ) {
+                                            Box(modifier = Modifier.fillMaxWidth().aspectRatio(3f / 4f)) {
+                                                Card(shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxSize(),
+                                                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0A0A0A))
+                                                ) {
+                                                    AsyncImage(model = relation.cover, contentDescription = relation.title,
+                                                        contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                                                }
+                                                Surface(modifier = Modifier.padding(6.dp).align(Alignment.TopStart),
+                                                    shape = RoundedCornerShape(6.dp), color = Color.Black.copy(alpha = 0.8f)
+                                                ) {
+                                                    Text(relation.relationType.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() },
+                                                        style = MaterialTheme.typography.labelSmall, color = Color.White,
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                                                }
+                                                val chapterText = when {
+                                                    relation.chapters != null && relation.chapters > 0 -> "${relation.chapters} ch."
+                                                    else -> null
+                                                }
+                                                chapterText?.let {
+                                                    Surface(modifier = Modifier.padding(6.dp).align(Alignment.BottomStart),
+                                                        shape = RoundedCornerShape(6.dp), color = Color.Black.copy(alpha = 0.8f)
+                                                    ) {
+                                                        Text(it, style = MaterialTheme.typography.labelSmall, color = Color.White,
+                                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                                                    }
+                                                }
+                                            }
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Text(relation.title, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Medium,
+                                                maxLines = 2, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onBackground,
+                                                modifier = Modifier.height(32.dp))
+                                            relation.format?.let { format ->
+                                                val fmtDisplay = when (format) {
+                                                    "MANGA" -> "Manga"; "NOVEL" -> "Novel"; "ONE_SHOT" -> "One Shot"
+                                                    "MANHWA" -> "Manhwa"; "MANHUA" -> "Manhua"; else -> format
+                                                }
+                                                Text(fmtDisplay, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
+
+                // Characters
+                val characters = displayData.characters?.nodes
+                if (!characters.isNullOrEmpty()) {
+                    item {
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                            shape = RoundedCornerShape(20.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f))
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                                    Box(
+                                        modifier = Modifier.size(38.dp).clip(RoundedCornerShape(12.dp))
+                                            .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary.copy(alpha = 0.22f), MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)))),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Default.Group, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column {
+                                        Text("Characters", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                        Text("Appearing characters", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), letterSpacing = 0.5.sp)
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(12.dp))
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    itemsIndexed(characters, key = { _, c -> c.id }) { _, character ->
+                                        Column(
+                                            modifier = Modifier.width(80.dp).clip(RoundedCornerShape(12.dp))
+                                                .clickable { character.id.let(onCharacterClick) }.padding(4.dp)
+                                        ) {
+                                            Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
+                                                Card(shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxSize(),
+                                                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0A0A0A))
+                                                ) {
+                                                    AsyncImage(model = character.image?.large ?: "", contentDescription = character.name?.full,
+                                                        contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                                                }
+                                            }
+                                            Spacer(modifier = Modifier.height(6.dp))
+                                            Text(character.name?.full ?: "Unknown", style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                                                color = MaterialTheme.colorScheme.onBackground, modifier = Modifier.height(28.dp))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Staff
+                val staff = displayData.staff?.edges
+                if (!staff.isNullOrEmpty()) {
+                    item {
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                            shape = RoundedCornerShape(20.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f))
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                                    Box(
+                                        modifier = Modifier.size(38.dp).clip(RoundedCornerShape(12.dp))
+                                            .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary.copy(alpha = 0.22f), MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)))),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column {
+                                        Text("Staff", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                        Text("Production crew", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), letterSpacing = 0.5.sp)
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(12.dp))
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    itemsIndexed(staff, key = { index, _ -> "staff_$index" }) { _, staffEdge ->
+                                        staffEdge.node?.let { staffNode ->
+                                            Column(
+                                                modifier = Modifier.width(80.dp).clip(RoundedCornerShape(12.dp))
+                                                    .clickable { staffNode.id.let(onStaffClick) }.padding(4.dp)
+                                            ) {
+                                                Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
+                                                    Card(shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxSize(),
+                                                        colors = CardDefaults.cardColors(containerColor = Color(0xFF0A0A0A))
+                                                    ) {
+                                                        AsyncImage(model = staffNode.image?.large ?: "", contentDescription = staffNode.name?.full,
+                                                            contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                                                    }
+                                                }
+                                                Spacer(modifier = Modifier.height(6.dp))
+                                                Text(staffNode.name?.full ?: "Unknown", style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                                                    color = MaterialTheme.colorScheme.onBackground, modifier = Modifier.height(28.dp))
+                                                staffEdge.role?.let { role ->
+                                                    Text(role.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() },
+                                                        style = MaterialTheme.typography.labelSmall, maxLines = 1,
+                                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f))
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Recommendations
+                val recommendations = displayData.recommendations
+                if (recommendations.isNotEmpty()) {
+                    item {
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                            shape = RoundedCornerShape(20.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f))
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                                    Box(
+                                        modifier = Modifier.size(38.dp).clip(RoundedCornerShape(12.dp))
+                                            .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary.copy(alpha = 0.22f), MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)))),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Default.Star, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Text("Recommendations", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                }
+                                Spacer(modifier = Modifier.height(12.dp))
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    itemsIndexed(recommendations.take(20)) { _, rec ->
+                                        val title = if (preferEnglishTitles && !rec.titleEnglish.isNullOrBlank()) rec.titleEnglish else rec.title
+                                        Column(
+                                            modifier = Modifier.width(110.dp).clip(RoundedCornerShape(12.dp))
+                                                .clickable { navigateToMangaDetail(rec.id) }.padding(4.dp)
+                                        ) {
+                                            Box(modifier = Modifier.fillMaxWidth().aspectRatio(3f / 4f)) {
+                                                Card(shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxSize(),
+                                                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0A0A0A))
+                                                ) {
+                                                    AsyncImage(model = rec.cover, contentDescription = title,
+                                                        contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                                                }
+                                            }
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Text(title, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Medium,
+                                                maxLines = 2, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onBackground)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Rankings
+                val rankings = displayData.rankings
+                if (rankings.isNotEmpty()) {
+                    item {
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                            shape = RoundedCornerShape(20.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f))
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier.size(38.dp).clip(RoundedCornerShape(12.dp))
+                                            .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary.copy(alpha = 0.22f), MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)))),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.AutoMirrored.Filled.TrendingUp, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Text("Rankings", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                }
+                                Spacer(modifier = Modifier.height(12.dp))
+                                rankings.forEach { ranking ->
+                                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Text("#${ranking.rank ?: "-"}", fontWeight = FontWeight.Bold, fontSize = 18.sp,
+                                            color = if (ranking.primary == true) Color(0xFFfbbf24) else MaterialTheme.colorScheme.primary)
+                                        Spacer(Modifier.width(12.dp))
+                                        Column {
+                                            Text("${ranking.context ?: ""} ${ranking.type ?: ""}".trim(),
+                                                style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                                            if (ranking.primary == true) {
+                                                Text("Top", style = MaterialTheme.typography.labelSmall, color = Color(0xFFfbbf24))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Synonyms
+                val synonyms = displayData.synonymTitles
+                if (synonyms.isNotEmpty()) {
+                    item {
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                            shape = RoundedCornerShape(20.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f))
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier.size(38.dp).clip(RoundedCornerShape(12.dp))
+                                            .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary.copy(alpha = 0.22f), MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)))),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Text("Also Known As", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                }
+                                Spacer(modifier = Modifier.height(12.dp))
+                                synonyms.forEach { syn ->
+                                    Text(syn, style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 2.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // External Links
+                val extLinks = displayData.externalLinks
+                if (extLinks.isNotEmpty()) {
+                    item {
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                            shape = RoundedCornerShape(20.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f))
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier.size(38.dp).clip(RoundedCornerShape(12.dp))
+                                            .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary.copy(alpha = 0.22f), MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)))),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Default.Link, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Text("External Links", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                }
+                                Spacer(modifier = Modifier.height(12.dp))
+                                extLinks.forEach { link ->
+                                    link.url?.let { url ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable {
+                                                try { context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))) } catch (_: Exception) { }
+                                            },
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(Icons.Default.Link, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                                            Spacer(Modifier.width(8.dp))
+                                            Text(link.site ?: url, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                item { Spacer(modifier = Modifier.height(80.dp)) }
+            }
+        }
+    }
+
+    if (selectedTagForDescription != null) {
+        val tag: TagData = selectedTagForDescription!!
+        androidx.compose.material3.ModalBottomSheet(
+            onDismissRequest = { selectedTagForDescription = null },
+            sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        ) {
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 40.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.AutoMirrored.Filled.Label, contentDescription = null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(24.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(tag.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                }
+                tag.rank?.let { rank ->
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Rank: $rank%", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+                Spacer(modifier = Modifier.height(16.dp))
+                val description = tag.description ?: "No description available."
+                val cleanDescription = description.replace("<br>", "\n").replace("<br/>", "\n")
+                    .replace("<b>", "").replace("</b>", "").replace("<i>", "").replace("</i>", "")
+                    .replace("&quot;", "\"").replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+                Text(cleanDescription, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, lineHeight = 24.sp)
+            }
+        }
+    }
+
+    if (fullscreenImageUrl != null) {
+        Dialog(onDismissRequest = { fullscreenImageUrl = null }) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Box(modifier = Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { fullscreenImageUrl = null } })
+                AsyncImage(model = fullscreenImageUrl, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize().padding(16.dp))
             }
         }
     }
@@ -378,460 +1188,159 @@ fun DetailedMangaScreen(
             onDismiss = { showStatusDialog = false }
         )
     }
-
-    if (showChapterList) {
-        MangaFullChapterList(
-            chapters = chapters,
-            isLoading = isLoadingChapters,
-            mangaId = manga.id,
-            currentProgress = displayProgress,
-            viewModel = viewModel,
-            onSelectChapter = { chapter, index ->
-                viewModel.markMangaChapterRead(manga.id, chapter)
-                onStartReader(index)
-                showChapterList = false
-            },
-            onDismiss = { showChapterList = false }
-        )
-    }
-
-    if (fullscreenImageUrl != null) {
-        Dialog(onDismissRequest = { fullscreenImageUrl = null }) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Box(modifier = Modifier.fillMaxSize().clickable { fullscreenImageUrl = null })
-                AsyncImage(
-                    model = fullscreenImageUrl, contentDescription = null,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxSize().padding(16.dp)
-                )
-            }
-        }
-    }
 }
 
 @Composable
-private fun MangaDetailHeader(
-    detail: MangaDetail?,
-    manga: MangaMedia,
-    isOled: Boolean,
-    onCopyTitle: (String) -> Unit,
-    onFullscreenImage: (String) -> Unit
-) {
-    val bannerUrl = detail?.banner ?: manga.banner
-    Box(modifier = Modifier.fillMaxWidth()) {
-        if (!bannerUrl.isNullOrEmpty()) {
-            AsyncImage(
-                model = bannerUrl, contentDescription = null,
-                modifier = Modifier.fillMaxWidth().height(240.dp),
-                contentScale = ContentScale.Crop
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth().height(240.dp)
-                    .background(Brush.verticalGradient(
-                        colors = listOf(Color.Transparent, if (isOled) Color.Black else MaterialTheme.colorScheme.background)
-                    ))
-            )
-        }
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = if (bannerUrl.isNullOrEmpty()) 0.dp else 180.dp)
-                .padding(horizontal = 16.dp)
-                .padding(bottom = 16.dp)
-        ) {
-            Row(verticalAlignment = Alignment.Bottom) {
-                AsyncImage(
-                    model = detail?.cover ?: manga.cover,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .width(120.dp).aspectRatio(0.7f)
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable { detail?.cover?.let(onFullscreenImage) },
-                    contentScale = ContentScale.Crop
-                )
-                Spacer(Modifier.width(16.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = detail?.title ?: manga.title,
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold, maxLines = 3,
-                            overflow = TextOverflow.Ellipsis,
-                            color = if (bannerUrl.isNullOrEmpty()) MaterialTheme.colorScheme.onSurface else Color.White,
-                            modifier = Modifier.weight(1f)
-                        )
-                        IconButton(onClick = { onCopyTitle(detail?.title ?: manga.title) }, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Default.ContentCopy, contentDescription = "Copy", tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
-                        }
-                    }
-                    detail?.titleEnglish?.let { eng ->
-                        if (eng != (detail?.title ?: manga.title)) {
-                            Text(eng, style = MaterialTheme.typography.bodyMedium,
-                                color = if (bannerUrl.isNullOrEmpty()) MaterialTheme.colorScheme.onSurfaceVariant else Color.White.copy(alpha = 0.8f),
-                                maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        }
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        detail?.averageScore?.let { score ->
-                            Surface(shape = RoundedCornerShape(4.dp), color = Color(0xFF4CAF50).copy(alpha = 0.8f)) {
-                                Row(modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Star, null, Modifier.size(14.dp), tint = Color.White)
-                                    Spacer(Modifier.width(2.dp))
-                                    Text("${score / 10}", style = MaterialTheme.typography.labelSmall, color = Color.White)
-                                }
-                            }
-                        }
-                        detail?.status?.let { st ->
-                            Surface(shape = RoundedCornerShape(4.dp), color = Color(0xFF666666).copy(alpha = 0.8f)) {
-                                Text(st.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() },
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                    style = MaterialTheme.typography.labelSmall, color = Color.White)
-                            }
-                        }
-                        detail?.format?.let { fmt ->
-                            Surface(shape = RoundedCornerShape(4.dp), color = Color(0xFF666666).copy(alpha = 0.8f)) {
-                                Text(fmt.replace("_", " "), modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                    style = MaterialTheme.typography.labelSmall, color = Color.White)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun MangaActionButtons(
-    detail: MangaDetail?,
-    chapters: List<MangaChapter>,
-    isLoading: Boolean,
-    isLoadingChapters: Boolean,
-    currentStatus: String?,
-    currentProgress: Int,
-    displayProgress: Int,
-    totalChapters: Int,
-    isFavorite: Boolean,
-    onStartReader: () -> Unit,
-    onShowStatusMenu: () -> Unit,
-    onShowChapterList: () -> Unit,
-    onFavoriteClick: () -> Unit,
-    onShareClick: () -> Unit
+private fun MangaInfoCard(
+    displayData: MangaDetail,
+    statusDisplay: String,
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth().padding(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f))
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                Button(
-                    onClick = onStartReader,
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    enabled = chapters.isNotEmpty() && !isLoadingChapters
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier.size(38.dp).clip(RoundedCornerShape(12.dp))
+                        .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary.copy(alpha = 0.22f), MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)))),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Default.PlayArrow, null)
-                    Spacer(Modifier.width(8.dp))
-                    Text(if (displayProgress > 0) "Ch. ${displayProgress}" else "Start Reading")
+                    Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                 }
-                OutlinedButton(onClick = onShowChapterList, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Default.List, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("${chapters.size} Ch.")
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text("Information", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                    Text("Overview & details", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), letterSpacing = 0.5.sp)
                 }
             }
-            Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                OutlinedButton(onClick = onShowStatusMenu, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Default.BookmarkBorder, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text(mangaStatusLabel(currentStatus))
-                }
-                OutlinedButton(onClick = onShareClick, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Default.Share, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Share")
-                }
-            }
-            Spacer(Modifier.height(12.dp))
-            // Stats
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                MangaStatItem("Chapters", "${detail?.chapters ?: chapters.size}")
-                detail?.volumes?.let { MangaStatItem("Volumes", "$it") }
-                detail?.popularity?.let { MangaStatItem("Popularity", formatMangaNumber(it)) }
-                detail?.favourites?.let { MangaStatItem("Favorites", formatMangaNumber(it)) }
-            }
-        }
-    }
-}
+            Spacer(modifier = Modifier.height(18.dp))
 
-@Composable
-private fun MangaSynopsisSection(description: String, showFull: Boolean, onToggle: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Description, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(8.dp))
-                Text("Synopsis", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            // Hero stats: Score / Chapters / Volumes / Popularity / Favorites
+            val heroStats = buildList {
+                displayData.averageScore?.takeIf { it > 0 }?.let { add("Score" to String.format(Locale.US, "%.1f", it / 10.0)) }
+                displayData.chapters.takeIf { it > 0 }?.let { add("Chapters" to it.toString()) }
+                displayData.volumes?.takeIf { it > 0 }?.let { add("Volumes" to it.toString()) }
+                displayData.popularity?.takeIf { it > 0 }?.let { add("Popularity" to formatNumber(it)) }
+                displayData.favourites?.takeIf { it > 0 }?.let { add("Favorites" to formatNumber(it)) }
             }
-            Spacer(Modifier.height(8.dp))
-            val text = if (showFull) description else description.take(400).replace(Regex("<[^>]*>"), "") + if (description.length > 400) "..." else ""
-            Text(text.replace(Regex("<[^>]*>"), ""), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (description.length > 400) {
-                TextButton(onClick = onToggle) { Text(if (showFull) "Show Less" else "Read More") }
-            }
-        }
-    }
-}
 
-@Composable
-private fun MangaCharactersSection(
-    characters: List<MangaCharacterNode>,
-    onCharacterClick: (Int) -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Group, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(8.dp))
-                Text("Characters", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            }
-            Spacer(Modifier.height(8.dp))
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                itemsIndexed(characters.take(20)) { _, char ->
-                    Column(modifier = Modifier.width(80.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        AsyncImage(
-                            model = char.image?.large ?: "",
-                            contentDescription = char.name?.full,
-                            modifier = Modifier
-                                .size(72.dp).clip(CircleShape)
-                                .clickable { char.id.let(onCharacterClick) },
-                            contentScale = ContentScale.Crop
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(char.name?.full ?: "", style = MaterialTheme.typography.labelSmall,
-                            maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun MangaStaffSection(
-    staff: List<MangaStaffEdge>,
-    onStaffClick: (Int) -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Person, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(8.dp))
-                Text("Staff", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            }
-            Spacer(Modifier.height(8.dp))
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                itemsIndexed(staff.take(20)) { _, edge ->
-                    Column(modifier = Modifier.width(80.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        AsyncImage(
-                            model = edge.node?.image?.large ?: "",
-                            contentDescription = edge.node?.name?.full,
-                            modifier = Modifier
-                                .size(72.dp).clip(CircleShape)
-                                .clickable { edge.node?.id?.let(onStaffClick) },
-                            contentScale = ContentScale.Crop
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(edge.node?.name?.full ?: "", style = MaterialTheme.typography.labelSmall,
-                            maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
-                        Text(edge.role ?: "", style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
-                            overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun MangaRelationsSection(
-    relations: List<MangaRelation>,
-    onRelationClick: (MangaRelation) -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Link, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(8.dp))
-                Text("Relations", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            }
-            Spacer(Modifier.height(8.dp))
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                itemsIndexed(relations) { _, relation ->
-                    MangaRelationCard(relation = relation, onClick = { onRelationClick(relation) })
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun MangaRelationCard(relation: MangaRelation, onClick: () -> Unit) {
-    Card(
-        modifier = Modifier.width(130.dp).clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
-        Column {
-            AsyncImage(
-                model = relation.cover, contentDescription = null,
-                modifier = Modifier.fillMaxWidth().height(170.dp),
-                contentScale = ContentScale.Crop
-            )
-            Column(modifier = Modifier.padding(8.dp)) {
-                Text(relation.title, style = MaterialTheme.typography.labelMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Spacer(Modifier.height(4.dp))
-                Text(relation.relationType.replace("_", " "), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-            }
-        }
-    }
-}
-
-@Composable
-private fun MangaGenresSection(genres: List<String>, isOled: Boolean) {
-    Card(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        colors = CardDefaults.cardColors(containerColor = if (isOled) Color(0xFF111111) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text("Genres", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(8.dp))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                genres.forEach { genre ->
-                    Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)) {
-                        Text(genre, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun MangaTagsSection(tags: List<TagData>, showAll: Boolean, onToggle: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text("Tags", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(8.dp))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                val displayTags = if (showAll) tags else tags.take(15)
-                displayTags.forEach { tag ->
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
-                    ) {
-                        Text(tag.name, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            }
-            if (tags.size > 15) {
-                TextButton(onClick = onToggle) { Text(if (showAll) "Show Less" else "Show All (${tags.size})") }
-            }
-        }
-    }
-}
-
-@Composable
-private fun MangaRecommendationsSection(
-    recommendations: List<MangaMedia>,
-    preferEnglishTitles: Boolean,
-    onMangaClick: (MangaMedia) -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text("Recommendations", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(8.dp))
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                itemsIndexed(recommendations.take(20)) { _, rec ->
-                    val title = if (preferEnglishTitles && !rec.titleEnglish.isNullOrBlank()) rec.titleEnglish else rec.title
-                    Card(
-                        modifier = Modifier.width(110.dp).clickable { onMangaClick(rec) },
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                    ) {
-                        Column {
-                            Box(modifier = Modifier.height(150.dp).fillMaxWidth()) {
-                                AsyncImage(
-                                    model = rec.cover, contentDescription = null,
-                                    modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop
-                                )
+            if (heroStats.isNotEmpty()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                        .padding(vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    heroStats.forEachIndexed { index, (label, value) ->
+                        val accent = when (label) {
+                            "Score" -> Color(0xFFFFB300)
+                            "Chapters" -> MaterialTheme.colorScheme.primary
+                            "Volumes" -> MaterialTheme.colorScheme.tertiary
+                            "Popularity" -> MaterialTheme.colorScheme.primary
+                            "Favorites" -> Color(0xFFEC4899)
+                            else -> MaterialTheme.colorScheme.primary
+                        }
+                        val icon = when (label) {
+                            "Score" -> Icons.Default.Star
+                            "Favorites" -> Icons.Default.Favorite
+                            else -> null
+                        }
+                        Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                icon?.let {
+                                    Icon(it, contentDescription = null, tint = accent, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                }
+                                Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
+                                    color = accent, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
-                            Text(title, modifier = Modifier.padding(6.dp), style = MaterialTheme.typography.labelSmall,
-                                maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(label.uppercase(), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Medium,
+                                letterSpacing = 1.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f))
+                        }
+                        if (index < heroStats.lastIndex) {
+                            Box(modifier = Modifier.width(1.dp).height(28.dp)
+                                .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)))
                         }
                     }
                 }
+                Spacer(modifier = Modifier.height(16.dp))
             }
-        }
-    }
-}
 
-@Composable
-private fun MangaExternalLinksSection(
-    links: List<com.blissless.tensei.data.models.MangaExternalLink>
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text("External Links", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(8.dp))
-            val ctx = LocalContext.current
-            links.forEach { link ->
-                link.url?.let { url ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable {
-                            try { ctx.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))) } catch (_: Exception) { }
-                        },
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Default.Link, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.width(8.dp))
-                        Text(link.site ?: url, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // Bento spec grid
+            val specs = buildList {
+                displayData.format?.let {
+                    add(SpecEntry(label = "Format", value = it.replace("_", " ").lowercase().replaceFirstChar { c -> c.uppercase() }, icon = Icons.Default.Category))
+                }
+                displayData.status?.let {
+                    add(SpecEntry(label = "Status", value = statusDisplay, icon = Icons.Default.PlayArrow))
+                }
+                displayData.source?.let {
+                    add(SpecEntry(label = "Source", value = it.replace("_", " ").lowercase().replaceFirstChar { c -> c.uppercase() }, icon = Icons.Default.Description))
+                }
+                if (displayData.chapters > 0) {
+                    add(SpecEntry(label = "Chapters", value = displayData.chapters.toString()))
+                }
+                displayData.volumes?.let {
+                    add(SpecEntry(label = "Volumes", value = it.toString()))
+                }
+                displayData.year?.let {
+                    add(SpecEntry(label = "Year", value = it.toString()))
+                }
+            }
+
+            var i = 0
+            while (i < specs.size) {
+                val current = specs[i]
+                val next = specs.getOrNull(i + 1)
+                if (next != null && !current.fullSpan) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        BentoSpecCell(current, modifier = Modifier.weight(1f))
+                        BentoSpecCell(next, modifier = Modifier.weight(1f))
                     }
+                    i += 2
+                } else {
+                    BentoSpecCell(current, modifier = Modifier.fillMaxWidth())
+                    i += 1
+                }
+                if (i < specs.size) {
+                    Spacer(modifier = Modifier.height(10.dp))
                 }
             }
         }
     }
 }
 
+private data class SpecEntry(
+    val label: String,
+    val value: String,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    val fullSpan: Boolean = false
+)
+
 @Composable
-private fun MangaStatItem(label: String, value: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+private fun BentoSpecCell(spec: SpecEntry, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.30f))
+            .padding(14.dp)
+    ) {
+        Text(spec.label.uppercase(), style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Medium, letterSpacing = 1.2.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f))
+        Spacer(modifier = Modifier.height(6.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            spec.icon?.let { ic ->
+                Icon(ic, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+            }
+            Text(spec.value, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
     }
 }
 
@@ -860,7 +1369,7 @@ private fun MangaStatusAlertDialog(
                         modifier = Modifier.fillMaxWidth().clickable { onSelect(key) }.padding(vertical = 12.dp, horizontal = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(icons[key] ?: Icons.Default.BookmarkBorder, null,
+                        Icon(icons[key] ?: Icons.Outlined.FavoriteBorder, null,
                             tint = if (currentStatus == key) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
                         Spacer(Modifier.width(12.dp))
                         Text(label, fontWeight = if (currentStatus == key) FontWeight.Bold else FontWeight.Normal,
@@ -878,95 +1387,25 @@ private fun MangaStatusAlertDialog(
 }
 
 @Composable
-private fun MangaFullChapterList(
-    chapters: List<MangaChapter>,
-    isLoading: Boolean,
-    mangaId: Int,
-    currentProgress: Int,
-    viewModel: MainViewModel,
-    onSelectChapter: (MangaChapter, Int) -> Unit,
-    onDismiss: () -> Unit
-) {
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
-    ) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background
-        ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp).padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Chapters", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.weight(1f))
-                    IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, "Close") }
-                }
-                HorizontalDivider()
-                if (isLoading) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                } else {
-                    LazyColumn(modifier = Modifier.fillMaxSize()) {
-                        itemsIndexed(chapters) { index, chapter ->
-                            val isDownloaded = viewModel.isChapterDownloaded(mangaId, chapter.chapterNumber)
-                            val isRead = index < currentProgress
-                            var showDeleteConfirm by remember { mutableStateOf(false) }
-                            androidx.compose.material3.ListItem(
-                                headlineContent = {
-                                    Text(chapter.title,
-                                        fontWeight = if (isRead) FontWeight.Normal else FontWeight.Medium,
-                                        color = if (isRead) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface)
-                                },
-                                supportingContent = chapter.groups.take(2).let {
-                                    if (it.isNotEmpty()) ({ Text(it.joinToString(", ")) }) else null
-                                },
-                                leadingContent = {
-                                    if (isDownloaded) {
-                                        IconButton(onClick = { showDeleteConfirm = true }) {
-                                            Icon(Icons.Default.DownloadDone, "Downloaded", Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
-                                        }
-                                    } else if (isRead) {
-                                        Icon(Icons.Default.CheckCircle, "Read", Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
-                                    }
-                                },
-                                modifier = Modifier.clickable { onSelectChapter(chapter, index) }
-                            )
-                            if (index < chapters.lastIndex) HorizontalDivider(modifier = Modifier.padding(start = 72.dp))
-
-                            if (showDeleteConfirm) {
-                                AlertDialog(
-                                    onDismissRequest = { showDeleteConfirm = false },
-                                    title = { Text("Delete Download") },
-                                    text = { Text("Delete downloaded chapter ${chapter.title}?") },
-                                    confirmButton = {
-                                        TextButton(onClick = { viewModel.deleteMangaChapter(mangaId, chapter.chapterNumber); showDeleteConfirm = false }) {
-                                            Text("Delete", color = MaterialTheme.colorScheme.error)
-                                        }
-                                    },
-                                    dismissButton = { TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") } }
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-private fun mangaStatusLabel(status: String?): String = when (status) {
-    "CURRENT" -> "Reading"
-    "PLANNING" -> "Plan to Read"
-    "COMPLETED" -> "Completed"
-    "PAUSED" -> "Paused"
-    "DROPPED" -> "Dropped"
-    else -> "Add to List"
-}
-
-private fun formatMangaNumber(n: Int): String = when {
+private fun formatNumber(n: Int): String = when {
     n >= 1_000_000 -> "${n / 1_000_000}M"
     n >= 1_000 -> "${n / 1_000}K"
     else -> n.toString()
 }
+
+private fun MangaMedia.asDetail(): MangaDetail = MangaDetail(
+    id = id,
+    title = title,
+    titleEnglish = titleEnglish,
+    cover = cover,
+    banner = banner,
+    chapters = totalChapters,
+    volumes = totalVolumes,
+    status = status,
+    averageScore = averageScore,
+    genres = genres,
+    year = year,
+    format = format,
+    siteUrl = siteUrl,
+    malId = malId
+)

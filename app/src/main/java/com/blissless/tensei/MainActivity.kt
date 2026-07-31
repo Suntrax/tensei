@@ -1380,7 +1380,10 @@ fun MainScreen(
             initialChapterIndex = mangaReaderChapterIndex,
             viewModel = viewModel,
             isOled = isOled,
-            onClose = { showMangaReader = false }
+            onClose = {
+                mangaAutoShowChapters = false
+                showMangaReader = false
+            }
         )
     }
 

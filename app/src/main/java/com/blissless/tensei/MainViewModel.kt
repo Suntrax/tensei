@@ -40,6 +40,7 @@ import com.blissless.tensei.update.GitHubRelease
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -867,9 +868,17 @@ class MainViewModel : ViewModel() {
         }
 
         _isLoadingHome.value = true
-        val userSuccess = fetchUser()
-        val listsSuccess = fetchLists()
-        val mangaListsSuccess = fetchMangaLists()
+        val userSuccess: Boolean
+        val listsSuccess: Boolean
+        val mangaListsSuccess: Boolean
+        coroutineScope {
+            val userDeferred = async { fetchUser() }
+            val listsDeferred = async { fetchLists() }
+            val mangaListsDeferred = async { fetchMangaLists() }
+            userSuccess = userDeferred.await()
+            listsSuccess = listsDeferred.await()
+            mangaListsSuccess = mangaListsDeferred.await()
+        }
         _isLoadingHome.value = false
 
         if (userSuccess && listsSuccess) {

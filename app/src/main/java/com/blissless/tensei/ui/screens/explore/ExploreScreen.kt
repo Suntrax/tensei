@@ -823,14 +823,12 @@ fun ExploreScreen(
             // ─── Manga Explore Sections ──────────────────────────────
             if (mangaExploreSections.isNotEmpty()) {
                 val sectionLabelMap = mapOf(
-                    "trending" to "Trending Manga",
-                    "popular" to "Popular Manga",
-                    "topRated" to "Top Rated Manga",
-                    "action" to "Action Manga",
-                    "romance" to "Romance Manga",
-                    "comedy" to "Comedy Manga",
-                    "fantasy" to "Fantasy Manga",
-                    "scifi" to "Sci-Fi Manga"
+                    "popular" to "Most Popular",
+                    "topRated" to "Top Rated",
+                    "favourites" to "Most Favourited",
+                    "action" to "Action",
+                    "romance" to "Romance",
+                    "fantasy" to "Fantasy"
                 )
                 mangaExploreSections.forEach { (key, list) ->
                     if (list.isNotEmpty()) {

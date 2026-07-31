@@ -1117,6 +1117,7 @@ data class MangaDetail(
     val siteUrl: String? = null,
     val mangaDexId: String? = null,
     val synonymTitles: List<String> = emptyList(),
+    val rankings: List<MangaRankingEntry> = emptyList(),
     val externalLinks: List<MangaExternalLink> = emptyList()
 )
 
@@ -1171,6 +1172,15 @@ data class MangaCharacterName(
 data class MangaExternalLink(
     val url: String? = null,
     val site: String? = null
+)
+
+@Serializable
+data class MangaRankingEntry(
+    val id: Int? = null,
+    val rank: Int? = null,
+    val type: String? = null,
+    val context: String? = null,
+    val primary: Boolean? = null
 )
 
 @Serializable
@@ -1259,6 +1269,7 @@ data class MangaDetailMedia(
     val staff: MangaDetailStaffWrapper? = null,
     val recommendations: MangaDetailRecommendations? = null,
     val synonyms: List<String>? = null,
+    val rankings: List<MangaRankingEntry>? = null,
     val externalLinks: List<MangaExternalLink>? = null
 )
 
