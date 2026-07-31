@@ -1043,4 +1043,419 @@ data class MediaTag(
     val isAdult: Boolean = false
 )
 
+// ============================================
+// MANGA MODELS
+// ============================================
+
+@Serializable
+data class MangaMedia(
+    val id: Int,
+    val title: String,
+    val titleEnglish: String? = null,
+    val cover: String,
+    val banner: String? = null,
+    val progress: Int = 0,
+    val totalChapters: Int = 0,
+    val totalVolumes: Int? = null,
+    val latestChapter: Float? = null,
+    val status: String = "",
+    val averageScore: Int? = null,
+    val genres: List<String> = emptyList(),
+    val listStatus: String = "",
+    val listEntryId: Int? = null,
+    val year: Int? = null,
+    val malId: Int? = null,
+    val format: String? = null,
+    val userScore: Int? = null,
+    val siteUrl: String? = null,
+    val mangaDexId: String? = null
+)
+
+@Serializable
+data class MangaChapter(
+    val url: String,
+    val title: String,
+    val chapterId: String,
+    val volume: Float? = null,
+    val chapterNumber: Float = 0f,
+    val groups: List<String> = emptyList()
+)
+
+@Serializable
+data class ChapterImages(
+    val chapterUrl: String,
+    val images: List<String>
+)
+
+@Serializable
+data class MangaDetail(
+    val id: Int,
+    val title: String,
+    val titleEnglish: String? = null,
+    val titleNative: String? = null,
+    val cover: String,
+    val banner: String? = null,
+    val description: String? = null,
+    val chapters: Int = 0,
+    val volumes: Int? = null,
+    val status: String? = null,
+    val averageScore: Int? = null,
+    val meanScore: Int? = null,
+    val popularity: Int? = null,
+    val favourites: Int? = null,
+    val genres: List<String> = emptyList(),
+    val tags: List<TagData> = emptyList(),
+    val year: Int? = null,
+    val format: String? = null,
+    val source: String? = null,
+    val isAdult: Boolean = false,
+    val staff: MangaStaff? = null,
+    val recommendations: List<MangaMedia> = emptyList(),
+    val malId: Int? = null,
+    val relations: List<MangaRelation> = emptyList(),
+    val characters: MangaCharacters? = null,
+    val siteUrl: String? = null,
+    val mangaDexId: String? = null,
+    val synonymTitles: List<String> = emptyList(),
+    val externalLinks: List<MangaExternalLink> = emptyList()
+)
+
+@Serializable
+data class MangaRelation(
+    val id: Int,
+    val title: String,
+    val cover: String,
+    val chapters: Int?,
+    val averageScore: Int?,
+    val format: String?,
+    val relationType: String
+)
+
+@Serializable
+data class MangaStaff(
+    val edges: List<MangaStaffEdge> = emptyList()
+)
+
+@Serializable
+data class MangaStaffEdge(
+    val node: MangaStaffNode? = null,
+    val role: String? = null
+)
+
+@Serializable
+data class MangaStaffNode(
+    val id: Int,
+    val name: MangaCharacterName? = null,
+    val image: MediaCoverImage? = null
+)
+
+@Serializable
+data class MangaCharacters(
+    val nodes: List<MangaCharacterNode> = emptyList()
+)
+
+@Serializable
+data class MangaCharacterNode(
+    val id: Int,
+    val name: MangaCharacterName? = null,
+    val image: MediaCoverImage? = null
+)
+
+@Serializable
+data class MangaCharacterName(
+    val full: String? = null,
+    val native: String? = null
+)
+
+@Serializable
+data class MangaExternalLink(
+    val url: String? = null,
+    val site: String? = null
+)
+
+@Serializable
+data class MangaTrack(
+    val mangaId: Int,
+    val title: String = "",
+    val cover: String = "",
+    val progress: Float = 0f,
+    val scrollProgress: Float = 0f,
+    val totalChapters: Int = 0,
+    val totalVolumes: Int? = null,
+    val status: String = "PLANNING",
+    val mangaDexId: String? = null,
+    val lastReadChapter: MangaChapter? = null
+)
+
+@Serializable
+data class MangaExploreMedia(
+    val id: Int,
+    val idMal: Int? = null,
+    val title: MangaTitle,
+    val coverImage: MediaCoverImage?,
+    val bannerImage: String?,
+    val chapters: Int?,
+    val status: String?,
+    val averageScore: Int?,
+    val genres: List<String>?,
+    val seasonYear: Int? = null,
+    val startDate: MangaFuzzyDate? = null,
+    val isAdult: Boolean = false,
+    val format: String? = null,
+    val volumes: Int? = null
+)
+
+@Serializable
+data class MangaTitle(
+    val romaji: String?,
+    val english: String?
+)
+
+@Serializable
+data class MangaFuzzyDate(
+    val year: Int? = null,
+    val month: Int? = null,
+    val day: Int? = null
+)
+
+@Serializable
+data class MangaExploreResponse(val data: MangaExploreData)
+
+@Serializable
+data class MangaExploreData(val Page: MangaExplorePage)
+
+@Serializable
+data class MangaExplorePage(val media: List<MangaExploreMedia>)
+
+@Serializable
+data class MangaDetailResponse(val data: MangaDetailDataWrapper)
+
+@Serializable
+data class MangaDetailDataWrapper(val Media: MangaDetailMedia)
+
+@Serializable
+data class MangaDetailMedia(
+    val id: Int,
+    val idMal: Int? = null,
+    val title: MangaDetailTitle? = null,
+    val coverImage: MediaCoverImage? = null,
+    val bannerImage: String? = null,
+    val description: String? = null,
+    val chapters: Int? = null,
+    val volumes: Int? = null,
+    val status: String? = null,
+    val averageScore: Int? = null,
+    val meanScore: Int? = null,
+    val popularity: Int? = null,
+    val favourites: Int? = null,
+    val genres: List<String>? = null,
+    val tags: List<TagData>? = null,
+    val seasonYear: Int? = null,
+    val format: String? = null,
+    val source: String? = null,
+    val isAdult: Boolean = false,
+    val relations: MangaDetailRelations? = null,
+    val characters: MangaDetailCharacters? = null,
+    val staff: MangaDetailStaffWrapper? = null,
+    val recommendations: MangaDetailRecommendations? = null,
+    val synonyms: List<String>? = null,
+    val externalLinks: List<MangaExternalLink>? = null
+)
+
+@Serializable
+data class MangaDetailTitle(
+    val romaji: String? = null,
+    val english: String? = null,
+    val native: String? = null
+)
+
+@Serializable
+data class MangaDetailRelations(
+    val edges: List<MangaDetailRelationEdge>
+)
+
+@Serializable
+data class MangaDetailRelationEdge(
+    val relationType: String? = null,
+    val node: MangaDetailRelationNode
+)
+
+@Serializable
+data class MangaDetailRelationNode(
+    val id: Int,
+    val title: MangaTitle? = null,
+    val coverImage: MediaCoverImage? = null,
+    val chapters: Int? = null,
+    val averageScore: Int? = null,
+    val format: String? = null
+)
+
+@Serializable
+data class MangaDetailCharacters(
+    val nodes: List<MangaDetailCharacterNode> = emptyList()
+)
+
+@Serializable
+data class MangaDetailCharacterNode(
+    val id: Int,
+    val name: MangaCharacterName? = null,
+    val image: MediaCoverImage? = null
+)
+
+@Serializable
+data class MangaDetailStaffWrapper(
+    val edges: List<MangaStaffEdge> = emptyList()
+)
+
+@Serializable
+data class MangaDetailRecommendations(
+    val nodes: List<MangaDetailRecommendationNode> = emptyList()
+)
+
+@Serializable
+data class MangaDetailRecommendationNode(
+    val mediaRecommendation: MangaExploreMedia? = null
+)
+
+@Serializable
+data class MangaUserListResponse(val data: MangaUserListData)
+
+@Serializable
+data class MangaUserListData(val MediaListCollection: MangaMediaListCollection)
+
+@Serializable
+data class MangaMediaListCollection(val lists: List<MangaMediaList>)
+
+@Serializable
+data class MangaMediaList(
+    val name: String,
+    val status: String?,
+    val entries: List<MangaMediaListEntry>
+)
+
+@Serializable
+data class MangaMediaListEntry(
+    val id: Int,
+    val mediaId: Int,
+    val progress: Int?,
+    val progressVolumes: Int?,
+    val score: Int?,
+    val status: String?,
+    val media: MangaEntryMedia
+)
+
+@Serializable
+data class MangaEntryMedia(
+    val id: Int,
+    val idMal: Int? = null,
+    val title: MangaTitle,
+    val coverImage: MediaCoverImage?,
+    val bannerImage: String?,
+    val chapters: Int?,
+    val volumes: Int?,
+    val status: String?,
+    val averageScore: Int?,
+    val genres: List<String>?,
+    val seasonYear: Int? = null,
+    val format: String? = null
+)
+
+@Serializable
+data class MangaUserProfileResponse(val data: MangaUserProfileData)
+
+@Serializable
+data class MangaUserProfileData(val User: MangaUserProfile)
+
+@Serializable
+data class MangaUserProfile(
+    val id: Int,
+    val name: String,
+    val avatar: Avatar? = null,
+    val bannerImage: String? = null,
+    val siteUrl: String? = null,
+    val createdAt: Long? = null,
+    val statistics: MangaUserStatistics? = null
+)
+
+@Serializable
+data class MangaUserStatistics(
+    val manga: MangaUserMangaStats? = null
+)
+
+@Serializable
+data class MangaUserMangaStats(
+    val count: Int = 0,
+    val chaptersRead: Int = 0,
+    val volumesRead: Int = 0,
+    val meanScore: Double? = null
+)
+
+// MangaDex models
+@Serializable
+data class MangaDexAggregate(
+    val result: String? = null,
+    val volumes: Map<String, MangaDexVolume>? = null
+)
+
+@Serializable
+data class MangaDexVolume(
+    val volume: String? = null,
+    val count: Int = 0,
+    val chapters: Map<String, MangaDexVolumeChapter>? = null
+)
+
+@Serializable
+data class MangaDexVolumeChapter(
+    val chapter: String? = null,
+    val id: String? = null,
+    val others: List<String>? = null,
+    val count: Int = 0
+)
+
+@Serializable
+data class MangaDexAtHome(
+    val result: String? = null,
+    val baseUrl: String? = null,
+    val chapter: MangaDexAtHomeChapter? = null
+)
+
+@Serializable
+data class MangaDexAtHomeChapter(
+    val hash: String? = null,
+    val data: List<String>? = null,
+    val dataSaver: List<String>? = null
+)
+
+@Serializable
+data class MangaDexMangaResponse(
+    val result: String? = null,
+    val response: String? = null,
+    val data: List<MangaDexMangaData>? = null
+)
+
+@Serializable
+data class MangaDexMangaData(
+    val id: String? = null,
+    val type: String? = null,
+    val attributes: MangaDexMangaAttributes? = null
+)
+
+@Serializable
+data class MangaDexMangaAttributes(
+    val title: MangaDexLocalizedString? = null,
+    val altTitles: List<MangaDexLocalizedString>? = null,
+    val links: MangaDexLinks? = null
+)
+
+@Serializable
+data class MangaDexLocalizedString(
+    val en: String? = null,
+    val ja: String? = null
+)
+
+@Serializable
+data class MangaDexLinks(
+    val al: String? = null
+)
+
 

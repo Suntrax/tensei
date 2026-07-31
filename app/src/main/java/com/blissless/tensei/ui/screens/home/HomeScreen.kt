@@ -10,6 +10,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,10 +24,13 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -42,6 +46,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.filled.SignalWifiOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -51,6 +56,8 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -75,6 +82,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
@@ -82,6 +90,7 @@ import com.blissless.tensei.MainViewModel
 import com.blissless.tensei.R
 import com.blissless.tensei.data.models.AnimeMedia
 import com.blissless.tensei.data.models.ContinueWatchingEntry
+import com.blissless.tensei.data.models.MangaMedia
 import com.blissless.tensei.data.models.ExploreAnime
 import com.blissless.tensei.data.models.toDetailedAnimeData
 import com.blissless.tensei.dialogs.HomeAnimeStatusDialog
@@ -105,6 +114,9 @@ import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
 // Extension functions on MainViewModel (defined in com.blissless.tensei.viewmodel)
 import com.blissless.tensei.viewmodel.loadAvailableMagnetExtensions
+import com.blissless.tensei.viewmodel.mangaCompleted
+import com.blissless.tensei.viewmodel.mangaContinueReading
+import com.blissless.tensei.viewmodel.mangaPlanningToRead
 import com.blissless.tensei.viewmodel.removeContinueWatchingEntry
 import com.blissless.tensei.util.toast
 import com.blissless.tensei.util.longToast
@@ -133,6 +145,8 @@ fun HomeScreen(
     onNavigateToSettings: (() -> Unit)? = null,
     onNoExtension: () -> Unit = {},
     onNavigateToSearch: () -> Unit = {},
+    onMangaClick: (MangaMedia) -> Unit = {},
+    onMangaInfoClick: (MangaMedia) -> Unit = {},
     currentScreenIndex: Int = 0,
     playbackPositions: Map<String, Long> = emptyMap(),
     playbackDurations: Map<String, Long> = emptyMap(),
@@ -156,6 +170,12 @@ fun HomeScreen(
 
     val userName by viewModel.userName.collectAsState()
     val userAvatar by viewModel.userAvatar.collectAsState()
+
+    // ─── Manga state ─────────────────────────────────────────────────
+    val mangaContinueReading by viewModel.mangaContinueReading.collectAsState()
+    val mangaPlanningToRead by viewModel.mangaPlanningToRead.collectAsState()
+    val mangaCompleted by viewModel.mangaCompleted.collectAsState()
+
     val context = LocalContext.current
 
     var selectedAnime by remember { mutableStateOf<AnimeMedia?>(null) }
@@ -186,6 +206,8 @@ fun HomeScreen(
     var statusListIcon by remember { mutableStateOf(Icons.Default.PlayArrow) }
     var statusListType by remember { mutableStateOf("") }
     var statusListAnime by remember { mutableStateOf<List<AnimeMedia>>(emptyList()) }
+    var statusListManga by remember { mutableStateOf<List<MangaMedia>>(emptyList()) }
+    var statusListIsManga by remember { mutableStateOf(false) }
 
     // Track first anime for back navigation
     var firstAnime by remember { mutableStateOf<AnimeMedia?>(null) }
@@ -696,6 +718,76 @@ fun HomeScreen(
                             )
                         }
 
+                        // ─── Manga sections ────────────────────────────────
+                        if (mangaContinueReading.isNotEmpty()) {
+                            SectionHeader(
+                                title = "Continue Reading",
+                                icon = Icons.Default.Bookmark,
+                                count = mangaContinueReading.size,
+                                iconTint = HomeStatusColors.getColor("CURRENT"),
+                                onClick = {
+                                    statusListTitle = "Continue Reading"
+                                    statusListIcon = Icons.Default.PlayArrow
+                                    statusListType = "CURRENT"
+                                    statusListManga = mangaContinueReading
+                                    statusListIsManga = true
+                                    showStatusListScreen = true
+                                }
+                            )
+                            MangaHorizontalRow(
+                                mangaList = mangaContinueReading,
+                                isOled = isOled,
+                                onMangaClick = onMangaClick,
+                                onMangaInfoClick = onMangaInfoClick
+                            )
+                        }
+
+                        if (mangaPlanningToRead.isNotEmpty()) {
+                            SectionHeader(
+                                title = "Planning to Read",
+                                icon = Icons.Default.Bookmark,
+                                count = mangaPlanningToRead.size,
+                                iconTint = HomeStatusColors.getColor("PLANNING"),
+                                onClick = {
+                                    statusListTitle = "Planning to Read"
+                                    statusListIcon = Icons.Default.Bookmark
+                                    statusListType = "PLANNING"
+                                    statusListManga = mangaPlanningToRead
+                                    statusListIsManga = true
+                                    showStatusListScreen = true
+                                }
+                            )
+                            MangaHorizontalRow(
+                                mangaList = mangaPlanningToRead,
+                                isOled = isOled,
+                                onMangaClick = onMangaClick,
+                                onMangaInfoClick = onMangaInfoClick
+                            )
+                        }
+
+                        if (mangaCompleted.isNotEmpty()) {
+                            SectionHeader(
+                                title = "Completed",
+                                icon = Icons.Default.Check,
+                                count = mangaCompleted.size,
+                                iconTint = HomeStatusColors.getColor("COMPLETED"),
+                                onClick = {
+                                    statusListTitle = "Completed"
+                                    statusListIcon = Icons.Default.Check
+                                    statusListType = "COMPLETED"
+                                    statusListManga = mangaCompleted
+                                    statusListIsManga = true
+                                    showStatusListScreen = true
+                                }
+                            )
+                            MangaHorizontalRow(
+                                mangaList = mangaCompleted,
+                                isOled = isOled,
+                                onMangaClick = onMangaClick,
+                                onMangaInfoClick = onMangaInfoClick
+                            )
+                        }
+
                         if (allListsEmpty && !showWelcomeCard) {
                             Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 24.dp), contentAlignment = Alignment.Center) {
                                 Surface(
@@ -755,7 +847,9 @@ fun HomeScreen(
                 title = statusListTitle,
                 icon = statusListIcon,
                 animeList = statusListAnime,
+                mangaList = statusListManga,
                 listType = statusListType,
+                isManga = statusListIsManga,
                 showStatusColors = showStatusColors,
                 preferEnglishTitles = preferEnglishTitles,
                 onAnimeClick = { anime, _ -> selectedAnime = anime; showEpisodeSheet = true },
@@ -784,6 +878,7 @@ fun HomeScreen(
                     if (firstAnime == null) firstAnime = anime
                     showDetailedAnimeScreen = true
                 },
+                onMangaClick = { manga -> onMangaClick(manga) },
                 onBackClick = { showStatusListScreen = false },
                 onDismiss = { showStatusListScreen = false }
             )
@@ -1108,7 +1203,8 @@ fun HomeScreen(
             preferEnglishTitles = preferEnglishTitles,
             onDismiss = { showUserProfileDialog = false },
             onShowDetailedAnimeFromMal = onShowDetailedAnimeFromMal,
-            onShowDetailedAnimeFromAniList = onShowDetailedAnimeFromAniList
+            onShowDetailedAnimeFromAniList = onShowDetailedAnimeFromAniList,
+            onMangaClick = onMangaClick
         )
     }
 
@@ -1118,6 +1214,94 @@ fun HomeScreen(
             // Use a timeout to ensure refreshing stops even if loading state gets stuck
             delay(15000.milliseconds)
             isRefreshing = false
+        }
+    }
+}
+
+@Composable
+private fun MangaHorizontalRow(
+    mangaList: List<MangaMedia>,
+    isOled: Boolean,
+    onMangaClick: (MangaMedia) -> Unit,
+    onMangaInfoClick: (MangaMedia) -> Unit = {}
+) {
+    val context = LocalContext.current
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        itemsIndexed(mangaList) { _, manga ->
+            val progressText = when {
+                manga.totalChapters > 0 && manga.progress > 0 -> "${manga.progress} / ${manga.totalChapters}"
+                manga.totalChapters > 0 -> "${manga.totalChapters} ch."
+                manga.progress > 0 -> "Ch. ${manga.progress}"
+                else -> null
+            }
+            Column(modifier = Modifier.width(140.dp)) {
+                Card(
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .height(195.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable { onMangaClick(manga) }
+                ) {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(context)
+                                .data(manga.cover)
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = manga.title,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                        Box(modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().height(50.dp)
+                            .background(Brush.verticalGradient(colors = listOf(Color.Black.copy(alpha = 0.6f), Color.Transparent))))
+                        Box(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(80.dp)
+                            .background(Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f)))))
+
+                        Row(
+                            modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            if (progressText != null) {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color.Black.copy(alpha = 0.65f)
+                                ) {
+                                    Text(
+                                        text = progressText,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+                            FilledTonalIconButton(
+                                onClick = { onMangaInfoClick(manga) },
+                                modifier = Modifier.size(30.dp),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = Color.Black.copy(alpha = 0.5f), contentColor = Color.White)
+                            ) { Icon(imageVector = Icons.Outlined.Info, contentDescription = "Info", modifier = Modifier.size(16.dp)) }
+                        }
+                    }
+                }
+                Box(modifier = Modifier.width(140.dp).height(40.dp)) {
+                    Text(
+                        text = manga.title,
+                        modifier = Modifier.padding(top = 8.dp),
+                        maxLines = 2,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Medium,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
         }
     }
 }

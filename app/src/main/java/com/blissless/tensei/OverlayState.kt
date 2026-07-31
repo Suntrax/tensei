@@ -2,11 +2,14 @@ package com.blissless.tensei
 
 import com.blissless.tensei.data.models.AnimeMedia
 import com.blissless.tensei.data.models.ExploreAnime
+import com.blissless.tensei.data.models.MangaMedia
 
 sealed class OverlayState {
     open val previousStates: List<OverlayState> = emptyList()
 
     data object None : OverlayState()
+
+    // ─── Anime ────────────────────────────────────────────────────────────
 
     data class ExploreAnimeDialog(
         val anime: ExploreAnime,
@@ -48,6 +51,17 @@ sealed class OverlayState {
     data class EpisodeDownloadDialog(
         val anime: AnimeMedia
     ) : OverlayState()
+
+    // ─── Manga ────────────────────────────────────────────────────────────
+
+    data class MangaDetailDialog(
+        val manga: MangaMedia,
+        val isFirstOpen: Boolean = true,
+        override val previousStates: List<OverlayState> = emptyList()
+    ) : OverlayState()
+
+    data class MangaReaderDialog(
+        val manga: MangaMedia,
+        val chapterIndex: Int = 0
+    ) : OverlayState()
 }
-
-

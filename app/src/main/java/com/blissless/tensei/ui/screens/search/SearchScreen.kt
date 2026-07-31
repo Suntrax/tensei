@@ -94,6 +94,7 @@ import com.blissless.tensei.MainViewModel
 import com.blissless.tensei.data.models.AnimeMedia
 import com.blissless.tensei.data.models.ExploreAnime
 import com.blissless.tensei.data.models.LocalAnimeEntry
+import com.blissless.tensei.data.models.MangaExploreMedia
 import com.blissless.tensei.data.models.MediaTag
 import com.blissless.tensei.data.models.isAdultContent
 import com.blissless.tensei.data.models.toDetailedAnimeData
@@ -106,6 +107,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import java.util.Locale
 import com.blissless.tensei.util.toast
 import com.blissless.tensei.util.longToast
+import com.blissless.tensei.viewmodel.searchManga
 
 val ALL_GENRES = listOf(
     "Action", "Adventure", "Comedy", "Drama", "Fantasy", "Horror",
@@ -161,10 +163,13 @@ fun SearchScreen(
     onViewAllCast: (Int, String) -> Unit = { _, _ -> },
     onViewAllStaff: (Int, String) -> Unit = { _, _ -> },
     onViewAllRelations: (Int, String) -> Unit = { _, _ -> },
-    onNoExtension: () -> Unit = {}
+    onNoExtension: () -> Unit = {},
+    onMangaClick: (MangaExploreMedia) -> Unit = {}
 ) {
+    var searchType by remember { mutableStateOf("both") }
     var filters by remember { mutableStateOf(SearchFilters()) }
     var results by remember { mutableStateOf<List<ExploreAnime>>(emptyList()) }
+    var mangaResults by remember { mutableStateOf<List<MangaExploreMedia>>(emptyList()) }
     var isSearching by remember { mutableStateOf(false) }
     var hasSearched by remember { mutableStateOf(false) }
     var showFilters by remember { mutableStateOf(false) }
@@ -235,26 +240,44 @@ fun SearchScreen(
             val seasonYearVal = filters.seasonYear.toIntOrNull()
             val genreList = filters.genres.toList().ifEmpty { null }
             val tagList = filters.tags.toList().ifEmpty { null }
-            val newResults = viewModel.searchAnimeAdvanced(
-                search = filters.query.ifBlank { null },
-                genres = genreList,
-                tags = tagList,
-                format = filters.format,
-                status = filters.status,
-                season = filters.season,
-                seasonYear = seasonYearVal,
-                sort = filters.sort,
-                isAdult = null,
-                page = page,
-                perPage = 30
-            )
-            if (page == 1) {
-                results = newResults
-                hasMore = newResults.size >= 30
+
+            if (searchType == "anime" || searchType == "both") {
+                val newResults = viewModel.searchAnimeAdvanced(
+                    search = filters.query.ifBlank { null },
+                    genres = genreList,
+                    tags = tagList,
+                    format = filters.format,
+                    status = filters.status,
+                    season = filters.season,
+                    seasonYear = seasonYearVal,
+                    sort = filters.sort,
+                    isAdult = null,
+                    page = page,
+                    perPage = 30
+                )
+                if (page == 1) {
+                    results = newResults
+                    hasMore = newResults.size >= 30
+                } else {
+                    results = results + newResults
+                    hasMore = newResults.size >= 30
+                }
             } else {
-                results = results + newResults
-                hasMore = newResults.size >= 30
+                results = emptyList()
             }
+
+            if (searchType == "manga" || searchType == "both") {
+                viewModel.searchManga(filters.query, page) { mangaList ->
+                    if (page == 1) {
+                        mangaResults = mangaList
+                    } else {
+                        mangaResults = mangaResults + mangaList
+                    }
+                }
+            } else {
+                mangaResults = emptyList()
+            }
+
             currentPage = page
             isSearching = false
             isLoadingMore = false
@@ -356,6 +379,39 @@ fun SearchScreen(
                     ) {
                         Icon(Icons.Default.Close, contentDescription = "Clear", tint = Color.White.copy(alpha = if (filters.query.isNotEmpty()) 0.5f else 0f), modifier = Modifier.size(18.dp))
                     }
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf("anime" to "Anime", "manga" to "Manga", "both" to "Both").forEach { (value, label) ->
+                    FilterChip(
+                        selected = searchType == value,
+                        onClick = {
+                            searchType = value
+                            results = emptyList()
+                            mangaResults = emptyList()
+                            hasSearched = false
+                            if (filters.query.isNotBlank()) {
+                                performSearch()
+                            }
+                        },
+                        label = { Text(label, style = MaterialTheme.typography.labelMedium) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            containerColor = Color(0xFF2A2A2A),
+                            selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
+                            labelColor = Color.White.copy(alpha = 0.6f),
+                            selectedLabelColor = MaterialTheme.colorScheme.primary
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            borderColor = Color.Transparent,
+                            selectedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                            enabled = true,
+                            selected = searchType == value
+                        )
+                    )
                 }
             }
 
@@ -479,13 +535,13 @@ fun SearchScreen(
                 Box(modifier = Modifier.fillMaxSize().padding(top = 128.dp), contentAlignment = Alignment.TopCenter) {
                     CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 }
-            } else if (hasSearched && filteredResults.isEmpty()) {
+            } else if (hasSearched && filteredResults.isEmpty() && mangaResults.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(top = 128.dp)) {
                         Icon(Icons.Default.Search, contentDescription = null, tint = Color.White.copy(alpha = 0.2f), modifier = Modifier.size(48.dp))
                         Spacer(modifier = Modifier.height(12.dp))
                         Text("No results found", color = Color.White.copy(alpha = 0.4f), style = MaterialTheme.typography.titleMedium)
-                        Text("Try adjusting your filters", color = Color.White.copy(alpha = 0.3f), style = MaterialTheme.typography.bodySmall)
+                        Text("Try adjusting your search", color = Color.White.copy(alpha = 0.3f), style = MaterialTheme.typography.bodySmall)
                     }
                 }
             } else if (!hasSearched) {
@@ -493,9 +549,53 @@ fun SearchScreen(
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(top = 128.dp)) {
                         Icon(Icons.Default.Search, contentDescription = null, tint = Color.White.copy(alpha = 0.15f), modifier = Modifier.size(48.dp))
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text("Discover Anime", color = Color.White.copy(alpha = 0.35f), style = MaterialTheme.typography.titleLarge)
+                        Text(
+                            if (searchType == "manga") "Discover Manga"
+                            else if (searchType == "both") "Discover Anime & Manga"
+                            else "Discover Anime",
+                            color = Color.White.copy(alpha = 0.35f),
+                            style = MaterialTheme.typography.titleLarge
+                        )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text("Search by name or use filters above", color = Color.White.copy(alpha = 0.25f), style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            } else if (searchType == "manga") {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    state = gridState,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(mangaResults, key = { it.id }) { manga ->
+                        val title = if (preferEnglishTitles && !manga.title.english.isNullOrBlank()) manga.title.english
+                                   else manga.title.romaji ?: "Unknown"
+                        val coverUrl = manga.coverImage?.large ?: manga.coverImage?.medium ?: ""
+                        SearchResultCard(
+                            anime = null,
+                            mangaTitle = title,
+                            mangaCover = coverUrl,
+                            mangaFormat = manga.format,
+                            mangaScore = manga.averageScore,
+                            onClick = { onMangaClick(manga) }
+                        )
+                    }
+                    if (hasMore && mangaResults.size >= 30) {
+                        item {
+                            Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                                if (isLoadingMore) {
+                                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                                } else {
+                                    TextButton(onClick = { performSearch(currentPage + 1) }) {
+                                        Text("Load More", color = MaterialTheme.colorScheme.primary)
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             } else {
@@ -519,6 +619,32 @@ fun SearchScreen(
                                 showDetailDialog = true
                             }
                         )
+                    }
+                    if (mangaResults.isNotEmpty() && searchType == "both") {
+                        item {
+                            Text(
+                                "Manga",
+                                color = Color.White.copy(alpha = 0.6f),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+                        }
+                        mangaResults.forEach { manga ->
+                            item {
+                                val title = if (preferEnglishTitles && !manga.title.english.isNullOrBlank()) manga.title.english
+                                           else manga.title.romaji ?: "Unknown"
+                                val coverUrl = manga.coverImage?.large ?: manga.coverImage?.medium ?: ""
+                                SearchResultCard(
+                                    anime = null,
+                                    mangaTitle = title,
+                                    mangaCover = coverUrl,
+                                    mangaFormat = manga.format,
+                                    mangaScore = manga.averageScore,
+                                    onClick = { onMangaClick(manga) }
+                                )
+                            }
+                        }
                     }
                     if (hasMore) {
                         item {
@@ -625,14 +751,25 @@ fun SearchScreen(
 
 @Composable
 private fun SearchResultCard(
-    anime: ExploreAnime,
+    anime: ExploreAnime? = null,
+    mangaTitle: String? = null,
+    mangaCover: String? = null,
+    mangaFormat: String? = null,
+    mangaScore: Int? = null,
     listStatus: String? = null,
-    preferEnglishTitles: Boolean,
+    preferEnglishTitles: Boolean = true,
     onClick: () -> Unit
 ) {
     val context = LocalContext.current
-    val displayTitle = if (preferEnglishTitles && !anime.titleEnglish.isNullOrEmpty()) anime.titleEnglish else anime.title
-    val displayScore = anime.averageScore?.let { it / 10.0 }
+    val displayTitle = if (anime != null) {
+        if (preferEnglishTitles && !anime.titleEnglish.isNullOrEmpty()) anime.titleEnglish else anime.title
+    } else {
+        mangaTitle ?: "Unknown"
+    }
+    val displayScore = anime?.averageScore?.let { it / 10.0 } ?: mangaScore?.let { it / 10.0 }
+    val cover = anime?.cover ?: mangaCover ?: ""
+    val format = anime?.format ?: mangaFormat
+    val year = anime?.year
 
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
@@ -642,27 +779,24 @@ private fun SearchResultCard(
         Column {
             Box {
                 AsyncImage(
-                    model = ImageRequest.Builder(context).data(anime.cover).memoryCacheKey(anime.cover).diskCacheKey(anime.cover).crossfade(false).build(),
-                    contentDescription = anime.title,
+                    model = ImageRequest.Builder(context).data(cover).memoryCacheKey(cover).diskCacheKey(cover).crossfade(false).build(),
+                    contentDescription = displayTitle,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxWidth().aspectRatio(2f/3f).clip(RoundedCornerShape(12.dp))
                 )
-                if (listStatus != null) {
-                    val statusColor = StatusColors[listStatus] ?: Color.Transparent
-                    if (statusColor != Color.Transparent) {
-                        Surface(
-                            modifier = Modifier.align(Alignment.TopEnd).padding(6.dp),
-                            shape = RoundedCornerShape(6.dp),
-                            color = Color.Black.copy(alpha = 0.6f)
-                        ) {
-                            Text(
-                                StatusLabels[listStatus] ?: listStatus,
-                                color = statusColor,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
+                if (listStatus != null && StatusColors[listStatus] != Color.Transparent) {
+                    Surface(
+                        modifier = Modifier.align(Alignment.TopEnd).padding(6.dp),
+                        shape = RoundedCornerShape(6.dp),
+                        color = Color.Black.copy(alpha = 0.6f)
+                    ) {
+                        Text(
+                            StatusLabels[listStatus] ?: listStatus,
+                            color = StatusColors[listStatus] ?: Color.Transparent,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
                     }
                 }
                 if (displayScore != null) {
@@ -682,15 +816,15 @@ private fun SearchResultCard(
                 modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 2.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                anime.format?.let { fmt ->
+                format?.let { fmt ->
                     Text(fmt, color = Color.White.copy(alpha = 0.4f), style = MaterialTheme.typography.labelSmall, maxLines = 1)
-                    if (anime.year != null || anime.episodes > 0) Text(" • ", color = Color.White.copy(alpha = 0.3f), style = MaterialTheme.typography.labelSmall)
+                    if (year != null) Text(" • ", color = Color.White.copy(alpha = 0.3f), style = MaterialTheme.typography.labelSmall)
                 }
-                anime.year?.let {
+                year?.let {
                     Text("$it", color = Color.White.copy(alpha = 0.4f), style = MaterialTheme.typography.labelSmall, maxLines = 1)
                 }
-                if (anime.episodes > 0 && anime.format?.uppercase() != "MOVIE") {
-                    if (anime.year != null) Text(" • ", color = Color.White.copy(alpha = 0.3f), style = MaterialTheme.typography.labelSmall)
+                if (anime != null && anime.episodes > 0 && format?.uppercase() != "MOVIE") {
+                    if (year != null) Text(" • ", color = Color.White.copy(alpha = 0.3f), style = MaterialTheme.typography.labelSmall)
                     Text("${anime.episodes} eps", color = Color.White.copy(alpha = 0.4f), style = MaterialTheme.typography.labelSmall)
                 }
             }

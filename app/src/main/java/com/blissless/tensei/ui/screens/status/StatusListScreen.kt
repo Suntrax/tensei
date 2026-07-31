@@ -81,6 +81,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.blissless.tensei.data.models.AnimeMedia
+import com.blissless.tensei.data.models.MangaMedia
 import com.blissless.tensei.ui.components.HomeAnimeCardBounds
 import com.blissless.tensei.ui.components.HomeStatusColors
 import com.blissless.tensei.ui.components.rememberCinematicAnimation
@@ -103,14 +104,17 @@ enum class SortOption(val label: String, val icon: ImageVector) {
 fun StatusListScreen(
     title: String,
     icon: ImageVector,
-    animeList: List<AnimeMedia>,
+    animeList: List<AnimeMedia> = emptyList(),
+    mangaList: List<MangaMedia> = emptyList(),
     listType: String,
+    isManga: Boolean = false,
     showStatusColors: Boolean = true,
     preferEnglishTitles: Boolean = true,
     onAnimeClick: (AnimeMedia, HomeAnimeCardBounds?) -> Unit = { _, _ -> },
     onPlayClick: (AnimeMedia) -> Unit = {},
     onInfoClick: (AnimeMedia, HomeAnimeCardBounds?) -> Unit = { _, _ -> },
     onStatusClick: (AnimeMedia) -> Unit = {},
+    onMangaClick: (MangaMedia) -> Unit = {},
     onBackClick: () -> Unit = {},
     onDismiss: () -> Unit = {}
 ) {
@@ -130,11 +134,11 @@ fun StatusListScreen(
     var showSortSheet by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
 
-    val displayList = remember(animeList, searchQuery, selectedSort) {
+    val displayAnimeList = remember(animeList, searchQuery, selectedSort) {
         val filtered = if (searchQuery.isBlank()) animeList
         else animeList.filter {
-            val displayTitle = if (preferEnglishTitles && !it.titleEnglish.isNullOrEmpty()) it.titleEnglish else it.title
-            displayTitle.contains(searchQuery, ignoreCase = true)
+            val t = if (preferEnglishTitles && !it.titleEnglish.isNullOrEmpty()) it.titleEnglish else it.title
+            t.contains(searchQuery, ignoreCase = true)
         }
         when (selectedSort) {
             SortOption.ALPHABETICAL_A_Z -> filtered.sortedBy {
@@ -154,6 +158,11 @@ fun StatusListScreen(
             SortOption.SCORE_HIGH -> filtered.sortedByDescending { it.averageScore ?: Int.MIN_VALUE }
             SortOption.SCORE_LOW -> filtered.sortedBy { it.averageScore ?: Int.MAX_VALUE }
         }
+    }
+
+    val displayMangaList = remember(mangaList, searchQuery) {
+        if (searchQuery.isBlank()) mangaList
+        else mangaList.filter { it.title.contains(searchQuery, ignoreCase = true) }
     }
 
     val gridState = rememberLazyGridState()
@@ -208,7 +217,7 @@ fun StatusListScreen(
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "${animeList.size} anime",
+                                text = if (isManga) "${mangaList.size} manga" else "${animeList.size} anime",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -259,7 +268,7 @@ fun StatusListScreen(
                 shape = RoundedCornerShape(12.dp)
             )
 
-            if (animeList.isEmpty()) {
+            if ((if (isManga) mangaList.size else animeList.size) == 0) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -281,7 +290,7 @@ fun StatusListScreen(
                             )
                             Spacer(modifier = Modifier.height(12.dp))
                             Text(
-                                text = "No anime in this list",
+                                text = if (isManga) "No manga in this list" else "No anime in this list",
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -308,73 +317,126 @@ fun StatusListScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    itemsIndexed(items = displayList, key = { _, anime -> "${listType}_${anime.id}" }) { index, anime ->
-                        val staggerDelay = minOf(index, 20) * 30f
-                        val staggerMs = staggerDelay / 1000f
-                        val rawProgress = ((cinematicProgress - staggerMs) / (1f - staggerMs))
-                        val easedProgress = easeOutCubic(rawProgress.coerceAtLeast(0f).coerceAtMost(1f))
+                    if (isManga) {
+                        itemsIndexed(items = displayMangaList, key = { _, manga -> "${listType}_${manga.id}" }) { index, manga ->
+                            val staggerDelay = minOf(index, 20) * 30f
+                            val staggerMs = staggerDelay / 1000f
+                            val rawProgress = ((cinematicProgress - staggerMs) / (1f - staggerMs))
+                            val easedProgress = easeOutCubic(rawProgress.coerceAtLeast(0f).coerceAtMost(1f))
 
-                        val introScale = 0.3f + easedProgress * 0.7f
-                        val introAlpha = easedProgress.coerceAtLeast(0f)
-                        val introTranslationY = translationYOffset * (1f - easedProgress)
+                            val introScale = 0.3f + easedProgress * 0.7f
+                            val introAlpha = easedProgress.coerceAtLeast(0f)
+                            val introTranslationY = translationYOffset * (1f - easedProgress)
 
-                        val centerOffset by remember {
-                            derivedStateOf {
-                                val layoutInfo = gridState.layoutInfo
-                                val visibleItems = layoutInfo.visibleItemsInfo
-                                val itemInfo = visibleItems.find { it.index == index }
-                                if (itemInfo != null) {
-                                    val itemCenter = itemInfo.offset.y + itemInfo.size.height / 2
-                                    val screenCenter = (layoutInfo.viewportSize.height / 2).toFloat()
-                                    (itemCenter - screenCenter) / screenCenter
-                                } else 0f
+                            val centerOffset by remember {
+                                derivedStateOf {
+                                    val layoutInfo = gridState.layoutInfo
+                                    val visibleItems = layoutInfo.visibleItemsInfo
+                                    val itemInfo = visibleItems.find { it.index == index }
+                                    if (itemInfo != null) {
+                                        val itemCenter = itemInfo.offset.y + itemInfo.size.height / 2
+                                        val screenCenter = (layoutInfo.viewportSize.height / 2).toFloat()
+                                        (itemCenter - screenCenter) / screenCenter
+                                    } else 0f
+                                }
+                            }
+
+                            val animatedOffset by animateFloatAsState(
+                                targetValue = if (isScrolling) centerOffset.coerceIn(-2f, 2f) else 0f,
+                                animationSpec = if (isScrolling) {
+                                    spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)
+                                } else {
+                                    spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)
+                                },
+                                label = "centerOffset"
+                            )
+
+                            val scrollScale = 1f - (animatedOffset.absoluteValue * 0.15f).coerceAtMost(0.15f)
+                            val scrollAlpha = 1f - (animatedOffset.absoluteValue * 0.3f).coerceAtMost(0.4f)
+                            val scrollParallax = animatedOffset * 20f
+                            val finalScale = scrollScale * introScale
+                            val finalAlpha = (scrollAlpha * introAlpha).coerceIn(0f, 1f)
+                            val finalTranslationY = scrollParallax + introTranslationY
+
+                            Box(
+                                modifier = Modifier
+                                    .animateItem()
+                                    .graphicsLayer {
+                                        scaleX = finalScale
+                                        scaleY = finalScale
+                                        alpha = finalAlpha
+                                        translationY = finalTranslationY
+                                    }
+                            ) {
+                                StatusListMangaCard(
+                                    manga = manga,
+                                    listType = listType,
+                                    onClick = { onMangaClick(manga) }
+                                )
                             }
                         }
+                    } else {
+                        itemsIndexed(items = displayAnimeList, key = { _, anime -> "${listType}_${anime.id}" }) { index, anime ->
+                            val staggerDelay = minOf(index, 20) * 30f
+                            val staggerMs = staggerDelay / 1000f
+                            val rawProgress = ((cinematicProgress - staggerMs) / (1f - staggerMs))
+                            val easedProgress = easeOutCubic(rawProgress.coerceAtLeast(0f).coerceAtMost(1f))
 
-                        val animatedOffset by animateFloatAsState(
-                            targetValue = if (isScrolling) centerOffset.coerceIn(-2f, 2f) else 0f,
-                            animationSpec = if (isScrolling) {
-                                spring(
-                                    dampingRatio = Spring.DampingRatioNoBouncy,
-                                    stiffness = Spring.StiffnessMedium
-                                )
-                            } else {
-                                spring(
-                                    dampingRatio = Spring.DampingRatioMediumBouncy,
-                                    stiffness = Spring.StiffnessLow
-                                )
-                            },
-                            label = "centerOffset"
-                        )
+                            val introScale = 0.3f + easedProgress * 0.7f
+                            val introAlpha = easedProgress.coerceAtLeast(0f)
+                            val introTranslationY = translationYOffset * (1f - easedProgress)
 
-                        val scrollScale = 1f - (animatedOffset.absoluteValue * 0.15f).coerceAtMost(0.15f)
-                        val scrollAlpha = 1f - (animatedOffset.absoluteValue * 0.3f).coerceAtMost(0.4f)
-                        val scrollParallax = animatedOffset * 20f
-
-                        val finalScale = scrollScale * introScale
-                        val finalAlpha = (scrollAlpha * introAlpha).coerceIn(0f, 1f)
-                        val finalTranslationY = scrollParallax + introTranslationY
-
-                        Box(
-                            modifier = Modifier
-                                .animateItem()
-                                .graphicsLayer {
-                                    scaleX = finalScale
-                                    scaleY = finalScale
-                                    alpha = finalAlpha
-                                    translationY = finalTranslationY
+                            val centerOffset by remember {
+                                derivedStateOf {
+                                    val layoutInfo = gridState.layoutInfo
+                                    val visibleItems = layoutInfo.visibleItemsInfo
+                                    val itemInfo = visibleItems.find { it.index == index }
+                                    if (itemInfo != null) {
+                                        val itemCenter = itemInfo.offset.y + itemInfo.size.height / 2
+                                        val screenCenter = (layoutInfo.viewportSize.height / 2).toFloat()
+                                        (itemCenter - screenCenter) / screenCenter
+                                    } else 0f
                                 }
-                        ) {
-                            StatusListAnimeCard(
-                                anime = anime,
-                                listType = listType,
-                                showStatusColors = showStatusColors,
-                                preferEnglishTitles = preferEnglishTitles,
-                                onClick = { bounds -> onAnimeClick(anime, bounds) },
-                                onPlayClick = { onPlayClick(anime) },
-                                onInfoClick = { bounds -> onInfoClick(anime, bounds) },
-                                onStatusClick = { onStatusClick(anime) }
+                            }
+
+                            val animatedOffset by animateFloatAsState(
+                                targetValue = if (isScrolling) centerOffset.coerceIn(-2f, 2f) else 0f,
+                                animationSpec = if (isScrolling) {
+                                    spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)
+                                } else {
+                                    spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)
+                                },
+                                label = "centerOffset"
                             )
+
+                            val scrollScale = 1f - (animatedOffset.absoluteValue * 0.15f).coerceAtMost(0.15f)
+                            val scrollAlpha = 1f - (animatedOffset.absoluteValue * 0.3f).coerceAtMost(0.4f)
+                            val scrollParallax = animatedOffset * 20f
+                            val finalScale = scrollScale * introScale
+                            val finalAlpha = (scrollAlpha * introAlpha).coerceIn(0f, 1f)
+                            val finalTranslationY = scrollParallax + introTranslationY
+
+                            Box(
+                                modifier = Modifier
+                                    .animateItem()
+                                    .graphicsLayer {
+                                        scaleX = finalScale
+                                        scaleY = finalScale
+                                        alpha = finalAlpha
+                                        translationY = finalTranslationY
+                                    }
+                            ) {
+                                StatusListAnimeCard(
+                                    anime = anime,
+                                    listType = listType,
+                                    showStatusColors = showStatusColors,
+                                    preferEnglishTitles = preferEnglishTitles,
+                                    onClick = { bounds -> onAnimeClick(anime, bounds) },
+                                    onPlayClick = { onPlayClick(anime) },
+                                    onInfoClick = { bounds -> onInfoClick(anime, bounds) },
+                                    onStatusClick = { onStatusClick(anime) }
+                                )
+                            }
                         }
                     }
                 }
@@ -654,6 +716,75 @@ private fun StatusListAnimeCard(
         ) {
             Text(
                 text = displayTitle,
+                maxLines = 2,
+                style = MaterialTheme.typography.labelMedium,
+                overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatusListMangaCard(
+    manga: MangaMedia,
+    listType: String,
+    onClick: () -> Unit
+) {
+    val context = LocalContext.current
+    val progressText = when (listType) {
+        "CURRENT" -> if (manga.totalChapters > 0) "${manga.progress} / ${manga.totalChapters}" else "Ch. ${manga.progress}"
+        "COMPLETED" -> if (manga.totalChapters > 0) "${manga.totalChapters} ch." else "Ch. ${manga.progress}"
+        else -> if (manga.totalChapters > 0) "${manga.totalChapters} ch." else null
+    }
+    Column(modifier = Modifier.width(160.dp)) {
+        Card(
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier
+                .height(220.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .clickable(onClick = onClick)
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                AsyncImage(
+                    model = ImageRequest.Builder(context).data(manga.cover).crossfade(true).build(),
+                    contentDescription = manga.title,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .height(80.dp)
+                        .background(Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.9f))))
+                )
+                if (progressText != null) {
+                    Row(
+                        modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(8.dp),
+                        horizontalArrangement = Arrangement.Start
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color.Black.copy(alpha = 0.7f)
+                        ) {
+                            Text(
+                                text = progressText,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        Box(
+            modifier = Modifier.width(160.dp).height(40.dp).padding(top = 6.dp)
+        ) {
+            Text(
+                text = manga.title,
                 maxLines = 2,
                 style = MaterialTheme.typography.labelMedium,
                 overflow = TextOverflow.Ellipsis,

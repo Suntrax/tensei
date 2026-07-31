@@ -91,6 +91,10 @@ import com.blissless.tensei.viewmodel.fetchUserActivity
 import com.blissless.tensei.viewmodel.fetchUserStats
 import com.blissless.tensei.viewmodel.loadAniListFavoritesFromStorage
 import com.blissless.tensei.viewmodel.toggleAniListFavorite
+import com.blissless.tensei.viewmodel.mangaContinueReading
+import com.blissless.tensei.viewmodel.mangaPlanningToRead
+import com.blissless.tensei.viewmodel.mangaCompleted
+import com.blissless.tensei.data.models.MangaMedia
 
 data class HistoryData(val entries: List<JikanHistoryEntry>, val statuses: List<String>, val progressList: List<String>)
 
@@ -104,7 +108,8 @@ fun UserProfileScreen(
     preferEnglishTitles: Boolean = true,
     onDismiss: () -> Unit,
     onShowDetailedAnimeFromMal: (Int) -> Unit,
-    onShowDetailedAnimeFromAniList: (Int) -> Unit
+    onShowDetailedAnimeFromAniList: (Int) -> Unit,
+    onMangaClick: (MangaMedia) -> Unit = {}
 ) {
     var selectedSection by remember { mutableStateOf(UserProfileSection.ABOUT_ME) }
     val context = LocalContext.current
@@ -121,6 +126,14 @@ fun UserProfileScreen(
     val userBio by viewModel.userBio.collectAsState()
     val userSiteUrl by viewModel.userSiteUrl.collectAsState()
     val userCreatedAt by viewModel.userCreatedAt.collectAsState()
+
+    val mangaContinueReading by viewModel.mangaContinueReading.collectAsState()
+    val mangaPlanningToRead by viewModel.mangaPlanningToRead.collectAsState()
+    val mangaCompleted by viewModel.mangaCompleted.collectAsState()
+
+    val mangaFavorites = remember(mangaContinueReading, mangaPlanningToRead, mangaCompleted) {
+        mangaContinueReading + mangaPlanningToRead + mangaCompleted
+    }
 
     LaunchedEffect(loginProvider) {
         if (loginProvider == LoginProvider.ANILIST) {
@@ -280,6 +293,7 @@ fun UserProfileScreen(
                         )
                         UserProfileSection.FAVORITES -> FavoritesContent(
                             favorites = favorites,
+                            mangaFavorites = mangaFavorites,
                             preferEnglishTitles = preferEnglishTitles,
                             onAnimeClick = { anime ->
                                 if (anime.malId != 0) {
@@ -290,10 +304,12 @@ fun UserProfileScreen(
                             },
                             onRemoveFavorite = {
                                 viewModel.toggleAniListFavorite(it.malId)
-                            }
+                            },
+                            onMangaClick = onMangaClick
                         )
                         UserProfileSection.HISTORY -> HistoryContent(
                             history = history,
+                            mangaHistory = mangaContinueReading,
                             preferEnglishTitles = preferEnglishTitles,
                             onAnimeClick = { entry ->
                                 if (loginProvider == LoginProvider.MAL) {
@@ -302,6 +318,7 @@ fun UserProfileScreen(
                                     onShowDetailedAnimeFromAniList(entry.malId)
                                 }
                             },
+                            onMangaClick = onMangaClick,
                             statuses = statuses, progressList = progressDisplay
                         )
                     }
@@ -324,13 +341,13 @@ fun UserProfileScreen(
                         icon = Icons.Default.Favorite, title = "Favorites",
                         isSelected = selectedSection == UserProfileSection.FAVORITES,
                         onClick = { selectedSection = UserProfileSection.FAVORITES },
-                        badge = favorites.size
+                        badge = favorites.size + mangaFavorites.size
                     )
                     UserProfileNavButton(
                         icon = Icons.Default.History, title = "History",
                         isSelected = selectedSection == UserProfileSection.HISTORY,
                         onClick = { selectedSection = UserProfileSection.HISTORY },
-                        badge = history.size
+                        badge = history.size + mangaContinueReading.size
                     )
                 }
             }
@@ -544,11 +561,13 @@ private fun formatDate(timestamp: Long): String {
 @Composable
 private fun FavoritesContent(
     favorites: List<JikanFavoriteAnime>,
+    mangaFavorites: List<MangaMedia> = emptyList(),
     preferEnglishTitles: Boolean,
     onAnimeClick: (JikanFavoriteAnime) -> Unit,
-    onRemoveFavorite: ((JikanFavoriteAnime) -> Unit)? = null
+    onRemoveFavorite: ((JikanFavoriteAnime) -> Unit)? = null,
+    onMangaClick: (MangaMedia) -> Unit = {}
 ) {
-    if (favorites.isEmpty()) {
+    if (favorites.isEmpty() && mangaFavorites.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Icon(
@@ -565,13 +584,27 @@ private fun FavoritesContent(
             verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(vertical = 8.dp)
         ) {
-            itemsIndexed(favorites) { _, anime ->
-                FavoriteItem(
-                    anime = anime,
-                    preferEnglishTitles = preferEnglishTitles,
-                    onClick = { onAnimeClick(anime) },
-                    onRemove = { onRemoveFavorite?.invoke(anime) }
-                )
+            if (favorites.isNotEmpty()) {
+                item {
+                    Text("Anime", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 4.dp))
+                }
+                itemsIndexed(favorites) { _, anime ->
+                    FavoriteItem(
+                        anime = anime,
+                        preferEnglishTitles = preferEnglishTitles,
+                        onClick = { onAnimeClick(anime) },
+                        onRemove = { onRemoveFavorite?.invoke(anime) }
+                    )
+                }
+            }
+            if (mangaFavorites.isNotEmpty()) {
+                item {
+                    Spacer(Modifier.height(8.dp))
+                    Text("Manga", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 4.dp))
+                }
+                itemsIndexed(mangaFavorites) { _, manga ->
+                    MangaFavoriteItem(manga = manga, preferEnglishTitles = preferEnglishTitles, onClick = { onMangaClick(manga) })
+                }
             }
         }
     }
@@ -662,12 +695,14 @@ private fun FavoriteItem(
 @Composable
 private fun HistoryContent(
     history: List<JikanHistoryEntry>,
+    mangaHistory: List<MangaMedia> = emptyList(),
     preferEnglishTitles: Boolean,
     onAnimeClick: (JikanHistoryEntry) -> Unit,
+    onMangaClick: (MangaMedia) -> Unit = {},
     statuses: List<String> = emptyList(),
     progressList: List<String> = emptyList()
 ) {
-    if (history.isEmpty()) {
+    if (history.isEmpty() && mangaHistory.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Icon(
@@ -676,7 +711,7 @@ private fun HistoryContent(
                     modifier = Modifier.size(48.dp)
                 )
                 Spacer(Modifier.height(8.dp))
-                Text("No watch history", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("No history", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     } else {
@@ -684,14 +719,28 @@ private fun HistoryContent(
             verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(vertical = 8.dp)
         ) {
-            itemsIndexed(history) { index, entry ->
-                HistoryItem(
-                    entry = entry,
-                    preferEnglishTitles = preferEnglishTitles,
-                    onClick = { onAnimeClick(entry) },
-                    status = statuses.getOrNull(index),
-                    progress = progressList.getOrNull(index)
-                )
+            if (history.isNotEmpty()) {
+                item {
+                    Text("Anime", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 4.dp))
+                }
+                itemsIndexed(history) { index, entry ->
+                    HistoryItem(
+                        entry = entry,
+                        preferEnglishTitles = preferEnglishTitles,
+                        onClick = { onAnimeClick(entry) },
+                        status = statuses.getOrNull(index),
+                        progress = progressList.getOrNull(index)
+                    )
+                }
+            }
+            if (mangaHistory.isNotEmpty()) {
+                item {
+                    Spacer(Modifier.height(8.dp))
+                    Text("Manga Reading", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 4.dp))
+                }
+                itemsIndexed(mangaHistory) { _, manga ->
+                    MangaHistoryItem(manga = manga, preferEnglishTitles = preferEnglishTitles, onClick = { onMangaClick(manga) })
+                }
             }
         }
     }
@@ -742,6 +791,81 @@ private fun HistoryItem(
                 Spacer(modifier = Modifier.height(2.dp))
                 entry.date?.let { date ->
                     Text(date, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MangaFavoriteItem(
+    manga: MangaMedia,
+    preferEnglishTitles: Boolean,
+    onClick: () -> Unit = {}
+) {
+    val displayTitle = if (preferEnglishTitles && !manga.titleEnglish.isNullOrEmpty()) manga.titleEnglish else manga.title
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AsyncImage(
+                model = manga.cover, contentDescription = displayTitle,
+                modifier = Modifier.width(60.dp).height(84.dp).clip(RoundedCornerShape(10.dp)),
+                contentScale = ContentScale.Crop
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(displayTitle, color = MaterialTheme.colorScheme.onBackground,
+                    style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.height(4.dp))
+                Text(if (manga.totalChapters > 0) "${manga.totalChapters} chapters" else "",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
+                if (manga.averageScore != null && manga.averageScore > 0) {
+                    Spacer(Modifier.height(2.dp))
+                    Text("${manga.averageScore / 10}.${manga.averageScore % 10}",
+                        color = Color(0xFFFFD700), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MangaHistoryItem(
+    manga: MangaMedia,
+    preferEnglishTitles: Boolean,
+    onClick: () -> Unit = {}
+) {
+    val displayTitle = if (preferEnglishTitles && !manga.titleEnglish.isNullOrEmpty()) manga.titleEnglish else manga.title
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AsyncImage(
+                model = manga.cover, contentDescription = displayTitle,
+                modifier = Modifier.width(60.dp).height(84.dp).clip(RoundedCornerShape(10.dp)),
+                contentScale = ContentScale.Crop
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(displayTitle, color = MaterialTheme.colorScheme.onBackground,
+                    style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = null, tint = StatusCurrent, modifier = Modifier.size(14.dp))
+                    Text("Ch. ${manga.progress}", color = StatusCurrent, style = MaterialTheme.typography.bodySmall)
                 }
             }
         }

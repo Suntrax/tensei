@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Memory
@@ -53,6 +54,9 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Subscriptions
 import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.ViewAgenda
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -112,6 +116,9 @@ import com.blissless.tensei.viewmodel.setPreventScheduleSync
 import com.blissless.tensei.viewmodel.setHideAdultContent
 import com.blissless.tensei.viewmodel.setDownloadDirectoryUri
 import com.blissless.tensei.viewmodel.setKeepDownloadedFiles
+import com.blissless.tensei.viewmodel.setMangaReaderMode
+import com.blissless.tensei.viewmodel.setMangaDataSaver
+import com.blissless.tensei.viewmodel.setMangaPageIndicator
 import com.blissless.tensei.viewmodel.setStreamMethod
 import com.blissless.tensei.viewmodel.setPreferredCategory
 import com.blissless.tensei.viewmodel.setBufferAheadSeconds
@@ -138,6 +145,11 @@ import com.blissless.tensei.viewmodel.getVideoCacheSize
 import com.blissless.tensei.viewmodel.getDownloadCacheSize
 import com.blissless.tensei.viewmodel.clearNonEssentialCaches
 import com.blissless.tensei.viewmodel.clearDownloadCache
+import com.blissless.tensei.viewmodel.discoverExtensions
+import com.blissless.tensei.viewmodel.installedExtensions
+import com.blissless.tensei.viewmodel.InstalledExtension
+import com.blissless.tensei.viewmodel.selectedExtensionAuthority
+import com.blissless.tensei.viewmodel.selectExtension
 import com.blissless.tensei.util.ErrorHandler
 import com.blissless.tensei.util.toast
 import com.blissless.tensei.util.longToast
@@ -172,6 +184,7 @@ fun SettingsScreen(
             SettingsGroup("downloads", "Downloads", "Sub/dub, subtitles, and download preferences", Icons.Default.Download),
             SettingsGroup("stream", "Stream Settings", "Audio preferences and buffering", Icons.Default.PlayArrow),
             SettingsGroup("player", "Player Settings", "Playback controls and skipping", Icons.Default.Subscriptions),
+            SettingsGroup("reader", "Reader Settings", "Manga reading preferences", Icons.Default.Bookmark),
             SettingsGroup("cache", "Cache Management", "Storage and data cleanup", Icons.Default.Storage),
             SettingsGroup("extensions", "Extensions", "Manage source extensions", Icons.Default.Extension),
             SettingsGroup("about", "About", "Version and updates", Icons.Default.Info)
@@ -206,6 +219,7 @@ fun SettingsScreen(
                 "stream" -> StreamSettingsPage(viewModel = viewModel,
                     preferredCategory = preferredCategory, onNavigateToExtensions = { selectedGroup = "extensions" }, onBack = { selectedGroup = null })
                 "player" -> PlayerSettingsPage(viewModel = viewModel, autoSkipOpening = autoSkipOpening, autoSkipEnding = autoSkipEnding, autoPlayNextEpisode = autoPlayNextEpisode, onBack = { selectedGroup = null })
+                "reader" -> ReaderSettingsPage(viewModel = viewModel, onBack = { selectedGroup = null })
                 "cache" -> CacheSettingsPage(viewModel = viewModel, context = LocalContext.current, onBack = { selectedGroup = null })
                 "extensions" -> ExtensionsSettingsPage(viewModel = viewModel, onBack = { selectedGroup = null })
                 "about" -> AboutSettingsPage(viewModel = viewModel, onBack = { selectedGroup = null })
@@ -1266,6 +1280,55 @@ private fun PlayerSettingsPage(
     }
 }
 
+// ─── Reader Settings ───────────────────────────────────────────────────
+
+@Composable
+private fun ReaderSettingsPage(
+    viewModel: MainViewModel,
+    onBack: () -> Unit
+) {
+    val readerMode by viewModel.mangaReaderMode.collectAsState()
+    val showPageIndicator by viewModel.mangaPageIndicator.collectAsState()
+
+    SettingsPageScaffold(title = "Reader", onBack = onBack) {
+        SectionHeader("READING MODE")
+        SettingsCard {
+            val modes = listOf(
+                Triple("vertical_scroll", "Vertical Scroll", "Webtoon-style continuous scroll") to Icons.Default.ViewAgenda,
+                Triple("left_to_right", "Left to Right", "One page per screen, swipe left") to Icons.AutoMirrored.Filled.ArrowForward,
+                Triple("right_to_left", "Right to Left", "One page per screen, swipe right (manga)") to Icons.AutoMirrored.Filled.ArrowBack
+            )
+            modes.forEachIndexed { index, (triple, icon) ->
+                val (key, title, description) = triple
+                SettingsRadioItem(
+                    selected = readerMode == key,
+                    onClick = { viewModel.setMangaReaderMode(key) },
+                    icon = icon,
+                    title = title,
+                    description = description
+                )
+                if (index < modes.lastIndex) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 54.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.15f),
+                        thickness = 0.5.dp
+                    )
+                }
+            }
+        }
+
+        SectionHeader("DISPLAY")
+        SettingsCard {
+            SettingsToggle(
+                title = "Page Indicator",
+                description = "Show current page number in the bottom-right corner while reading.",
+                checked = showPageIndicator,
+                onCheckedChange = { viewModel.setMangaPageIndicator(it) }
+            )
+        }
+    }
+}
+
 // ─── Cache Management ───────────────────────────────────────────────────
 
 @Composable
@@ -1386,6 +1449,13 @@ private fun ExtensionsSettingsPage(
         viewModel.loadAvailableMagnetExtensions()
     }
 
+    val installedMangaExtensions by viewModel.installedExtensions.collectAsState()
+    val selectedMangaExtensionAuthority by viewModel.selectedExtensionAuthority.collectAsState()
+
+    LaunchedEffect(Unit) {
+        viewModel.discoverExtensions()
+    }
+
     SettingsPageScaffold(title = "Extensions", onBack = onBack, scrollable = false, actions = {
         IconButton(onClick = { extViewModel.loadExtensions(true) }) {
             Icon(Icons.Default.Refresh, contentDescription = "Refresh")
@@ -1393,7 +1463,11 @@ private fun ExtensionsSettingsPage(
     }) {
         ExtensionsScreen(
             viewModel = extViewModel,
-            magnetExtensions = magnetExtensions
+            magnetExtensions = magnetExtensions,
+            mangaExtensions = installedMangaExtensions,
+            selectedMangaExtensionAuthority = selectedMangaExtensionAuthority,
+            onDiscoverMangaExtensions = { viewModel.discoverExtensions() },
+            onSelectMangaExtension = { viewModel.selectExtension(it) }
         )
     }
 }

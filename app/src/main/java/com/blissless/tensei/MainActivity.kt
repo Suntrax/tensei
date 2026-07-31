@@ -92,6 +92,9 @@ import com.blissless.tensei.ui.screens.relations.AllRelationsScreen
 import com.blissless.tensei.ui.screens.search.SearchScreen
 import com.blissless.tensei.ui.screens.settings.SettingsScreen
 import com.blissless.tensei.ui.screens.status.StatusListScreen
+import com.blissless.tensei.ui.screens.manga.MangaDetailScreen
+import com.blissless.tensei.ui.screens.manga.DetailedMangaScreen
+import com.blissless.tensei.ui.screens.manga.MangaReaderScreen
 import com.blissless.tensei.ui.theme.AppTheme
 import com.blissless.tensei.ui.theme.ThemeMode
 import com.blissless.tensei.update.UpdateViewModel
@@ -112,6 +115,11 @@ import com.blissless.tensei.viewmodel.setAutoPlayNextEpisode
 import com.blissless.tensei.viewmodel.setSwipeBrightness
 import com.blissless.tensei.viewmodel.setSwipeSwap
 import com.blissless.tensei.viewmodel.setSwipeVolume
+import com.blissless.tensei.viewmodel.updateMangaStatus
+import com.blissless.tensei.viewmodel.updateMangaProgress
+import com.blissless.tensei.viewmodel.removeMangaTracking
+import com.blissless.tensei.data.models.MangaExploreMedia
+import com.blissless.tensei.data.models.MangaMedia
 import eu.kanade.tachiyomi.animesource.model.Video
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -486,6 +494,13 @@ fun MainScreen(
     var statusListType by remember { mutableStateOf("") }
     var statusListIcon by remember { mutableStateOf<ImageVector?>(null) }
     var statusListAnime by remember { mutableStateOf<List<AnimeMedia>>(emptyList()) }
+
+    // ─── Manga state ──────────────────────────────────────────────────
+    var showMangaReader by remember { mutableStateOf(false) }
+    var mangaReaderChapterIndex by remember { mutableIntStateOf(0) }
+    var selectedMangaState by remember { mutableStateOf<com.blissless.tensei.data.models.MangaMedia?>(null) }
+    var showMangaDetailScreen by remember { mutableStateOf(false) }
+    var mangaAutoShowChapters by remember { mutableStateOf(false) }
 
     val animeStatusMap = remember(currentlyWatching, planningToWatch, completed, onHold, dropped) {
         val map = mutableMapOf<Int, String>()
@@ -1317,6 +1332,58 @@ fun MainScreen(
         )
     }
 
+    // ─── Manga Detail Screen ─────────────────────────────────────────
+    if (selectedMangaState != null && showMangaDetailScreen) {
+        val manga = selectedMangaState!!
+        DetailedMangaScreen(
+            manga = manga,
+            viewModel = viewModel,
+            isOled = isOled,
+            preferEnglishTitles = preferEnglishTitles,
+            autoShowChapters = mangaAutoShowChapters,
+            currentStatus = manga.listStatus,
+            currentProgress = manga.progress,
+            onDismiss = {
+                mangaAutoShowChapters = false
+                showMangaDetailScreen = false
+                selectedMangaState = null
+            },
+            onSwipeToClose = {
+                mangaAutoShowChapters = false
+                showMangaDetailScreen = false
+                selectedMangaState = null
+            },
+            onUpdateStatus = { status ->
+                if (status != null) viewModel.updateMangaStatus(manga.id, status)
+            },
+            onUpdateProgress = { progress ->
+                viewModel.updateMangaProgress(manga.id, progress.toFloat())
+            },
+            onRemove = {
+                viewModel.removeMangaTracking(manga.id)
+                mangaAutoShowChapters = false
+                showMangaDetailScreen = false
+                selectedMangaState = null
+            },
+            onStartReader = { chapterIndex ->
+                mangaReaderChapterIndex = chapterIndex
+                showMangaDetailScreen = false
+                showMangaReader = true
+            }
+        )
+    }
+
+    // ─── Manga Reader Screen ─────────────────────────────────────────
+    if (showMangaReader && selectedMangaState != null) {
+        MangaReaderScreen(
+            manga = selectedMangaState!!,
+            initialChapterIndex = mangaReaderChapterIndex,
+            viewModel = viewModel,
+            isOled = isOled,
+            onClose = { showMangaReader = false }
+        )
+    }
+
     // Character Screen
     val characterDialog = overlayState as? OverlayState.CharacterDialog
     if (characterDialog != null) {
@@ -1779,6 +1846,17 @@ fun MainScreen(
                             onNoExtension = {
                                 showSettings = true
                                 pendingSettingsGroup = if (extUiState.extensions.isEmpty()) "extensions" else "stream"
+                            },
+                            onMangaClick = { manga ->
+                                selectedMangaState = com.blissless.tensei.data.models.MangaMedia(
+                                    id = manga.id,
+                                    title = manga.title.romaji ?: manga.title.english ?: "Unknown",
+                                    titleEnglish = manga.title.english,
+                                    cover = manga.coverImage?.extraLarge ?: manga.coverImage?.large ?: "",
+                                    totalChapters = manga.chapters ?: 0,
+                                    averageScore = manga.averageScore
+                                )
+                                showMangaDetailScreen = true
                             }
                         )
                         2 -> HomeScreen(
@@ -1841,6 +1919,15 @@ fun MainScreen(
                             },
                             onNavigateToSearch = { showSearchScreen = true },
                             playbackPositions = playbackPositions,
+                            onMangaClick = { manga ->
+                                mangaAutoShowChapters = true
+                                selectedMangaState = manga
+                                showMangaDetailScreen = true
+                            },
+                            onMangaInfoClick = { manga ->
+                                selectedMangaState = manga
+                                showMangaDetailScreen = true
+                            },
                             playbackDurations = playbackDurations,
                             startedAt = startedAt
                         )
@@ -1891,6 +1978,17 @@ fun MainScreen(
                             onNoExtension = {
                                 showSettings = true
                                 pendingSettingsGroup = if (extUiState.extensions.isEmpty()) "extensions" else "stream"
+                            },
+                            onMangaClick = { manga ->
+                                selectedMangaState = com.blissless.tensei.data.models.MangaMedia(
+                                    id = manga.id,
+                                    title = manga.title.romaji ?: manga.title.english ?: "Unknown",
+                                    titleEnglish = manga.title.english,
+                                    cover = manga.coverImage?.extraLarge ?: manga.coverImage?.large ?: "",
+                                    totalChapters = manga.chapters ?: 0,
+                                    averageScore = manga.averageScore
+                                )
+                                showMangaDetailScreen = true
                             }
                         )
                     }

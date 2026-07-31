@@ -30,6 +30,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ExpandLess
@@ -61,6 +62,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -74,13 +76,18 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.blissless.tensei.util.toast
 import com.blissless.tensei.util.longToast
+import com.blissless.tensei.viewmodel.InstalledExtension
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExtensionsScreen(
     viewModel: ExtensionsViewModel = viewModel(),
     onBrowseChanged: ((Boolean) -> Unit)? = null,
-    magnetExtensions: List<Pair<String, String>> = emptyList()
+    magnetExtensions: List<Pair<String, String>> = emptyList(),
+    mangaExtensions: List<InstalledExtension> = emptyList(),
+    selectedMangaExtensionAuthority: String? = null,
+    onDiscoverMangaExtensions: () -> Unit = {},
+    onSelectMangaExtension: (String?) -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var repoUrl by remember { mutableStateOf("") }
@@ -88,6 +95,7 @@ fun ExtensionsScreen(
     var reposExpanded by remember { mutableStateOf(false) }
     var extensionsExpanded by remember { mutableStateOf(false) }
     var magnetExtensionsExpanded by remember { mutableStateOf(false) }
+    var mangaExtensionsExpanded by remember { mutableStateOf(false) }
     val installedPackages = uiState.extensions.map { it.packageName }.toSet()
     val updatableCount = uiState.updatablePackageNames.size
 
@@ -323,7 +331,51 @@ fun ExtensionsScreen(
                 }
             }
 
-            if (uiState.extensions.isEmpty() && uiState.repos.isEmpty() && uiState.error == null && !uiState.isLoading) {
+            if (mangaExtensions.isNotEmpty()) {
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                mangaExtensionsExpanded = !mangaExtensionsExpanded
+                                if (!mangaExtensionsExpanded) onDiscoverMangaExtensions()
+                            }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "Manga Extensions (${mangaExtensions.size})",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Icon(
+                            if (mangaExtensionsExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = if (mangaExtensionsExpanded) "Collapse" else "Expand",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                items(mangaExtensions, key = { it.packageName }) { ext ->
+                    AnimatedVisibility(
+                        visible = mangaExtensionsExpanded,
+                        enter = expandVertically(),
+                        exit = shrinkVertically()
+                    ) {
+                        OniExtensionCard(
+                            extension = ext,
+                            isSelected = ext.authority == selectedMangaExtensionAuthority,
+                            onSelect = {
+                                onSelectMangaExtension(
+                                    if (ext.authority == selectedMangaExtensionAuthority) null else ext.authority
+                                )
+                            }
+                        )
+                    }
+                }
+            }
+
+            if (uiState.extensions.isEmpty() && uiState.repos.isEmpty() && mangaExtensions.isEmpty() && uiState.error == null && !uiState.isLoading) {
                 item {
                     Text(
                         text = "No extensions found",
@@ -608,6 +660,82 @@ private fun InstalledExtensionCard(
                     Icons.Default.Info,
                     contentDescription = "App info",
                     modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun OniExtensionCard(
+    extension: InstalledExtension,
+    isSelected: Boolean,
+    onSelect: () -> Unit
+) {
+    val context = LocalContext.current
+    val appIcon = remember(extension.packageName) {
+        try {
+            context.packageManager.getApplicationIcon(extension.packageName)
+        } catch (_: Exception) {
+            null
+        }
+    }
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onSelect),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        ),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            if (appIcon != null) {
+                Image(
+                    painter = BitmapPainter(appIcon.toBitmap(64, 64).asImageBitmap()),
+                    contentDescription = extension.label,
+                    modifier = Modifier.size(48.dp)
+                )
+            } else {
+                Box(
+                    modifier = Modifier.size(48.dp).background(
+                        if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+                        else MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+                        RoundedCornerShape(12.dp)
+                    ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "O",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = extension.label,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = extension.packageName,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (isSelected) {
+                Text(
+                    text = "Active",
+                    color = Color(0xFF10B981),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold
                 )
             }
         }

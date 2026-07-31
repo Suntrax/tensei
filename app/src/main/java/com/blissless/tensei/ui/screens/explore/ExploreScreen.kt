@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -42,13 +43,16 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.blissless.tensei.MainViewModel
 import com.blissless.tensei.data.models.AnimeMedia
 import com.blissless.tensei.data.models.ExploreAnime
 import com.blissless.tensei.data.models.LocalAnimeEntry
+import com.blissless.tensei.data.models.MangaExploreMedia
 import com.blissless.tensei.data.models.toDetailedAnimeData
 import com.blissless.tensei.dialogs.HomeAnimeStatusDialog
 import com.blissless.tensei.ui.components.AnimeCardBounds
@@ -63,6 +67,19 @@ import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
 import com.blissless.tensei.util.toast
 import com.blissless.tensei.util.longToast
+import com.blissless.tensei.viewmodel.mangaExploreSections
+import com.blissless.tensei.viewmodel.isLoadingManga
+import com.blissless.tensei.viewmodel.fetchMangaExplore
+import coil.compose.AsyncImage
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.draw.clip
+import coil.request.ImageRequest
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -89,7 +106,8 @@ fun ExploreScreen(
     onViewAllStaff: (Int, String) -> Unit = { _, _ -> },
     onViewAllRelations: (Int, String) -> Unit = { _, _ -> },
     onSearchClick: () -> Unit = {},
-    onNoExtension: () -> Unit = {}
+    onNoExtension: () -> Unit = {},
+    onMangaClick: (MangaExploreMedia) -> Unit = {}
 ) {
     val context = LocalContext.current
     val featuredAnime by viewModel.featuredAnime.collectAsState()
@@ -109,6 +127,8 @@ fun ExploreScreen(
     val streamMethod by viewModel.streamMethod.collectAsState()
     val defaultExtPkg by viewModel.defaultExtensionPackage.collectAsState()
     val localAnimeStatus by viewModel.localAnimeStatus.collectAsState()
+    val mangaExploreSections by viewModel.mangaExploreSections.collectAsState()
+    val isLoadingManga by viewModel.isLoadingManga.collectAsState()
     
     val filteredFeaturedAnime = remember(featuredAnime, hideAdultContent) {
         if (hideAdultContent) featuredAnime.filter { !isAdultContent(it.isAdult, it.genres) } else featuredAnime
@@ -399,6 +419,12 @@ fun ExploreScreen(
         if (isVisible && seasonalAnime.isEmpty()) {
             delay(100.milliseconds)
             viewModel.forceRefreshExplore()
+        }
+    }
+
+    LaunchedEffect(isVisible) {
+        if (isVisible && mangaExploreSections.isEmpty()) {
+            viewModel.fetchMangaExplore()
         }
     }
 
@@ -794,11 +820,130 @@ fun ExploreScreen(
                 viewModel = viewModel
             )
 
+            // ─── Manga Explore Sections ──────────────────────────────
+            if (mangaExploreSections.isNotEmpty()) {
+                val sectionLabelMap = mapOf(
+                    "trending" to "Trending Manga",
+                    "popular" to "Popular Manga",
+                    "topRated" to "Top Rated Manga",
+                    "action" to "Action Manga",
+                    "romance" to "Romance Manga",
+                    "comedy" to "Comedy Manga",
+                    "fantasy" to "Fantasy Manga",
+                    "scifi" to "Sci-Fi Manga"
+                )
+                mangaExploreSections.forEach { (key, list) ->
+                    if (list.isNotEmpty()) {
+                        val label = sectionLabelMap[key] ?: key.replaceFirstChar { it.uppercase() }
+                        SectionTitle(label, list.size, isOled)
+                        MangaExploreHorizontalRow(
+                            mangaList = list,
+                            isOled = isOled,
+                            preferEnglishTitles = preferEnglishTitles,
+                            onMangaClick = onMangaClick
+                        )
+                    }
+                }
+            } else if (isLoadingManga) {
+                SectionTitle("Manga", 0, isOled)
+                LoadingPlaceholder(isOled)
+            }
+
             Spacer(modifier = Modifier.height(20.dp))
         }
         }
 
 
+    }
+}
+
+@Composable
+private fun MangaExploreHorizontalRow(
+    mangaList: List<MangaExploreMedia>,
+    isOled: Boolean,
+    preferEnglishTitles: Boolean,
+    onMangaClick: (MangaExploreMedia) -> Unit
+) {
+    val context = LocalContext.current
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        itemsIndexed(mangaList) { _, manga ->
+            val title = if (preferEnglishTitles && !manga.title.english.isNullOrBlank()) manga.title.english
+                       else manga.title.romaji ?: "Unknown"
+            val coverUrl = manga.coverImage?.large ?: manga.coverImage?.medium ?: ""
+            Column(modifier = Modifier.width(140.dp)) {
+                Card(
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.height(195.dp).clip(RoundedCornerShape(14.dp)).clickable { onMangaClick(manga) }
+                ) {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        if (coverUrl.isNotEmpty()) {
+                            AsyncImage(
+                                model = ImageRequest.Builder(context).data(coverUrl).crossfade(true).build(),
+                                contentDescription = title,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant),
+                                contentAlignment = Alignment.Center
+                            ) { Text("N/A", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        }
+                        Box(modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().height(50.dp)
+                            .background(Brush.verticalGradient(colors = listOf(Color.Black.copy(alpha = 0.6f), Color.Transparent))))
+                        Box(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(80.dp)
+                            .background(Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f)))))
+
+                        manga.averageScore?.let { score ->
+                            Surface(
+                                modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color(0xFF4CAF50).copy(alpha = 0.85f)
+                            ) {
+                                Text(
+                                    text = "${score / 10}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+
+                        manga.chapters?.let { ch ->
+                            Surface(
+                                modifier = Modifier.align(Alignment.BottomStart).padding(8.dp),
+                                shape = RoundedCornerShape(6.dp),
+                                color = Color.Black.copy(alpha = 0.65f)
+                            ) {
+                                Text(
+                                    text = "$ch ch.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+                Box(modifier = Modifier.width(140.dp).height(40.dp)) {
+                    Text(
+                        text = title,
+                        modifier = Modifier.padding(top = 8.dp),
+                        maxLines = 2,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Medium,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+        }
     }
 }
 

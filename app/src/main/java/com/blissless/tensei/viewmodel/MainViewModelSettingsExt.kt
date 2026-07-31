@@ -106,6 +106,15 @@ fun MainViewModel.setDownloadDirectoryUri(uri: String?) =
 fun MainViewModel.setKeepDownloadedFiles(enabled: Boolean) =
     userPreferences.setKeepDownloadedFiles(enabled)
 
+fun MainViewModel.setMangaReaderMode(mode: String) =
+    userPreferences.setMangaReaderMode(mode)
+
+fun MainViewModel.setMangaDataSaver(enabled: Boolean) =
+    userPreferences.setMangaDataSaver(enabled)
+
+fun MainViewModel.setMangaPageIndicator(enabled: Boolean) =
+    userPreferences.setMangaPageIndicator(enabled)
+
 fun MainViewModel.setDefaultMagnetExtension(authority: String) =
     userPreferences.setDefaultMagnetExtension(authority)
 

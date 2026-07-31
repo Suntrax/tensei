@@ -66,6 +66,9 @@ import okhttp3.OkHttpClient
 import com.blissless.tensei.viewmodel.startApiRetryLoop
 import com.blissless.tensei.viewmodel.queueSync
 import com.blissless.tensei.viewmodel.fetchMalList
+import com.blissless.tensei.viewmodel.initManga
+import com.blissless.tensei.viewmodel.fetchMangaExplore
+import com.blissless.tensei.viewmodel.fetchMangaLists
 import com.blissless.tensei.viewmodel.toggleMalFavoriteById
 import com.blissless.tensei.viewmodel.loadMalFavoritesFromCache
 import com.blissless.tensei.viewmodel.fetchAniListFavorites
@@ -422,6 +425,11 @@ class MainViewModel : ViewModel() {
     val streamMethod: StateFlow<String> get() = userPreferences.streamMethod
     val downloadDirectoryUri: StateFlow<String?> get() = userPreferences.downloadDirectoryUri
     val keepDownloadedFiles: StateFlow<Boolean> get() = userPreferences.keepDownloadedFiles
+    val mangaReaderMode: StateFlow<String> get() = userPreferences.mangaReaderMode
+    val mangaDataSaver: StateFlow<Boolean> get() = userPreferences.mangaDataSaver
+    val mangaPageLayout: StateFlow<String> get() = userPreferences.mangaPageLayout
+    val mangaImageScaling: StateFlow<String> get() = userPreferences.mangaImageScaling
+    val mangaPageIndicator: StateFlow<Boolean> get() = userPreferences.mangaPageIndicator
 
     // Notification tap events
     private val _notificationAnimeTaps = MutableSharedFlow<String>(replay = 1, extraBufferCapacity = 1)
@@ -516,6 +524,9 @@ class MainViewModel : ViewModel() {
         jikanService = JikanService()
         sourceManager = com.blissless.tensei.stream.SourceManager(context)
 
+        // Initialize manga managers
+        initManga()
+
         // Initialize video cache for offline playback
         cacheManager.initializeVideoCache(context)
 
@@ -561,11 +572,13 @@ class MainViewModel : ViewModel() {
 
             val exploreDeferred = async { loadExploreDataWithCache() }
             val scheduleDeferred = async { fetchAiringSchedule() }
+            val mangaDeferred = async { fetchMangaExplore() }
 
             // Wait for all to complete (they run in parallel)
             homeDeferred.await()
             exploreDeferred.await()
             scheduleDeferred.await()
+            mangaDeferred.await()
 
             _splashReady.value = true
 
@@ -856,6 +869,7 @@ class MainViewModel : ViewModel() {
         _isLoadingHome.value = true
         val userSuccess = fetchUser()
         val listsSuccess = fetchLists()
+        val mangaListsSuccess = fetchMangaLists()
         _isLoadingHome.value = false
 
         if (userSuccess && listsSuccess) {

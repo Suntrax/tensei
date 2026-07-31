@@ -67,6 +67,11 @@ class UserPreferences(context: Context) {
         private const val KEY_DEFAULT_MAGNET_EXTENSION = "default_magnet_extension"
         private const val KEY_DOWNLOAD_DIRECTORY_URI = "download_directory_uri"
         private const val KEY_KEEP_DOWNLOADED_FILES = "keep_downloaded_files"
+        private const val KEY_MANGA_READER_MODE = "manga_reader_mode"
+        private const val KEY_MANGA_DATA_SAVER = "manga_data_saver"
+        private const val KEY_MANGA_PAGE_LAYOUT = "manga_page_layout"
+        private const val KEY_MANGA_IMAGE_SCALING = "manga_image_scaling"
+        private const val KEY_MANGA_PAGE_INDICATOR = "manga_page_indicator"
     }
 
     private val sharedPreferences: SharedPreferences =
@@ -170,9 +175,25 @@ class UserPreferences(context: Context) {
     private val _downloadDirectoryUri = MutableStateFlow<String?>(null)
     val downloadDirectoryUri: StateFlow<String?> = _downloadDirectoryUri.asStateFlow()
 
-    // Keep downloaded video files (MKV/MP4) to custom directory instead of cache-only
+    // Keep downloaded files after deletion from list
     private val _keepDownloadedFiles = MutableStateFlow(false)
     val keepDownloadedFiles: StateFlow<Boolean> = _keepDownloadedFiles.asStateFlow()
+
+    // Manga Reader Preferences
+    private val _mangaReaderMode = MutableStateFlow("vertical_scroll")
+    val mangaReaderMode: StateFlow<String> = _mangaReaderMode.asStateFlow()
+
+    private val _mangaDataSaver = MutableStateFlow(false)
+    val mangaDataSaver: StateFlow<Boolean> = _mangaDataSaver.asStateFlow()
+
+    private val _mangaPageLayout = MutableStateFlow("single_page")
+    val mangaPageLayout: StateFlow<String> = _mangaPageLayout.asStateFlow()
+
+    private val _mangaImageScaling = MutableStateFlow("fit_width")
+    val mangaImageScaling: StateFlow<String> = _mangaImageScaling.asStateFlow()
+
+    private val _mangaPageIndicator = MutableStateFlow(true)
+    val mangaPageIndicator: StateFlow<Boolean> = _mangaPageIndicator.asStateFlow()
 
     // Startup Screen
     private val _startupScreen = MutableStateFlow(2)
@@ -288,6 +309,11 @@ class UserPreferences(context: Context) {
         _autoUpdateExtensions.value = sharedPreferences.getBoolean(KEY_AUTO_UPDATE_EXTENSIONS, true)
         _downloadDirectoryUri.value = sharedPreferences.getString(KEY_DOWNLOAD_DIRECTORY_URI, null)
         _keepDownloadedFiles.value = sharedPreferences.getBoolean(KEY_KEEP_DOWNLOADED_FILES, false)
+        _mangaReaderMode.value = sharedPreferences.getString(KEY_MANGA_READER_MODE, "vertical_scroll") ?: "vertical_scroll"
+        _mangaDataSaver.value = sharedPreferences.getBoolean(KEY_MANGA_DATA_SAVER, false)
+        _mangaPageLayout.value = sharedPreferences.getString(KEY_MANGA_PAGE_LAYOUT, "single_page") ?: "single_page"
+        _mangaImageScaling.value = sharedPreferences.getString(KEY_MANGA_IMAGE_SCALING, "fit_width") ?: "fit_width"
+        _mangaPageIndicator.value = sharedPreferences.getBoolean(KEY_MANGA_PAGE_INDICATOR, true)
 
         // Load local favorites
         loadLocalFavorites()
@@ -466,6 +492,31 @@ class UserPreferences(context: Context) {
     fun setKeepDownloadedFiles(enabled: Boolean) {
         _keepDownloadedFiles.value = enabled
         sharedPreferences.edit { putBoolean(KEY_KEEP_DOWNLOADED_FILES, enabled) }
+    }
+
+    fun setMangaReaderMode(mode: String) {
+        _mangaReaderMode.value = mode
+        sharedPreferences.edit { putString(KEY_MANGA_READER_MODE, mode) }
+    }
+
+    fun setMangaDataSaver(enabled: Boolean) {
+        _mangaDataSaver.value = enabled
+        sharedPreferences.edit { putBoolean(KEY_MANGA_DATA_SAVER, enabled) }
+    }
+
+    fun setMangaPageLayout(layout: String) {
+        _mangaPageLayout.value = layout
+        sharedPreferences.edit { putString(KEY_MANGA_PAGE_LAYOUT, layout) }
+    }
+
+    fun setMangaImageScaling(scaling: String) {
+        _mangaImageScaling.value = scaling
+        sharedPreferences.edit { putString(KEY_MANGA_IMAGE_SCALING, scaling) }
+    }
+
+    fun setMangaPageIndicator(enabled: Boolean) {
+        _mangaPageIndicator.value = enabled
+        sharedPreferences.edit { putBoolean(KEY_MANGA_PAGE_INDICATOR, enabled) }
     }
 
     fun setStartupScreen(screen: Int) {
