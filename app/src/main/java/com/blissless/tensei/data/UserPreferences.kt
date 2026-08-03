@@ -72,6 +72,8 @@ class UserPreferences(context: Context) {
         private const val KEY_MANGA_PAGE_LAYOUT = "manga_page_layout"
         private const val KEY_MANGA_IMAGE_SCALING = "manga_image_scaling"
         private const val KEY_MANGA_PAGE_INDICATOR = "manga_page_indicator"
+        private const val KEY_SELECTED_MANGA_EXTENSION = "selected_manga_extension_authority"
+        private const val KEY_MANGA_SYNC_THRESHOLD = "manga_anilist_sync_threshold"
     }
 
     private val sharedPreferences: SharedPreferences =
@@ -195,6 +197,11 @@ class UserPreferences(context: Context) {
     private val _mangaPageIndicator = MutableStateFlow(true)
     val mangaPageIndicator: StateFlow<Boolean> = _mangaPageIndicator.asStateFlow()
 
+    // AniList sync threshold (75-100%) — the scroll percentage at which a chapter is
+    // considered "read" and progress is pushed to AniList. Default 90% (matching oni).
+    private val _mangaSyncThreshold = MutableStateFlow(90)
+    val mangaSyncThreshold: StateFlow<Int> = _mangaSyncThreshold.asStateFlow()
+
     // Startup Screen
     private val _startupScreen = MutableStateFlow(2)
     val startupScreen: StateFlow<Int> = _startupScreen.asStateFlow()
@@ -314,6 +321,7 @@ class UserPreferences(context: Context) {
         _mangaPageLayout.value = sharedPreferences.getString(KEY_MANGA_PAGE_LAYOUT, "single_page") ?: "single_page"
         _mangaImageScaling.value = sharedPreferences.getString(KEY_MANGA_IMAGE_SCALING, "fit_width") ?: "fit_width"
         _mangaPageIndicator.value = sharedPreferences.getBoolean(KEY_MANGA_PAGE_INDICATOR, true)
+        _mangaSyncThreshold.value = sharedPreferences.getInt(KEY_MANGA_SYNC_THRESHOLD, 90).coerceIn(75, 100)
 
         // Load local favorites
         loadLocalFavorites()
@@ -841,6 +849,30 @@ class UserPreferences(context: Context) {
         sharedPreferences.edit {
             remove(KEY_MAL_FAVORITES)
         }
+    }
+
+    // ─── Manga Extension Selection ────────────────────────────────────
+
+    fun getSelectedMangaExtensionAuthority(): String? {
+        return sharedPreferences.getString(KEY_SELECTED_MANGA_EXTENSION, null)
+    }
+
+    fun setSelectedMangaExtensionAuthority(authority: String?) {
+        sharedPreferences.edit {
+            if (authority == null) {
+                remove(KEY_SELECTED_MANGA_EXTENSION)
+            } else {
+                putString(KEY_SELECTED_MANGA_EXTENSION, authority)
+            }
+        }
+    }
+
+    // ─── Manga AniList Sync Threshold ─────────────────────────────────
+
+    fun setMangaSyncThreshold(percent: Int) {
+        val clamped = percent.coerceIn(75, 100)
+        _mangaSyncThreshold.value = clamped
+        sharedPreferences.edit { putInt(KEY_MANGA_SYNC_THRESHOLD, clamped) }
     }
 }
 

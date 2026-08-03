@@ -54,15 +54,15 @@ import com.blissless.tensei.MainViewModel
 import com.blissless.tensei.data.models.AnimeRelation
 
 @Composable
-fun AllRelationsScreen(
+fun AllRecommendationsScreen(
     animeId: Int,
     animeTitle: String,
     viewModel: MainViewModel,
     onDismiss: () -> Unit,
     onNavigateBack: () -> Unit = onDismiss,
-    onRelationClick: (AnimeRelation) -> Unit
+    onRecommendationClick: (AnimeRelation) -> Unit
 ) {
-    var relations by remember { mutableStateOf<List<AnimeRelation>>(emptyList()) }
+    var recommendations by remember { mutableStateOf<List<AnimeRelation>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
 
     val statusBarsPadding = WindowInsets.statusBars.asPaddingValues()
@@ -70,8 +70,8 @@ fun AllRelationsScreen(
 
     LaunchedEffect(animeId) {
         isLoading = true
-        relations = try {
-            viewModel.fetchAnimeRelations(animeId) ?: emptyList()
+        recommendations = try {
+            viewModel.fetchAnimeRecommendations(animeId) ?: emptyList()
         } catch (_: Exception) {
             emptyList()
         }
@@ -112,7 +112,7 @@ fun AllRelationsScreen(
                     }
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.align(Alignment.Center)) {
                         Text(
-                            text = "Relations",
+                            text = "Recommendations",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onBackground,
@@ -132,10 +132,10 @@ fun AllRelationsScreen(
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                     }
-                } else if (relations.isEmpty()) {
+                } else if (recommendations.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(
-                            text = "No relations found",
+                            text = "No recommendations found",
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -151,12 +151,12 @@ fun AllRelationsScreen(
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                         modifier = Modifier.fillMaxSize()
                     ) {
-                        items(relations) { relation ->
+                        items(recommendations) { rec ->
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(12.dp))
-                                    .clickable { onRelationClick(relation) },
+                                    .clickable { onRecommendationClick(rec) },
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 Card(
@@ -168,40 +168,23 @@ fun AllRelationsScreen(
                                 ) {
                                     Box(modifier = Modifier.fillMaxSize()) {
                                         AsyncImage(
-                                            model = relation.cover,
-                                            contentDescription = relation.title,
+                                            model = rec.cover,
+                                            contentDescription = rec.title,
                                             contentScale = ContentScale.Crop,
                                             modifier = Modifier.fillMaxSize()
                                         )
-                                        Surface(
-                                            modifier = Modifier.padding(6.dp).align(Alignment.TopStart),
-                                            shape = RoundedCornerShape(6.dp),
-                                            color = Color.Black.copy(alpha = 0.7f)
-                                        ) {
-                                            Text(
-                                                relation.relationType.replace("_", " ").lowercase()
-                                                    .replaceFirstChar { it.uppercase() },
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = Color.White,
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                            )
-                                        }
-                                        val episodeText = when {
-                                            relation.episodes != null && relation.episodes > 0 -> "${relation.episodes} ${if (relation.episodes == 1) "ep" else "eps"}"
-                                            relation.latestEpisode != null && relation.latestEpisode > 0 -> "Ep ${relation.latestEpisode}"
-                                            else -> null
-                                        }
-                                        episodeText?.let { text ->
+                                        rec.averageScore?.let { score ->
                                             Surface(
-                                                modifier = Modifier.padding(6.dp).align(Alignment.BottomStart),
+                                                modifier = Modifier.padding(6.dp).align(Alignment.TopEnd),
                                                 shape = RoundedCornerShape(6.dp),
-                                                color = Color.Black.copy(alpha = 0.7f)
+                                                color = Color.Black.copy(alpha = 0.8f)
                                             ) {
                                                 Text(
-                                                    text,
+                                                    "${(score / 10.0).toString().take(3)}",
                                                     style = MaterialTheme.typography.labelSmall,
-                                                    color = Color.White,
-                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                                    color = Color(0xFFFFD700),
+                                                    fontWeight = FontWeight.Bold,
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                                                 )
                                             }
                                         }
@@ -209,7 +192,7 @@ fun AllRelationsScreen(
                                 }
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Text(
-                                    text = relation.title,
+                                    text = rec.title,
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Medium,
                                     maxLines = 2,
@@ -217,7 +200,7 @@ fun AllRelationsScreen(
                                     color = MaterialTheme.colorScheme.onBackground,
                                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
                                 )
-                                relation.format?.let { format ->
+                                rec.format?.let { format ->
                                     val formatDisplay = when (format) {
                                         "TV" -> "TV"; "TV_SHORT" -> "TV Short"
                                         "MOVIE" -> "Movie"; "SPECIAL" -> "Special"
@@ -240,4 +223,3 @@ fun AllRelationsScreen(
         }
     }
 }
-

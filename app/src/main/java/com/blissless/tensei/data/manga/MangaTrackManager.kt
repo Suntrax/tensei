@@ -56,16 +56,62 @@ class MangaTrackManager(context: Context) {
     fun markChapterComplete(mangaId: Int, chapter: MangaChapter) {
         val tracks = getTracks().toMutableList()
         val index = tracks.indexOfFirst { it.mangaId == mangaId }
+        val newProgress = if (chapter.chapterNumber > 0f) chapter.chapterNumber else 1f
         if (index >= 0) {
             val track = tracks[index]
-            val newProgress = if (chapter.chapterNumber > track.progress) chapter.chapterNumber else track.progress
+            val finalProgress = if (newProgress > track.progress) newProgress else track.progress
             tracks[index] = track.copy(
-                progress = newProgress,
+                progress = finalProgress,
                 lastReadChapter = chapter,
-                status = "CURRENT"
+                status = if (track.status == "COMPLETED") "COMPLETED" else "CURRENT"
+            )
+        } else {
+            // First-time reader: auto-create a track so progress is recorded.
+            // Caller can override title/cover via updateMangaInfo later (e.g. from fetchMangaDetail).
+            tracks.add(
+                MangaTrack(
+                    mangaId = mangaId,
+                    progress = newProgress,
+                    lastReadChapter = chapter,
+                    status = "CURRENT",
+                    totalChapters = 0
+                )
             )
         }
         saveTracks(tracks)
+    }
+
+    /**
+     * Ensure a track exists for the given manga. If none exists, a new CURRENT track is created
+     * with the provided metadata. Returns the (possibly newly-created) track.
+     */
+    fun ensureTrack(mangaId: Int, title: String = "", cover: String = "", totalChapters: Int = 0): MangaTrack {
+        val tracks = getTracks().toMutableList()
+        val index = tracks.indexOfFirst { it.mangaId == mangaId }
+        if (index >= 0) {
+            // Patch in any non-default metadata if missing
+            val existing = tracks[index]
+            val patched = existing.copy(
+                title = existing.title.ifBlank { title },
+                cover = existing.cover.ifBlank { cover },
+                totalChapters = if (existing.totalChapters == 0) totalChapters else existing.totalChapters
+            )
+            if (patched != existing) {
+                tracks[index] = patched
+                saveTracks(tracks)
+            }
+            return patched
+        }
+        val newTrack = MangaTrack(
+            mangaId = mangaId,
+            title = title,
+            cover = cover,
+            totalChapters = totalChapters,
+            status = "CURRENT"
+        )
+        tracks.add(newTrack)
+        saveTracks(tracks)
+        return newTrack
     }
 
     fun updateChapterProgress(mangaId: Int, progress: Float) {

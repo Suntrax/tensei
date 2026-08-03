@@ -24,6 +24,15 @@ val StatusLabels = mapOf(
     "DROPPED" to "Dropped"
 )
 
+// Manga-specific status labels (same colors as anime, just different text)
+val MangaStatusLabels = mapOf(
+    "CURRENT" to "Reading",
+    "PLANNING" to "Plan to Read",
+    "COMPLETED" to "Completed",
+    "PAUSED" to "On Hold",
+    "DROPPED" to "Dropped"
+)
+
 val SurfaceWhite = Color(0xFFF8F8F8)
 
 val GlassWhite = Color(0x1AFFFFFF)

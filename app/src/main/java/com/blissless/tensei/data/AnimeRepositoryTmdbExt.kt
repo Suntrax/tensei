@@ -5,6 +5,7 @@ import com.blissless.tensei.BuildConfig
 import com.blissless.tensei.data.models.AnimeRelation
 import com.blissless.tensei.data.models.AnimeRelationsMedia
 import com.blissless.tensei.data.models.AnimeRelationsResponse
+import com.blissless.tensei.data.models.AnimeRecommendationsResponse
 import com.blissless.tensei.data.models.TmdbEpisode
 import com.blissless.tensei.data.models.TmdbSearchResponse
 import com.blissless.tensei.data.models.TmdbSearchResult
@@ -394,12 +395,12 @@ internal suspend fun AnimeRepository.getPrequelEpisodesSum(animeId: Int): Int {
 
         // Find ALL PREQUEL relations.
         val prequels = media.relations?.edges?.filter {
-            it.relationType == "PREQUEL" && it.node.type == "ANIME"
+            it.relationType == "PREQUEL" && it.node?.type == "ANIME"
         } ?: emptyList()
 
         var totalOffset = 0
         for (edge in prequels) {
-            val node = edge.node
+            val node = edge.node ?: continue
             // Only add episodes for Series formats (TV, ONA, TV_SHORT)
             // But ALWAYS recurse, even into Movies/Specials, to find older seasons
             val isSeriesFormat = node.format == "TV" || node.format == "ONA" || node.format == "TV_SHORT"
@@ -417,8 +418,8 @@ suspend fun AnimeRepository.fetchAnimeRelationsList(animeId: Int): List<AnimeRel
         return publicGraphqlRequest(query, mapOf("id" to animeId))?.let {
             try {
                 val data = json.decodeFromString<AnimeRelationsResponse>(it)
-                data.data.Media.relations?.edges?.map { edge ->
-                    edge.node.let { node ->
+                data.data.Media.relations?.edges?.mapNotNull { edge ->
+                    edge.node?.let { node ->
                         AnimeRelation(
                             id = node.id,
                             title = node.title?.english ?: node.title?.romaji ?: "Unknown",
@@ -427,6 +428,31 @@ suspend fun AnimeRepository.fetchAnimeRelationsList(animeId: Int): List<AnimeRel
                             averageScore = node.averageScore,
                             format = node.format,
                             relationType = edge.relationType ?: "UNKNOWN"
+                        )
+                    }
+                }
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
+
+suspend fun AnimeRepository.fetchAnimeRecommendationsList(animeId: Int): List<AnimeRelation>? {
+        val query = GraphqlQueries.GET_ANIME_RECOMMENDATIONS
+
+        return publicGraphqlRequest(query, mapOf("id" to animeId))?.let {
+            try {
+                val data = json.decodeFromString<AnimeRecommendationsResponse>(it)
+                data.data.Media.recommendations?.nodes?.mapNotNull { node ->
+                    node.mediaRecommendation?.let { rec ->
+                        AnimeRelation(
+                            id = rec.id,
+                            title = rec.title?.english ?: rec.title?.romaji ?: "Unknown",
+                            cover = rec.coverImage?.extraLarge ?: "",
+                            episodes = rec.episodes,
+                            averageScore = rec.averageScore,
+                            format = rec.format,
+                            relationType = "RECOMMENDATION"
                         )
                     }
                 }

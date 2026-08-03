@@ -1,5 +1,6 @@
 package com.blissless.tensei.ui.screens.manga
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandVertically
@@ -11,7 +12,9 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -23,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -30,31 +34,35 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
-import coil.request.CachePolicy
-import coil.request.ImageRequest
+import androidx.compose.ui.unit.toSize
 import com.blissless.tensei.MainViewModel
 import com.blissless.tensei.data.models.MangaChapter
 import com.blissless.tensei.data.models.MangaMedia
+import com.blissless.tensei.viewmodel.fetchMangaDetail
+import com.blissless.tensei.viewmodel.isLoadingMangaChapters
 import com.blissless.tensei.viewmodel.loadChapterImages
 import com.blissless.tensei.viewmodel.loadMangaChapters
 import com.blissless.tensei.viewmodel.mangaChapterImages
+import com.blissless.tensei.viewmodel.mangaChapterImagesError
 import com.blissless.tensei.viewmodel.mangaChapters
 import com.blissless.tensei.viewmodel.markMangaChapterRead
+import com.blissless.tensei.viewmodel.onMangaScrollProgress
+import com.blissless.tensei.viewmodel.setMangaPageIndicator
 import com.blissless.tensei.viewmodel.setMangaReaderMode
 import com.blissless.tensei.viewmodel.updateMangaScrollProgress
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 enum class ReaderMode { VERTICAL_SCROLL, LEFT_TO_RIGHT, RIGHT_TO_LEFT }
@@ -67,8 +75,16 @@ fun MangaReaderScreen(
     isOled: Boolean,
     onClose: () -> Unit
 ) {
+    android.util.Log.d("MangaReader", "MangaReaderScreen compose: manga.id=${manga.id} title='${manga.title}' initialChapterIndex=$initialChapterIndex")
+    DisposableEffect(Unit) {
+        android.util.Log.d("MangaReader", "READER COMPOSED (disposable effect) manga.id=${manga.id}")
+        onDispose {
+            android.util.Log.d("MangaReader", "READER DISPOSED / LEAVING COMPOSITION manga.id=${manga.id} — screen is being removed (navigation close OR crash recovery)")
+        }
+    }
     val chapters by viewModel.mangaChapters.collectAsState()
     val chapterImages by viewModel.mangaChapterImages.collectAsState()
+    val chapterImagesError by viewModel.mangaChapterImagesError.collectAsState()
     var currentChapterIndex by remember { mutableIntStateOf(initialChapterIndex.coerceAtLeast(0)) }
     var readerMode by remember { mutableStateOf(
         when (viewModel.mangaReaderMode.value) {
@@ -80,42 +96,104 @@ fun MangaReaderScreen(
     var showControls by remember { mutableStateOf(false) }
     var showChapterList by remember { mutableStateOf(initialChapterIndex < 0) }
     var scrollProgress by remember { mutableFloatStateOf(0f) }
+    var currentPageIndex by remember { mutableIntStateOf(0) }
     val readIndices = remember { mutableStateOf((0 until manga.progress.coerceAtLeast(0)).toSet()) }
+    val scope = rememberCoroutineScope()
 
     val currentChapter = chapters.getOrNull(currentChapterIndex)
     val isFirstChapter = currentChapterIndex == 0
     val isLastChapter = currentChapterIndex >= chapters.lastIndex
     val useDataSaver = viewModel.mangaDataSaver.value
+    val isLoadingChapters by viewModel.isLoadingMangaChapters.collectAsState()
+    val showPageIndicator by viewModel.mangaPageIndicator.collectAsState()
+    val syncThreshold by viewModel.mangaSyncThreshold.collectAsState()
+
+    android.util.Log.d("MangaReader", "MangaReaderScreen state: chapters.size=${chapters.size} showChapterList=$showChapterList currentChapterIndex=$currentChapterIndex chapterImages=${chapterImages?.size ?: "null"}")
 
     LaunchedEffect(currentChapter, showChapterList) {
+        android.util.Log.d("MangaReader", "LaunchedEffect(currentChapter, showChapterList): showChapterList=$showChapterList currentChapter=${currentChapter != null}")
         if (!showChapterList) {
             currentChapter?.let { chapter ->
-                viewModel.loadChapterImages(chapter.chapterId, useDataSaver, manga.title)
+                android.util.Log.d("MangaReader", "Loading chapter images for chapterId='${chapter.chapterId}' title='${chapter.title}'")
+                viewModel.loadChapterImages(
+                    chapterId = chapter.chapterId,
+                    useDataSaver = useDataSaver,
+                    mangaTitle = manga.title,
+                    chapterTitle = chapter.title,
+                    mangaId = manga.id
+                )
             }
         }
     }
 
-    // Auto-load chapters if the list is empty (e.g. user jumped straight here)
-    LaunchedEffect(chapters, showChapterList) {
-        if (chapters.isEmpty() && showChapterList) {
+    // Auto-load chapters if the list is empty — always fetch, regardless of showChapterList.
+    // The reader needs chapters both for the chapter list view AND for direct reading.
+    LaunchedEffect(manga.id) {
+        android.util.Log.d("MangaReader", "LaunchedEffect(manga.id=${manga.id}): chapters.isEmpty()=${chapters.isEmpty()}")
+        if (chapters.isEmpty()) {
+            android.util.Log.d("MangaReader", "Fetching manga detail + chapters for manga.id=${manga.id}")
+            viewModel.fetchMangaDetail(manga.id)
             viewModel.loadMangaChapters(manga.id, manga.title)
         }
     }
 
+    // Handle system back button — if chapter list is open, close it first; otherwise close reader
+    BackHandler {
+        android.util.Log.d("MangaReader", "BACK pressed: showChapterList=$showChapterList chapters.size=${chapters.size} — " +
+            if (!showChapterList && chapters.isNotEmpty()) "closing to chapter list" else "closing reader via onClose()")
+        if (!showChapterList && chapters.isNotEmpty()) {
+            // Was reading — go back to chapter list
+            showChapterList = true
+            showControls = false
+        } else {
+            // Was on chapter list — close reader
+            onClose()
+        }
+    }
+
     fun selectChapter(index: Int) {
-        val chapter = chapters.getOrNull(index) ?: return
-        viewModel.markMangaChapterRead(manga.id, chapter)
+        android.util.Log.d("MangaReader", "selectChapter(index=$index) chapters.size=${chapters.size}")
+        val chapter = chapters.getOrNull(index) ?: run {
+            android.util.Log.w("MangaReader", "selectChapter: index $index out of range, IGNORED")
+            return
+        }
+        android.util.Log.d("MangaReader", "selectChapter: opening chapterId='${chapter.chapterId}' title='${chapter.title}'")
+        viewModel.markMangaChapterRead(manga.id, chapter, manga.title, manga.cover)
         readIndices.value = readIndices.value + index
         currentChapterIndex = index
+        currentPageIndex = 0
         showChapterList = false
         showControls = false
     }
 
+    // Retry the current chapter image load (used by the error UI)
+    fun retryChapterLoad() {
+        currentChapter?.let { chapter ->
+            viewModel.loadChapterImages(chapter.chapterId, useDataSaver, manga.title)
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize().background(if (isOled) Color.Black else Color(0xFF1a1a1a))) {
+        val branch = when {
+            showChapterList || chapters.isEmpty() -> "chapter_list"
+            readerMode == ReaderMode.VERTICAL_SCROLL -> "vertical_scroll"
+            else -> "paged"
+        }
+        // Log only when the significant render state actually changes (avoids spam during scroll)
+        var lastRenderSig by remember { mutableStateOf("") }
+        val renderSig = "$branch|${chapters.size}|$currentChapterIndex|$readerMode|${chapterImages?.size ?: "null"}"
+        if (lastRenderSig != renderSig) {
+            lastRenderSig = renderSig
+            android.util.Log.d("MangaReader", "RENDER branch=$branch showChapterList=$showChapterList chapters=${chapters.size} " +
+                "currentChapterIndex=$currentChapterIndex readerMode=$readerMode chapterImages=${chapterImages?.size ?: "null"} error=${chapterImagesError != null}")
+        }
         when {
-            showChapterList -> {
+            // Show chapter list when explicitly requested OR when chapters haven't loaded yet
+            // (shows a loading state inside MangaChapterListWithGroups)
+            showChapterList || chapters.isEmpty() -> {
                 MangaChapterListWithGroups(
                     chapters = chapters,
+                    isLoadingChapters = isLoadingChapters,
                     readIndices = readIndices.value,
                     nextChapterToRead = manga.progress.coerceAtLeast(0),
                     onChapterClick = { selectChapter(it) },
@@ -123,38 +201,69 @@ fun MangaReaderScreen(
                         val next = manga.progress.coerceAtLeast(0)
                         if (next in chapters.indices) selectChapter(next)
                     },
-                    onBack = onClose
+                    onRetryLoadChapters = {
+                        scope.launch {
+                            viewModel.fetchMangaDetail(manga.id)
+                            viewModel.loadMangaChapters(manga.id, manga.title)
+                        }
+                    },
+                    onBack = {
+                        android.util.Log.d("MangaReader", "Chapter list back arrow tapped — calling onClose()")
+                        onClose()
+                    }
                 )
             }
 
             readerMode == ReaderMode.VERTICAL_SCROLL -> {
                 VerticalScrollReader(
                     chapterImages = chapterImages ?: emptyList(),
+                    chapterImagesError = chapterImagesError,
                     chapter = currentChapter,
                     totalChapters = chapters.size,
                     currentIndex = currentChapterIndex,
                     scrollProgress = scrollProgress,
+                    restoreProgress = if (currentChapterIndex == manga.progress - 1) manga.scrollProgress else -1f,
                     showControls = showControls,
-                    onScrollProgress = { viewModel.updateMangaScrollProgress(manga.id, it); scrollProgress = it },
+                    onScrollProgress = {
+                        viewModel.onMangaScrollProgress(
+                            mangaId = manga.id,
+                            chapter = currentChapter,
+                            scrollPercent = it,
+                            mangaTitle = manga.title,
+                            mangaCover = manga.cover
+                        )
+                        scrollProgress = it
+                    },
+                    onCurrentPage = { page -> currentPageIndex = page },
                     onToggleControls = { showControls = !showControls },
-                    onPrevChapter = { if (!isFirstChapter) selectChapter(currentChapterIndex - 1) },
-                    onNextChapter = { if (!isLastChapter) selectChapter(currentChapterIndex + 1) },
-                    isFirstChapter = isFirstChapter,
-                    isLastChapter = isLastChapter
+                    onRetry = { retryChapterLoad() }
                 )
             }
 
             readerMode == ReaderMode.LEFT_TO_RIGHT || readerMode == ReaderMode.RIGHT_TO_LEFT -> {
                 PagedMangaReader(
                     chapterImages = chapterImages ?: emptyList(),
-                    chapter = currentChapter,
+                    chapterImagesError = chapterImagesError,
                     mode = readerMode,
-                    showControls = showControls,
+                    initialPage = currentPageIndex.coerceIn(0, (chapterImages?.size ?: 1) - 1),
                     onToggleControls = { showControls = !showControls },
                     onPrevChapter = { if (!isFirstChapter) selectChapter(currentChapterIndex - 1) },
                     onNextChapter = { if (!isLastChapter) selectChapter(currentChapterIndex + 1) },
-                    isFirstChapter = isFirstChapter,
-                    isLastChapter = isLastChapter
+                    onRetry = { retryChapterLoad() },
+                    onPageChanged = { page, total ->
+                        currentPageIndex = page
+                        if (total > 1) {
+                            val progress = page.toFloat() / (total - 1).toFloat()
+                            viewModel.onMangaScrollProgress(
+                                mangaId = manga.id,
+                                chapter = currentChapter,
+                                scrollPercent = progress,
+                                mangaTitle = manga.title,
+                                mangaCover = manga.cover
+                            )
+                            scrollProgress = progress
+                        }
+                    }
                 )
             }
         }
@@ -167,37 +276,31 @@ fun MangaReaderScreen(
             modifier = Modifier.align(Alignment.TopCenter)
         ) {
             Column {
-                Surface(
-                    color = Color.Black.copy(alpha = 0.95f)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .statusBarsPadding()
-                            .padding(horizontal = 4.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        IconButton(onClick = onClose) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
-                        }
-                        Column(modifier = Modifier.weight(1f)) {
+                TopAppBar(
+                    title = {
+                        Column {
                             Text(
                                 text = manga.title,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color.White,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                             if (currentChapter != null) {
                                 Text(
                                     text = currentChapter.title,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color.White.copy(alpha = 0.7f),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onClose) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
+                    },
+                    actions = {
                         IconButton(
                             onClick = { if (currentChapterIndex > 0) selectChapter(currentChapterIndex - 1) },
                             enabled = currentChapterIndex > 0
@@ -221,8 +324,13 @@ fun MangaReaderScreen(
                         IconButton(onClick = { showChapterList = true }) {
                             Icon(Icons.Default.List, contentDescription = "Chapters", tint = Color.White)
                         }
-                    }
-                }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Black.copy(alpha = 0.95f),
+                        titleContentColor = Color.White,
+                        navigationIconContentColor = Color.White
+                    )
+                )
                 Box(modifier = Modifier.fillMaxWidth().height(3.dp).background(Color.Black.copy(alpha = 0.95f))) {
                     Box(modifier = Modifier.fillMaxWidth().height(3.dp).background(Color.White.copy(alpha = 0.2f)))
                     Box(
@@ -231,23 +339,39 @@ fun MangaReaderScreen(
                             .height(3.dp)
                             .background(MaterialTheme.colorScheme.primary)
                     )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(syncThreshold / 100f)
+                            .fillMaxHeight()
+                            .background(Color.Transparent)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .width(2.dp)
+                                .fillMaxHeight()
+                                .background(Color.White.copy(alpha = 0.8f))
+                        )
+                    }
                 }
             }
         }
 
-        // ─── Overlay: page indicator (bottom-right) ───────────────────
-        if (showControls && !showChapterList && chapterImages != null) {
+        // ─── Overlay: page indicator (bottom-right floating pill) ──────
+        // Visible whenever the setting is on — independent of the controls
+        // overlay, matching oni.
+        if (showPageIndicator && !showChapterList && chapterImages != null) {
             val total = chapterImages?.size ?: 0
             if (total > 0) {
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
-                        .padding(end = 12.dp, bottom = 64.dp)
+                        .padding(end = 12.dp, bottom = 56.dp)
                         .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(12.dp))
                         .padding(horizontal = 10.dp, vertical = 4.dp)
                 ) {
                     Text(
-                        text = "${currentChapterIndex + 1}/$total",
+                        text = "${currentPageIndex + 1} / $total",
                         style = MaterialTheme.typography.labelMedium,
                         color = Color.White
                     )
@@ -255,21 +379,19 @@ fun MangaReaderScreen(
             }
         }
 
-        // ─── Overlay: bottom bar (reader mode toggle) ────────────────
+        // ─── Overlay: bottom bar (reader mode toggle + page indicator toggle) ─
         AnimatedVisibility(
             visible = showControls && !showChapterList,
             enter = fadeIn(tween(150)),
             exit = fadeOut(tween(150)),
             modifier = Modifier.align(Alignment.BottomCenter)
         ) {
-            Row(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .navigationBarsPadding()
                     .background(Color.Black.copy(alpha = 0.95f))
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(horizontal = 16.dp, vertical = 10.dp)
             ) {
                 ReaderModeSegmentedToggle(
                     currentMode = readerMode,
@@ -282,8 +404,20 @@ fun MangaReaderScreen(
                                 ReaderMode.RIGHT_TO_LEFT -> "right_to_left"
                             }
                         )
-                    }
+                    },
+                    modifier = Modifier.align(Alignment.Center)
                 )
+                IconButton(
+                    onClick = { viewModel.setMangaPageIndicator(!showPageIndicator) },
+                    modifier = Modifier.align(Alignment.CenterEnd).size(32.dp)
+                ) {
+                    Icon(
+                        Icons.Default.ViewAgenda,
+                        contentDescription = "Toggle page indicator",
+                        tint = if (showPageIndicator) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.5f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             }
         }
     }
@@ -292,122 +426,222 @@ fun MangaReaderScreen(
 @Composable
 private fun ReaderModeSegmentedToggle(
     currentMode: ReaderMode,
-    onSelect: (ReaderMode) -> Unit
+    onSelect: (ReaderMode) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Row(
-        modifier = Modifier
+        modifier = modifier
             .clip(RoundedCornerShape(10.dp))
-            .background(Color.White.copy(alpha = 0.1f))
-            .padding(3.dp)
+            .background(Color.White.copy(alpha = 0.08f))
+            .padding(2.dp)
     ) {
-        ReaderModeButton(ReaderMode.VERTICAL_SCROLL, "Scroll", currentMode, onSelect)
-        ReaderModeButton(ReaderMode.LEFT_TO_RIGHT, "LTR", currentMode, onSelect)
-        ReaderModeButton(ReaderMode.RIGHT_TO_LEFT, "RTL", currentMode, onSelect)
+        ReaderModeToggleItem(
+            icon = Icons.Default.ViewAgenda,
+            contentDescription = "Vertical scroll mode",
+            selected = currentMode == ReaderMode.VERTICAL_SCROLL,
+            onClick = { onSelect(ReaderMode.VERTICAL_SCROLL) }
+        )
+        ReaderModeToggleItem(
+            icon = Icons.AutoMirrored.Filled.ArrowForward,
+            contentDescription = "Left to right paged mode",
+            selected = currentMode == ReaderMode.LEFT_TO_RIGHT,
+            onClick = { onSelect(ReaderMode.LEFT_TO_RIGHT) }
+        )
+        ReaderModeToggleItem(
+            icon = Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = "Right to left paged mode",
+            selected = currentMode == ReaderMode.RIGHT_TO_LEFT,
+            onClick = { onSelect(ReaderMode.RIGHT_TO_LEFT) }
+        )
     }
 }
 
 @Composable
-private fun ReaderModeButton(
-    mode: ReaderMode,
-    label: String,
-    currentMode: ReaderMode,
-    onSelect: (ReaderMode) -> Unit
+private fun ReaderModeToggleItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    selected: Boolean,
+    onClick: () -> Unit
 ) {
-    val isSelected = mode == currentMode
     Box(
         modifier = Modifier
+            .size(32.dp)
             .clip(RoundedCornerShape(8.dp))
-            .background(if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent)
-            .clickable { onSelect(mode) }
-            .padding(horizontal = 16.dp, vertical = 7.dp)
+            .background(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-            color = if (isSelected) MaterialTheme.colorScheme.onPrimary else Color.White.copy(alpha = 0.8f)
+        Icon(
+            icon,
+            contentDescription = contentDescription,
+            tint = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            modifier = Modifier.size(18.dp)
         )
+    }
+}
+
+@Composable
+private fun ChapterLoadErrorView(
+    message: String,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier.fillMaxSize().padding(32.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                Icons.Default.ErrorOutline,
+                contentDescription = null,
+                tint = Color.White.copy(alpha = 0.6f),
+                modifier = Modifier.size(48.dp)
+            )
+            Text(
+                text = message,
+                color = Color.White.copy(alpha = 0.85f),
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+            Button(
+                onClick = onRetry,
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+            ) {
+                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Retry")
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChapterLoadingView(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        CircularProgressIndicator(color = Color.White)
     }
 }
 
 @Composable
 private fun VerticalScrollReader(
     chapterImages: List<String>,
+    chapterImagesError: String?,
     chapter: MangaChapter?,
     totalChapters: Int,
     currentIndex: Int,
     scrollProgress: Float,
+    restoreProgress: Float = -1f,
     showControls: Boolean,
     onScrollProgress: (Float) -> Unit,
+    onCurrentPage: (Int) -> Unit = {},
     onToggleControls: () -> Unit,
-    onPrevChapter: () -> Unit,
-    onNextChapter: () -> Unit,
-    isFirstChapter: Boolean,
-    isLastChapter: Boolean
+    onRetry: () -> Unit
 ) {
     val listState = rememberLazyListState()
+    var restored by remember { mutableStateOf(false) }
 
     LaunchedEffect(chapter) {
         listState.scrollToItem(0)
+        restored = false
     }
 
+    // Restore the saved reading position once images are available (oni-style resume).
+    // Only applies to the chapter that was last being read (see caller's restoreProgress).
+    LaunchedEffect(chapter, chapterImages) {
+        if (!restored && restoreProgress > 0f && chapterImages.isNotEmpty()) {
+            delay(150)
+            val targetIndex = (restoreProgress * chapterImages.size)
+                .toInt().coerceIn(0, chapterImages.size - 1)
+            listState.scrollToItem(targetIndex)
+            restored = true
+        }
+    }
+
+    // Reading progress (0..1) — pixel-based scroll fraction, matching oni.
+    // Writes are done in the COLLECT lambda (outside snapshotFlow's read-only
+    // snapshot); writing state inside the snapshotFlow block itself would throw
+    // "Cannot modify a state object in a read-only snapshot".
     LaunchedEffect(listState) {
         snapshotFlow {
             val layoutInfo = listState.layoutInfo
-            if (layoutInfo.totalItemsCount > 0 && layoutInfo.visibleItemsInfo.isNotEmpty()) {
-                val firstVisible = layoutInfo.visibleItemsInfo.first()
-                val progress = (firstVisible.index + firstVisible.offset.toFloat() / firstVisible.size) / layoutInfo.totalItemsCount
-                progress.coerceIn(0f, 1f)
-            } else 0f
-        }.collect { onScrollProgress(it) }
+            val totalItems = layoutInfo.totalItemsCount
+            if (totalItems == 0) return@snapshotFlow 0f
+            if (totalItems <= 1) return@snapshotFlow 1f
+
+            val firstVisibleItem = layoutInfo.visibleItemsInfo.firstOrNull() ?: return@snapshotFlow 0f
+            val itemSize = firstVisibleItem.size
+            val viewportHeight = layoutInfo.viewportSize.height
+
+            val currentScroll = listState.firstVisibleItemIndex.toFloat() * itemSize.toFloat() + listState.firstVisibleItemScrollOffset.toFloat()
+            val maxScroll = (totalItems.toFloat() * itemSize.toFloat() - viewportHeight.toFloat()).coerceAtLeast(0f)
+            if (maxScroll <= 0f) 0f else (currentScroll / maxScroll).coerceIn(0f, 1f)
+        }.collect { progress: Float ->
+            onScrollProgress(progress)
+        }
     }
 
+    // Track the current PAGE (the one the user is actually looking at) by
+    // watching the LazyColumn's layout, using the item with the largest
+    // viewport overlap (oni's approach). Runs in the collect lambda so state
+    // writes are legal.
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.layoutInfo }
+            .collect { layoutInfo ->
+                val visibleItems = layoutInfo.visibleItemsInfo
+                if (visibleItems.isEmpty()) return@collect
+                val best = visibleItems.maxByOrNull { item ->
+                    val overlapTop = maxOf(item.offset, layoutInfo.viewportStartOffset)
+                    val overlapBottom = minOf(item.offset + item.size, layoutInfo.viewportEndOffset)
+                    maxOf(0, overlapBottom - overlapTop)
+                }
+                if (best != null) {
+                    onCurrentPage(best.index)
+                }
+            }
+    }
+
+    // Error state — show error message + retry button instead of empty list
+    if (chapterImagesError != null) {
+        ChapterLoadErrorView(
+            message = chapterImagesError,
+            onRetry = onRetry,
+            modifier = Modifier.fillMaxSize()
+        )
+        return
+    }
+
+    // Loading state — chapter just started loading
+    if (chapterImages.isEmpty()) {
+        ChapterLoadingView(modifier = Modifier.fillMaxSize())
+        return
+    }
+
+    // Vertical scroll mode — one zoomable page per row (7:10 box, edge-to-edge
+    // width), matching oni's MihonZoomableImage. Pinch/double-tap zoom works per
+    // page; single-finger drag at 1x passes through so the LazyColumn scrolls.
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally
+        contentPadding = PaddingValues(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        itemsIndexed(chapterImages) { index, imageUrl ->
-            Box(
+        itemsIndexed(chapterImages, key = { index, _ -> "page_$index" }) { index, imageUrl ->
+            MihonZoomableImage(
+                imageUrl = imageUrl,
+                contentDescription = "Page ${index + 1}",
                 modifier = Modifier
                     .fillMaxWidth()
-                    .pointerInput(Unit) {
-                        detectTapGestures { onToggleControls() }
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                if (imageUrl.isNotEmpty()) {
-                    AsyncImage(
-                        model = ImageRequest.Builder(LocalContext.current)
-                            .data(imageUrl)
-                            .crossfade(true)
-                            .memoryCachePolicy(CachePolicy.ENABLED)
-                            .build(),
-                        contentDescription = "Page ${index + 1}",
-                        modifier = Modifier.fillMaxWidth(),
-                        contentScale = ContentScale.Fit
-                    )
-                }
-            }
-        }
-
-        item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                TextButton(
-                    onClick = onPrevChapter,
-                    enabled = !isFirstChapter
-                ) { Text("Previous Chapter") }
-
-                TextButton(
-                    onClick = onNextChapter,
-                    enabled = !isLastChapter
-                ) { Text("Next Chapter") }
-            }
+                    .aspectRatio(7f / 10f),
+                fillWidth = true,
+                onSingleTap = { onToggleControls() }
+            )
         }
     }
 }
@@ -415,81 +649,131 @@ private fun VerticalScrollReader(
 @Composable
 private fun PagedMangaReader(
     chapterImages: List<String>,
-    chapter: MangaChapter?,
+    chapterImagesError: String?,
     mode: ReaderMode,
-    showControls: Boolean,
+    initialPage: Int,
     onToggleControls: () -> Unit,
     onPrevChapter: () -> Unit,
     onNextChapter: () -> Unit,
-    isFirstChapter: Boolean,
-    isLastChapter: Boolean
+    onRetry: () -> Unit,
+    onPageChanged: (page: Int, total: Int) -> Unit = { _, _ -> }
 ) {
-    val isRtl = mode == ReaderMode.RIGHT_TO_LEFT
-    val pagerState = rememberPagerState(
-        initialPage = 0,
-        pageCount = { chapterImages.size }
-    )
-
-    LaunchedEffect(chapter) {
-        pagerState.scrollToPage(0)
-    }
-
-    if (chapterImages.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(color = Color.White)
-        }
+    // Error state — show error message + retry button
+    if (chapterImagesError != null) {
+        ChapterLoadErrorView(
+            message = chapterImagesError,
+            onRetry = onRetry,
+            modifier = Modifier.fillMaxSize()
+        )
         return
     }
 
-    HorizontalPager(
-        state = pagerState,
-        reverseLayout = isRtl,
-        modifier = Modifier.fillMaxSize()
-    ) { page ->
-        val displayPage = if (isRtl) chapterImages.lastIndex - page else page
-        Box(
+    if (chapterImages.isEmpty()) {
+        ChapterLoadingView(modifier = Modifier.fillMaxSize())
+        return
+    }
+
+    val isRtl = mode == ReaderMode.RIGHT_TO_LEFT
+    // The pager is torn down and recreated whenever a chapter's images change
+    // (chapterImages is cleared to null during loading), so `initialPage` here
+    // both resumes the current page on mode switches AND starts new chapters at
+    // page 0 — matching oni.
+    val pagerState = rememberPagerState(
+        initialPage = initialPage.coerceIn(0, chapterImages.lastIndex),
+        pageCount = { chapterImages.size }
+    )
+    val scope = rememberCoroutineScope()
+
+    // Report the current page upward so the reader can show a page indicator
+    // and feed scroll progress back to the ViewModel for AniList sync. Fires
+    // once per page transition via distinctUntilChanged, matching oni.
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.currentPage }
+            .distinctUntilChanged()
+            .collect { page -> onPageChanged(page, chapterImages.size) }
+    }
+
+    // Track the current page's zoom state. While zoomed in, the pager's swipe
+    // is disabled so the user can pan without flipping pages.
+    var currentPageZoomed by remember { mutableStateOf(false) }
+
+    // Per-page double-tap zoom trigger. Incremented when a double-tap is
+    // detected at the pager level (before HorizontalPager consumes the event).
+    // MihonZoomableImage watches this and toggles zoom accordingly.
+    val doubleTapTriggers = remember { mutableStateMapOf<Int, Int>() }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        HorizontalPager(
+            state = pagerState,
+            reverseLayout = isRtl,
+            userScrollEnabled = !currentPageZoomed,
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(Unit) {
-                    detectTapGestures { offset ->
-                        val width = size.width
+                .background(Color.Black)
+                // Detect double-taps at the pager level using the Initial pass,
+                // which runs BEFORE HorizontalPager's own gesture detection.
+                .pointerInput(pagerState.currentPage) {
+                    awaitEachGesture {
+                        val down1 = awaitFirstDown(requireUnconsumed = false)
+                        val t1 = down1.uptimeMillis
+                        waitForUpOrCancellation() ?: return@awaitEachGesture
+                        val down2 = awaitFirstDown(requireUnconsumed = false)
+                        val t2 = down2.uptimeMillis
+                        if (t2 - t1 < 300) {
+                            val page = pagerState.currentPage
+                            doubleTapTriggers[page] = (doubleTapTriggers[page] ?: 0) + 1
+                            down2.consume()
+                        }
+                    }
+                }
+        ) { pageIndex ->
+            // Reset the zoom flag when the user lands on a new page: the new
+            // page starts at 1x, so the pager should be swipeable until pinched.
+            var isZoomed by remember(pageIndex) { mutableStateOf(false) }
+            var pageLayoutSize by remember(pageIndex) { mutableStateOf(Size.Zero) }
+
+            LaunchedEffect(pagerState.currentPage, isZoomed) {
+                currentPageZoomed = if (pagerState.currentPage == pageIndex) isZoomed else false
+            }
+
+            MihonZoomableImage(
+                imageUrl = chapterImages[pageIndex],
+                contentDescription = "Page ${pageIndex + 1}",
+                modifier = Modifier
+                    .fillMaxSize()
+                    .onSizeChanged { pageLayoutSize = it.toSize() },
+                fillWidth = false,
+                doubleTapTrigger = doubleTapTriggers[pageIndex] ?: 0,
+                onSingleTap = { tap ->
+                    if (isZoomed) return@MihonZoomableImage
+
+                    val width = pageLayoutSize.width
+                    if (width <= 0f) return@MihonZoomableImage
+
+                    // Middle zone (~40%) toggles the chrome; left/right zones
+                    // flip pages (handling chapter boundaries at the edges).
+                    val isMiddleZone = tap.x > width * 0.3f && tap.x < width * 0.7f
+                    if (isMiddleZone) {
+                        onToggleControls()
+                        return@MihonZoomableImage
+                    }
+
+                    val isPrevZone = if (isRtl) tap.x > width * 0.7f else tap.x < width * 0.3f
+
+                    scope.launch {
                         when {
-                            offset.x < width * 0.3f -> {
-                                if (isRtl) {
-                                    if (page > 0) { }
-                                    else if (!isLastChapter) onNextChapter()
-                                    else onToggleControls()
-                                } else {
-                                    if (page > 0) { }
-                                    else if (!isFirstChapter) onPrevChapter()
-                                    else onToggleControls()
-                                }
-                            }
-                            offset.x > width * 0.7f -> {
-                                if (isRtl) {
-                                    if (page < pagerState.pageCount - 1) { }
-                                    else if (!isFirstChapter) onPrevChapter()
-                                    else onToggleControls()
-                                } else {
-                                    if (page < pagerState.pageCount - 1) { }
-                                    else if (!isLastChapter) onNextChapter()
-                                    else onToggleControls()
-                                }
-                            }
-                            else -> onToggleControls()
+                            isPrevZone && pagerState.currentPage > 0 ->
+                                pagerState.animateScrollToPage(pagerState.currentPage - 1)
+                            !isPrevZone && pagerState.currentPage < chapterImages.lastIndex ->
+                                pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                            !isPrevZone && pagerState.currentPage == chapterImages.lastIndex ->
+                                onNextChapter()
+                            isPrevZone && pagerState.currentPage == 0 ->
+                                onPrevChapter()
                         }
                     }
                 },
-            contentAlignment = Alignment.Center
-        ) {
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(chapterImages.getOrNull(displayPage) ?: "")
-                    .crossfade(true)
-                    .build(),
-                contentDescription = "Page ${displayPage + 1}",
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Fit
+                onZoomChanged = { zoomed -> isZoomed = zoomed }
             )
         }
     }
@@ -504,23 +788,63 @@ fun MangaChapterListWithGroups(
     nextChapterToRead: Int,
     onChapterClick: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    isLoadingChapters: Boolean = true,
     onContinueReading: (() -> Unit)? = null,
+    onRetryLoadChapters: (() -> Unit)? = null,
     onBack: (() -> Unit)? = null
 ) {
     if (chapters.isEmpty()) {
+        var lastEmptySig by remember { mutableStateOf("") }
+        val emptySig = "empty|$isLoadingChapters"
+        if (lastEmptySig != emptySig) {
+            lastEmptySig = emptySig
+            android.util.Log.d("MangaChapterList", "RENDER empty-state: isLoadingChapters=$isLoadingChapters " +
+                "onRetryLoadChapters=${onRetryLoadChapters != null} onBack=${onBack != null}")
+        }
         Box(
             modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
             contentAlignment = Alignment.Center
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                CircularProgressIndicator()
-                Spacer(modifier = Modifier.height(16.dp))
-                Text("Loading chapters...", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 15.sp)
+                if (isLoadingChapters) {
+                    CircularProgressIndicator()
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Loading chapters...", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 15.sp)
+                } else {
+                    Text("No chapters found", color = MaterialTheme.colorScheme.onSurface, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "Could not load chapters for this manga. It may not be available on the configured source, or the source may be down.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 14.sp,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 32.dp)
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+                    if (onRetryLoadChapters != null) {
+                        Button(onClick = onRetryLoadChapters) {
+                            Text("Retry")
+                        }
+                    }
+                }
             }
         }
     } else {
         var searchQuery by remember { mutableStateOf("") }
-        val groupedChapters = remember(chapters) { groupChaptersByMainChapter(chapters) }
+        val groupedChapters = remember(chapters) {
+            runCatching {
+                groupChaptersByMainChapter(chapters)
+            }.onFailure { e ->
+                android.util.Log.e("MangaChapterList", "groupChaptersByMainChapter CRASHED: ${e.message}", e)
+            }.getOrElse { emptyList() }
+        }
+        var lastListSig by remember { mutableStateOf("") }
+        val listSig = "list|${chapters.size}|${groupedChapters.size}|${readIndices.size}|$nextChapterToRead"
+        if (lastListSig != listSig) {
+            lastListSig = listSig
+            android.util.Log.d("MangaChapterList", "RENDER list: chapters=${chapters.size} grouped=${groupedChapters.size} " +
+                "readIndices=${readIndices.size} nextChapterToRead=$nextChapterToRead")
+        }
 
         val filteredGroups = remember(groupedChapters, searchQuery) {
             if (searchQuery.isBlank()) groupedChapters

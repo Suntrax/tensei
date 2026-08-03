@@ -141,6 +141,7 @@ fun HomeScreen(
     onViewAllCast: (Int, String) -> Unit = { _, _ -> },
     onViewAllStaff: (Int, String) -> Unit = { _, _ -> },
     onViewAllRelations: (Int, String) -> Unit = { _, _ -> },
+    onViewAllRecommendations: (Int, String) -> Unit = { _, _ -> },
     onOverlayOpenChange: (Boolean) -> Unit = {},
     onNavigateToSettings: (() -> Unit)? = null,
     onNoExtension: () -> Unit = {},
@@ -535,6 +536,7 @@ fun HomeScreen(
                                     statusListAnime = continueWatchingEpisodes.map { entry ->
                                         animeById[entry.animeId] ?: AnimeMedia(id = entry.animeId, title = entry.animeTitle, titleEnglish = entry.animeTitleEnglish, cover = entry.animeCover, banner = entry.animeBanner)
                                     }
+                                    statusListIsManga = false
                                     showStatusListScreen = true
                                 }
                             )
@@ -573,6 +575,7 @@ fun HomeScreen(
                                     statusListIcon = Icons.Default.PlayArrow
                                     statusListType = "CURRENT"
                                     statusListAnime = effectiveCurrentlyWatching
+                                    statusListIsManga = false
                                     showStatusListScreen = true
                                 }
                             )
@@ -605,6 +608,7 @@ fun HomeScreen(
                                     statusListIcon = Icons.Default.Bookmark
                                     statusListType = "PLANNING"
                                     statusListAnime = effectivePlanningToWatch
+                                    statusListIsManga = false
                                     showStatusListScreen = true
                                 }
                             )
@@ -636,6 +640,7 @@ fun HomeScreen(
                                     statusListIcon = Icons.Default.Check
                                     statusListType = "COMPLETED"
                                     statusListAnime = effectiveCompleted
+                                    statusListIsManga = false
                                     showStatusListScreen = true
                                 }
                             )
@@ -667,6 +672,7 @@ fun HomeScreen(
                                     statusListIcon = Icons.Default.Pause
                                     statusListType = "PAUSED"
                                     statusListAnime = effectiveOnHold
+                                    statusListIsManga = false
                                     showStatusListScreen = true
                                 }
                             )
@@ -698,6 +704,7 @@ fun HomeScreen(
                                     statusListIcon = Icons.Default.Delete
                                     statusListType = "DROPPED"
                                     statusListAnime = effectiveDropped
+                                    statusListIsManga = false
                                     showStatusListScreen = true
                                 }
                             )
@@ -1093,6 +1100,9 @@ fun HomeScreen(
             onViewAllStaff = { onViewAllStaff(selectedAnime!!.id, selectedAnime!!.title) },
             onViewAllRelations = { animeId, title ->
                 onViewAllRelations(animeId, title)
+            },
+            onViewAllRecommendations = { animeId, title ->
+                onViewAllRecommendations(animeId, title)
             }
         )
     }

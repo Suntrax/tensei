@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import android.util.Log
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -89,6 +90,7 @@ import com.blissless.tensei.viewmodel.getMagnetForEpisode
 // Extension functions on AnimeRepository (defined in com.blissless.tensei.data)
 import com.blissless.tensei.data.fetchTmdbEpisodes
 import com.blissless.tensei.data.fetchAnimeRelationsList
+import com.blissless.tensei.data.fetchAnimeRecommendationsList
 import com.blissless.tensei.util.ErrorHandler
 
 @UnstableApi
@@ -431,6 +433,7 @@ class MainViewModel : ViewModel() {
     val mangaPageLayout: StateFlow<String> get() = userPreferences.mangaPageLayout
     val mangaImageScaling: StateFlow<String> get() = userPreferences.mangaImageScaling
     val mangaPageIndicator: StateFlow<Boolean> get() = userPreferences.mangaPageIndicator
+    val mangaSyncThreshold: StateFlow<Int> get() = userPreferences.mangaSyncThreshold
 
     // Notification tap events
     private val _notificationAnimeTaps = MutableSharedFlow<String>(replay = 1, extraBufferCapacity = 1)
@@ -872,10 +875,12 @@ class MainViewModel : ViewModel() {
         val listsSuccess: Boolean
         val mangaListsSuccess: Boolean
         coroutineScope {
-            val userDeferred = async { fetchUser() }
+            // fetchUser MUST complete before fetchLists/fetchMangaLists — both need _userId
+            // which is set by fetchUser. Running them in parallel was a bug that caused
+            // anime lists to silently fail (fetchLists returned false because _userId was null).
+            userSuccess = async { fetchUser() }.await()
             val listsDeferred = async { fetchLists() }
             val mangaListsDeferred = async { fetchMangaLists() }
-            userSuccess = userDeferred.await()
             listsSuccess = listsDeferred.await()
             mangaListsSuccess = mangaListsDeferred.await()
         }
@@ -1389,10 +1394,12 @@ class MainViewModel : ViewModel() {
      */
 
     suspend fun fetchDetailedAnimeData(animeId: Int, malId: Int? = null): DetailedAnimeData? {
+        Log.d("AnimeDetailDebug", "fetchDetailedAnimeData START id=$animeId malId=$malId")
         var media = repository.fetchDetailedAnime(animeId)
         
         // If not found and have MAL ID, try finding by MAL ID
         if (media == null && malId != null && malId > 0) {
+            Log.d("AnimeDetailDebug", "fetchDetailedAnimeData primary fetch returned null, retrying by MAL id=$malId")
             val foundMedia = repository.findAnimeByMalId(malId)
             if (foundMedia != null) {
                 media = repository.fetchDetailedAnime(foundMedia.id)
@@ -1400,10 +1407,11 @@ class MainViewModel : ViewModel() {
         }
         
         if (media == null) {
+            Log.e("AnimeDetailDebug", "fetchDetailedAnimeData RESULT=null (fallback used) id=$animeId malId=$malId")
             return null
         }
-        val relationsList = media.relations?.edges?.map { edge ->
-            edge.node.let { node ->
+        val relationsList = media.relations?.edges?.mapNotNull { edge ->
+            edge.node?.let { node ->
                 AnimeRelation(
                     id = node.id,
                     title = node.title?.english ?: node.title?.romaji ?: "Unknown",
@@ -1448,14 +1456,43 @@ class MainViewModel : ViewModel() {
                     com.blissless.tensei.network.Endpoints.YouTube.thumbnailUrl(videoId)
                 } else null
             },
-            staff = media.staff
+            staff = media.staff,
+            recommendations = media.recommendations?.nodes?.mapNotNull { r ->
+                r.mediaRecommendation?.let { m ->
+                    ExploreAnime(
+                        id = m.id,
+                        title = m.title?.romaji ?: m.title?.english ?: "Unknown",
+                        titleEnglish = m.title?.english,
+                        cover = m.coverImage?.extraLarge ?: "",
+                        banner = m.bannerImage,
+                        episodes = m.episodes ?: 0,
+                        latestEpisode = m.nextAiringEpisode?.episode?.let { it - 1 },
+                        averageScore = m.averageScore,
+                        genres = m.genres ?: emptyList(),
+                        year = m.seasonYear,
+                        malId = m.idMal,
+                        format = m.format
+                    )
+                }
+            } ?: emptyList()
         )
         cacheManager.cacheDetailedAnime(animeId, detailedData)
+        Log.d(
+            "AnimeDetailDebug",
+            "fetchDetailedAnimeData RESULT=OK id=$animeId title=${detailedData.title} " +
+                "relations=${detailedData.relations.size} chars=${detailedData.characters?.nodes?.size ?: 0} " +
+                "staff=${detailedData.staff?.edges?.size ?: 0} studios=${detailedData.studios.size} " +
+                "descLen=${detailedData.description?.length ?: 0} recs=${detailedData.recommendations.size}"
+        )
         return detailedData
     }
 
     suspend fun fetchAnimeRelations(animeId: Int): List<AnimeRelation>? {
         return repository.fetchAnimeRelationsList(animeId)
+    }
+
+    suspend fun fetchAnimeRecommendations(animeId: Int): List<AnimeRelation>? {
+        return repository.fetchAnimeRecommendationsList(animeId)
     }
 
     suspend fun fetchDetailedAnimeDataByMalId(malId: Int): DetailedAnimeData? {

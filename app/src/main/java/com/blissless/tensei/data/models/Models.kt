@@ -694,7 +694,18 @@ data class DetailedAnimeMedia(
     val isAdult: Boolean = false,
     val characters: DetailedAnimeCharacters? = null,
     val trailer: MediaTrailer? = null,
-    val staff: DetailedAnimeStaff? = null
+    val staff: DetailedAnimeStaff? = null,
+    val recommendations: DetailedAnimeRecommendations? = null
+)
+
+@Serializable
+data class DetailedAnimeRecommendations(
+    val nodes: List<DetailedAnimeRecommendationNode> = emptyList()
+)
+
+@Serializable
+data class DetailedAnimeRecommendationNode(
+    val mediaRecommendation: DetailedAnimeMedia? = null
 )
 
 @Serializable
@@ -706,7 +717,7 @@ data class DetailedAnimeTitle(
 
 @Serializable
 data class DetailedAnimeStudios(
-    val nodes: List<DetailedAnimeStudioNode>
+    val nodes: List<DetailedAnimeStudioNode> = emptyList()
 )
 
 @Serializable
@@ -737,13 +748,13 @@ data class AnimeRelationsMedia(
 
 @Serializable
 data class AnimeRelations(
-    val edges: List<AnimeRelationEdge>
+    val edges: List<AnimeRelationEdge> = emptyList()
 )
 
 @Serializable
 data class AnimeRelationEdge(
     val relationType: String? = null,
-    val node: AnimeRelationNode
+    val node: AnimeRelationNode? = null
 )
 
 @Serializable
@@ -756,6 +767,28 @@ data class AnimeRelationNode(
     val type: String? = null,
     val format: String? = null,
     val nextAiringEpisode: NextAiringEpisode? = null
+)
+
+@Serializable
+data class AnimeRecommendationsResponse(val data: AnimeRecommendationsData)
+
+@Serializable
+data class AnimeRecommendationsData(val Media: AnimeRecommendationsMedia)
+
+@Serializable
+data class AnimeRecommendationsMedia(
+    val id: Int,
+    val recommendations: AnimeRecommendations? = null
+)
+
+@Serializable
+data class AnimeRecommendations(
+    val nodes: List<AnimeRecommendationNode> = emptyList()
+)
+
+@Serializable
+data class AnimeRecommendationNode(
+    val mediaRecommendation: AnimeRelationNode? = null
 )
 
 // ============================================
@@ -977,7 +1010,8 @@ data class CharacterAnimeConnection(
 data class CharacterAnimeNode(
     val id: Int,
     val title: MediaTitle? = null,
-    val coverImage: MediaCoverImage? = null
+    val coverImage: MediaCoverImage? = null,
+    val format: String? = null
 )
 
 @Serializable
@@ -1068,7 +1102,8 @@ data class MangaMedia(
     val format: String? = null,
     val userScore: Int? = null,
     val siteUrl: String? = null,
-    val mangaDexId: String? = null
+    val mangaDexId: String? = null,
+    val scrollProgress: Float = 0f
 )
 
 @Serializable
@@ -1180,7 +1215,8 @@ data class MangaRankingEntry(
     val rank: Int? = null,
     val type: String? = null,
     val context: String? = null,
-    val primary: Boolean? = null
+    val allTime: Boolean? = null,
+    val season: String? = null
 )
 
 @Serializable
@@ -1202,12 +1238,12 @@ data class MangaExploreMedia(
     val id: Int,
     val idMal: Int? = null,
     val title: MangaTitle,
-    val coverImage: MediaCoverImage?,
-    val bannerImage: String?,
-    val chapters: Int?,
-    val status: String?,
-    val averageScore: Int?,
-    val genres: List<String>?,
+    val coverImage: MediaCoverImage? = null,
+    val bannerImage: String? = null,
+    val chapters: Int? = null,
+    val status: String? = null,
+    val averageScore: Int? = null,
+    val genres: List<String>? = null,
     val seasonYear: Int? = null,
     val startDate: MangaFuzzyDate? = null,
     val isAdult: Boolean = false,
@@ -1217,8 +1253,8 @@ data class MangaExploreMedia(
 
 @Serializable
 data class MangaTitle(
-    val romaji: String?,
-    val english: String?
+    val romaji: String? = null,
+    val english: String? = null
 )
 
 @Serializable
@@ -1288,7 +1324,7 @@ data class MangaDetailRelations(
 @Serializable
 data class MangaDetailRelationEdge(
     val relationType: String? = null,
-    val node: MangaDetailRelationNode
+    val node: MangaDetailRelationNode? = null
 )
 
 @Serializable
@@ -1375,7 +1411,7 @@ data class MangaEntryMedia(
 data class MangaUserProfileResponse(val data: MangaUserProfileData)
 
 @Serializable
-data class MangaUserProfileData(val User: MangaUserProfile)
+data class MangaUserProfileData(val User: MangaUserProfile? = null)
 
 @Serializable
 data class MangaUserProfile(
@@ -1470,3 +1506,70 @@ data class MangaDexLinks(
 )
 
 
+// ─── Manga Favorites & Activity (Profile) ────────────────────────────
+
+@Serializable
+data class MangaFavorite(
+    val id: Int,
+    val title: MangaTitle? = null,
+    val coverImage: MediaCoverImage? = null,
+    val format: String? = null,
+    val status: String? = null,
+    val startDate: MangaFuzzyDate? = null,
+    val chapters: Int? = null,
+    val averageScore: Int? = null,
+    val siteUrl: String? = null
+)
+
+@Serializable
+data class MangaFavoritesResponse(val data: MangaFavoritesData)
+
+@Serializable
+data class MangaFavoritesData(val Viewer: MangaFavoritesViewer)
+
+@Serializable
+data class MangaFavoritesViewer(val favourites: MangaFavoritesFavourites? = null)
+
+@Serializable
+data class MangaFavoritesFavourites(val manga: MangaFavoritesPage? = null)
+
+@Serializable
+data class MangaFavoritesPage(val nodes: List<MangaFavorite> = emptyList())
+
+@Serializable
+data class MangaActivity(
+    val id: Int,
+    val createdAt: Long,
+    val status: String? = null,
+    val progress: String? = null,
+    val media: MangaActivityMedia? = null
+)
+
+@Serializable
+data class MangaActivityMedia(
+    val id: Int,
+    val title: MangaTitle? = null,
+    val coverImage: MediaCoverImage? = null,
+    val chapters: Int? = null,
+    val siteUrl: String? = null
+)
+
+@Serializable
+data class MangaActivityResponse(val data: MangaActivityData)
+
+@Serializable
+data class MangaActivityData(val Page: MangaActivityPage)
+
+@Serializable
+data class MangaActivityPage(
+    val activities: List<MangaActivityNode> = emptyList()
+)
+
+@Serializable
+data class MangaActivityNode(
+    val id: Int = 0,
+    val createdAt: Long = 0,
+    val status: String? = null,
+    val progress: String? = null,
+    val media: MangaActivityMedia? = null
+)

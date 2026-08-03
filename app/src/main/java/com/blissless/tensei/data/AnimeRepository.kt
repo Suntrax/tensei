@@ -655,6 +655,7 @@ class AnimeRepository(
     // ============================================
 
     suspend fun fetchDetailedAnime(animeId: Int): DetailedAnimeMedia? {
+        Log.d("AnimeDetailDebug", "fetchDetailedAnime START id=$animeId")
         val query = $$"""
             query ($id: Int) {
                 Media(id: $id, type: ANIME) {
@@ -722,6 +723,23 @@ class AnimeRepository(
                             }
                         }
                     }
+                    recommendations(perPage: 20) {
+                        nodes {
+                            mediaRecommendation {
+                                id
+                                idMal
+                                title { romaji english }
+                                coverImage { extraLarge }
+                                bannerImage
+                                episodes
+                                nextAiringEpisode { episode }
+                                averageScore
+                                genres
+                                seasonYear
+                                format
+                            }
+                        }
+                    }
                 }
             }
         """.trimIndent()
@@ -729,8 +747,22 @@ class AnimeRepository(
         return publicGraphqlRequest(query, mapOf("id" to animeId))?.let { response ->
             try {
                 val data = json.decodeFromString<DetailedAnimeResponse>(response)
-                data.data.Media
-            } catch (_: Exception) {
+                val media = data.data.Media
+                Log.d(
+                    "AnimeDetailDebug",
+                    "fetchDetailedAnime PARSED id=${media.id} title=${media.title?.romaji ?: media.title?.english}" +
+                        " chars=${media.characters?.nodes?.size ?: 0}" +
+                        " staff=${media.staff?.edges?.size ?: 0}" +
+                        " relations=${media.relations?.edges?.size ?: 0}" +
+                        " studios=${media.studios?.nodes?.size ?: 0}" +
+                        " genres=${media.genres?.size ?: 0}" +
+                        " desc=${media.description?.length ?: 0}" +
+                        " recs=${media.recommendations?.nodes?.size ?: 0}"
+                )
+                media
+            } catch (e: Exception) {
+                Log.e("AnimeDetailDebug", "fetchDetailedAnime PARSE FAILED id=$animeId: ${e::class.simpleName}: ${e.message}", e)
+                Log.d("AnimeDetailDebug", "fetchDetailedAnime RAW head=${response.take(500)}")
                 null
             }
         }
@@ -786,6 +818,7 @@ class AnimeRepository(
                             id
                             title { romaji english }
                             coverImage { extraLarge }
+                            format
                         }
                     }
                 }
@@ -816,6 +849,7 @@ class AnimeRepository(
                                 id
                                 title { romaji english }
                                 coverImage { extraLarge }
+                                format
                             }
                             staffRole
                         }

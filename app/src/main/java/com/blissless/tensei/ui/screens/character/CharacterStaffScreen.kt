@@ -195,7 +195,7 @@ fun CharacterScreen(
     viewModel: MainViewModel,
     onDismiss: () -> Unit,
     onNavigateBack: () -> Unit = onDismiss,
-    onAnimeClick: (Int) -> Unit,
+    onMediaClick: (Int, String?) -> Unit,
     onCharacterClick: ((Int) -> Unit)? = null,
     onStaffClick: ((Int) -> Unit)? = null
 ) {
@@ -362,7 +362,7 @@ fun CharacterScreen(
                                         onClick = { offset ->
                                             val animeAnnot = annotatedBio.getStringAnnotations("ANIME", offset, offset).firstOrNull()
                                             if (animeAnnot != null) {
-                                                onAnimeClick(animeAnnot.item.toInt())
+                                                onMediaClick(animeAnnot.item.toInt(), null)
                                             } else {
                                                 val urlAnnot = annotatedBio.getStringAnnotations("URL", offset, offset).firstOrNull()
                                                 if (urlAnnot != null) {
@@ -412,7 +412,7 @@ fun CharacterScreen(
                                                         modifier = Modifier
                                                             .width(100.dp)
                                                             .clip(RoundedCornerShape(12.dp))
-                                                            .clickable { onAnimeClick(anime.id) },
+                                                            .clickable { onMediaClick(anime.id, anime.format) },
                                                         horizontalAlignment = Alignment.CenterHorizontally
                                                     ) {
                                                         Card(
@@ -467,7 +467,7 @@ fun StaffScreen(
     viewModel: MainViewModel,
     onDismiss: () -> Unit,
     onNavigateBack: () -> Unit = onDismiss,
-    onAnimeClick: (Int) -> Unit,
+    onMediaClick: (Int, String?) -> Unit,
     onCharacterClick: ((Int) -> Unit)? = null,
     onStaffClick: ((Int) -> Unit)? = null
 ) {
@@ -647,7 +647,7 @@ fun StaffScreen(
                                         onClick = { offset ->
                                             val animeAnnot = annotatedBio.getStringAnnotations("ANIME", offset, offset).firstOrNull()
                                             if (animeAnnot != null) {
-                                                onAnimeClick(animeAnnot.item.toInt())
+                                                onMediaClick(animeAnnot.item.toInt(), null)
                                             } else {
                                                 val urlAnnot = annotatedBio.getStringAnnotations("URL", offset, offset).firstOrNull()
                                                 if (urlAnnot != null) {
@@ -700,7 +700,7 @@ fun StaffScreen(
                                                         modifier = Modifier
                                                             .width(110.dp)
                                                             .clip(RoundedCornerShape(12.dp))
-                                                            .clickable { onAnimeClick(anime.id) },
+                                                            .clickable { onMediaClick(anime.id, anime.format) },
                                                         horizontalAlignment = Alignment.CenterHorizontally
                                                     ) {
                                                         Card(

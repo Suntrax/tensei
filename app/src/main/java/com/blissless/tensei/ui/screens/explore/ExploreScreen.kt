@@ -23,6 +23,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SignalWifiOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -64,6 +65,7 @@ import com.blissless.tensei.ui.components.SectionTitle
 import com.blissless.tensei.ui.screens.details.DetailedAnimeScreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.lifecycle.viewModelScope
 import kotlin.time.Duration.Companion.milliseconds
 import com.blissless.tensei.util.toast
 import com.blissless.tensei.util.longToast
@@ -80,6 +82,24 @@ import coil.request.ImageRequest
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.text.style.TextAlign
+import com.blissless.tensei.util.ErrorHandler
+import kotlinx.coroutines.Job
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -105,6 +125,7 @@ fun ExploreScreen(
     onViewAllCast: (Int, String) -> Unit = { _, _ -> },
     onViewAllStaff: (Int, String) -> Unit = { _, _ -> },
     onViewAllRelations: (Int, String) -> Unit = { _, _ -> },
+    onViewAllRecommendations: (Int, String) -> Unit = { _, _ -> },
     onSearchClick: () -> Unit = {},
     onNoExtension: () -> Unit = {},
     onMangaClick: (MangaExploreMedia) -> Unit = {}
@@ -297,6 +318,9 @@ fun ExploreScreen(
             onViewAllRelations = { animeId, title ->
                 onViewAllRelations(animeId, title)
             },
+            onViewAllRecommendations = { animeId, title ->
+                onViewAllRecommendations(animeId, title)
+            },
             onNoExtension = {
                 showDialog = false
                 onNoExtension()
@@ -422,8 +446,10 @@ fun ExploreScreen(
         }
     }
 
-    LaunchedEffect(isVisible) {
-        if (isVisible && mangaExploreSections.isEmpty()) {
+    LaunchedEffect(isVisible, isLoadingManga) {
+        android.util.Log.d("MangaExplore", "LaunchedEffect: isVisible=$isVisible mangaExploreSections.isEmpty=${mangaExploreSections.isEmpty()} isLoadingManga=$isLoadingManga")
+        if (isVisible && mangaExploreSections.isEmpty() && !isLoadingManga) {
+            android.util.Log.d("MangaExplore", "Triggering fetchMangaExplore()")
             viewModel.fetchMangaExplore()
         }
     }
@@ -820,17 +846,45 @@ fun ExploreScreen(
                 viewModel = viewModel
             )
 
+            Spacer(modifier = Modifier.height(20.dp))
+
             // ─── Manga Explore Sections ──────────────────────────────
+            // No "Manga" header — sections flow directly after anime sections.
             if (mangaExploreSections.isNotEmpty()) {
                 val sectionLabelMap = mapOf(
+                    "trending" to "Trending Now",
                     "popular" to "Most Popular",
                     "topRated" to "Top Rated",
                     "favourites" to "Most Favourited",
                     "action" to "Action",
                     "romance" to "Romance",
-                    "fantasy" to "Fantasy"
+                    "fantasy" to "Fantasy",
+                    "seinen" to "Seinen"
                 )
-                mangaExploreSections.forEach { (key, list) ->
+                // Explicit render order so newly-added sections always land in the right spot.
+                // Trending is rendered as the featured carousel above the rows.
+                val mangaSectionOrder = listOf(
+                    "trending", "popular", "topRated", "favourites",
+                    "action", "romance", "fantasy", "seinen"
+                )
+
+                // Featured carousel fed by the trending section (mirrors anime FeaturedCarousel)
+                val trendingList = mangaExploreSections["trending"].orEmpty()
+                if (trendingList.isNotEmpty()) {
+                    MangaFeaturedCarousel(
+                        mangaList = trendingList,
+                        onMangaClick = onMangaClick,
+                        preferEnglishTitles = preferEnglishTitles,
+                        autoScrollEnabled = isVisible,
+                        isVisible = isVisible
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+
+                // Remaining section rows in fixed order (trending is rendered as carousel above)
+                mangaSectionOrder.forEach { key ->
+                    if (key == "trending") return@forEach // already shown in the carousel
+                    val list = mangaExploreSections[key].orEmpty()
                     if (list.isNotEmpty()) {
                         val label = sectionLabelMap[key] ?: key.replaceFirstChar { it.uppercase() }
                         SectionTitle(label, list.size, isOled)
@@ -843,8 +897,59 @@ fun ExploreScreen(
                     }
                 }
             } else if (isLoadingManga) {
-                SectionTitle("Manga", 0, isOled)
-                LoadingPlaceholder(isOled)
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator(modifier = Modifier.size(28.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Loading manga...",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            } else {
+                // Fetch completed but returned empty — show retry button with explanatory text
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            Icons.Default.CloudOff,
+                            contentDescription = null,
+                            modifier = Modifier.size(32.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Couldn't load manga sections",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "AniList may be experiencing issues. Tap retry to try again.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 32.dp)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        TextButton(onClick = {
+                            viewModel.viewModelScope.launch {
+                                viewModel.fetchMangaExplore()
+                            }
+                        }) {
+                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Retry")
+                        }
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(20.dp))
@@ -869,13 +974,14 @@ private fun MangaExploreHorizontalRow(
         modifier = Modifier.fillMaxWidth()
     ) {
         itemsIndexed(mangaList) { _, manga ->
-            val title = if (preferEnglishTitles && !manga.title.english.isNullOrBlank()) manga.title.english
+            val title = if (preferEnglishTitles && !manga.title.english.isNullOrBlank()) manga.title.english!!
                        else manga.title.romaji ?: "Unknown"
-            val coverUrl = manga.coverImage?.large ?: manga.coverImage?.medium ?: ""
-            Column(modifier = Modifier.width(140.dp)) {
+            val coverUrl = manga.coverImage?.extraLarge ?: manga.coverImage?.large ?: manga.coverImage?.medium ?: ""
+            // Match anime card dimensions exactly: 120dp wide, 170dp tall, RoundedCornerShape(4.dp)
+            Column(modifier = Modifier.width(120.dp)) {
                 Card(
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier.height(195.dp).clip(RoundedCornerShape(14.dp)).clickable { onMangaClick(manga) }
+                    shape = RoundedCornerShape(4.dp),
+                    modifier = Modifier.height(170.dp).clip(RoundedCornerShape(4.dp)).clickable { onMangaClick(manga) }
                 ) {
                     Box(modifier = Modifier.fillMaxSize()) {
                         if (coverUrl.isNotEmpty()) {
@@ -929,7 +1035,7 @@ private fun MangaExploreHorizontalRow(
                         }
                     }
                 }
-                Box(modifier = Modifier.width(140.dp).height(40.dp)) {
+                Box(modifier = Modifier.width(120.dp).height(36.dp)) {
                     Text(
                         text = title,
                         modifier = Modifier.padding(top = 8.dp),
@@ -989,6 +1095,216 @@ private fun GenreSection(
             )
         } else if (isLoading) {
             LoadingPlaceholder(isOled)
+        }
+    }
+}
+
+/**
+ * Featured carousel for manga, mirroring the anime [FeaturedCarousel] visual pattern.
+ * Renders a ~400dp tall pager with title, score, format and a "Read Now" button.
+ * Uses the portrait cover image (coverImage.extraLarge / large), matching oni's explore screen.
+ */
+@Composable
+private fun MangaFeaturedCarousel(
+    mangaList: List<MangaExploreMedia>,
+    onMangaClick: (MangaExploreMedia) -> Unit,
+    preferEnglishTitles: Boolean = true,
+    autoScrollEnabled: Boolean = true,
+    isVisible: Boolean = true
+) {
+    if (mangaList.isEmpty()) return
+
+    val actualCount = mangaList.size
+    val pagerState = rememberPagerState(
+        initialPage = actualCount * 100,
+        pageCount = { actualCount * 200 }
+    )
+
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val isDragged by pagerState.interactionSource.collectIsDraggedAsState()
+    var autoScrollJob by remember { mutableStateOf<Job?>(null) }
+    var headerVisible by remember { mutableStateOf(true) }
+    var pageWhenScrollStarted by remember { mutableIntStateOf(pagerState.currentPage) }
+    var timerResetSignal by remember { mutableIntStateOf(0) }
+
+    val currentPageOffsetFraction by remember { derivedStateOf { pagerState.currentPageOffsetFraction } }
+
+    LaunchedEffect(pagerState.isScrollInProgress, currentPageOffsetFraction) {
+        if (pagerState.isScrollInProgress) {
+            pageWhenScrollStarted = pagerState.currentPage
+        } else if (pagerState.currentPage != pageWhenScrollStarted) {
+            headerVisible = false
+            delay(80.milliseconds)
+            headerVisible = true
+            pageWhenScrollStarted = pagerState.currentPage
+        }
+    }
+
+    LaunchedEffect(isDragged) {
+        if (isDragged) {
+            timerResetSignal++
+        }
+    }
+
+    LaunchedEffect(autoScrollEnabled, isVisible, timerResetSignal) {
+        if (autoScrollEnabled && isVisible) {
+            while (true) {
+                delay(4500.milliseconds)
+
+                headerVisible = false
+                delay(80.milliseconds)
+                headerVisible = true
+
+                autoScrollJob = scope.launch {
+                    try {
+                        val targetPage = pagerState.currentPage + 1
+                        pagerState.animateScrollToPage(targetPage)
+                    } catch (e: Exception) {
+                        ErrorHandler.ignore("MangaFeaturedCarousel", "best-effort operation failed", e)
+                    }
+                }
+                autoScrollJob?.join()
+
+                delay(300.milliseconds)
+            }
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { autoScrollJob?.cancel() }
+    }
+
+    Box(modifier = Modifier.fillMaxWidth().height(560.dp)) {
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxSize(),
+            pageSpacing = 0.dp,
+            userScrollEnabled = true,
+            beyondViewportPageCount = 0
+        ) { page ->
+            val manga = mangaList[page % actualCount]
+            val coverUrl = manga.coverImage?.extraLarge
+                ?: manga.coverImage?.large
+                ?: ""
+
+            Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+                if (coverUrl.isNotEmpty()) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(context)
+                            .data(coverUrl)
+                            .memoryCacheKey(coverUrl)
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+
+                Box(
+                    modifier = Modifier.fillMaxSize().background(
+                        Brush.verticalGradient(
+                            listOf(
+                                Color.Black.copy(alpha = 0.35f),
+                                Color.Black.copy(alpha = 0.05f),
+                                Color.Black.copy(alpha = 0.65f),
+                                Color.Black.copy(alpha = 0.95f)
+                            )
+                        )
+                    )
+                )
+            }
+        }
+
+        Box(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).align(Alignment.BottomCenter),
+            contentAlignment = Alignment.BottomCenter
+        ) {
+            val currentManga by remember {
+                derivedStateOf { mangaList[pagerState.currentPage % actualCount] }
+            }
+
+            AnimatedVisibility(
+                visible = headerVisible,
+                enter = fadeIn(animationSpec = tween(400, easing = FastOutSlowInEasing)) +
+                        slideInVertically(
+                            animationSpec = tween(400, easing = FastOutSlowInEasing),
+                            initialOffsetY = { it / 2 }
+                        ),
+                exit = fadeOut(animationSpec = tween(150, easing = FastOutSlowInEasing)) +
+                        slideOutVertically(
+                            animationSpec = tween(150, easing = FastOutSlowInEasing),
+                            targetOffsetY = { it / 2 }
+                        )
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    val displayTitle = if (preferEnglishTitles && !currentManga.title.english.isNullOrBlank())
+                        currentManga.title.english!!
+                    else currentManga.title.romaji ?: "Unknown"
+
+                    Text(
+                        text = displayTitle,
+                        color = Color.White,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 8.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        currentManga.seasonYear?.let { year ->
+                            Text(text = year.toString(), color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodyMedium)
+                            Text(text = " • ", color = Color.White.copy(alpha = 0.4f), style = MaterialTheme.typography.bodyMedium)
+                        }
+                        val formatText = when (currentManga.format?.uppercase()) {
+                            "MANGA" -> "Manga"
+                            "NOVEL" -> "Novel"
+                            "ONE_SHOT" -> "One-Shot"
+                            else -> "Manga"
+                        }
+                        Text(text = formatText, color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodyMedium)
+                        currentManga.averageScore?.let { score ->
+                            Text(text = " • ", color = Color.White.copy(alpha = 0.4f), style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                text = "★ ${"%.1f".format(score / 10.0)}",
+                                color = Color(0xFFFFD700),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Button(
+                        onClick = { onMangaClick(currentManga) },
+                        modifier = Modifier.height(50.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color.White.copy(alpha = 0.15f),
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Icon(
+                            Icons.Outlined.PlayArrow,
+                            contentDescription = "Read",
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Read Now", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
         }
     }
 }

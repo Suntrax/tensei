@@ -160,11 +160,13 @@ fun DetailedAnimeScreen(
     onUpdateLocalStatus: (String?) -> Unit = {},
     onRemoveLocalStatus: () -> Unit = {},
     onRelationClick: (AnimeRelation) -> Unit = {},
+    onRecommendationClick: (Int) -> Unit = {},
     onCharacterClick: (Int) -> Unit = {},
     onStaffClick: (Int) -> Unit = {},
     onViewAllCast: () -> Unit = {},
     onViewAllStaff: () -> Unit = {},
     onViewAllRelations: (Int, String) -> Unit = { _, _ -> },
+    onViewAllRecommendations: (Int, String) -> Unit = { _, _ -> },
     preferEnglishTitles: Boolean = true,
     onNavigateToSettings: (() -> Unit)? = null,
     onNoExtension: () -> Unit = {},
@@ -1037,9 +1039,9 @@ fun DetailedAnimeScreen(
                     }
                 }
 
-                val filteredRelations = displayData.relations.filter { relation ->
-                    relation.format != "MANGA" && relation.format != "NOVEL" && relation.format != "ONE_SHOT"
-                }
+                // Show all relations including manga — manga relations are clickable and
+                // will open the manga detail screen (wired via onRelationClick in MainActivity).
+                val filteredRelations = displayData.relations
 
                 if (filteredRelations.isNotEmpty()) {
                     item {
@@ -1258,6 +1260,167 @@ fun DetailedAnimeScreen(
                                                     style = MaterialTheme.typography.labelSmall,
                                                     color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
                                                 )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Recommendations
+                val recommendations = displayData.recommendations
+                if (recommendations.isNotEmpty()) {
+                    item {
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                            shape = RoundedCornerShape(20.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f))
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                                    Box(
+                                        modifier = Modifier.size(38.dp).clip(RoundedCornerShape(12.dp))
+                                            .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary.copy(alpha = 0.22f), MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)))),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Default.Star, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Text("Recommendations", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    TextButton(onClick = { onViewAllRecommendations(displayData.id, displayData.title) }) {
+                                        Text("View All", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                val recListState = rememberLazyListState()
+                                val isRecScrolling by remember {
+                                    derivedStateOf { recListState.isScrollInProgress }
+                                }
+                                val recCameraDistancePx = with(density) { 12.dp.toPx() }
+
+                                LazyRow(
+                                    state = recListState,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    itemsIndexed(
+                                        items = recommendations.take(20),
+                                        key = { _, rec -> rec.id }
+                                    ) { index, rec ->
+                                        val title = if (preferEnglishTitles && !rec.titleEnglish.isNullOrBlank()) rec.titleEnglish else rec.title
+
+                                        val recLayoutInfo by remember { derivedStateOf { recListState.layoutInfo } }
+                                        val recVisibleItems = recLayoutInfo.visibleItemsInfo
+                                        val recItemInfo = recVisibleItems.find { it.index == index }
+
+                                        val recCenterOffset = if (recItemInfo != null) {
+                                            val itemCenter = recItemInfo.offset + recItemInfo.size / 2
+                                            val screenCenter = (recLayoutInfo.viewportSize.width / 2).toFloat()
+                                            (itemCenter - screenCenter) / screenCenter
+                                        } else {
+                                            0f
+                                        }
+
+                                        val recAnimatedOffset by animateFloatAsState(
+                                            targetValue = if (isRecScrolling) recCenterOffset.coerceIn(-1.5f, 1.5f) else 0f,
+                                            animationSpec = if (isRecScrolling) {
+                                                spring(
+                                                    dampingRatio = Spring.DampingRatioNoBouncy,
+                                                    stiffness = Spring.StiffnessMedium
+                                                )
+                                            } else {
+                                                spring(
+                                                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                                                    stiffness = Spring.StiffnessLow
+                                                )
+                                            },
+                                            label = "recCenterOffset"
+                                        )
+
+                                        val recScrollScale = 1f - (recAnimatedOffset.absoluteValue * 0.25f).coerceAtMost(0.25f)
+                                        val recScrollAlpha = 1f - (recAnimatedOffset.absoluteValue * 0.4f).coerceAtMost(0.6f)
+                                        val recScrollTranslationX = recAnimatedOffset * -20f
+                                        val recScrollRotationY = (recAnimatedOffset * 15f).coerceIn(-15f, 15f)
+
+                                        val recIndexFloat = index.toFloat()
+                                        val recStaggeredProgress = ((cinematicProgress * 1000f - (recIndexFloat * 40f)) / 1000f).coerceIn(0f, 1f)
+                                        val recEasedProgress = easeOut(recStaggeredProgress)
+
+                                        val recIntroScale = if (cinematicProgress >= 1f) 1f else 0.85f + recEasedProgress * 0.15f
+                                        val recIntroAlpha = if (cinematicProgress >= 1f) 1f else recEasedProgress
+
+                                        Column(
+                                            modifier = Modifier
+                                                .width(110.dp)
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .clickable { onRecommendationClick(rec.id) }
+                                                .graphicsLayer {
+                                                    scaleX = recIntroScale * recScrollScale
+                                                    scaleY = recIntroScale * recScrollScale
+                                                    this.alpha = recIntroAlpha * recScrollAlpha
+                                                    translationX = recScrollTranslationX
+                                                    rotationY = recScrollRotationY
+                                                    cameraDistance = recCameraDistancePx
+                                                }
+                                                .padding(4.dp)
+                                        ) {
+                                            Box(modifier = Modifier.fillMaxWidth().aspectRatio(3f / 4f)) {
+                                                Card(
+                                                    shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxSize(),
+                                                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0A0A0A))
+                                                ) {
+                                                    AsyncImage(model = rec.cover, contentDescription = title,
+                                                        contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                                                }
+                                                rec.averageScore?.let { score ->
+                                                    Surface(
+                                                        modifier = Modifier
+                                                            .padding(6.dp)
+                                                            .align(Alignment.TopEnd),
+                                                        shape = RoundedCornerShape(6.dp),
+                                                        color = Color.Black.copy(alpha = 0.8f)
+                                                    ) {
+                                                        Text(
+                                                            "${(score / 10.0).toString().take(3)}",
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            color = Color(0xFFFFD700),
+                                                            fontWeight = FontWeight.Bold,
+                                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Text(title, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Medium,
+                                                maxLines = 2, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onBackground,
+                                                modifier = Modifier.height(32.dp))
+                                            Box(modifier = Modifier.fillMaxWidth().height(16.dp), contentAlignment = Alignment.CenterStart) {
+                                                rec.format?.let { format ->
+                                                    val formatDisplay = when (format) {
+                                                        "TV" -> "TV"
+                                                        "TV_SHORT" -> "TV Short"
+                                                        "MOVIE" -> "Movie"
+                                                        "SPECIAL" -> "Special"
+                                                        "OVA" -> "OVA"
+                                                        "ONA" -> "ONA"
+                                                        "MANGA" -> "Manga"
+                                                        "NOVEL" -> "Novel"
+                                                        "ONE_SHOT" -> "One Shot"
+                                                        "MUSIC" -> "Music"
+                                                        else -> format
+                                                    }
+                                                    Text(
+                                                        formatDisplay,
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                                                    )
+                                                }
                                             }
                                         }
                                     }

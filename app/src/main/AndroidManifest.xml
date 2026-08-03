@@ -9,6 +9,14 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
+    <!-- Manga extension discovery: allows querying broadcast receivers for the
+         EXTENSION_BEACON intent so we can find installed manga source extensions. -->
+    <queries>
+        <intent>
+            <action android:name="com.blissless.mangaclient.EXTENSION_BEACON" />
+        </intent>
+    </queries>
+
     <application
         android:name=".TenseiApplication"
         android:allowBackup="true"

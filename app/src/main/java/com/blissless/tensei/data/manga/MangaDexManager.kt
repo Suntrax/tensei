@@ -9,6 +9,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
 class MangaDexManager(private val client: OkHttpClient = DEFAULT_CLIENT) {
@@ -21,7 +22,7 @@ class MangaDexManager(private val client: OkHttpClient = DEFAULT_CLIENT) {
             .readTimeout(30, TimeUnit.SECONDS)
             .addInterceptor { chain ->
                 val request = chain.request().newBuilder()
-                    .header("User-Agent", "Tensei/1.0")
+                    .header("User-Agent", "Tensei/1.0 (https://github.com/Suntrax/tensei)")
                     .build()
                 chain.proceed(request)
             }
@@ -31,8 +32,9 @@ class MangaDexManager(private val client: OkHttpClient = DEFAULT_CLIENT) {
     }
 
     suspend fun findMangaByAniListId(title: String, aniListId: Int): String? = withContext(Dispatchers.IO) {
-        val searchQuery = title.take(80).replace("&", "and")
-        val url = "$BASE_URL/manga?limit=10&title=$searchQuery&includes[]=cover_art"
+        val sanitized = title.take(80).replace("&", "and")
+        val encoded = URLEncoder.encode(sanitized, "UTF-8")
+        val url = "$BASE_URL/manga?limit=10&title=$encoded&order[relevance]=desc&includes[]=cover_art"
         val request = Request.Builder().url(url).get().build()
         val response = try {
             client.newCall(request).execute()
@@ -50,18 +52,28 @@ class MangaDexManager(private val client: OkHttpClient = DEFAULT_CLIENT) {
         }
         val data = parsed.data ?: return@withContext null
 
+        // 1. Exact match by AniList ID in links
         val exactMatch = data.firstOrNull { manga ->
             manga.attributes?.links?.al == aniListId.toString()
         }
         if (exactMatch != null) return@withContext exactMatch.id
 
-        val titleLower = title.lowercase()
+        // 2. Exact title match (case-insensitive)
+        val titleLower = title.lowercase().trim()
+        val exactTitle = data.firstOrNull { manga ->
+            val attrs = manga.attributes ?: return@firstOrNull false
+            val mangaTitle = attrs.title?.en?.lowercase()?.trim() ?: ""
+            val altTitles = attrs.altTitles?.mapNotNull { it.en?.lowercase()?.trim() } ?: emptyList()
+            mangaTitle == titleLower || altTitles.any { it == titleLower }
+        }
+        if (exactTitle != null) return@withContext exactTitle.id
+
+        // 3. Partial contains match
         data.firstOrNull { manga ->
             val attrs = manga.attributes ?: return@firstOrNull false
             val mangaTitle = attrs.title?.en?.lowercase() ?: ""
             val altTitles = attrs.altTitles?.mapNotNull { it.en?.lowercase() } ?: emptyList()
-            mangaTitle == titleLower || altTitles.any { it == titleLower } ||
-                    mangaTitle.contains(titleLower) || altTitles.any { it.contains(titleLower) }
+            mangaTitle.contains(titleLower) || altTitles.any { it.contains(titleLower) }
         }?.id
     }
 
@@ -78,35 +90,35 @@ class MangaDexManager(private val client: OkHttpClient = DEFAULT_CLIENT) {
         }
     }
 
+    /**
+     * Build a flat, deduplicated chapter list from a MangaDex aggregate.
+     *
+     * "Others" (duplicate chapter IDs for the same chapter number) are collapsed into a single
+     * entry — we use the first ID. This prevents the reader's grouped chapter list from showing
+     * N duplicate rows for the same chapter number.
+     */
     suspend fun buildChapterList(aggregate: MangaDexAggregate?): List<MangaChapter> {
         if (aggregate?.volumes == null) return emptyList()
         val chapters = mutableListOf<MangaChapter>()
+        val seenNumbers = mutableSetOf<Float>()
         val sortedVolumes = aggregate.volumes.entries.sortedBy { it.key.toFloatOrNull() ?: 0f }
         for ((_, volume) in sortedVolumes) {
             val volumeChapters = volume.chapters?.entries?.sortedBy { it.key.toFloatOrNull() ?: 0f } ?: continue
             for ((_, ch) in volumeChapters) {
                 val chapterNum = ch.chapter?.toFloatOrNull() ?: continue
-                val chapterId = ch.id ?: continue
-                chapters.add(
-                    MangaChapter(
-                        url = "https://mangadex.org/chapter/$chapterId",
-                        title = "Ch. $chapterNum",
-                        chapterId = chapterId,
-                        volume = volume.volume?.toFloatOrNull(),
-                        chapterNumber = chapterNum
-                    )
-                )
-                ch.others?.forEach { otherId ->
+                val firstId = ch.id ?: continue
+                if (seenNumbers.add(chapterNum)) {
                     chapters.add(
                         MangaChapter(
-                            url = "https://mangadex.org/chapter/$otherId",
+                            url = "https://mangadex.org/chapter/$firstId",
                             title = "Ch. $chapterNum",
-                            chapterId = otherId,
+                            chapterId = firstId,
                             volume = volume.volume?.toFloatOrNull(),
                             chapterNumber = chapterNum
                         )
                     )
                 }
+                // "others" are alternate scanlation groups for the same chapter number — skipped
             }
         }
         return chapters

@@ -77,6 +77,26 @@ object GraphqlQueries {
         }
     """.trimIndent()
 
+    val GET_ANIME_RECOMMENDATIONS = $$"""
+        query ($id: Int!) {
+            Media(id: $id, type: ANIME) {
+                id
+                recommendations(perPage: 50) {
+                    nodes {
+                        mediaRecommendation {
+                            id
+                            title { romaji english }
+                            coverImage { extraLarge }
+                            episodes
+                            averageScore
+                            format
+                        }
+                    }
+                }
+            }
+        }
+    """.trimIndent()
+
     val GET_ALL_TAGS = """
         query {
             MediaTagCollection {

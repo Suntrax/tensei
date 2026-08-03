@@ -64,7 +64,21 @@ class GraphQLClient(
     private val endpoint: String = Endpoints.AniList.GRAPHQL,
     private val config: GraphQLConfig = GraphQLConfig()
 ) {
-    companion object;
+    companion object {
+        /**
+         * Process-wide shared rate-limit state. Multiple GraphQLClient instances (anime + manga)
+         * share this so that when one gets a 429, the other also backs off. AniList rate-limits
+         * per-IP, not per-client-id, so this is the correct behavior.
+         */
+        @Volatile
+        private var sharedRateLimitState: RateLimitState? = null
+
+        internal fun getSharedRateLimitState(): RateLimitState {
+            return sharedRateLimitState ?: synchronized(this) {
+                sharedRateLimitState ?: RateLimitState().also { sharedRateLimitState = it }
+            }
+        }
+    };
 
     // Request queue channel (unlimited buffer)
     private val requestChannel = Channel<QueuedRequest<*>>(UNLIMITED)
@@ -72,8 +86,9 @@ class GraphQLClient(
     // Concurrency limiter
     private val concurrencySemaphore = Semaphore(config.maxConcurrentRequests)
 
-    // Rate limit state
-    private val rateLimitState = RateLimitState()
+    // Rate limit state — shared across all GraphQLClient instances via the companion object
+    // so that when anime gets a 429, manga also backs off (AniList rate-limits per-IP).
+    private val rateLimitState: RateLimitState get() = getSharedRateLimitState()
 
     // Response cache
     private val responseCache = ConcurrentHashMap<String, CacheEntry>()
@@ -529,7 +544,7 @@ class GraphQLClient(
 // Internal data classes
 // ============================================
 
-private data class RateLimitState(
+internal data class RateLimitState(
     var isLimited: Boolean = false,
     var retryAfterMs: Long = 0,
     var lastLimitedTime: Long = 0

@@ -71,6 +71,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -119,6 +120,7 @@ import com.blissless.tensei.viewmodel.setKeepDownloadedFiles
 import com.blissless.tensei.viewmodel.setMangaReaderMode
 import com.blissless.tensei.viewmodel.setMangaDataSaver
 import com.blissless.tensei.viewmodel.setMangaPageIndicator
+import com.blissless.tensei.viewmodel.setMangaSyncThreshold
 import com.blissless.tensei.viewmodel.setStreamMethod
 import com.blissless.tensei.viewmodel.setPreferredCategory
 import com.blissless.tensei.viewmodel.setBufferAheadSeconds
@@ -1289,6 +1291,7 @@ private fun ReaderSettingsPage(
 ) {
     val readerMode by viewModel.mangaReaderMode.collectAsState()
     val showPageIndicator by viewModel.mangaPageIndicator.collectAsState()
+    val syncThreshold by viewModel.mangaSyncThreshold.collectAsState()
 
     SettingsPageScaffold(title = "Reader", onBack = onBack) {
         SectionHeader("READING MODE")
@@ -1325,6 +1328,60 @@ private fun ReaderSettingsPage(
                 checked = showPageIndicator,
                 onCheckedChange = { viewModel.setMangaPageIndicator(it) }
             )
+        }
+
+        SectionHeader("ANILIST SYNC")
+        SettingsCard {
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Auto-Track Threshold",
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Scroll percentage at which a chapter is marked as read and progress is synced to AniList.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Text(
+                        text = "$syncThreshold%",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+                Slider(
+                    value = syncThreshold.toFloat(),
+                    onValueChange = { viewModel.setMangaSyncThreshold(it.toInt()) },
+                    valueRange = 75f..100f,
+                    steps = 24,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("75%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("100%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Lower = syncs earlier (useful for long chapters). Higher = only syncs when you've nearly finished.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+            }
         }
     }
 }

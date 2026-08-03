@@ -38,12 +38,14 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Button
@@ -63,6 +65,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -107,7 +110,10 @@ import kotlin.time.Duration.Companion.milliseconds
 import java.util.Locale
 import com.blissless.tensei.util.toast
 import com.blissless.tensei.util.longToast
-import com.blissless.tensei.viewmodel.searchManga
+import com.blissless.tensei.viewmodel.searchMangaAdvanced
+import com.blissless.tensei.viewmodel.mangaContinueReading
+import com.blissless.tensei.viewmodel.mangaPlanningToRead
+import com.blissless.tensei.viewmodel.mangaCompleted
 
 val ALL_GENRES = listOf(
     "Action", "Adventure", "Comedy", "Drama", "Fantasy", "Horror",
@@ -141,6 +147,28 @@ data class SearchFilters(
     val sort: String = "POPULARITY_DESC"
 )
 
+/**
+ * Heterogeneous search result wrapper used when `searchType == "both"`.
+ * Lets the unified LazyVerticalGrid render anime and manga side-by-side
+ * in a single, evenly-spaced grid.
+ */
+sealed class UnifiedSearchItem {
+    abstract val id: Int
+
+    data class Anime(val item: ExploreAnime) : UnifiedSearchItem() {
+        override val id: Int get() = item.id
+    }
+
+    data class Manga(val item: MangaExploreMedia) : UnifiedSearchItem() {
+        override val id: Int get() = item.id
+    }
+
+    fun stableKey(): String = when (this) {
+        is Anime -> "anime_$id"
+        is Manga -> "manga_$id"
+    }
+}
+
 @OptIn(UnstableApi::class)
 @Composable
 fun SearchScreen(
@@ -163,6 +191,7 @@ fun SearchScreen(
     onViewAllCast: (Int, String) -> Unit = { _, _ -> },
     onViewAllStaff: (Int, String) -> Unit = { _, _ -> },
     onViewAllRelations: (Int, String) -> Unit = { _, _ -> },
+    onViewAllRecommendations: (Int, String) -> Unit = { _, _ -> },
     onNoExtension: () -> Unit = {},
     onMangaClick: (MangaExploreMedia) -> Unit = {}
 ) {
@@ -177,8 +206,15 @@ fun SearchScreen(
     var showStatusDropdown by remember { mutableStateOf(false) }
     var showSeasonDropdown by remember { mutableStateOf(false) }
     var showSortDropdown by remember { mutableStateOf(false) }
-    var currentPage by remember { mutableIntStateOf(1) }
+    // Anime and manga pages are tracked independently so "both" mode can
+    // fetch and merge the next page of each type without losing state.
+    var currentAnimePage by remember { mutableIntStateOf(1) }
+    var currentMangaPage by remember { mutableIntStateOf(1) }
+    var hasMoreAnime by remember { mutableStateOf(true) }
+    var hasMoreManga by remember { mutableStateOf(true) }
     var isLoadingMore by remember { mutableStateOf(false) }
+    // Unified "has more" flag — mirrors whichever type(s) are active for the
+    // current searchType. Updated at the end of performSearch().
     var hasMore by remember { mutableStateOf(true) }
 
     var selectedAnime by remember { mutableStateOf<ExploreAnime?>(null) }
@@ -213,6 +249,21 @@ fun SearchScreen(
         map
     }
 
+    // ── Manga tracking state ───────────────────────────────────────────
+    // Read from the VM's StateFlows so manga cards in the unified grid can
+    // show the same list-status badges as anime cards.
+    val mangaContinueReadingList by viewModel.mangaContinueReading.collectAsState()
+    val mangaPlanningToReadList by viewModel.mangaPlanningToRead.collectAsState()
+    val mangaCompletedList by viewModel.mangaCompleted.collectAsState()
+
+    val mangaTrackMap = remember(mangaContinueReadingList, mangaPlanningToReadList, mangaCompletedList) {
+        val map = mutableMapOf<Int, String>()
+        mangaContinueReadingList.forEach { map[it.id] = "CURRENT" }
+        mangaPlanningToReadList.forEach { map[it.id] = "PLANNING" }
+        mangaCompletedList.forEach { map[it.id] = "COMPLETED" }
+        map
+    }
+
     val savedAnimeProgressMap = remember(currentlyWatching, planningToWatch, completed, onHold, dropped, localAnimeStatus) {
         val map = mutableMapOf<Int, Int>()
         currentlyWatching.forEach { if (it.progress > 0) map[it.id] = it.progress }
@@ -229,18 +280,20 @@ fun SearchScreen(
 
     BackHandler { onClose() }
 
-    fun performSearch(page: Int = 1) {
+    /**
+     * Run an initial search (page 1) for whichever type(s) are active.
+     * Replaces existing results for each fetched type.
+     */
+    fun performSearch() {
         scope.launch {
-            if (page == 1) {
-                isSearching = true
-                hasSearched = true
-            } else {
-                isLoadingMore = true
-            }
+            isSearching = true
+            hasSearched = true
             val seasonYearVal = filters.seasonYear.toIntOrNull()
             val genreList = filters.genres.toList().ifEmpty { null }
             val tagList = filters.tags.toList().ifEmpty { null }
 
+            // ── Anime fetch ──────────────────────────────────────────────
+            // In "anime" and "both" modes we always run the anime query.
             if (searchType == "anime" || searchType == "both") {
                 val newResults = viewModel.searchAnimeAdvanced(
                     search = filters.query.ifBlank { null },
@@ -252,34 +305,121 @@ fun SearchScreen(
                     seasonYear = seasonYearVal,
                     sort = filters.sort,
                     isAdult = null,
-                    page = page,
+                    page = 1,
                     perPage = 30
                 )
-                if (page == 1) {
-                    results = newResults
-                    hasMore = newResults.size >= 30
-                } else {
-                    results = results + newResults
-                    hasMore = newResults.size >= 30
-                }
+                results = newResults
+                hasMoreAnime = newResults.size >= 30
+                currentAnimePage = 1
             } else {
                 results = emptyList()
+                hasMoreAnime = false
             }
 
+            // ── Manga fetch ─────────────────────────────────────────────
+            // Uses the new searchMangaAdvanced() so genres/format/status/sort
+            // are honored in BOTH "manga" and "both" modes (previously only
+            // the text query was forwarded to the manga endpoint).
             if (searchType == "manga" || searchType == "both") {
-                viewModel.searchManga(filters.query, page) { mangaList ->
-                    if (page == 1) {
-                        mangaResults = mangaList
-                    } else {
-                        mangaResults = mangaResults + mangaList
-                    }
-                }
+                // When the user is doing a plain text search and hasn't
+                // explicitly chosen a sort, prefer SEARCH_MATCH (better
+                // relevance ranking for manga). Otherwise honor the sort
+                // they picked so the filter chip behaves consistently.
+                val effectiveMangaSort = if (
+                    filters.query.isNotBlank() && filters.sort == "POPULARITY_DESC"
+                ) "SEARCH_MATCH" else filters.sort
+
+                val newMangaResults = viewModel.searchMangaAdvanced(
+                    search = filters.query.ifBlank { null },
+                    genres = genreList ?: emptyList(),
+                    format = filters.format,
+                    status = filters.status,
+                    sort = effectiveMangaSort,
+                    page = 1,
+                    perPage = 30
+                )
+                mangaResults = newMangaResults
+                hasMoreManga = newMangaResults.size >= 30
+                currentMangaPage = 1
             } else {
                 mangaResults = emptyList()
+                hasMoreManga = false
             }
 
-            currentPage = page
+            // Recompute the unified hasMore flag based on the active mode so
+            // the "Load More" button only shows when there is actually more
+            // data to fetch for at least one of the active types.
+            hasMore = when (searchType) {
+                "anime" -> hasMoreAnime
+                "manga" -> hasMoreManga
+                "both" -> hasMoreAnime || hasMoreManga
+                else -> false
+            }
+
             isSearching = false
+        }
+    }
+
+    /**
+     * Fetch the next page of whichever active type(s) still have more
+     * results, and append them to the existing lists. Each type tracks
+     * its own page counter so an exhausted side is skipped instead of
+     * being re-fetched (which would clobber the existing results).
+     */
+    fun loadMore() {
+        scope.launch {
+            isLoadingMore = true
+            val seasonYearVal = filters.seasonYear.toIntOrNull()
+            val genreList = filters.genres.toList().ifEmpty { null }
+            val tagList = filters.tags.toList().ifEmpty { null }
+
+            if ((searchType == "anime" || searchType == "both") && hasMoreAnime) {
+                val nextPage = currentAnimePage + 1
+                val newResults = viewModel.searchAnimeAdvanced(
+                    search = filters.query.ifBlank { null },
+                    genres = genreList,
+                    tags = tagList,
+                    format = filters.format,
+                    status = filters.status,
+                    season = filters.season,
+                    seasonYear = seasonYearVal,
+                    sort = filters.sort,
+                    isAdult = null,
+                    page = nextPage,
+                    perPage = 30
+                )
+                results = results + newResults
+                hasMoreAnime = newResults.size >= 30
+                currentAnimePage = nextPage
+            }
+
+            if ((searchType == "manga" || searchType == "both") && hasMoreManga) {
+                val effectiveMangaSort = if (
+                    filters.query.isNotBlank() && filters.sort == "POPULARITY_DESC"
+                ) "SEARCH_MATCH" else filters.sort
+
+                val nextPage = currentMangaPage + 1
+                val newMangaResults = viewModel.searchMangaAdvanced(
+                    search = filters.query.ifBlank { null },
+                    genres = genreList ?: emptyList(),
+                    format = filters.format,
+                    status = filters.status,
+                    sort = effectiveMangaSort,
+                    page = nextPage,
+                    perPage = 30
+                )
+                mangaResults = mangaResults + newMangaResults
+                hasMoreManga = newMangaResults.size >= 30
+                currentMangaPage = nextPage
+            }
+
+            hasMore = when (searchType) {
+                "anime" -> hasMoreAnime
+                "manga" -> hasMoreManga
+                "both" -> hasMoreAnime || hasMoreManga
+                else -> false
+            }
+
             isLoadingMore = false
         }
     }
@@ -317,6 +457,12 @@ fun SearchScreen(
     fun clearAllFilters() {
         filters = SearchFilters(query = filters.query)
         results = emptyList()
+        mangaResults = emptyList()
+        currentAnimePage = 1
+        currentMangaPage = 1
+        hasMoreAnime = true
+        hasMoreManga = true
+        hasMore = true
         hasSearched = false
     }
 
@@ -327,6 +473,29 @@ fun SearchScreen(
 
     val filteredResults = remember(results, hideAdultContent) {
         if (hideAdultContent) results.filter { !isAdultContent(it.isAdult, it.genres) } else results
+    }
+
+    // Manga results filtered by adult-content preference. MangaExploreMedia
+    // exposes a simple `isAdult` flag (no genre inference like anime), so we
+    // only need a straightforward filter here.
+    val filteredMangaResults = remember(mangaResults, hideAdultContent) {
+        if (hideAdultContent) mangaResults.filter { !it.isAdult } else mangaResults
+    }
+
+    // Heterogeneous list used by the "both" grid. We interleave anime and
+    // manga items (anime first, then manga on the same row) so neither type
+    // ever dominates a long stretch of the grid and the user gets a balanced
+    // view of both media types.
+    val unifiedResults = remember(filteredResults, filteredMangaResults) {
+        val animeItems = filteredResults.map { UnifiedSearchItem.Anime(it) }
+        val mangaItems = filteredMangaResults.map { UnifiedSearchItem.Manga(it) }
+        val merged = mutableListOf<UnifiedSearchItem>()
+        val maxLen = maxOf(animeItems.size, mangaItems.size)
+        for (i in 0 until maxLen) {
+            if (i < animeItems.size) merged.add(animeItems[i])
+            if (i < mangaItems.size) merged.add(mangaItems[i])
+        }
+        merged
     }
 
     Box(
@@ -374,7 +543,17 @@ fun SearchScreen(
                         }
                     )
                     IconButton(
-                        onClick = { filters = filters.copy(query = ""); results = emptyList(); hasSearched = false },
+                        onClick = {
+                            filters = filters.copy(query = "")
+                            results = emptyList()
+                            mangaResults = emptyList()
+                            currentAnimePage = 1
+                            currentMangaPage = 1
+                            hasMoreAnime = true
+                            hasMoreManga = true
+                            hasMore = true
+                            hasSearched = false
+                        },
                         modifier = Modifier.size(36.dp)
                     ) {
                         Icon(Icons.Default.Close, contentDescription = "Clear", tint = Color.White.copy(alpha = if (filters.query.isNotEmpty()) 0.5f else 0f), modifier = Modifier.size(18.dp))
@@ -393,6 +572,11 @@ fun SearchScreen(
                             searchType = value
                             results = emptyList()
                             mangaResults = emptyList()
+                            currentAnimePage = 1
+                            currentMangaPage = 1
+                            hasMoreAnime = true
+                            hasMoreManga = true
+                            hasMore = true
                             hasSearched = false
                             if (filters.query.isNotBlank()) {
                                 performSearch()
@@ -535,7 +719,7 @@ fun SearchScreen(
                 Box(modifier = Modifier.fillMaxSize().padding(top = 128.dp), contentAlignment = Alignment.TopCenter) {
                     CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 }
-            } else if (hasSearched && filteredResults.isEmpty() && mangaResults.isEmpty()) {
+            } else if (hasSearched && filteredResults.isEmpty() && filteredMangaResults.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(top = 128.dp)) {
                         Icon(Icons.Default.Search, contentDescription = null, tint = Color.White.copy(alpha = 0.2f), modifier = Modifier.size(48.dp))
@@ -569,7 +753,7 @@ fun SearchScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    items(mangaResults, key = { it.id }) { manga ->
+                    items(filteredMangaResults, key = { it.id }) { manga ->
                         val title = if (preferEnglishTitles && !manga.title.english.isNullOrBlank()) manga.title.english
                                    else manga.title.romaji ?: "Unknown"
                         val coverUrl = manga.coverImage?.large ?: manga.coverImage?.medium ?: ""
@@ -579,16 +763,74 @@ fun SearchScreen(
                             mangaCover = coverUrl,
                             mangaFormat = manga.format,
                             mangaScore = manga.averageScore,
+                            listStatus = mangaTrackMap[manga.id],
                             onClick = { onMangaClick(manga) }
                         )
                     }
-                    if (hasMore && mangaResults.size >= 30) {
+                    if (hasMoreManga && filteredMangaResults.size >= 30) {
                         item {
                             Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
                                 if (isLoadingMore) {
                                     CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
                                 } else {
-                                    TextButton(onClick = { performSearch(currentPage + 1) }) {
+                                    TextButton(onClick = { loadMore() }) {
+                                        Text("Load More", color = MaterialTheme.colorScheme.primary)
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else if (searchType == "both") {
+                // Unified grid: anime and manga are interleaved into a single
+                // heterogeneous list and rendered through MediaSearchResultCard
+                // so each tile carries a small ▶/📖 type chip in the corner.
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    state = gridState,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(unifiedResults, key = { it.stableKey() }) { item ->
+                        when (item) {
+                            is UnifiedSearchItem.Anime -> MediaSearchResultCard(
+                                isAnime = true,
+                                anime = item.item,
+                                listStatus = savedAnimeMap[item.item.id],
+                                preferEnglishTitles = preferEnglishTitles,
+                                onClick = {
+                                    keyboardController?.hide()
+                                    selectedAnime = item.item
+                                    firstAnime = item.item
+                                    showDetailDialog = true
+                                }
+                            )
+                            is UnifiedSearchItem.Manga -> {
+                                val manga = item.item
+                                MediaSearchResultCard(
+                                    isAnime = false,
+                                    manga = manga,
+                                    listStatus = mangaTrackMap[manga.id],
+                                    preferEnglishTitles = preferEnglishTitles,
+                                    onClick = { onMangaClick(manga) }
+                                )
+                            }
+                        }
+                    }
+                    if (hasMore) {
+                        item {
+                            Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                                if (isLoadingMore) {
+                                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                                } else {
+                                    // loadMore() fetches the next page of
+                                    // whichever active type(s) still have more
+                                    // results, skipping any exhausted side.
+                                    TextButton(onClick = { loadMore() }) {
                                         Text("Load More", color = MaterialTheme.colorScheme.primary)
                                         Spacer(modifier = Modifier.width(4.dp))
                                         Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
@@ -620,39 +862,13 @@ fun SearchScreen(
                             }
                         )
                     }
-                    if (mangaResults.isNotEmpty() && searchType == "both") {
-                        item {
-                            Text(
-                                "Manga",
-                                color = Color.White.copy(alpha = 0.6f),
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(vertical = 8.dp)
-                            )
-                        }
-                        mangaResults.forEach { manga ->
-                            item {
-                                val title = if (preferEnglishTitles && !manga.title.english.isNullOrBlank()) manga.title.english
-                                           else manga.title.romaji ?: "Unknown"
-                                val coverUrl = manga.coverImage?.large ?: manga.coverImage?.medium ?: ""
-                                SearchResultCard(
-                                    anime = null,
-                                    mangaTitle = title,
-                                    mangaCover = coverUrl,
-                                    mangaFormat = manga.format,
-                                    mangaScore = manga.averageScore,
-                                    onClick = { onMangaClick(manga) }
-                                )
-                            }
-                        }
-                    }
-                    if (hasMore) {
+                    if (hasMoreAnime) {
                         item {
                             Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
                                 if (isLoadingMore) {
                                     CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
                                 } else {
-                                    TextButton(onClick = { performSearch(currentPage + 1) }) {
+                                    TextButton(onClick = { loadMore() }) {
                                         Text("Load More", color = MaterialTheme.colorScheme.primary)
                                         Spacer(modifier = Modifier.width(4.dp))
                                         Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
@@ -713,6 +929,7 @@ fun SearchScreen(
             onViewAllCast = { onViewAllCast(selectedAnime!!.id, selectedAnime!!.title) },
             onViewAllStaff = { onViewAllStaff(selectedAnime!!.id, selectedAnime!!.title) },
             onViewAllRelations = { animeId, title -> onViewAllRelations(animeId, title) },
+            onViewAllRecommendations = { animeId, title -> onViewAllRecommendations(animeId, title) },
             onNoExtension = {
                 showDetailDialog = false
                 onNoExtension()
@@ -824,6 +1041,148 @@ private fun SearchResultCard(
                     Text("$it", color = Color.White.copy(alpha = 0.4f), style = MaterialTheme.typography.labelSmall, maxLines = 1)
                 }
                 if (anime != null && anime.episodes > 0 && format?.uppercase() != "MOVIE") {
+                    if (year != null) Text(" • ", color = Color.White.copy(alpha = 0.3f), style = MaterialTheme.typography.labelSmall)
+                    Text("${anime.episodes} eps", color = Color.White.copy(alpha = 0.4f), style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Unified search-result card used in "both" mode. Renders either an anime
+ * or manga tile with the same visual language as [SearchResultCard], but
+ * adds a small type chip (▶ Anime / 📖 Manga) in the top-right corner so
+ * the user can tell which kind of media each tile represents at a glance.
+ *
+ * List-status badges (CURRENT/PLANNING/COMPLETED) are moved to the
+ * top-START corner so they don't collide with the type chip.
+ */
+@Composable
+private fun MediaSearchResultCard(
+    isAnime: Boolean,
+    anime: ExploreAnime? = null,
+    manga: MangaExploreMedia? = null,
+    listStatus: String? = null,
+    preferEnglishTitles: Boolean = true,
+    onClick: () -> Unit
+) {
+    val context = LocalContext.current
+
+    val displayTitle = if (isAnime) {
+        val a = anime
+        if (a != null) {
+            if (preferEnglishTitles && !a.titleEnglish.isNullOrEmpty()) a.titleEnglish else a.title
+        } else "Unknown"
+    } else {
+        val m = manga
+        if (m != null) {
+            if (preferEnglishTitles && !m.title.english.isNullOrBlank()) m.title.english
+            else m.title.romaji ?: "Unknown"
+        } else "Unknown"
+    }
+
+    val displayScore = if (isAnime) {
+        anime?.averageScore?.let { it / 10.0 }
+    } else {
+        manga?.averageScore?.let { it / 10.0 }
+    }
+
+    val cover = if (isAnime) {
+        anime?.cover ?: ""
+    } else {
+        manga?.coverImage?.large ?: manga?.coverImage?.medium ?: ""
+    }
+
+    val format = if (isAnime) anime?.format else manga?.format
+    val year = anime?.year
+
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent)
+    ) {
+        Column {
+            Box {
+                AsyncImage(
+                    model = ImageRequest.Builder(context).data(cover).memoryCacheKey(cover).diskCacheKey(cover).crossfade(false).build(),
+                    contentDescription = displayTitle,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxWidth().aspectRatio(2f/3f).clip(RoundedCornerShape(12.dp))
+                )
+
+                // List-status badge — moved to top-START in the unified card
+                // so it doesn't overlap with the type chip on the top-end.
+                if (listStatus != null && StatusColors[listStatus] != Color.Transparent) {
+                    Surface(
+                        modifier = Modifier.align(Alignment.TopStart).padding(6.dp),
+                        shape = RoundedCornerShape(6.dp),
+                        color = Color.Black.copy(alpha = 0.6f)
+                    ) {
+                        Text(
+                            StatusLabels[listStatus] ?: listStatus,
+                            color = StatusColors[listStatus] ?: Color.Transparent,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+
+                // Type chip (top-end) — small, 24dp tall, with a subtle
+                // scrim background so it stays legible over any cover art.
+                Surface(
+                    modifier = Modifier.align(Alignment.TopEnd).padding(6.dp),
+                    shape = RoundedCornerShape(6.dp),
+                    color = Color.Black.copy(alpha = 0.55f)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .height(24.dp)
+                            .padding(horizontal = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = if (isAnime) Icons.Default.PlayArrow else Icons.AutoMirrored.Filled.MenuBook,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Text(
+                            text = if (isAnime) "Anime" else "Manga",
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                if (displayScore != null) {
+                    Row(
+                        modifier = Modifier.align(Alignment.BottomStart).padding(6.dp).background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Star, contentDescription = null, tint = Color(0xFFFFD700), modifier = Modifier.size(12.dp))
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Text(String.format(Locale.getDefault(), "%.1f", displayScore), color = Color(0xFFFFD700), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(displayTitle, color = Color.White, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 4.dp))
+            Row(
+                modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                format?.let { fmt ->
+                    Text(fmt, color = Color.White.copy(alpha = 0.4f), style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                    if (year != null) Text(" • ", color = Color.White.copy(alpha = 0.3f), style = MaterialTheme.typography.labelSmall)
+                }
+                year?.let {
+                    Text("$it", color = Color.White.copy(alpha = 0.4f), style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                }
+                if (isAnime && anime != null && anime.episodes > 0 && format?.uppercase() != "MOVIE") {
                     if (year != null) Text(" • ", color = Color.White.copy(alpha = 0.3f), style = MaterialTheme.typography.labelSmall)
                     Text("${anime.episodes} eps", color = Color.White.copy(alpha = 0.4f), style = MaterialTheme.typography.labelSmall)
                 }

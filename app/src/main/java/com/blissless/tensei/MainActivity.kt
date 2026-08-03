@@ -88,13 +88,17 @@ import com.blissless.tensei.ui.screens.downloads.EpisodeDownloadDialog
 import com.blissless.tensei.ui.screens.explore.ExploreScreen
 import com.blissless.tensei.ui.screens.home.HomeScreen
 import com.blissless.tensei.ui.screens.player.PlayerScreen
+import com.blissless.tensei.ui.screens.relations.AllRecommendationsScreen
 import com.blissless.tensei.ui.screens.relations.AllRelationsScreen
 import com.blissless.tensei.ui.screens.search.SearchScreen
 import com.blissless.tensei.ui.screens.settings.SettingsScreen
 import com.blissless.tensei.ui.screens.status.StatusListScreen
-import com.blissless.tensei.ui.screens.manga.MangaDetailScreen
 import com.blissless.tensei.ui.screens.manga.DetailedMangaScreen
 import com.blissless.tensei.ui.screens.manga.MangaReaderScreen
+import com.blissless.tensei.ui.screens.manga.MangaAllCharactersScreen
+import com.blissless.tensei.ui.screens.manga.MangaAllRelationsScreen
+import com.blissless.tensei.ui.screens.manga.MangaAllRecommendationsScreen
+import com.blissless.tensei.ui.screens.manga.MangaAllStaffScreen
 import com.blissless.tensei.ui.theme.AppTheme
 import com.blissless.tensei.ui.theme.ThemeMode
 import com.blissless.tensei.update.UpdateViewModel
@@ -118,6 +122,8 @@ import com.blissless.tensei.viewmodel.setSwipeVolume
 import com.blissless.tensei.viewmodel.updateMangaStatus
 import com.blissless.tensei.viewmodel.updateMangaProgress
 import com.blissless.tensei.viewmodel.removeMangaTracking
+import com.blissless.tensei.viewmodel.isMangaFavorited
+import com.blissless.tensei.viewmodel.clearMangaDetail
 import com.blissless.tensei.data.models.MangaExploreMedia
 import com.blissless.tensei.data.models.MangaMedia
 import eu.kanade.tachiyomi.animesource.model.Video
@@ -145,6 +151,12 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // DEBUG: log any uncaught crash to logcat so "screen just closes" issues are traceable.
+        val previousCrashHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            android.util.Log.e("AppCrash", "UNCAUGHT EXCEPTION on thread '${thread.name}':", throwable)
+            previousCrashHandler?.uncaughtException(thread, throwable)
+        }
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
@@ -498,9 +510,63 @@ fun MainScreen(
     // ─── Manga state ──────────────────────────────────────────────────
     var showMangaReader by remember { mutableStateOf(false) }
     var mangaReaderChapterIndex by remember { mutableIntStateOf(0) }
-    var selectedMangaState by remember { mutableStateOf<com.blissless.tensei.data.models.MangaMedia?>(null) }
+    var mangaDetailStack by remember { mutableStateOf<List<com.blissless.tensei.data.models.MangaMedia>>(emptyList()) }
+    val currentManga = mangaDetailStack.lastOrNull()
     var showMangaDetailScreen by remember { mutableStateOf(false) }
     var mangaAutoShowChapters by remember { mutableStateOf(false) }
+    var mangaOverlay by remember { mutableStateOf<MangaOverlay>(MangaOverlay.None) }
+    // Manga All* grids that were suspended while navigating deeper (e.g. tapping a
+    // relation opens a new manga detail / anime detail). Restored when back returns
+    // to the grid's owning manga so the grid stays in the back stack.
+    var mangaOverlayRestoreStack by remember { mutableStateOf<List<MangaOverlay>>(emptyList()) }
+
+    fun restoreMangaOverlayIfPending() {
+        val pending = mangaOverlayRestoreStack.lastOrNull() ?: return
+        val current = mangaDetailStack.lastOrNull()
+        if (current != null && mangaOverlay == MangaOverlay.None && pending.mangaId == current.id) {
+            android.util.Log.d("MangaNav", "restoreMangaOverlay: restoring ${pending.javaClass.simpleName} for manga id=${pending.mangaId}")
+            mangaOverlay = pending
+            mangaOverlayRestoreStack = mangaOverlayRestoreStack.dropLast(1)
+        }
+    }
+
+    fun dismissDetailedAnimeAndRestoreMangaGrid() {
+        showDetailedAnimeScreen = false
+        val restoreStackSizeBefore = mangaOverlayRestoreStack.size
+        restoreMangaOverlayIfPending()
+        if (mangaOverlayRestoreStack.size < restoreStackSizeBefore && mangaDetailStack.isNotEmpty()) {
+            showMangaDetailScreen = true
+        }
+    }
+
+    val openMangaDetail: (com.blissless.tensei.data.models.MangaMedia) -> Unit = { m ->
+        android.util.Log.d("MangaNav", "openMangaDetail PUSH: id=${m.id} title='${m.title}' stackDepth=${mangaDetailStack.size} -> ${mangaDetailStack.size + 1}")
+        viewModel.clearMangaDetail()
+        mangaDetailStack = mangaDetailStack + m
+        showMangaDetailScreen = true
+    }
+    val popMangaDetail: () -> Unit = {
+        val popped = mangaDetailStack.lastOrNull()
+        val remaining = mangaDetailStack.dropLast(1)
+        android.util.Log.d("MangaNav", "popMangaDetail POP: id=${popped?.id} remaining=${remaining.size}")
+        mangaDetailStack = remaining
+        if (remaining.isEmpty()) {
+            showMangaDetailScreen = false
+            mangaOverlayRestoreStack = emptyList()
+        } else {
+            restoreMangaOverlayIfPending()
+        }
+        viewModel.clearMangaDetail()
+    }
+    val closeAllManga: () -> Unit = {
+        android.util.Log.d("MangaNav", "closeAllManga: clearing stack depth=${mangaDetailStack.size}")
+        mangaDetailStack = emptyList()
+        showMangaDetailScreen = false
+        showMangaReader = false
+        mangaOverlay = MangaOverlay.None
+        mangaOverlayRestoreStack = emptyList()
+        viewModel.clearMangaDetail()
+    }
 
     val animeStatusMap = remember(currentlyWatching, planningToWatch, completed, onHold, dropped) {
         val map = mutableMapOf<Int, String>()
@@ -1129,41 +1195,90 @@ fun MainScreen(
                 pendingSettingsGroup = if (extUiState.extensions.isEmpty()) "extensions" else "stream"
             },
             onRelationClick = { relation ->
-                try {
-                    scope.launch {
-                        try {
-                            delay(100.milliseconds)
-                            val detailedData = viewModel.fetchDetailedAnimeData(relation.id)
-                            if (detailedData != null) {
-                                viewModel.clearExploreAnimeCardBounds()
-                                val newAnime = ExploreAnime(
-                                    id = relation.id,
-                                    title = detailedData.title,
-                                    titleEnglish = detailedData.titleEnglish,
-                                    cover = detailedData.cover,
-                                    banner = detailedData.banner,
-                                    episodes = detailedData.episodes,
-                                    latestEpisode = detailedData.latestEpisode,
-                                    averageScore = detailedData.averageScore,
-                                    genres = detailedData.genres,
-                                    year = detailedData.year,
-                                    format = detailedData.format
-                                )
-                                overlayState = OverlayState.ExploreAnimeDialog(
-                                    anime = newAnime,
-                                    firstAnime = exploreDialog.firstAnime ?: exploreDialog.anime,
-                                    isFirstOpen = false,
-                                    previousStates = exploreDialog.previousStates + exploreDialog
-                                )
-                            } else {
-                                context.toast("Anime not found - ID: ${relation.id}")
+                // If the relation is a manga/novel format, open the manga detail screen instead
+                if (relation.format == null || relation.format in listOf("MANGA", "NOVEL", "ONE_SHOT", "DOUJIN", "MANHWA", "MANHUA")) {
+                    openMangaDetail(
+                        com.blissless.tensei.data.models.MangaMedia(
+                            id = relation.id,
+                            title = relation.title,
+                            cover = relation.cover,
+                            totalChapters = 0,
+                            averageScore = relation.averageScore,
+                            format = relation.format
+                        )
+                    )
+                    mangaAutoShowChapters = false
+                } else {
+                    try {
+                        scope.launch {
+                            try {
+                                delay(100.milliseconds)
+                                val detailedData = viewModel.fetchDetailedAnimeData(relation.id)
+                                if (detailedData != null) {
+                                    viewModel.clearExploreAnimeCardBounds()
+                                    val newAnime = ExploreAnime(
+                                        id = relation.id,
+                                        title = detailedData.title,
+                                        titleEnglish = detailedData.titleEnglish,
+                                        cover = detailedData.cover,
+                                        banner = detailedData.banner,
+                                        episodes = detailedData.episodes,
+                                        latestEpisode = detailedData.latestEpisode,
+                                        averageScore = detailedData.averageScore,
+                                        genres = detailedData.genres,
+                                        year = detailedData.year,
+                                        format = detailedData.format
+                                    )
+                                    overlayState = OverlayState.ExploreAnimeDialog(
+                                        anime = newAnime,
+                                        firstAnime = exploreDialog.firstAnime ?: exploreDialog.anime,
+                                        isFirstOpen = false,
+                                        previousStates = exploreDialog.previousStates + exploreDialog
+                                    )
+                                } else {
+                                    context.toast("Anime not found - ID: ${relation.id}")
+                                }
+                            } catch (e: Exception) {
+                                context.toast("Error: ${e.message}")
                             }
-                        } catch (e: Exception) {
-                            context.toast("Error: ${e.message}")
                         }
+                    } catch (e: Exception) {
+                        context.toast("Error: ${e.message}")
                     }
-                } catch (e: Exception) {
-                    context.toast("Error: ${e.message}")
+                }
+            },
+            onRecommendationClick = { recId ->
+                scope.launch {
+                    try {
+                        delay(100.milliseconds)
+                        val detailedData = viewModel.fetchDetailedAnimeData(recId)
+                        if (detailedData != null) {
+                            viewModel.clearExploreAnimeCardBounds()
+                            val newAnime = ExploreAnime(
+                                id = recId,
+                                title = detailedData.title,
+                                titleEnglish = detailedData.titleEnglish,
+                                cover = detailedData.cover,
+                                banner = detailedData.banner,
+                                episodes = detailedData.episodes,
+                                latestEpisode = detailedData.latestEpisode,
+                                averageScore = detailedData.averageScore,
+                                genres = detailedData.genres,
+                                year = detailedData.year,
+                                format = detailedData.format
+                            )
+                            overlayState = OverlayState.ExploreAnimeDialog(
+                                anime = newAnime,
+                                firstAnime = exploreDialog.firstAnime ?: exploreDialog.anime,
+                                isFirstOpen = false,
+                                previousStates = exploreDialog.previousStates + exploreDialog
+                            )
+                        } else {
+                            context.toast("Anime not found")
+                        }
+                    } catch (e: Exception) {
+                        context.toast("Error: ${e.message}")
+                    }
                 }
             },
             onCharacterClick = { characterId ->
@@ -1201,6 +1316,13 @@ fun MainScreen(
                     previousStates = exploreDialog.previousStates + exploreDialog
                 )
             },
+            onViewAllRecommendations = { animeId, title ->
+                overlayState = OverlayState.AllRecommendationsDialog(
+                    animeId = animeId,
+                    animeTitle = title,
+                    previousStates = exploreDialog.previousStates + exploreDialog
+                )
+            },
             preferEnglishTitles = preferEnglishTitles,
         )
     }
@@ -1218,9 +1340,9 @@ fun MainScreen(
             currentProgress = currentProgressForAnime,
             isFavorite = isAnimeFavorite,
             initialCardBounds = currentCardBounds,
-            onDismiss = { showDetailedAnimeScreen = false },
-            onNavigateBack = { showDetailedAnimeScreen = false },
-            onSwipeToClose = { showDetailedAnimeScreen = false },
+            onDismiss = { dismissDetailedAnimeAndRestoreMangaGrid() },
+            onNavigateBack = { dismissDetailedAnimeAndRestoreMangaGrid() },
+            onSwipeToClose = { dismissDetailedAnimeAndRestoreMangaGrid() },
             onPlayEpisode = { episode, _ ->
                 onPlayEpisode(selectedAnimeState!!, episode, null)
                 showDetailedAnimeScreen = false
@@ -1250,39 +1372,86 @@ fun MainScreen(
                 showDetailedAnimeScreen = false
             },
             onRelationClick = { relation ->
-                try {
-                    scope.launch {
-                        try {
-                            delay(100.milliseconds)
-                            val detailedData = viewModel.fetchDetailedAnimeData(relation.id)
-                            if (detailedData != null) {
-                                currentCardBounds = null
-                                selectedAnimeState = AnimeMedia(
-                                    id = detailedData.id,
-                                    title = detailedData.title,
-                                    titleEnglish = detailedData.titleEnglish,
-                                    cover = detailedData.cover,
-                                    banner = detailedData.banner,
-                                    progress = 0,
-                                    totalEpisodes = detailedData.episodes,
-                                    latestEpisode = detailedData.latestEpisode,
-                                    status = detailedData.status ?: "",
-                                    averageScore = detailedData.averageScore,
-                                    genres = detailedData.genres,
-                                    listStatus = "",
-                                    listEntryId = 0,
-                                    year = detailedData.year,
-                                    malId = detailedData.malId
-                                )
-                            } else {
+                // If the relation is a manga/novel format, open the manga detail screen instead
+                if (relation.format == null || relation.format in listOf("MANGA", "NOVEL", "ONE_SHOT", "DOUJIN", "MANHWA", "MANHUA")) {
+                    openMangaDetail(
+                        com.blissless.tensei.data.models.MangaMedia(
+                            id = relation.id,
+                            title = relation.title,
+                            cover = relation.cover,
+                            totalChapters = 0,
+                            averageScore = relation.averageScore,
+                            format = relation.format
+                        )
+                    )
+                    mangaAutoShowChapters = false
+                } else {
+                    try {
+                        scope.launch {
+                            try {
+                                delay(100.milliseconds)
+                                val detailedData = viewModel.fetchDetailedAnimeData(relation.id)
+                                if (detailedData != null) {
+                                    currentCardBounds = null
+                                    selectedAnimeState = AnimeMedia(
+                                        id = detailedData.id,
+                                        title = detailedData.title,
+                                        titleEnglish = detailedData.titleEnglish,
+                                        cover = detailedData.cover,
+                                        banner = detailedData.banner,
+                                        progress = 0,
+                                        totalEpisodes = detailedData.episodes,
+                                        latestEpisode = detailedData.latestEpisode,
+                                        status = detailedData.status ?: "",
+                                        averageScore = detailedData.averageScore,
+                                        genres = detailedData.genres,
+                                        listStatus = "",
+                                        listEntryId = 0,
+                                        year = detailedData.year,
+                                        malId = detailedData.malId
+                                    )
+                                } else {
+                                    context.toast("Anime not found")
+                                }
+                            } catch (_: Exception) {
                                 context.toast("Anime not found")
                             }
-                        } catch (_: Exception) {
+                        }
+                    } catch (_: Exception) {
+                        context.toast("Anime not found")
+                    }
+                }
+            },
+            onRecommendationClick = { recId ->
+                scope.launch {
+                    try {
+                        delay(100.milliseconds)
+                        val detailedData = viewModel.fetchDetailedAnimeData(recId)
+                        if (detailedData != null) {
+                            currentCardBounds = null
+                            selectedAnimeState = AnimeMedia(
+                                id = detailedData.id,
+                                title = detailedData.title,
+                                titleEnglish = detailedData.titleEnglish,
+                                cover = detailedData.cover,
+                                banner = detailedData.banner,
+                                progress = 0,
+                                totalEpisodes = detailedData.episodes,
+                                latestEpisode = detailedData.latestEpisode,
+                                status = detailedData.status ?: "",
+                                averageScore = detailedData.averageScore,
+                                genres = detailedData.genres,
+                                listStatus = "",
+                                listEntryId = 0,
+                                year = detailedData.year,
+                                malId = detailedData.malId
+                            )
+                        } else {
                             context.toast("Anime not found")
                         }
+                    } catch (_: Exception) {
+                        context.toast("Anime not found")
                     }
-                } catch (_: Exception) {
-                    context.toast("Anime not found")
                 }
             },
             onCharacterClick = { characterId ->
@@ -1300,6 +1469,7 @@ fun MainScreen(
             onViewAllCast = { overlayState = OverlayState.AllCastDialog(animeId = selectedAnimeState!!.id, animeTitle = selectedAnimeState!!.title) },
             onViewAllStaff = { overlayState = OverlayState.AllStaffDialog(animeId = selectedAnimeState!!.id, animeTitle = selectedAnimeState!!.title) },
             onViewAllRelations = { animeId, title -> overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = title) },
+            onViewAllRecommendations = { animeId, title -> overlayState = OverlayState.AllRecommendationsDialog(animeId = animeId, animeTitle = title) },
             isLoggedIn = isLoggedIn,
             onUpdateLocalStatus = { status ->
                 val currentEntry = localAnimeStatus[selectedAnimeState!!.id]
@@ -1333,8 +1503,9 @@ fun MainScreen(
     }
 
     // ─── Manga Detail Screen ─────────────────────────────────────────
-    if (selectedMangaState != null && showMangaDetailScreen) {
-        val manga = selectedMangaState!!
+    if (currentManga != null && showMangaDetailScreen) {
+        val manga = currentManga
+        android.util.Log.d("MangaNav", "DETAIL COMPOSE: id=${manga.id} title='${manga.title}' autoShowChapters=$mangaAutoShowChapters stackDepth=${mangaDetailStack.size}")
         DetailedMangaScreen(
             manga = manga,
             viewModel = viewModel,
@@ -1343,15 +1514,111 @@ fun MainScreen(
             autoShowChapters = mangaAutoShowChapters,
             currentStatus = manga.listStatus,
             currentProgress = manga.progress,
-            onDismiss = {
+            isLoggedIn = isLoggedIn,
+            isFavorite = viewModel.isMangaFavorited(manga.id),
+            onRelationClick = { relation ->
+                // If the relation is an anime format, open the anime detail screen
+                if (relation.format != null && relation.format !in listOf("MANGA", "NOVEL", "ONE_SHOT", "DOUJIN", "MANHWA", "MANHUA")) {
+                    scope.launch {
+                        try {
+                            delay(100.milliseconds)
+                            val detailedData = viewModel.fetchDetailedAnimeData(relation.id)
+                            if (detailedData != null) {
+                                selectedAnimeState = AnimeMedia(
+                                    id = detailedData.id,
+                                    title = detailedData.title,
+                                    titleEnglish = detailedData.titleEnglish,
+                                    cover = detailedData.cover,
+                                    banner = detailedData.banner,
+                                    progress = 0,
+                                    totalEpisodes = detailedData.episodes,
+                                    latestEpisode = detailedData.latestEpisode,
+                                    status = detailedData.status ?: "",
+                                    averageScore = detailedData.averageScore,
+                                    genres = detailedData.genres,
+                                    listStatus = "",
+                                    listEntryId = 0,
+                                    year = detailedData.year,
+                                    malId = detailedData.malId
+                                )
+                                showMangaDetailScreen = false
+                                showDetailedAnimeScreen = true
+                            } else {
+                                context.toast("Anime not found")
+                            }
+                        } catch (_: Exception) {
+                            context.toast("Anime not found")
+                        }
+                    }
+                } else {
+                    // Manga relation — push the new manga detail onto the stack
+                    openMangaDetail(
+                        com.blissless.tensei.data.models.MangaMedia(
+                            id = relation.id,
+                            title = relation.title,
+                            cover = relation.cover,
+                            totalChapters = relation.chapters ?: 0,
+                            averageScore = relation.averageScore,
+                            format = relation.format
+                        )
+                    )
+                    mangaAutoShowChapters = false
+                }
+            },
+            onCharacterClick = { characterId ->
+                overlayState = OverlayState.CharacterDialog(
+                    characterId = characterId,
+                    animeId = manga.id,
+                    previousStates = emptyList()
+                )
+            },
+            onStaffClick = { staffId ->
+                overlayState = OverlayState.StaffDialog(
+                    staffId = staffId,
+                    animeId = manga.id,
+                    previousStates = emptyList()
+                )
+            },
+            onViewAllCharacters = {
+                mangaOverlay = MangaOverlay.AllCharacters(manga.id, manga.title)
+            },
+            onViewAllStaff = {
+                mangaOverlay = MangaOverlay.AllStaff(manga.id, manga.title)
+            },
+            onViewAllRelations = {
+                mangaOverlay = MangaOverlay.AllRelations(manga.id, manga.title)
+            },
+            onViewAllRecommendations = {
+                mangaOverlay = MangaOverlay.AllRecommendations(manga.id, manga.title)
+            },
+            navigateToMangaDetail = { mangaId ->
+                // Navigate to another manga's detail — push a fresh manga onto the stack
+                openMangaDetail(
+                    com.blissless.tensei.data.models.MangaMedia(
+                        id = mangaId,
+                        title = "",
+                        cover = ""
+                    )
+                )
                 mangaAutoShowChapters = false
-                showMangaDetailScreen = false
-                selectedMangaState = null
+            },
+            onDismiss = {
+                if (showMangaReader) {
+                    android.util.Log.d("MangaNav", "DETAIL onDismiss suppressed (id=${manga.id}) — reader is open, keeping manga detail")
+                } else {
+                    android.util.Log.d("MangaNav", "DETAIL onDismiss — popping detail (id=${manga.id})")
+                    mangaAutoShowChapters = false
+                    popMangaDetail()
+                }
             },
             onSwipeToClose = {
-                mangaAutoShowChapters = false
-                showMangaDetailScreen = false
-                selectedMangaState = null
+                if (showMangaReader) {
+                    android.util.Log.d("MangaNav", "DETAIL onSwipeToClose suppressed (id=${manga.id}) — reader is open, keeping manga detail")
+                } else {
+                    android.util.Log.d("MangaNav", "DETAIL onSwipeToClose — popping detail (id=${manga.id})")
+                    mangaAutoShowChapters = false
+                    popMangaDetail()
+                }
             },
             onUpdateStatus = { status ->
                 if (status != null) viewModel.updateMangaStatus(manga.id, status)
@@ -1362,29 +1629,166 @@ fun MainScreen(
             onRemove = {
                 viewModel.removeMangaTracking(manga.id)
                 mangaAutoShowChapters = false
-                showMangaDetailScreen = false
-                selectedMangaState = null
+                popMangaDetail()
             },
             onStartReader = { chapterIndex ->
+                android.util.Log.d("MangaNav", "onStartReader called: chapterIndex=$chapterIndex manga.id=${manga.id} " +
+                    "mangaAutoShowChapters=$mangaAutoShowChapters showMangaDetailScreen=$showMangaDetailScreen showMangaReader=$showMangaReader")
                 mangaReaderChapterIndex = chapterIndex
-                showMangaDetailScreen = false
                 showMangaReader = true
+                // NOTE: Do NOT hide the detail or clear manga detail here — the reader is a
+                // Dialog layered on top, so closing the reader reveals the detail again.
             }
         )
     }
 
     // ─── Manga Reader Screen ─────────────────────────────────────────
-    if (showMangaReader && selectedMangaState != null) {
-        MangaReaderScreen(
-            manga = selectedMangaState!!,
-            initialChapterIndex = mangaReaderChapterIndex,
-            viewModel = viewModel,
-            isOled = isOled,
-            onClose = {
+    // NOTE: Wrapped in a fullscreen Dialog so it renders on top of the main
+    // Scaffold. Before this, the reader was composed directly in the main window
+    // and the Scaffold (composed later, always on top) covered it — the reader
+    // opened (state/logs) but was never visible.
+    if (showMangaReader && currentManga != null) {
+        val readerManga = currentManga
+        val closeReader: () -> Unit = {
+            if (showMangaReader) {
+                android.util.Log.d("MangaNav", "READER onClose INVOKED — closing reader (manga.id=${readerManga.id}) " +
+                    "autoShowChapters=$mangaAutoShowChapters detailBehind=$showMangaDetailScreen stackDepth=${mangaDetailStack.size}")
                 mangaAutoShowChapters = false
                 showMangaReader = false
+                if (!showMangaDetailScreen) {
+                    // Reader was opened directly (e.g. from a home card) with no detail behind.
+                    mangaDetailStack = mangaDetailStack.dropLast(1)
+                    if (mangaDetailStack.isEmpty()) {
+                        showMangaDetailScreen = false
+                    }
+                    viewModel.clearMangaDetail()
+                }
+            }
+        }
+        android.util.Log.d("MangaNav", "READER COMPOSE: id=${readerManga.id} title='${readerManga.title}' " +
+            "initialChapterIndex=$mangaReaderChapterIndex autoShowChapters=$mangaAutoShowChapters")
+        Dialog(
+            onDismissRequest = {
+                android.util.Log.d("MangaNav", "READER dialog dismissed via system — calling closeReader (manga.id=${readerManga.id})")
+                closeReader()
+            },
+            properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+        ) {
+            MangaReaderScreen(
+                manga = readerManga,
+                initialChapterIndex = mangaReaderChapterIndex,
+                viewModel = viewModel,
+                isOled = isOled,
+                onClose = closeReader
+            )
+        }
+    } else if (showMangaReader && currentManga == null) {
+        android.util.Log.e("MangaNav", "READER skipped: showMangaReader=true but currentManga is NULL! " +
+            "autoShowChapters=$mangaAutoShowChapters")
+    }
+
+    // Manga All Characters / All Staff / All Relations overlays
+    when (val mangaOv = mangaOverlay) {
+        is MangaOverlay.AllCharacters -> MangaAllCharactersScreen(
+            mangaId = mangaOv.mangaId,
+            mangaTitle = mangaOv.mangaTitle,
+            viewModel = viewModel,
+            onDismiss = { mangaOverlay = MangaOverlay.None },
+            onNavigateBack = { mangaOverlay = MangaOverlay.None },
+            onCharacterClick = { characterId ->
+                overlayState = OverlayState.CharacterDialog(
+                    characterId = characterId,
+                    animeId = mangaOv.mangaId,
+                    previousStates = emptyList()
+                )
             }
         )
+        is MangaOverlay.AllStaff -> MangaAllStaffScreen(
+            mangaId = mangaOv.mangaId,
+            mangaTitle = mangaOv.mangaTitle,
+            viewModel = viewModel,
+            onDismiss = { mangaOverlay = MangaOverlay.None },
+            onNavigateBack = { mangaOverlay = MangaOverlay.None },
+            onStaffClick = { staffId ->
+                overlayState = OverlayState.StaffDialog(
+                    staffId = staffId,
+                    animeId = mangaOv.mangaId,
+                    previousStates = emptyList()
+                )
+            }
+        )
+        is MangaOverlay.AllRelations -> MangaAllRelationsScreen(
+            mangaId = mangaOv.mangaId,
+            mangaTitle = mangaOv.mangaTitle,
+            viewModel = viewModel,
+            onDismiss = { mangaOverlay = MangaOverlay.None },
+            onNavigateBack = { mangaOverlay = MangaOverlay.None },
+            onRelationClick = { relation ->
+                // Suspend the grid so it can be restored when back returns to this manga
+                mangaOverlayRestoreStack = mangaOverlayRestoreStack + MangaOverlay.AllRelations(mangaOv.mangaId, mangaOv.mangaTitle)
+                mangaOverlay = MangaOverlay.None
+                if (relation.format != null && relation.format !in listOf("MANGA", "NOVEL", "ONE_SHOT", "DOUJIN", "MANHWA", "MANHUA")) {
+                    scope.launch {
+                        try {
+                            delay(100.milliseconds)
+                            val detailedData = viewModel.fetchDetailedAnimeData(relation.id)
+                            if (detailedData != null) {
+                                selectedAnimeState = AnimeMedia(
+                                    id = detailedData.id,
+                                    title = detailedData.title,
+                                    titleEnglish = detailedData.titleEnglish,
+                                    cover = detailedData.cover,
+                                    banner = detailedData.banner,
+                                    progress = 0,
+                                    totalEpisodes = detailedData.episodes,
+                                    latestEpisode = detailedData.latestEpisode,
+                                    status = detailedData.status ?: "",
+                                    averageScore = detailedData.averageScore,
+                                    genres = detailedData.genres,
+                                    listStatus = "",
+                                    listEntryId = 0,
+                                    year = detailedData.year,
+                                    malId = detailedData.malId
+                                )
+                                showMangaDetailScreen = false
+                                showDetailedAnimeScreen = true
+                            } else {
+                                context.toast("Anime not found")
+                            }
+                        } catch (_: Exception) {
+                            context.toast("Anime not found")
+                        }
+                    }
+                } else {
+                    openMangaDetail(
+                        com.blissless.tensei.data.models.MangaMedia(
+                            id = relation.id,
+                            title = relation.title,
+                            cover = relation.cover,
+                            totalChapters = relation.chapters ?: 0,
+                            averageScore = relation.averageScore,
+                            format = relation.format
+                        )
+                    )
+                    mangaAutoShowChapters = false
+                }
+            }
+        )
+        is MangaOverlay.AllRecommendations -> MangaAllRecommendationsScreen(
+            mangaId = mangaOv.mangaId,
+            mangaTitle = mangaOv.mangaTitle,
+            viewModel = viewModel,
+            onDismiss = { mangaOverlay = MangaOverlay.None },
+            onNavigateBack = { mangaOverlay = MangaOverlay.None },
+            onRecommendationClick = { rec ->
+                // Suspend the grid so it can be restored when back returns to this manga
+                mangaOverlayRestoreStack = mangaOverlayRestoreStack + MangaOverlay.AllRecommendations(mangaOv.mangaId, mangaOv.mangaTitle)
+                mangaOverlay = MangaOverlay.None
+                openMangaDetail(rec)
+                mangaAutoShowChapters = false
+            }
+        )
+        else -> {}
     }
 
     // Character Screen
@@ -1397,30 +1801,42 @@ fun MainScreen(
                 overlayState = OverlayState.None
             },
             onNavigateBack = onClearAnimeStack,
-            onAnimeClick = { animeId ->
-                scope.launch {
-                    val detailedData = viewModel.fetchDetailedAnimeData(animeId)
-                    if (detailedData != null) {
-                        val newAnime = ExploreAnime(
-                            id = detailedData.id,
-                            title = detailedData.title,
-                            titleEnglish = detailedData.titleEnglish,
-                            cover = detailedData.cover,
-                            banner = detailedData.banner,
-                            episodes = detailedData.episodes,
-                            latestEpisode = detailedData.latestEpisode,
-                            averageScore = detailedData.averageScore,
-                            genres = detailedData.genres,
-                            year = detailedData.year,
-                            format = detailedData.format
-                        )
-                        overlayState = OverlayState.ExploreAnimeDialog(
-                            anime = newAnime, firstAnime = newAnime, isFirstOpen = false,
-                            previousStates = characterDialog.previousStates + characterDialog
-                        )
-                    } else {
-                        context.toast("Anime not found")
+            onMediaClick = { mediaId, format ->
+                if (format != null && format !in listOf("MANGA", "NOVEL", "ONE_SHOT", "DOUJIN", "MANHWA", "MANHUA")) {
+                    scope.launch {
+                        val detailedData = viewModel.fetchDetailedAnimeData(mediaId)
+                        if (detailedData != null) {
+                            val newAnime = ExploreAnime(
+                                id = detailedData.id,
+                                title = detailedData.title,
+                                titleEnglish = detailedData.titleEnglish,
+                                cover = detailedData.cover,
+                                banner = detailedData.banner,
+                                episodes = detailedData.episodes,
+                                latestEpisode = detailedData.latestEpisode,
+                                averageScore = detailedData.averageScore,
+                                genres = detailedData.genres,
+                                year = detailedData.year,
+                                format = detailedData.format
+                            )
+                            overlayState = OverlayState.ExploreAnimeDialog(
+                                anime = newAnime, firstAnime = newAnime, isFirstOpen = false,
+                                previousStates = characterDialog.previousStates + characterDialog
+                            )
+                        } else {
+                            context.toast("Anime not found")
+                        }
                     }
+                } else {
+                    overlayState = OverlayState.None
+                    openMangaDetail(
+                        com.blissless.tensei.data.models.MangaMedia(
+                            id = mediaId,
+                            title = "",
+                            cover = ""
+                        )
+                    )
+                    mangaAutoShowChapters = false
                 }
             },
             onCharacterClick = { id ->
@@ -1450,30 +1866,42 @@ fun MainScreen(
                 overlayState = OverlayState.None
             },
             onNavigateBack = onClearAnimeStack,
-            onAnimeClick = { animeId ->
-                scope.launch {
-                    val detailedData = viewModel.fetchDetailedAnimeData(animeId)
-                    if (detailedData != null) {
-                        val newAnime = ExploreAnime(
-                            id = detailedData.id,
-                            title = detailedData.title,
-                            titleEnglish = detailedData.titleEnglish,
-                            cover = detailedData.cover,
-                            banner = detailedData.banner,
-                            episodes = detailedData.episodes,
-                            latestEpisode = detailedData.latestEpisode,
-                            averageScore = detailedData.averageScore,
-                            genres = detailedData.genres,
-                            year = detailedData.year,
-                            format = detailedData.format
-                        )
-                        overlayState = OverlayState.ExploreAnimeDialog(
-                            anime = newAnime, firstAnime = newAnime, isFirstOpen = false,
-                            previousStates = staffDialog.previousStates + staffDialog
-                        )
-                    } else {
-                        context.toast("Anime not found")
+            onMediaClick = { mediaId, format ->
+                if (format != null && format !in listOf("MANGA", "NOVEL", "ONE_SHOT", "DOUJIN", "MANHWA", "MANHUA")) {
+                    scope.launch {
+                        val detailedData = viewModel.fetchDetailedAnimeData(mediaId)
+                        if (detailedData != null) {
+                            val newAnime = ExploreAnime(
+                                id = detailedData.id,
+                                title = detailedData.title,
+                                titleEnglish = detailedData.titleEnglish,
+                                cover = detailedData.cover,
+                                banner = detailedData.banner,
+                                episodes = detailedData.episodes,
+                                latestEpisode = detailedData.latestEpisode,
+                                averageScore = detailedData.averageScore,
+                                genres = detailedData.genres,
+                                year = detailedData.year,
+                                format = detailedData.format
+                            )
+                            overlayState = OverlayState.ExploreAnimeDialog(
+                                anime = newAnime, firstAnime = newAnime, isFirstOpen = false,
+                                previousStates = staffDialog.previousStates + staffDialog
+                            )
+                        } else {
+                            context.toast("Anime not found")
+                        }
                     }
+                } else {
+                    overlayState = OverlayState.None
+                    openMangaDetail(
+                        com.blissless.tensei.data.models.MangaMedia(
+                            id = mediaId,
+                            title = "",
+                            cover = ""
+                        )
+                    )
+                    mangaAutoShowChapters = false
                 }
             },
             onCharacterClick = { id ->
@@ -1564,9 +1992,65 @@ fun MainScreen(
                 overlayState = OverlayState.None
             },
             onNavigateBack = onClearAnimeStack,
-            onAnimeClick = { animeId ->
+            onRelationClick = { relation ->
+                if (relation.format != null && relation.format !in listOf("MANGA", "NOVEL", "ONE_SHOT", "DOUJIN", "MANHWA", "MANHUA")) {
+                    scope.launch {
+                        val detailedData = viewModel.fetchDetailedAnimeData(relation.id)
+                        if (detailedData != null) {
+                            val newAnime = ExploreAnime(
+                                id = detailedData.id,
+                                title = detailedData.title,
+                                titleEnglish = detailedData.titleEnglish,
+                                cover = detailedData.cover,
+                                banner = detailedData.banner,
+                                episodes = detailedData.episodes,
+                                latestEpisode = detailedData.latestEpisode,
+                                averageScore = detailedData.averageScore,
+                                genres = detailedData.genres,
+                                year = detailedData.year,
+                                format = detailedData.format
+                            )
+                            overlayState = OverlayState.ExploreAnimeDialog(
+                                anime = newAnime,
+                                firstAnime = newAnime,
+                                isFirstOpen = false,
+                                previousStates = allRelationsDialog.previousStates + allRelationsDialog
+                            )
+                        } else {
+                            context.toast("Anime not found")
+                        }
+                    }
+                } else {
+                    overlayState = OverlayState.None
+                    openMangaDetail(
+                        com.blissless.tensei.data.models.MangaMedia(
+                            id = relation.id,
+                            title = relation.title,
+                            cover = relation.cover,
+                            averageScore = relation.averageScore,
+                            format = relation.format
+                        )
+                    )
+                    mangaAutoShowChapters = false
+                }
+            }
+        )
+    }
+
+    // All Recommendations Screen
+    val allRecommendationsDialog = overlayState as? OverlayState.AllRecommendationsDialog
+    if (allRecommendationsDialog != null) {
+        AllRecommendationsScreen(
+            animeId = allRecommendationsDialog.animeId,
+            animeTitle = allRecommendationsDialog.animeTitle,
+            viewModel = viewModel,
+            onDismiss = {
+                overlayState = OverlayState.None
+            },
+            onNavigateBack = onClearAnimeStack,
+            onRecommendationClick = { rec ->
                 scope.launch {
-                    val detailedData = viewModel.fetchDetailedAnimeData(animeId)
+                    val detailedData = viewModel.fetchDetailedAnimeData(rec.id)
                     if (detailedData != null) {
                         val newAnime = ExploreAnime(
                             id = detailedData.id,
@@ -1581,7 +2065,12 @@ fun MainScreen(
                             year = detailedData.year,
                             format = detailedData.format
                         )
-                        overlayState = OverlayState.ExploreAnimeDialog(anime = newAnime, firstAnime = newAnime, isFirstOpen = false)
+                        overlayState = OverlayState.ExploreAnimeDialog(
+                            anime = newAnime,
+                            firstAnime = newAnime,
+                            isFirstOpen = false,
+                            previousStates = allRecommendationsDialog.previousStates + allRecommendationsDialog
+                        )
                     } else {
                         context.toast("Anime not found")
                     }
@@ -1808,6 +2297,9 @@ fun MainScreen(
                             onViewAllRelations = { animeId, animeTitle ->
                                 overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = animeTitle)
                             },
+                            onViewAllRecommendations = { animeId, animeTitle ->
+                                overlayState = OverlayState.AllRecommendationsDialog(animeId = animeId, animeTitle = animeTitle)
+                            },
                             onNoExtension = {
                                 showSettings = true
                                 pendingSettingsGroup = if (extUiState.extensions.isEmpty()) "extensions" else "stream"
@@ -1845,21 +2337,26 @@ fun MainScreen(
                             onViewAllRelations = { animeId, animeTitle ->
                                 overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = animeTitle)
                             },
+                            onViewAllRecommendations = { animeId, animeTitle ->
+                                overlayState = OverlayState.AllRecommendationsDialog(animeId = animeId, animeTitle = animeTitle)
+                            },
                             onSearchClick = { showSearchScreen = true },
                             onNoExtension = {
                                 showSettings = true
                                 pendingSettingsGroup = if (extUiState.extensions.isEmpty()) "extensions" else "stream"
                             },
                             onMangaClick = { manga ->
-                                selectedMangaState = com.blissless.tensei.data.models.MangaMedia(
-                                    id = manga.id,
-                                    title = manga.title.romaji ?: manga.title.english ?: "Unknown",
-                                    titleEnglish = manga.title.english,
-                                    cover = manga.coverImage?.extraLarge ?: manga.coverImage?.large ?: "",
-                                    totalChapters = manga.chapters ?: 0,
-                                    averageScore = manga.averageScore
+                                android.util.Log.d("MangaNav", "EXPLORE onMangaClick: id=${manga.id} title='${manga.title.romaji ?: manga.title.english}' -> DETAIL")
+                                openMangaDetail(
+                                    com.blissless.tensei.data.models.MangaMedia(
+                                        id = manga.id,
+                                        title = manga.title.romaji ?: manga.title.english ?: "Unknown",
+                                        titleEnglish = manga.title.english,
+                                        cover = manga.coverImage?.extraLarge ?: manga.coverImage?.large ?: "",
+                                        totalChapters = manga.chapters ?: 0,
+                                        averageScore = manga.averageScore
+                                    )
                                 )
-                                showMangaDetailScreen = true
                             }
                         )
                         2 -> HomeScreen(
@@ -1899,7 +2396,7 @@ fun MainScreen(
                                             year = detailedData.year,
                                             format = detailedData.format
                                         )
-                                        overlayState = OverlayState.ExploreAnimeDialog(anime = newAnime, firstAnime = newAnime, isFirstOpen = false)
+                            overlayState = OverlayState.ExploreAnimeDialog(anime = newAnime, firstAnime = newAnime, isFirstOpen = false)
                                     } else {
                                         context.toast("Anime not found")
                                     }
@@ -1920,16 +2417,23 @@ fun MainScreen(
                             onViewAllRelations = { animeId, animeTitle ->
                                 overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = animeTitle)
                             },
+                            onViewAllRecommendations = { animeId, animeTitle ->
+                                overlayState = OverlayState.AllRecommendationsDialog(animeId = animeId, animeTitle = animeTitle)
+                            },
                             onNavigateToSearch = { showSearchScreen = true },
                             playbackPositions = playbackPositions,
                             onMangaClick = { manga ->
+                                android.util.Log.d("MangaNav", "HOME onMangaClick: id=${manga.id} title='${manga.title}' " +
+                                    "progress=${manga.progress} scrollProgress=${manga.scrollProgress}")
                                 mangaAutoShowChapters = true
-                                selectedMangaState = manga
-                                showMangaDetailScreen = true
+                                mangaDetailStack = mangaDetailStack + manga
+                                mangaReaderChapterIndex = -1
+                                showMangaReader = true
                             },
                             onMangaInfoClick = { manga ->
-                                selectedMangaState = manga
-                                showMangaDetailScreen = true
+                                android.util.Log.d("MangaNav", "HOME onMangaInfoClick: id=${manga.id} title='${manga.title}'")
+                                mangaAutoShowChapters = false
+                                openMangaDetail(manga)
                             },
                             playbackDurations = playbackDurations,
                             startedAt = startedAt
@@ -1978,20 +2482,25 @@ fun MainScreen(
                             onViewAllRelations = { animeId, animeTitle ->
                                 overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = animeTitle)
                             },
+                            onViewAllRecommendations = { animeId, animeTitle ->
+                                overlayState = OverlayState.AllRecommendationsDialog(animeId = animeId, animeTitle = animeTitle)
+                            },
                             onNoExtension = {
                                 showSettings = true
                                 pendingSettingsGroup = if (extUiState.extensions.isEmpty()) "extensions" else "stream"
                             },
                             onMangaClick = { manga ->
-                                selectedMangaState = com.blissless.tensei.data.models.MangaMedia(
-                                    id = manga.id,
-                                    title = manga.title.romaji ?: manga.title.english ?: "Unknown",
-                                    titleEnglish = manga.title.english,
-                                    cover = manga.coverImage?.extraLarge ?: manga.coverImage?.large ?: "",
-                                    totalChapters = manga.chapters ?: 0,
+                                android.util.Log.d("MangaNav", "SEARCH onMangaClick: id=${manga.id} title='${manga.title.romaji ?: manga.title.english}' -> DETAIL")
+                                openMangaDetail(
+                                    com.blissless.tensei.data.models.MangaMedia(
+                                        id = manga.id,
+                                        title = manga.title.romaji ?: manga.title.english ?: "Unknown",
+                                        titleEnglish = manga.title.english,
+                                        cover = manga.coverImage?.extraLarge ?: manga.coverImage?.large ?: "",
+                                        totalChapters = manga.chapters ?: 0,
                                     averageScore = manga.averageScore
                                 )
-                                showMangaDetailScreen = true
+                            )
                             }
                         )
                     }
