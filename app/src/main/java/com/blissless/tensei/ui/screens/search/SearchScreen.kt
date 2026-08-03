@@ -111,7 +111,7 @@ import java.util.Locale
 import com.blissless.tensei.util.toast
 import com.blissless.tensei.util.longToast
 import com.blissless.tensei.viewmodel.searchMangaAdvanced
-import com.blissless.tensei.viewmodel.mangaContinueReading
+import com.blissless.tensei.viewmodel.mangaCurrentlyReading
 import com.blissless.tensei.viewmodel.mangaPlanningToRead
 import com.blissless.tensei.viewmodel.mangaCompleted
 
@@ -252,13 +252,13 @@ fun SearchScreen(
     // ── Manga tracking state ───────────────────────────────────────────
     // Read from the VM's StateFlows so manga cards in the unified grid can
     // show the same list-status badges as anime cards.
-    val mangaContinueReadingList by viewModel.mangaContinueReading.collectAsState()
+    val mangaCurrentlyReadingList by viewModel.mangaCurrentlyReading.collectAsState()
     val mangaPlanningToReadList by viewModel.mangaPlanningToRead.collectAsState()
     val mangaCompletedList by viewModel.mangaCompleted.collectAsState()
 
-    val mangaTrackMap = remember(mangaContinueReadingList, mangaPlanningToReadList, mangaCompletedList) {
+    val mangaTrackMap = remember(mangaCurrentlyReadingList, mangaPlanningToReadList, mangaCompletedList) {
         val map = mutableMapOf<Int, String>()
-        mangaContinueReadingList.forEach { map[it.id] = "CURRENT" }
+        mangaCurrentlyReadingList.forEach { map[it.id] = "CURRENT" }
         mangaPlanningToReadList.forEach { map[it.id] = "PLANNING" }
         mangaCompletedList.forEach { map[it.id] = "COMPLETED" }
         map

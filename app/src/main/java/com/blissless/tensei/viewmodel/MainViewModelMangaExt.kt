@@ -223,6 +223,9 @@ private fun MainViewModel.fetchExtensionChapterImages(mangaTitle: String, chapte
 private val _mangaContinueReading = MutableStateFlow<List<MangaMedia>>(emptyList())
 val MainViewModel.mangaContinueReading: StateFlow<List<MangaMedia>> get() = _mangaContinueReading.asStateFlow()
 
+private val _mangaCurrentlyReading = MutableStateFlow<List<MangaMedia>>(emptyList())
+val MainViewModel.mangaCurrentlyReading: StateFlow<List<MangaMedia>> get() = _mangaCurrentlyReading.asStateFlow()
+
 private val _mangaPlanningToRead = MutableStateFlow<List<MangaMedia>>(emptyList())
 val MainViewModel.mangaPlanningToRead: StateFlow<List<MangaMedia>> get() = _mangaPlanningToRead.asStateFlow()
 
@@ -292,9 +295,11 @@ fun MainViewModel.initManga() {
 private fun MainViewModel.loadLocalMangaTracking() {
     val tracker = mangaTrackManager ?: return
     val reading = tracker.getContinueReading().map { toMangaMedia(it) }
+    val currentlyReading = tracker.getCurrentlyReading().map { toMangaMedia(it) }
     val planning = tracker.getPlanningToRead().map { toMangaMedia(it) }
     val completed = tracker.getCompleted().map { toMangaMedia(it) }
     _mangaContinueReading.value = reading
+    _mangaCurrentlyReading.value = currentlyReading
     _mangaPlanningToRead.value = planning
     _mangaCompleted.value = completed
 }
@@ -308,7 +313,8 @@ private fun toMangaMedia(track: MangaTrack): MangaMedia {
         totalChapters = track.totalChapters,
         totalVolumes = track.totalVolumes,
         listStatus = track.status,
-        scrollProgress = track.scrollProgress
+        scrollProgress = track.scrollProgress,
+        currentChapterPages = track.currentChapterPages
     )
 }
 
@@ -694,30 +700,34 @@ fun MainViewModel.clearChapterImages() {
 // ─── Tracking ────────────────────────────────────────────────────────
 
 /**
- * Mark a chapter as read. If the user has no track for this manga yet, one is auto-created
- * with status CURRENT (matching oni's behavior). Progress is also pushed to AniList when
- * the chapter number is an integer (partial chapters like 12.5 are skipped to avoid spamming
- * the API — same as oni).
+ * Mark a chapter as read locally. If the user has no track for this manga yet, one is auto-created
+ * with status CURRENT (matching oni's behavior).
+ *
+ * The AniList progress push is NOT done here — [onMangaScrollProgress] schedules a single
+ * debounced (3s) AniList update when the sync threshold is reached. This function is called on
+ * every scroll frame above the threshold, so pushing here would fire one mutation per frame and
+ * spam/rate-limit the API (which silently breaks later updates, including manual status changes).
  */
 fun MainViewModel.markMangaChapterRead(mangaId: Int, chapter: MangaChapter, mangaTitle: String = "", mangaCover: String = "") {
     // Ensure a track exists so progress is recorded for first-time readers
     mangaTrackManager?.ensureTrack(mangaId, mangaTitle, mangaCover)
     mangaTrackManager?.markChapterComplete(mangaId, chapter)
     loadLocalMangaTracking()
+}
 
-    // Push to AniList (only for integer chapter numbers — skip 12.5, 12.OAD etc.)
-    val chapterNum = chapter.chapterNumber
-    if (chapterNum > 0f && chapterNum == chapterNum.toInt().toFloat()) {
-        viewModelScope.launch {
-            val token = authToken.value ?: return@launch
-            mangaRepository?.updateMangaStatus(
-                mediaId = mangaId,
-                status = "CURRENT",
-                token = token,
-                progress = chapterNum.toInt()
-            )
-        }
-    }
+/**
+ * Called when a chapter is opened in the reader. Ensures a local track exists so the manga
+ * shows up in "Continue Reading" on the home screen even if the user exits before reaching the
+ * sync threshold. Does NOT mark the chapter read and does NOT push anything to AniList.
+ */
+fun MainViewModel.startMangaChapter(mangaId: Int, mangaTitle: String = "", mangaCover: String = "") {
+    mangaTrackManager?.ensureTrack(mangaId, mangaTitle, mangaCover)
+    loadLocalMangaTracking()
+}
+
+/** Reload the local manga tracking lists (Continue Reading / Planning / Completed). */
+fun MainViewModel.refreshMangaTracking() {
+    loadLocalMangaTracking()
 }
 
 fun MainViewModel.updateMangaProgress(mangaId: Int, progress: Float) {
@@ -789,14 +799,21 @@ fun MainViewModel.updateMangaScrollProgress(mangaId: Int, scrollProgress: Float)
     mangaTrackManager?.updateScrollProgress(mangaId, safe)
 }
 
-fun MainViewModel.updateMangaStatus(mangaId: Int, status: String) {
-    mangaTrackManager?.updateTrackingStatus(mangaId, status)
+/** Persist the page count of the chapter currently being read so home can show "pages left". */
+fun MainViewModel.updateMangaChapterPages(mangaId: Int, pages: Int) {
+    if (pages <= 0) return
+    mangaTrackManager?.updateChapterPages(mangaId, pages)
+}
+
+fun MainViewModel.updateMangaStatus(mangaId: Int, status: String, progress: Int? = null) {
+    val effectiveStatus = status.ifBlank { "CURRENT" }
+    mangaTrackManager?.updateTrackingStatus(mangaId, effectiveStatus)
     loadLocalMangaTracking()
 
     viewModelScope.launch {
         val token = authToken.value
         if (token != null) {
-            mangaRepository?.updateMangaStatus(mangaId, status, token)
+            mangaRepository?.updateMangaStatus(mangaId, effectiveStatus, token, progress)
         }
     }
 }

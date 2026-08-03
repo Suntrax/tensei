@@ -16,6 +16,12 @@ class MangaTrackManager(context: Context) {
     fun getAllTracking(): List<MangaTrack> = getTracks()
 
     fun getContinueReading(): List<MangaTrack> =
+        getTracks()
+            .filter { it.status == "CURRENT" && (it.scrollProgress > 0f || it.currentChapterPages > 0) }
+            .sortedByDescending { it.progress }
+
+    /** Every CURRENT-status track — the source for the home "Currently Reading" row. */
+    fun getCurrentlyReading(): List<MangaTrack> =
         getTracks().filter { it.status == "CURRENT" }.sortedByDescending { it.progress }
 
     fun getPlanningToRead(): List<MangaTrack> =
@@ -160,6 +166,16 @@ class MangaTrackManager(context: Context) {
         val index = tracks.indexOfFirst { it.mangaId == mangaId }
         if (index >= 0) {
             tracks[index] = tracks[index].copy(mangaDexId = mangaDexId)
+        }
+        saveTracks(tracks)
+    }
+
+    fun updateChapterPages(mangaId: Int, pages: Int) {
+        if (pages <= 0) return
+        val tracks = getTracks().toMutableList()
+        val index = tracks.indexOfFirst { it.mangaId == mangaId }
+        if (index >= 0) {
+            tracks[index] = tracks[index].copy(currentChapterPages = pages)
         }
         saveTracks(tracks)
     }

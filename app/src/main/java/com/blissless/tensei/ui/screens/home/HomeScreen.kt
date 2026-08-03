@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -39,6 +40,7 @@ import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Pause
@@ -116,6 +118,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import com.blissless.tensei.viewmodel.loadAvailableMagnetExtensions
 import com.blissless.tensei.viewmodel.mangaCompleted
 import com.blissless.tensei.viewmodel.mangaContinueReading
+import com.blissless.tensei.viewmodel.mangaCurrentlyReading
 import com.blissless.tensei.viewmodel.mangaPlanningToRead
 import com.blissless.tensei.viewmodel.removeContinueWatchingEntry
 import com.blissless.tensei.util.toast
@@ -148,6 +151,8 @@ fun HomeScreen(
     onNavigateToSearch: () -> Unit = {},
     onMangaClick: (MangaMedia) -> Unit = {},
     onMangaInfoClick: (MangaMedia) -> Unit = {},
+    onMangaContinueReadingClick: (MangaMedia) -> Unit = {},
+    onMangaDismissClick: (MangaMedia) -> Unit = {},
     currentScreenIndex: Int = 0,
     playbackPositions: Map<String, Long> = emptyMap(),
     playbackDurations: Map<String, Long> = emptyMap(),
@@ -174,6 +179,7 @@ fun HomeScreen(
 
     // ─── Manga state ─────────────────────────────────────────────────
     val mangaContinueReading by viewModel.mangaContinueReading.collectAsState()
+    val mangaCurrentlyReading by viewModel.mangaCurrentlyReading.collectAsState()
     val mangaPlanningToRead by viewModel.mangaPlanningToRead.collectAsState()
     val mangaCompleted by viewModel.mangaCompleted.collectAsState()
 
@@ -564,6 +570,31 @@ fun HomeScreen(
                             )
                         }
 
+                        // Manga "Continue Reading" — direct resume cards, same style as anime's
+                        // Continue Watching, placed at the top alongside it.
+                        if (mangaContinueReading.isNotEmpty()) {
+                            SectionHeader(
+                                title = "Continue Reading",
+                                icon = Icons.Default.Bookmark,
+                                count = mangaContinueReading.size,
+                                iconTint = HomeStatusColors.getColor("CURRENT"),
+                                onClick = {
+                                    statusListTitle = "Continue Reading"
+                                    statusListIcon = Icons.Default.PlayArrow
+                                    statusListType = "CURRENT"
+                                    statusListManga = mangaContinueReading
+                                    statusListIsManga = true
+                                    showStatusListScreen = true
+                                }
+                            )
+                            MangaContinueReadingRow(
+                                mangaList = mangaContinueReading,
+                                isOled = isOled,
+                                onResumeClick = onMangaContinueReadingClick,
+                                onDismissClick = onMangaDismissClick
+                            )
+                        }
+
                         if (effectiveCurrentlyWatching.isNotEmpty()) {
                             SectionHeader(
                                 title = "Currently Watching",
@@ -726,23 +757,26 @@ fun HomeScreen(
                         }
 
                         // ─── Manga sections ────────────────────────────────
-                        if (mangaContinueReading.isNotEmpty()) {
+                        // Manga "Currently Reading" — full CURRENT-status poster row, mirroring the
+                        // anime "Currently Watching" section. Kept separate from "Continue Reading"
+                        // (which stays at the top and only shows manga with a saved reading position).
+                        if (mangaCurrentlyReading.isNotEmpty()) {
                             SectionHeader(
-                                title = "Continue Reading",
-                                icon = Icons.Default.Bookmark,
-                                count = mangaContinueReading.size,
+                                title = "Currently Reading",
+                                icon = Icons.Default.PlayArrow,
+                                count = mangaCurrentlyReading.size,
                                 iconTint = HomeStatusColors.getColor("CURRENT"),
                                 onClick = {
-                                    statusListTitle = "Continue Reading"
+                                    statusListTitle = "Currently Reading"
                                     statusListIcon = Icons.Default.PlayArrow
                                     statusListType = "CURRENT"
-                                    statusListManga = mangaContinueReading
+                                    statusListManga = mangaCurrentlyReading
                                     statusListIsManga = true
                                     showStatusListScreen = true
                                 }
                             )
                             MangaHorizontalRow(
-                                mangaList = mangaContinueReading,
+                                mangaList = mangaCurrentlyReading,
                                 isOled = isOled,
                                 onMangaClick = onMangaClick,
                                 onMangaInfoClick = onMangaInfoClick
@@ -1309,6 +1343,169 @@ private fun MangaHorizontalRow(
                         fontWeight = FontWeight.Medium,
                         overflow = TextOverflow.Ellipsis,
                         color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MangaContinueReadingRow(
+    mangaList: List<MangaMedia>,
+    isOled: Boolean,
+    onResumeClick: (MangaMedia) -> Unit,
+    onDismissClick: (MangaMedia) -> Unit
+) {
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp)
+    ) {
+        itemsIndexed(mangaList, key = { _, manga -> "manga_continue_${manga.id}" }) { _, manga ->
+            MangaContinueReadingCard(
+                manga = manga,
+                isOled = isOled,
+                onResumeClick = { onResumeClick(manga) },
+                onDismissClick = { onDismissClick(manga) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun MangaContinueReadingCard(
+    manga: MangaMedia,
+    isOled: Boolean,
+    onResumeClick: () -> Unit,
+    onDismissClick: () -> Unit
+) {
+    val context = LocalContext.current
+    val nextChapter = (manga.progress + 1).coerceAtLeast(1)
+    val scrollProgress = manga.scrollProgress.coerceIn(0f, 1f)
+    val hasScrollProgress = scrollProgress > 0f
+    val pageTotal = manga.currentChapterPages
+    val pagesLeft = if (pageTotal > 0) {
+        (pageTotal - (scrollProgress * pageTotal).toInt()).coerceIn(0, pageTotal)
+    } else {
+        null
+    }
+    val overallProgress = if (manga.totalChapters > 0) {
+        (manga.progress.toFloat() / manga.totalChapters.toFloat()).coerceIn(0f, 1f)
+    } else {
+        0f
+    }
+    val barFraction = if (hasScrollProgress) scrollProgress else overallProgress
+    val progressLabel = when {
+        pagesLeft != null -> "${(pageTotal - pagesLeft).coerceAtLeast(0)} of $pageTotal pages"
+        hasScrollProgress -> "${(scrollProgress * 100).toInt()}% through Ch. $nextChapter"
+        manga.totalChapters > 0 -> "${manga.progress} / ${manga.totalChapters} ch."
+        else -> "Ch. $nextChapter"
+    }
+    val progressColor = if (isOled) Color.White else MaterialTheme.colorScheme.primary
+
+    Card(
+        shape = RoundedCornerShape(18.dp),
+        modifier = Modifier
+            .width(240.dp)
+            .height(140.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .clickable { onResumeClick() }
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            AsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(manga.banner ?: manga.cover)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = manga.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Black.copy(alpha = 0.25f),
+                                Color.Black.copy(alpha = 0.9f)
+                            )
+                        )
+                    )
+            )
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(start = 8.dp, end = 8.dp, bottom = 14.dp, top = 8.dp),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color.Black.copy(alpha = 0.65f)
+                    ) {
+                        Text(
+                            text = pagesLeft?.let { "$it pages left" } ?: "Ch. $nextChapter",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                            .clickable { onDismissClick() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Remove from Continue Reading",
+                            tint = Color.White.copy(alpha = 0.8f),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+
+                Column {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(5.dp)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(Color.White.copy(alpha = 0.15f))
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .fillMaxWidth(barFraction)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(progressColor)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Text(
+                        text = progressLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(alpha = 0.6f)
+                    )
+
+                    Text(
+                        text = manga.title,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }

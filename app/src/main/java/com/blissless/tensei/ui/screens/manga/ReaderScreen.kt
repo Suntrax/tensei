@@ -56,10 +56,12 @@ import com.blissless.tensei.viewmodel.loadMangaChapters
 import com.blissless.tensei.viewmodel.mangaChapterImages
 import com.blissless.tensei.viewmodel.mangaChapterImagesError
 import com.blissless.tensei.viewmodel.mangaChapters
-import com.blissless.tensei.viewmodel.markMangaChapterRead
 import com.blissless.tensei.viewmodel.onMangaScrollProgress
+import com.blissless.tensei.viewmodel.refreshMangaTracking
 import com.blissless.tensei.viewmodel.setMangaPageIndicator
 import com.blissless.tensei.viewmodel.setMangaReaderMode
+import com.blissless.tensei.viewmodel.startMangaChapter
+import com.blissless.tensei.viewmodel.updateMangaChapterPages
 import com.blissless.tensei.viewmodel.updateMangaScrollProgress
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -80,6 +82,9 @@ fun MangaReaderScreen(
         android.util.Log.d("MangaReader", "READER COMPOSED (disposable effect) manga.id=${manga.id}")
         onDispose {
             android.util.Log.d("MangaReader", "READER DISPOSED / LEAVING COMPOSITION manga.id=${manga.id} — screen is being removed (navigation close OR crash recovery)")
+            // Refresh the home Continue Reading card with the latest scroll progress
+            // when leaving the reader mid-chapter.
+            viewModel.refreshMangaTracking()
         }
     }
     val chapters by viewModel.mangaChapters.collectAsState()
@@ -137,6 +142,15 @@ fun MangaReaderScreen(
         }
     }
 
+    // Persist the page count of the loaded chapter so home's Continue Reading card can show
+    // "pages left" for the manga being read.
+    LaunchedEffect(chapterImages) {
+        val images = chapterImages
+        if (images != null && images.isNotEmpty()) {
+            viewModel.updateMangaChapterPages(manga.id, images.size)
+        }
+    }
+
     // Handle system back button — if chapter list is open, close it first; otherwise close reader
     BackHandler {
         android.util.Log.d("MangaReader", "BACK pressed: showChapterList=$showChapterList chapters.size=${chapters.size} — " +
@@ -158,7 +172,11 @@ fun MangaReaderScreen(
             return
         }
         android.util.Log.d("MangaReader", "selectChapter: opening chapterId='${chapter.chapterId}' title='${chapter.title}'")
-        viewModel.markMangaChapterRead(manga.id, chapter, manga.title, manga.cover)
+        // Create the local track on open so the manga appears in "Continue Reading" even if the
+        // user exits before reaching the sync threshold. Chapter is NOT marked read here and
+        // nothing is pushed to AniList — that only happens once the user scrolls past the
+        // threshold (see onMangaScrollProgress).
+        viewModel.startMangaChapter(manga.id, manga.title, manga.cover)
         readIndices.value = readIndices.value + index
         currentChapterIndex = index
         currentPageIndex = 0
@@ -321,9 +339,6 @@ fun MangaReaderScreen(
                                 tint = if (currentChapterIndex < chapters.lastIndex) Color.White else Color.White.copy(alpha = 0.3f)
                             )
                         }
-                        IconButton(onClick = { showChapterList = true }) {
-                            Icon(Icons.Default.List, contentDescription = "Chapters", tint = Color.White)
-                        }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = Color.Black.copy(alpha = 0.95f),
@@ -357,66 +372,74 @@ fun MangaReaderScreen(
             }
         }
 
-        // ─── Overlay: page indicator (bottom-right floating pill) ──────
-        // Visible whenever the setting is on — independent of the controls
-        // overlay, matching oni.
-        if (showPageIndicator && !showChapterList && chapterImages != null) {
-            val total = chapterImages?.size ?: 0
-            if (total > 0) {
+        // ─── Overlay: page indicator + bottom bar ─────────────────────
+        // The page indicator sits directly above the bottom controls bar instead of
+        // floating independently. It stays visible whenever the setting is on (independent
+        // of the controls overlay); when the controls bar is hidden it rests at the bottom
+        // edge above the navigation bar.
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+        ) {
+            val totalPages = chapterImages?.size ?: 0
+            if (showPageIndicator && !showChapterList && totalPages > 0) {
                 Box(
                     modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = 12.dp, bottom = 56.dp)
-                        .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(12.dp))
-                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                        .fillMaxWidth()
+                        .padding(bottom = 4.dp),
+                    contentAlignment = Alignment.CenterEnd
                 ) {
-                    Text(
-                        text = "${currentPageIndex + 1} / $total",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Color.White
-                    )
+                    Box(
+                        modifier = Modifier
+                            .padding(end = 16.dp)
+                            .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(12.dp))
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "${currentPageIndex + 1} / $totalPages",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Color.White
+                        )
+                    }
                 }
             }
-        }
-
-        // ─── Overlay: bottom bar (reader mode toggle + page indicator toggle) ─
-        AnimatedVisibility(
-            visible = showControls && !showChapterList,
-            enter = fadeIn(tween(150)),
-            exit = fadeOut(tween(150)),
-            modifier = Modifier.align(Alignment.BottomCenter)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .background(Color.Black.copy(alpha = 0.95f))
-                    .padding(horizontal = 16.dp, vertical = 10.dp)
+            AnimatedVisibility(
+                visible = showControls && !showChapterList,
+                enter = fadeIn(tween(150)),
+                exit = fadeOut(tween(150))
             ) {
-                ReaderModeSegmentedToggle(
-                    currentMode = readerMode,
-                    onSelect = { mode ->
-                        readerMode = mode
-                        viewModel.setMangaReaderMode(
-                            when (mode) {
-                                ReaderMode.VERTICAL_SCROLL -> "vertical_scroll"
-                                ReaderMode.LEFT_TO_RIGHT -> "left_to_right"
-                                ReaderMode.RIGHT_TO_LEFT -> "right_to_left"
-                            }
-                        )
-                    },
-                    modifier = Modifier.align(Alignment.Center)
-                )
-                IconButton(
-                    onClick = { viewModel.setMangaPageIndicator(!showPageIndicator) },
-                    modifier = Modifier.align(Alignment.CenterEnd).size(32.dp)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color.Black.copy(alpha = 0.95f))
+                        .padding(horizontal = 16.dp, vertical = 10.dp)
                 ) {
-                    Icon(
-                        Icons.Default.ViewAgenda,
-                        contentDescription = "Toggle page indicator",
-                        tint = if (showPageIndicator) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.5f),
-                        modifier = Modifier.size(18.dp)
+                    ReaderModeSegmentedToggle(
+                        currentMode = readerMode,
+                        onSelect = { mode ->
+                            readerMode = mode
+                            viewModel.setMangaReaderMode(
+                                when (mode) {
+                                    ReaderMode.VERTICAL_SCROLL -> "vertical_scroll"
+                                    ReaderMode.LEFT_TO_RIGHT -> "left_to_right"
+                                    ReaderMode.RIGHT_TO_LEFT -> "right_to_left"
+                                }
+                            )
+                        },
+                        modifier = Modifier.align(Alignment.Center)
                     )
+                    IconButton(
+                        onClick = { viewModel.setMangaPageIndicator(!showPageIndicator) },
+                        modifier = Modifier.align(Alignment.CenterEnd).size(32.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.ViewAgenda,
+                            contentDescription = "Toggle page indicator",
+                            tint = if (showPageIndicator) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.5f),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
             }
         }

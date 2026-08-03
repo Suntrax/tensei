@@ -1265,7 +1265,7 @@ fun DetailedMangaScreen(
             totalChapters = totalCh,
             onUpdate = { status, progress ->
                 onUpdateStatus(status)
-                viewModel.updateMangaStatus(manga.id, status)
+                viewModel.updateMangaStatus(manga.id, status, progress)
                 if (progress != null) {
                     onUpdateProgress(progress)
                     viewModel.updateMangaProgress(manga.id, progress.toFloat())

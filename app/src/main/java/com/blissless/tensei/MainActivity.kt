@@ -2435,6 +2435,18 @@ fun MainScreen(
                                 mangaAutoShowChapters = false
                                 openMangaDetail(manga)
                             },
+                            onMangaContinueReadingClick = { manga ->
+                                android.util.Log.d("MangaNav", "HOME onMangaContinueReading: id=${manga.id} title='${manga.title}' " +
+                                    "progress=${manga.progress} scrollProgress=${manga.scrollProgress}")
+                                mangaAutoShowChapters = false
+                                mangaDetailStack = mangaDetailStack + manga
+                                mangaReaderChapterIndex = manga.progress.coerceAtLeast(0)
+                                showMangaReader = true
+                            },
+                            onMangaDismissClick = { manga ->
+                                android.util.Log.d("MangaNav", "HOME onMangaDismiss: removing local track for id=${manga.id} title='${manga.title}'")
+                                viewModel.removeMangaTracking(manga.id)
+                            },
                             playbackDurations = playbackDurations,
                             startedAt = startedAt
                         )
