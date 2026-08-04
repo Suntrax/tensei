@@ -784,6 +784,13 @@ private fun OniExtensionCard(
                     fontWeight = FontWeight.Bold
                 )
             }
+            IconButton(onClick = { openAppSettings(context, extension.packageName) }) {
+                Icon(
+                    Icons.Default.Info,
+                    contentDescription = "App info",
+                    modifier = Modifier.size(20.dp)
+                )
+            }
         }
     }
 }

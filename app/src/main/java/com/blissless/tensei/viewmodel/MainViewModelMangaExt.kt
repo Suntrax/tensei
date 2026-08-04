@@ -264,6 +264,12 @@ val MainViewModel.isLoadingManga: StateFlow<Boolean> get() = _isLoadingManga.asS
 private val _isLoadingMangaChapters = MutableStateFlow(false)
 val MainViewModel.isLoadingMangaChapters: StateFlow<Boolean> get() = _isLoadingMangaChapters.asStateFlow()
 
+// Tracks whether a chapter load has COMPLETED (success or failure) for the current manga.
+// While false, the reader shows the loading state immediately instead of flashing the
+// "No chapters found" empty state on the first frame before loadMangaChapters kicks in.
+private val _hasLoadedMangaChapters = MutableStateFlow(false)
+val MainViewModel.hasLoadedMangaChapters: StateFlow<Boolean> get() = _hasLoadedMangaChapters.asStateFlow()
+
 // Profile state — real AniList favorites and activity, not faked from tracking lists
 private val _mangaFavorites = MutableStateFlow<List<MangaFavorite>>(emptyList())
 val MainViewModel.mangaFavorites: StateFlow<List<MangaFavorite>> get() = _mangaFavorites.asStateFlow()
@@ -482,6 +488,7 @@ fun MainViewModel.clearMangaDetail() {
     _mangaChapterImagesError.value = null
     _mangaDexId.value = null
     _mangaExtensionTitle.value = null
+    _hasLoadedMangaChapters.value = false
 }
 
 suspend fun MainViewModel.fetchMangaAllCharacters(mangaId: Int): List<MangaCharacterNode> =
@@ -512,6 +519,18 @@ suspend fun MainViewModel.fetchMangaAllRecommendations(mangaId: Int): List<Manga
 suspend fun MainViewModel.loadMangaChapters(mangaId: Int, title: String) {
     android.util.Log.d("MangaChapters", "loadMangaChapters: mangaId=$mangaId title='$title'")
     _isLoadingMangaChapters.value = true
+    _hasLoadedMangaChapters.value = false
+
+    // Without a manga extension there is no real chapter source. The synthetic fallback
+    // (AniList chapter count) is wrong for releasing manga, so skip it entirely — the
+    // reader shows the "select an extension" screen instead of a bogus chapter list.
+    if (_selectedExtensionAuthority.value == null) {
+        android.util.Log.w("MangaChapters", "loadMangaChapters: no extension selected — skipping chapter list generation")
+        _mangaChapters.value = emptyList()
+        _hasLoadedMangaChapters.value = true
+        _isLoadingMangaChapters.value = false
+        return
+    }
 
     val detail = _mangaDetail.value
     android.util.Log.d("MangaChapters", "loadMangaChapters: detail=${detail != null} detail.chapters=${detail?.chapters} detail.title=${detail?.title}")
@@ -619,6 +638,7 @@ suspend fun MainViewModel.loadMangaChapters(mangaId: Int, title: String) {
         mdVolumeCount ?: detail?.volumes
     )
     loadLocalMangaTracking()
+    _hasLoadedMangaChapters.value = true
     _isLoadingMangaChapters.value = false
 }
 

@@ -143,6 +143,7 @@ import com.blissless.tensei.viewmodel.favoritedMangaIds
 import com.blissless.tensei.viewmodel.updateMangaStatus
 import com.blissless.tensei.viewmodel.updateMangaProgress
 import com.blissless.tensei.viewmodel.removeMangaTracking
+import com.blissless.tensei.viewmodel.selectedExtensionAuthority
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Locale
@@ -191,6 +192,7 @@ fun DetailedMangaScreen(
     val chapters by viewModel.mangaChapters.collectAsState()
     val isLoading by viewModel.isLoadingManga.collectAsState()
     val isLoadingChapters by viewModel.isLoadingMangaChapters.collectAsState()
+    val selectedExtension by viewModel.selectedExtensionAuthority.collectAsState()
     val favoritedMangaIds by viewModel.favoritedMangaIds.collectAsState()
     // Reactive favorite state from AniList (overrides the static isFavorite parameter)
     val isMangaFavorited = manga.id in favoritedMangaIds
@@ -221,8 +223,8 @@ fun DetailedMangaScreen(
     val dismissSlideOffset = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(manga.id) {
-        android.util.Log.d("MangaDetail", "LaunchedEffect(manga.id=${manga.id}): fetching detail + chapters, title='${manga.title}'")
+    LaunchedEffect(manga.id, selectedExtension) {
+        android.util.Log.d("MangaDetail", "LaunchedEffect(manga.id=${manga.id}, ext=${selectedExtension != null}): fetching detail + chapters, title='${manga.title}'")
         viewModel.fetchMangaDetail(manga.id)
         android.util.Log.d("MangaDetail", "fetchMangaDetail returned; loading chapters for ${manga.id}")
         viewModel.loadMangaChapters(manga.id, manga.title)
@@ -257,7 +259,9 @@ fun DetailedMangaScreen(
         animationSpec = tween(durationMillis = 200, easing = LinearEasing), label = "alpha"
     )
 
-    val statusToCheck = currentStatus ?: manga.listStatus
+    // Blank listStatus (default) means the user has no status — normalize to null so the
+    // "Add to List" section doesn't show a stale chip or "0 / x" progress.
+    val statusToCheck = (currentStatus ?: manga.listStatus).takeIf { it.isNotBlank() }
     val statusProgress = displayProgress
     val totalCh = manga.totalChapters
 

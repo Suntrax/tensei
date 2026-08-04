@@ -1292,8 +1292,27 @@ private fun ReaderSettingsPage(
     val readerMode by viewModel.mangaReaderMode.collectAsState()
     val showPageIndicator by viewModel.mangaPageIndicator.collectAsState()
     val syncThreshold by viewModel.mangaSyncThreshold.collectAsState()
+    val installedMangaExtensions by viewModel.installedExtensions.collectAsState()
+    val selectedMangaExtension by viewModel.selectedExtensionAuthority.collectAsState()
+    var showMangaExtPicker by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        viewModel.discoverExtensions()
+    }
 
     SettingsPageScaffold(title = "Reader", onBack = onBack) {
+        SectionHeader("DEFAULT SOURCE")
+        SettingsCard {
+            ClickableSettingsRow(
+                onClick = { showMangaExtPicker = true },
+                icon = Icons.Default.Extension,
+                title = "Default Extension",
+                subtitle = installedMangaExtensions.find { it.authority == selectedMangaExtension }?.label
+                    ?: selectedMangaExtension?.removeSuffix(".provider")
+                    ?: "None"
+            )
+        }
+
         SectionHeader("READING MODE")
         SettingsCard {
             val modes = listOf(
@@ -1383,6 +1402,58 @@ private fun ReaderSettingsPage(
                 )
             }
         }
+    }
+
+    if (showMangaExtPicker) {
+        AlertDialog(
+            onDismissRequest = { showMangaExtPicker = false },
+            title = { Text("Default Extension") },
+            text = {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    if (installedMangaExtensions.isEmpty()) {
+                        Text(
+                            text = "No manga extensions installed. Install one from Extensions, then pick it here.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    installedMangaExtensions.forEach { ext ->
+                        val isSelected = ext.authority == selectedMangaExtension
+                        TextButton(
+                            onClick = { viewModel.selectExtension(ext.authority); showMangaExtPicker = false },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                RadioButton(
+                                    selected = isSelected,
+                                    onClick = null,
+                                    colors = RadioButtonDefaults.colors(
+                                        selectedColor = MaterialTheme.colorScheme.primary
+                                    )
+                                )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        ext.label,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                                    )
+                                    Text(
+                                        ext.packageName,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showMangaExtPicker = false }) { Text("Cancel") } }
+        )
     }
 }
 

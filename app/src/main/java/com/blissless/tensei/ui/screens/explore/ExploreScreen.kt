@@ -73,6 +73,7 @@ import com.blissless.tensei.viewmodel.mangaExploreSections
 import com.blissless.tensei.viewmodel.isLoadingManga
 import com.blissless.tensei.viewmodel.fetchMangaExplore
 import coil.compose.AsyncImage
+import java.util.Locale
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -868,8 +869,9 @@ fun ExploreScreen(
                     "action", "romance", "fantasy", "seinen"
                 )
 
-                // Featured carousel fed by the trending section (mirrors anime FeaturedCarousel)
-                val trendingList = mangaExploreSections["trending"].orEmpty()
+                // Featured carousel fed by the trending section (mirrors anime FeaturedCarousel,
+                // which is limited to 10 items via perPage: 10)
+                val trendingList = mangaExploreSections["trending"].orEmpty().take(10)
                 if (trendingList.isNotEmpty()) {
                     MangaFeaturedCarousel(
                         mangaList = trendingList,
@@ -1004,32 +1006,33 @@ private fun MangaExploreHorizontalRow(
 
                         manga.averageScore?.let { score ->
                             Surface(
-                                modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
+                                modifier = Modifier.align(Alignment.TopEnd).padding(6.dp),
                                 shape = RoundedCornerShape(8.dp),
-                                color = Color(0xFF4CAF50).copy(alpha = 0.85f)
+                                color = Color.Black.copy(alpha = 0.65f)
                             ) {
                                 Text(
-                                    text = "${score / 10}",
+                                    "★ ${String.format(Locale.US, "%.1f", score / 10.0)}",
+                                    color = Color(0xFFFFD700),
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = Color.White,
                                     fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                                 )
                             }
                         }
 
                         manga.chapters?.let { ch ->
                             Surface(
-                                modifier = Modifier.align(Alignment.BottomStart).padding(8.dp),
-                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier.align(Alignment.TopStart).padding(6.dp),
+                                shape = RoundedCornerShape(8.dp),
                                 color = Color.Black.copy(alpha = 0.65f)
                             ) {
                                 Text(
-                                    text = "$ch ch.",
-                                    style = MaterialTheme.typography.labelSmall,
+                                    text = "Ch. $ch",
                                     color = Color.White,
+                                    style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                    maxLines = 1,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                                 )
                             }
                         }

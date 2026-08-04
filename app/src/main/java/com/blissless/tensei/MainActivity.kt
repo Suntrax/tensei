@@ -1679,7 +1679,13 @@ fun MainScreen(
                 initialChapterIndex = mangaReaderChapterIndex,
                 viewModel = viewModel,
                 isOled = isOled,
-                onClose = closeReader
+                onClose = closeReader,
+                onOpenSettings = {
+                    android.util.Log.d("MangaNav", "READER onOpenSettings — closing reader and opening Settings → Reader")
+                    closeReader()
+                    showSettings = true
+                    pendingSettingsGroup = "reader"
+                }
             )
         }
     } else if (showMangaReader && currentManga == null) {

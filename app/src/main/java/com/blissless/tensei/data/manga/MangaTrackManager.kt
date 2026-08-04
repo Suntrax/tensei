@@ -181,14 +181,15 @@ class MangaTrackManager(context: Context) {
     }
 
     fun updateMangaInfo(mangaId: Int, title: String, cover: String) {
+        // Only patch an existing track — never auto-create one here. This is called from
+        // fetchMangaDetail (i.e. merely viewing a detail page), so creating a track would
+        // silently add manga to "Planning to Read" without the user doing anything.
         val tracks = getTracks().toMutableList()
         val index = tracks.indexOfFirst { it.mangaId == mangaId }
         if (index >= 0) {
             tracks[index] = tracks[index].copy(title = title, cover = cover)
-        } else {
-            tracks.add(MangaTrack(mangaId = mangaId, title = title, cover = cover))
+            saveTracks(tracks)
         }
-        saveTracks(tracks)
     }
 
     private fun getTracks(): List<MangaTrack> {

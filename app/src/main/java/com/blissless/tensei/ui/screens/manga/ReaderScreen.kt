@@ -42,6 +42,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -50,6 +51,7 @@ import com.blissless.tensei.MainViewModel
 import com.blissless.tensei.data.models.MangaChapter
 import com.blissless.tensei.data.models.MangaMedia
 import com.blissless.tensei.viewmodel.fetchMangaDetail
+import com.blissless.tensei.viewmodel.hasLoadedMangaChapters
 import com.blissless.tensei.viewmodel.isLoadingMangaChapters
 import com.blissless.tensei.viewmodel.loadChapterImages
 import com.blissless.tensei.viewmodel.loadMangaChapters
@@ -58,6 +60,7 @@ import com.blissless.tensei.viewmodel.mangaChapterImagesError
 import com.blissless.tensei.viewmodel.mangaChapters
 import com.blissless.tensei.viewmodel.onMangaScrollProgress
 import com.blissless.tensei.viewmodel.refreshMangaTracking
+import com.blissless.tensei.viewmodel.selectedExtensionAuthority
 import com.blissless.tensei.viewmodel.setMangaPageIndicator
 import com.blissless.tensei.viewmodel.setMangaReaderMode
 import com.blissless.tensei.viewmodel.startMangaChapter
@@ -75,7 +78,8 @@ fun MangaReaderScreen(
     initialChapterIndex: Int,
     viewModel: MainViewModel,
     isOled: Boolean,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    onOpenSettings: () -> Unit = {}
 ) {
     android.util.Log.d("MangaReader", "MangaReaderScreen compose: manga.id=${manga.id} title='${manga.title}' initialChapterIndex=$initialChapterIndex")
     DisposableEffect(Unit) {
@@ -110,6 +114,8 @@ fun MangaReaderScreen(
     val isLastChapter = currentChapterIndex >= chapters.lastIndex
     val useDataSaver = viewModel.mangaDataSaver.value
     val isLoadingChapters by viewModel.isLoadingMangaChapters.collectAsState()
+    val hasLoadedChapters by viewModel.hasLoadedMangaChapters.collectAsState()
+    val selectedExtension by viewModel.selectedExtensionAuthority.collectAsState()
     val showPageIndicator by viewModel.mangaPageIndicator.collectAsState()
     val syncThreshold by viewModel.mangaSyncThreshold.collectAsState()
 
@@ -133,9 +139,11 @@ fun MangaReaderScreen(
 
     // Auto-load chapters if the list is empty — always fetch, regardless of showChapterList.
     // The reader needs chapters both for the chapter list view AND for direct reading.
-    LaunchedEffect(manga.id) {
-        android.util.Log.d("MangaReader", "LaunchedEffect(manga.id=${manga.id}): chapters.isEmpty()=${chapters.isEmpty()}")
-        if (chapters.isEmpty()) {
+    // Skipped while no manga extension is selected: without a source there's no real chapter
+    // list, and the synthetic fallback produces wrong chapter numbers for releasing manga.
+    LaunchedEffect(manga.id, selectedExtension) {
+        android.util.Log.d("MangaReader", "LaunchedEffect(manga.id=${manga.id}, selectedExtension=${selectedExtension != null}): chapters.isEmpty()=${chapters.isEmpty()}")
+        if (chapters.isEmpty() && selectedExtension != null) {
             android.util.Log.d("MangaReader", "Fetching manga detail + chapters for manga.id=${manga.id}")
             viewModel.fetchMangaDetail(manga.id)
             viewModel.loadMangaChapters(manga.id, manga.title)
@@ -212,6 +220,7 @@ fun MangaReaderScreen(
                 MangaChapterListWithGroups(
                     chapters = chapters,
                     isLoadingChapters = isLoadingChapters,
+                    hasLoadedChapters = hasLoadedChapters,
                     readIndices = readIndices.value,
                     nextChapterToRead = manga.progress.coerceAtLeast(0),
                     onChapterClick = { selectChapter(it) },
@@ -441,6 +450,69 @@ fun MangaReaderScreen(
                         )
                     }
                 }
+            }
+        }
+
+        // No manga extension selected — replace the entire reader content (including the
+        // chapter selection screen) so the user is forced to pick a source first.
+        if (selectedExtension == null) {
+            MangaNoExtensionScreen(
+                isOled = isOled,
+                onClose = onClose,
+                onOpenSettings = onOpenSettings
+            )
+        }
+    }
+}
+
+@Composable
+private fun MangaNoExtensionScreen(
+    isOled: Boolean,
+    onClose: () -> Unit,
+    onOpenSettings: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(if (isOled) Color.Black else Color(0xFF1a1a1a)),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(horizontal = 32.dp)
+        ) {
+            Icon(
+                Icons.Default.Extension,
+                contentDescription = null,
+                tint = Color.White.copy(alpha = 0.6f),
+                modifier = Modifier.size(48.dp)
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                "No extension selected",
+                color = Color.White,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "Select a manga extension in Reader Settings to load chapters for this title.",
+                color = Color.White.copy(alpha = 0.7f),
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(24.dp))
+            Button(
+                onClick = onOpenSettings,
+                modifier = Modifier.height(48.dp),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Go to Settings")
+            }
+            TextButton(onClick = onClose) {
+                Text("Close", color = Color.White.copy(alpha = 0.8f))
             }
         }
     }
@@ -812,24 +884,27 @@ fun MangaChapterListWithGroups(
     onChapterClick: (Int) -> Unit,
     modifier: Modifier = Modifier,
     isLoadingChapters: Boolean = true,
+    hasLoadedChapters: Boolean = false,
     onContinueReading: (() -> Unit)? = null,
     onRetryLoadChapters: (() -> Unit)? = null,
     onBack: (() -> Unit)? = null
 ) {
     if (chapters.isEmpty()) {
         var lastEmptySig by remember { mutableStateOf("") }
-        val emptySig = "empty|$isLoadingChapters"
+        val emptySig = "empty|$isLoadingChapters|$hasLoadedChapters"
         if (lastEmptySig != emptySig) {
             lastEmptySig = emptySig
             android.util.Log.d("MangaChapterList", "RENDER empty-state: isLoadingChapters=$isLoadingChapters " +
-                "onRetryLoadChapters=${onRetryLoadChapters != null} onBack=${onBack != null}")
+                "hasLoadedChapters=$hasLoadedChapters onRetryLoadChapters=${onRetryLoadChapters != null} onBack=${onBack != null}")
         }
         Box(
             modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
             contentAlignment = Alignment.Center
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                if (isLoadingChapters) {
+                // Show the loading state immediately on first open (before loadMangaChapters
+                // has completed) instead of flashing the "No chapters found" empty state.
+                if (isLoadingChapters || !hasLoadedChapters) {
                     CircularProgressIndicator()
                     Spacer(modifier = Modifier.height(16.dp))
                     Text("Loading chapters...", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 15.sp)

@@ -866,7 +866,12 @@ class MainViewModel : ViewModel() {
         if (now - lastHomeRefreshTime < MIN_REFRESH_INTERVAL_MS) {
             _isLoadingHome.value = false
             refreshReleasingAnimeProgress()
-            // prefetchContinueWatchingStreams() // Disabled for now
+            // Manga tracking is NOT cached like the anime lists, so always re-sync it from AniList
+            // even inside the 5-minute window. Otherwise AniList-tracked manga silently go stale and
+            // new additions don't show up until the window passes (the reported intermittency).
+            if (_loginProvider.value != LoginProvider.MAL) {
+                viewModelScope.launch { fetchMangaLists() }
+            }
             return
         }
 
@@ -1568,6 +1573,11 @@ class MainViewModel : ViewModel() {
 
         // Skip if recently refreshed (unless forced)
         if (!force && now - lastHomeRefreshTime < MIN_REFRESH_INTERVAL_MS) {
+            // Still re-sync manga tracking — it's a single lightweight AniList query, and the
+            // pull-to-refresh gesture should reflect AniList-tracked manga even inside the window.
+            if (_loginProvider.value != LoginProvider.MAL) {
+                viewModelScope.launch { fetchMangaLists() }
+            }
             return
         }
 
@@ -1580,6 +1590,7 @@ class MainViewModel : ViewModel() {
                 fetchJikanUserData()
             } else {
                 fetchLists()
+                fetchMangaLists()
             }
             _isLoadingHome.value = false
             // prefetchContinueWatchingStreams() // Disabled for now
