@@ -64,7 +64,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -88,9 +87,7 @@ fun ExtensionsScreen(
     onBrowseChanged: ((Boolean) -> Unit)? = null,
     magnetExtensions: List<Pair<String, String>> = emptyList(),
     mangaExtensions: List<InstalledExtension> = emptyList(),
-    selectedMangaExtensionAuthority: String? = null,
-    onDiscoverMangaExtensions: () -> Unit = {},
-    onSelectMangaExtension: (String?) -> Unit = {}
+    onDiscoverMangaExtensions: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var repoUrl by remember { mutableStateOf("") }
@@ -366,13 +363,7 @@ fun ExtensionsScreen(
                         exit = shrinkVertically()
                     ) {
                         OniExtensionCard(
-                            extension = ext,
-                            isSelected = ext.authority == selectedMangaExtensionAuthority,
-                            onSelect = {
-                                onSelectMangaExtension(
-                                    if (ext.authority == selectedMangaExtensionAuthority) null else ext.authority
-                                )
-                            }
+                            extension = ext
                         )
                     }
                 }
@@ -714,9 +705,7 @@ private fun InstalledExtensionCard(
 
 @Composable
 private fun OniExtensionCard(
-    extension: InstalledExtension,
-    isSelected: Boolean,
-    onSelect: () -> Unit
+    extension: InstalledExtension
 ) {
     val context = LocalContext.current
     val appIcon = remember(extension.packageName) {
@@ -727,12 +716,9 @@ private fun OniExtensionCard(
         }
     }
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onSelect),
+        modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
-            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.4f)
         ),
         shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
     ) {
@@ -750,17 +736,16 @@ private fun OniExtensionCard(
             } else {
                 Box(
                     modifier = Modifier.size(48.dp).background(
-                        if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
-                        else MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+                        MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f),
                         RoundedCornerShape(12.dp)
                     ),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "O",
+                        text = "M",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
+                        color = MaterialTheme.colorScheme.tertiary
                     )
                 }
             }
@@ -774,14 +759,6 @@ private fun OniExtensionCard(
                     text = extension.packageName,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            if (isSelected) {
-                Text(
-                    text = "Active",
-                    color = Color(0xFF10B981),
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold
                 )
             }
             IconButton(onClick = { openAppSettings(context, extension.packageName) }) {

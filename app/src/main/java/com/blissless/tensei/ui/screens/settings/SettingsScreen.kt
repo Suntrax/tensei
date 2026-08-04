@@ -1300,7 +1300,7 @@ private fun ReaderSettingsPage(
         viewModel.discoverExtensions()
     }
 
-    SettingsPageScaffold(title = "Reader", onBack = onBack) {
+    SettingsPageScaffold(title = "Reader Settings", onBack = onBack) {
         SectionHeader("DEFAULT SOURCE")
         SettingsCard {
             ClickableSettingsRow(
@@ -1578,7 +1578,6 @@ private fun ExtensionsSettingsPage(
     }
 
     val installedMangaExtensions by viewModel.installedExtensions.collectAsState()
-    val selectedMangaExtensionAuthority by viewModel.selectedExtensionAuthority.collectAsState()
 
     LaunchedEffect(Unit) {
         viewModel.discoverExtensions()
@@ -1593,9 +1592,7 @@ private fun ExtensionsSettingsPage(
             viewModel = extViewModel,
             magnetExtensions = magnetExtensions,
             mangaExtensions = installedMangaExtensions,
-            selectedMangaExtensionAuthority = selectedMangaExtensionAuthority,
-            onDiscoverMangaExtensions = { viewModel.discoverExtensions() },
-            onSelectMangaExtension = { viewModel.selectExtension(it) }
+            onDiscoverMangaExtensions = { viewModel.discoverExtensions() }
         )
     }
 }

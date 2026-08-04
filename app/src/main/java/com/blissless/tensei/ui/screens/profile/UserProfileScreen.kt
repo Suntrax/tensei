@@ -1,12 +1,15 @@
 package com.blissless.tensei.ui.screens.profile
 
 import android.content.Intent
+import android.util.Log
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +18,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -76,8 +80,11 @@ import com.blissless.tensei.api.jikan.JikanImages
 import com.blissless.tensei.api.myanimelist.LoginProvider
 import com.blissless.tensei.data.models.UserAnimeStats
 import com.blissless.tensei.ui.theme.StatusCompleted
+import com.blissless.tensei.ui.theme.StatusColors
 import com.blissless.tensei.ui.theme.StatusCurrent
 import com.blissless.tensei.ui.theme.StatusDropped
+import com.blissless.tensei.ui.theme.StatusLabels
+import com.blissless.tensei.ui.theme.MangaStatusLabels
 import com.blissless.tensei.ui.theme.StatusPaused
 import com.blissless.tensei.ui.theme.StatusPlanning
 import kotlinx.coroutines.launch
@@ -94,6 +101,9 @@ import com.blissless.tensei.viewmodel.toggleAniListFavorite
 import com.blissless.tensei.viewmodel.mangaContinueReading
 import com.blissless.tensei.viewmodel.mangaPlanningToRead
 import com.blissless.tensei.viewmodel.mangaCompleted
+import com.blissless.tensei.viewmodel.mangaCurrentlyReading
+import com.blissless.tensei.viewmodel.mangaPaused
+import com.blissless.tensei.viewmodel.mangaDropped
 import com.blissless.tensei.data.models.MangaMedia
 import com.blissless.tensei.data.models.MangaFavorite
 import com.blissless.tensei.data.models.MangaActivityNode
@@ -143,9 +153,20 @@ fun UserProfileScreen(
     val mangaActivity by viewModel.mangaActivity.collectAsState()
     val mangaUserProfile by viewModel.mangaUserProfile.collectAsState()
 
+    val mangaReading by viewModel.mangaCurrentlyReading.collectAsState()
+    val mangaPlanning by viewModel.mangaPlanningToRead.collectAsState()
+    val mangaFinished by viewModel.mangaCompleted.collectAsState()
+    val mangaHeld by viewModel.mangaPaused.collectAsState()
+    val mangaAbandoned by viewModel.mangaDropped.collectAsState()
+
     LaunchedEffect(loginProvider) {
         if (loginProvider == LoginProvider.ANILIST) {
             viewModel.loadAniListFavoritesFromStorage()
+            // Refresh the Viewer profile (name/avatar/banner/bio/joined/stats) and
+            // ensure _userId is populated BEFORE the child fetches that depend on it —
+            // otherwise fetchUserStats / fetchUserActivity / fetchAniListFavorites
+            // return early with null userId and About Me stays empty.
+            viewModel.fetchUser()
             viewModel.fetchAniListFavorites()
             viewModel.fetchUserActivity()
             viewModel.fetchUserStats()
@@ -178,18 +199,21 @@ fun UserProfileScreen(
     val historyData = when (loginProvider) {
         LoginProvider.ANILIST -> {
             val statuses = mutableListOf<String>()
+            val progress = mutableListOf<String>()
             val entries = userActivity.take(50).map { activity ->
                 val progressStr = activity.progress
                 val episodeDisplay = progressStr?.let { prog ->
                     val nums =
-                        prog.filter { it.isDigit() }.chunked(2).mapNotNull { it.toIntOrNull() }
+                        Regex("\\d+").findAll(prog).map { it.value.toIntOrNull() }.filterNotNull().toList()
                     when {
-                        nums.size >= 2 && nums[1] > nums[0] -> "${nums[0]}-${nums[1]}"
-                        nums.isNotEmpty() -> "Episode ${nums[0]}"
-                        else -> null
+                        nums.size >= 2 && nums[1] > nums[0] -> "episode ${nums[0]}-${nums[1]}"
+                        nums.isNotEmpty() -> "episode ${nums[0]}"
+                        else -> prog.lowercase()
                     }
                 }
                 statuses.add(activity.status)
+                progress.add(episodeDisplay ?: "")
+                Log.d("ProfileHistory", "anime status=${activity.status} rawProgress=${activity.progress} display=${episodeDisplay}")
                 JikanHistoryEntry(
                     malId = activity.mediaId,
                     title = activity.mediaTitle,
@@ -200,11 +224,11 @@ fun UserProfileScreen(
                     date = formatTimestamp(activity.createdAt)
                 )
             }
-            HistoryData(entries, statuses, userActivity.take(50).map { it.progress ?: "" })
+            HistoryData(entries, statuses, progress)
         }
         LoginProvider.MAL -> {
             val malHistory = jikanHistory?.anime?.take(50) ?: emptyList()
-            HistoryData(malHistory, malHistory.map { it.date ?: "" }, malHistory.map { "Episode ${it.episodesWatched ?: 0}" })
+            HistoryData(malHistory, malHistory.map { it.date ?: "" }, malHistory.map { "episode ${it.episodesWatched ?: 0}" })
         }
         LoginProvider.NONE -> HistoryData(emptyList(), emptyList(), emptyList())
     }
@@ -299,7 +323,21 @@ fun UserProfileScreen(
                             userAvatar = userAvatar, userBanner = userBanner,
                             userBio = userBio,
                             userCreatedAt = userCreatedAt, userStats = userStats,
-                            mangaUserProfile = mangaUserProfile
+                            mangaUserProfile = mangaUserProfile,
+                            animeLibrary = listOf(
+                                LibraryStatus("CURRENT", viewModel.currentlyWatching.value.size),
+                                LibraryStatus("PLANNING", viewModel.planningToWatch.value.size),
+                                LibraryStatus("COMPLETED", viewModel.completed.value.size),
+                                LibraryStatus("PAUSED", viewModel.onHold.value.size),
+                                LibraryStatus("DROPPED", viewModel.dropped.value.size)
+                            ),
+                            mangaLibrary = listOf(
+                                LibraryStatus("CURRENT", mangaReading.size),
+                                LibraryStatus("PLANNING", mangaPlanning.size),
+                                LibraryStatus("COMPLETED", mangaFinished.size),
+                                LibraryStatus("PAUSED", mangaHeld.size),
+                                LibraryStatus("DROPPED", mangaAbandoned.size)
+                            )
                         )
                         UserProfileSection.FAVORITES -> FavoritesContent(
                             favorites = favorites,
@@ -443,9 +481,12 @@ private fun AboutMeContent(
     userAvatar: String? = null, userBanner: String? = null,
     userBio: String? = null,
     userCreatedAt: Long? = null, userStats: UserAnimeStats? = null,
-    mangaUserProfile: MangaUserProfile? = null
+    mangaUserProfile: MangaUserProfile? = null,
+    animeLibrary: List<LibraryStatus> = emptyList(),
+    mangaLibrary: List<LibraryStatus> = emptyList()
 ) {
     var showFullscreenAvatar by remember { mutableStateOf(false) }
+    val mangaStats = mangaUserProfile?.statistics?.manga
 
     Box(modifier = Modifier.fillMaxSize()) {
         userBanner?.let { bannerUrl ->
@@ -457,10 +498,10 @@ private fun AboutMeContent(
         }
 
         Column(
-            modifier = Modifier.fillMaxSize().padding(16.dp),
+            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(140.dp))
+            Spacer(modifier = Modifier.height(if (userBanner != null) 140.dp else 8.dp))
 
             Box {
                 userAvatar?.let { avatarUrl ->
@@ -509,8 +550,19 @@ private fun AboutMeContent(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            if (userStats != null) {
-                Row(
+            if (userStats != null || animeLibrary.any { it.count > 0 }) {
+                Text(
+                    "Anime",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                if (userStats != null) {
+                    Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
@@ -528,27 +580,32 @@ private fun AboutMeContent(
                         }
                     }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(12.dp),
-                        horizontalArrangement = Arrangement.Center
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                     ) {
-                        Text(
-                            "Total: ${formatMinutesWatched(userStats.minutesWatched)}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                "Total: ${formatMinutesWatched(userStats.minutesWatched)}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
+
+                Spacer(modifier = Modifier.height(20.dp))
+                LibrarySection(title = "Anime Library", statuses = animeLibrary, labels = StatusLabels, colors = StatusColors)
             }
 
-            mangaUserProfile?.statistics?.manga?.let { mangaStats ->
+            val mangaTotal = mangaLibrary.sumOf { it.count }
+            if (mangaTotal > 0 || mangaStats != null) {
                 Spacer(modifier = Modifier.height(20.dp))
 
                 Text(
@@ -561,45 +618,16 @@ private fun AboutMeContent(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Box(Modifier.weight(1f)) {
-                        StatCard(value = mangaStats.count.toString(), label = "Manga", color = MaterialTheme.colorScheme.primary)
-                    }
-                    Box(Modifier.weight(1f)) {
-                        StatCard(value = formatChapters(mangaStats.chaptersRead), label = "Chapters", color = MaterialTheme.colorScheme.tertiary)
-                    }
-                    Box(Modifier.weight(1f)) {
-                        StatCard(
-                            value = mangaStats.meanScore?.let { "%.1f".format(it) } ?: "-",
-                            label = "Mean", color = MaterialTheme.colorScheme.secondary
-                        )
-                    }
-                }
+                StatCard(
+                    value = mangaStats?.meanScore?.let { "%.1f".format(it) } ?: "-",
+                    label = "Mean", color = MaterialTheme.colorScheme.secondary
+                )
 
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(12.dp),
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            "Volumes Read: ${mangaStats.volumesRead}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
+                Spacer(modifier = Modifier.height(20.dp))
+                LibrarySection(title = "Manga Library", statuses = mangaLibrary, labels = MangaStatusLabels, colors = StatusColors)
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(24.dp))
         }
 
         if (showFullscreenAvatar) {
@@ -636,14 +664,98 @@ private fun StatCard(value: String, label: String, color: Color) {
     }
 }
 
+private data class LibraryStatus(val key: String, val count: Int)
+
+private val StatusIcons = mapOf(
+    "CURRENT" to Icons.Default.PlayArrow,
+    "PLANNING" to Icons.Default.Bookmark,
+    "COMPLETED" to Icons.Default.Check,
+    "PAUSED" to Icons.Default.Pause,
+    "DROPPED" to Icons.Default.Delete
+)
+
+@Composable
+private fun LibrarySection(
+    title: String,
+    statuses: List<LibraryStatus>,
+    labels: Map<String, String>,
+    colors: Map<String, Color>
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+        ) {
+            val total = statuses.sumOf { it.count }.coerceAtLeast(1)
+            Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+                statuses.forEach { status ->
+                    LibraryStatRow(
+                        status = status,
+                        total = total,
+                        icon = StatusIcons[status.key] ?: Icons.Default.PlayArrow,
+                        color = colors[status.key] ?: Color.Gray,
+                        label = labels[status.key] ?: status.key
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LibraryStatRow(status: LibraryStatus, total: Int, icon: ImageVector, color: Color, label: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(16.dp))
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(96.dp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(8.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(status.count.toFloat() / total)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(color)
+            )
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            status.count.toString(),
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Bold,
+            color = color,
+            modifier = Modifier.width(28.dp),
+            textAlign = TextAlign.End
+        )
+    }
+}
+
 private fun formatEpisodes(episodes: Int): String = when {
     episodes >= 1000 -> "%.1fK".format(episodes / 1000.0)
     else -> episodes.toString()
-}
-
-private fun formatChapters(chapters: Int): String = when {
-    chapters >= 1000 -> "%.1fK".format(chapters / 1000.0)
-    else -> chapters.toString()
 }
 
 private fun formatMinutesWatched(minutes: Int): String {
@@ -862,11 +974,17 @@ private fun HistoryItem(
     status: String? = null, progress: String? = null
 ) {
     val (statusIcon, statusColor, statusLabel) = when {
-        status?.contains("completed", ignoreCase = true) == true -> Triple(Icons.Default.Check, StatusCompleted, "Completed")
-        status?.contains("watching", ignoreCase = true) == true -> Triple(Icons.Default.PlayArrow, StatusCurrent, "Watched")
-        status?.contains("plan", ignoreCase = true) == true -> Triple(Icons.Default.Bookmark, StatusPlanning, "Planning to Watch")
-        status?.contains("hold", ignoreCase = true) == true -> Triple(Icons.Default.Pause, StatusPaused, "On Hold")
-        status?.contains("dropped", ignoreCase = true) == true -> Triple(Icons.Default.Delete, StatusDropped, "Dropped")
+        status?.contains("completed", ignoreCase = true) == true || status?.contains("finished", ignoreCase = true) == true ->
+            Triple(Icons.Default.Check, StatusCompleted, "Completed")
+        status?.contains("paused", ignoreCase = true) == true || status?.contains("hold", ignoreCase = true) == true ->
+            Triple(Icons.Default.Pause, StatusPaused, "On Hold")
+        status?.contains("dropped", ignoreCase = true) == true ->
+            Triple(Icons.Default.Delete, StatusDropped, "Dropped")
+        status?.contains("plan", ignoreCase = true) == true ->
+            Triple(Icons.Default.Bookmark, StatusPlanning, "Planning to Watch")
+        status?.contains("watching", ignoreCase = true) == true || status?.contains("watched", ignoreCase = true) == true ||
+            status?.contains("repeating", ignoreCase = true) == true || status?.contains("rewatched", ignoreCase = true) == true ->
+            Triple(Icons.Default.PlayArrow, StatusCurrent, "Watched")
         else -> Triple(Icons.Default.PlayArrow, StatusCurrent, status ?: "")
     }
 
@@ -1005,26 +1123,26 @@ private fun MangaActivityItem(
         media?.title?.romaji ?: media?.title?.english ?: "Unknown"
     }
 
+    val status = node.status ?: ""
     val (statusIcon, statusColor, statusLabel) = when {
-        node.status?.equals("COMPLETED", ignoreCase = true) == true ->
-            Triple(Icons.Default.Check, StatusCompleted, "Read")
-        node.status?.let {
-            it.equals("READING", ignoreCase = true) ||
-                it.equals("REPEATING", ignoreCase = true) ||
-                it.equals("REREAD", ignoreCase = true)
-        } == true -> Triple(Icons.Default.PlayArrow, StatusCurrent, "Reading")
-        node.status?.equals("PLAN", ignoreCase = true) == true ->
-            Triple(Icons.Default.Bookmark, StatusPlanning, "Planning to Read")
-        node.status?.let {
-            it.equals("PAUSED", ignoreCase = true) || it.equals("HOLD", ignoreCase = true)
-        } == true -> Triple(Icons.Default.Pause, StatusPaused, "Paused")
-        node.status?.equals("DROPPED", ignoreCase = true) == true ->
+        status.contains("completed", ignoreCase = true) || status.contains("finished", ignoreCase = true) ->
+            Triple(Icons.Default.Check, StatusCompleted, "Completed")
+        status.contains("paused", ignoreCase = true) || status.contains("hold", ignoreCase = true) ->
+            Triple(Icons.Default.Pause, StatusPaused, "On Hold")
+        status.contains("dropped", ignoreCase = true) ->
             Triple(Icons.Default.Delete, StatusDropped, "Dropped")
-        else -> Triple(Icons.Default.PlayArrow, StatusCurrent, node.status ?: "")
+        status.contains("plan", ignoreCase = true) ->
+            Triple(Icons.Default.Bookmark, StatusPlanning, "Planning to Read")
+        status.contains("reading", ignoreCase = true) || status.contains("read", ignoreCase = true) ||
+            status.contains("current", ignoreCase = true) || status.contains("repeating", ignoreCase = true) ||
+            status.contains("reread", ignoreCase = true) ->
+            Triple(Icons.Default.PlayArrow, StatusCurrent, "Read")
+        else -> Triple(Icons.Default.PlayArrow, StatusCurrent, status)
     }
 
-    val progressSuffix = node.progress?.takeIf { it.isNotBlank() }?.let { "chapter $it" }
+    val progressSuffix = formatMangaProgress(node.progress)
     val statusText = if (progressSuffix != null) "$statusLabel $progressSuffix" else statusLabel
+    Log.d("ProfileHistory", "manga status=${node.status} rawProgress=${node.progress} display=$statusText")
 
     Card(
         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick),
@@ -1054,7 +1172,7 @@ private fun MangaActivityItem(
                 }
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    formatActivityDate(node.createdAt),
+                    formatTimestamp(node.createdAt),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall
                 )
@@ -1063,13 +1181,18 @@ private fun MangaActivityItem(
     }
 }
 
-private fun formatTimestamp(timestamp: Long): String {
-    val sdf = SimpleDateFormat("d MMMM, yyyy - HH:mm", Locale.getDefault())
-    return sdf.format(Date(timestamp * 1000))
+private fun formatMangaProgress(progress: String?): String? {
+    if (progress.isNullOrBlank()) return null
+    val nums = Regex("\\d+").findAll(progress).map { it.value.toIntOrNull() }.filterNotNull().toList()
+    return when {
+        nums.size >= 2 && nums[1] > nums[0] -> "chapter ${nums[0]}-${nums[1]}"
+        nums.isNotEmpty() -> "chapter ${nums[0]}"
+        else -> "chapter $progress"
+    }
 }
 
-private fun formatActivityDate(timestamp: Long): String {
-    val sdf = SimpleDateFormat("d MMM yyyy", Locale.getDefault())
+private fun formatTimestamp(timestamp: Long): String {
+    val sdf = SimpleDateFormat("d MMMM, yyyy - HH:mm", Locale.getDefault())
     return sdf.format(Date(timestamp * 1000))
 }
 

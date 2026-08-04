@@ -19,18 +19,25 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SignalWifiOff
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -63,6 +70,13 @@ import com.blissless.tensei.ui.screens.episode.EpisodeSelectionDialog
 import com.blissless.tensei.ui.screens.episode.RichEpisodeScreen
 import com.blissless.tensei.ui.components.SectionTitle
 import com.blissless.tensei.ui.screens.details.DetailedAnimeScreen
+import com.blissless.tensei.ui.screens.details.NoDefaultExtensionDialog
+import com.blissless.tensei.ui.screens.manga.MangaStatusDialog
+import com.blissless.tensei.ui.theme.StatusCompleted
+import com.blissless.tensei.ui.theme.StatusCurrent
+import com.blissless.tensei.ui.theme.StatusDropped
+import com.blissless.tensei.ui.theme.StatusPaused
+import com.blissless.tensei.ui.theme.StatusPlanning
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.lifecycle.viewModelScope
@@ -72,6 +86,13 @@ import com.blissless.tensei.util.longToast
 import com.blissless.tensei.viewmodel.mangaExploreSections
 import com.blissless.tensei.viewmodel.isLoadingManga
 import com.blissless.tensei.viewmodel.fetchMangaExplore
+import com.blissless.tensei.viewmodel.mangaCurrentlyReading
+import com.blissless.tensei.viewmodel.mangaPlanningToRead
+import com.blissless.tensei.viewmodel.mangaCompleted
+import com.blissless.tensei.viewmodel.selectedExtensionAuthority
+import com.blissless.tensei.viewmodel.removeMangaTracking
+import com.blissless.tensei.viewmodel.updateMangaStatus
+import com.blissless.tensei.viewmodel.updateMangaProgress
 import coil.compose.AsyncImage
 import java.util.Locale
 import androidx.compose.foundation.layout.PaddingValues
@@ -129,7 +150,9 @@ fun ExploreScreen(
     onViewAllRecommendations: (Int, String) -> Unit = { _, _ -> },
     onSearchClick: () -> Unit = {},
     onNoExtension: () -> Unit = {},
-    onMangaClick: (MangaExploreMedia) -> Unit = {}
+    onMangaClick: (MangaExploreMedia) -> Unit = {},
+    onMangaReadClick: (MangaExploreMedia) -> Unit = {},
+    onMangaNoExtension: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val featuredAnime by viewModel.featuredAnime.collectAsState()
@@ -151,6 +174,10 @@ fun ExploreScreen(
     val localAnimeStatus by viewModel.localAnimeStatus.collectAsState()
     val mangaExploreSections by viewModel.mangaExploreSections.collectAsState()
     val isLoadingManga by viewModel.isLoadingManga.collectAsState()
+    val mangaCurrentlyReading by viewModel.mangaCurrentlyReading.collectAsState()
+    val mangaPlanningToRead by viewModel.mangaPlanningToRead.collectAsState()
+    val mangaCompleted by viewModel.mangaCompleted.collectAsState()
+    val selectedMangaExtension by viewModel.selectedExtensionAuthority.collectAsState()
     
     val filteredFeaturedAnime = remember(featuredAnime, hideAdultContent) {
         if (hideAdultContent) featuredAnime.filter { !isAdultContent(it.isAdult, it.genres) } else featuredAnime
@@ -187,12 +214,31 @@ fun ExploreScreen(
         }
     }
 
+    // Create a map of mangaId -> status for quick lookup
+    val mangaStatusMap = remember(mangaCurrentlyReading, mangaPlanningToRead, mangaCompleted) {
+        buildMap {
+            mangaCurrentlyReading.forEach { put(it.id, "CURRENT") }
+            mangaPlanningToRead.forEach { put(it.id, "PLANNING") }
+            mangaCompleted.forEach { put(it.id, "COMPLETED") }
+        }
+    }
+    val mangaProgressMap = remember(mangaCurrentlyReading, mangaPlanningToRead, mangaCompleted) {
+        buildMap {
+            (mangaCurrentlyReading + mangaPlanningToRead + mangaCompleted)
+                .forEach { if (it.progress > 0) put(it.id, it.progress) }
+        }
+    }
+
     // Derive currentStatus from lists dynamically to ensure immediate UI updates
 
     var selectedAnime by remember { mutableStateOf<ExploreAnime?>(null) }
     var showDialog by remember { mutableStateOf(false) }
     var showEpisodeSelection by remember { mutableStateOf(false) }
     var showStatusDialog by remember { mutableStateOf(false) }
+    var showNoExtensionDialog by remember { mutableStateOf(false) }
+    var showMangaNoExtensionDialog by remember { mutableStateOf(false) }
+    var showMangaStatusDialog by remember { mutableStateOf(false) }
+    var selectedMangaForStatus by remember { mutableStateOf<MangaExploreMedia?>(null) }
     
     // Force recomposition when lists change by tracking a version counter
     var listVersion by remember { mutableIntStateOf(0) }
@@ -401,6 +447,65 @@ fun ExploreScreen(
         )
     }
 
+    // No-default-extension dialog for the Watch Now button. Instead of immediately
+    // redirecting to Settings, ask the user first — they can cancel or continue.
+    if (showNoExtensionDialog) {
+        NoDefaultExtensionDialog(
+            onDismiss = { showNoExtensionDialog = false },
+            onGoToSettings = {
+                showNoExtensionDialog = false
+                onNoExtension()
+            }
+        )
+    }
+
+    // No-default-manga-extension dialog for the Read Now button. The user is taken to
+    // the chapter selection only after a manga extension has been chosen.
+    if (showMangaNoExtensionDialog) {
+        AlertDialog(
+            onDismissRequest = { showMangaNoExtensionDialog = false },
+            title = { Text("No Extension Selected") },
+            text = { Text("Select a default manga extension in Settings to load chapters for this title.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showMangaNoExtensionDialog = false
+                    onMangaNoExtension()
+                }) {
+                    Text("Go to Settings")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showMangaNoExtensionDialog = false }) {
+                    Text("Close")
+                }
+            }
+        )
+    }
+
+    // Status dialog for manga carousel Save button
+    if (showMangaStatusDialog && selectedMangaForStatus != null) {
+        val manga = selectedMangaForStatus!!
+        MangaStatusDialog(
+            title = manga.title.romaji ?: manga.title.english ?: "Unknown",
+            coverUrl = manga.coverImage?.extraLarge ?: manga.coverImage?.large ?: "",
+            currentStatus = mangaStatusMap[manga.id],
+            currentProgress = mangaProgressMap[manga.id] ?: 0,
+            totalChapters = manga.chapters ?: 0,
+            onDismiss = { showMangaStatusDialog = false },
+            onRemove = {
+                viewModel.removeMangaTracking(manga.id)
+                showMangaStatusDialog = false
+            },
+            onUpdate = { status, progress ->
+                viewModel.updateMangaStatus(manga.id, status, progress)
+                if (progress != null) {
+                    viewModel.updateMangaProgress(manga.id, progress.toFloat())
+                }
+                showMangaStatusDialog = false
+            }
+        )
+    }
+
     // Stable callbacks to avoid recomposition
     val onAnimeClickStable = remember<(ExploreAnime, AnimeCardBounds?) -> Unit> {
         { anime, bounds ->
@@ -516,14 +621,14 @@ fun ExploreScreen(
                             showEpisodeSelection = true
                         } else {
                             showEpisodeSelection = false
-                            onNoExtension()
+                            showNoExtensionDialog = true
                         }
                     },
                     onInfoClick = onFeaturedAnimeClickStable,
                     onSearchClick = onSearchClick,
                     animeStatusMap = animeStatusMap,
                     preferEnglishTitles = preferEnglishTitles,
-                    isDialogOpen = showDialog || showStatusDialog || showEpisodeSelection,
+                    isDialogOpen = showDialog || showStatusDialog || showEpisodeSelection || showNoExtensionDialog,
                     autoScrollEnabled = isVisible && !showDialog
                 )
             } else if (apiError == null && !isOffline) {
@@ -875,10 +980,23 @@ fun ExploreScreen(
                 if (trendingList.isNotEmpty()) {
                     MangaFeaturedCarousel(
                         mangaList = trendingList,
-                        onMangaClick = onMangaClick,
+                        onStatusClick = { manga ->
+                            selectedMangaForStatus = manga
+                            showMangaStatusDialog = true
+                        },
+                        onReadClick = { manga ->
+                            if (selectedMangaExtension == null) {
+                                showMangaNoExtensionDialog = true
+                            } else {
+                                onMangaReadClick(manga)
+                            }
+                        },
+                        onInfoClick = onMangaClick,
+                        mangaStatusMap = mangaStatusMap,
                         preferEnglishTitles = preferEnglishTitles,
                         autoScrollEnabled = isVisible,
-                        isVisible = isVisible
+                        isVisible = isVisible,
+                        isDialogOpen = showMangaStatusDialog || showMangaNoExtensionDialog
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                 }
@@ -1110,10 +1228,14 @@ private fun GenreSection(
 @Composable
 private fun MangaFeaturedCarousel(
     mangaList: List<MangaExploreMedia>,
-    onMangaClick: (MangaExploreMedia) -> Unit,
+    onStatusClick: (MangaExploreMedia) -> Unit,
+    onReadClick: (MangaExploreMedia) -> Unit,
+    onInfoClick: (MangaExploreMedia) -> Unit,
+    mangaStatusMap: Map<Int, String> = emptyMap(),
     preferEnglishTitles: Boolean = true,
     autoScrollEnabled: Boolean = true,
-    isVisible: Boolean = true
+    isVisible: Boolean = true,
+    isDialogOpen: Boolean = false
 ) {
     if (mangaList.isEmpty()) return
 
@@ -1150,8 +1272,8 @@ private fun MangaFeaturedCarousel(
         }
     }
 
-    LaunchedEffect(autoScrollEnabled, isVisible, timerResetSignal) {
-        if (autoScrollEnabled && isVisible) {
+    LaunchedEffect(autoScrollEnabled, isVisible, isDialogOpen, timerResetSignal) {
+        if (autoScrollEnabled && isVisible && !isDialogOpen) {
             while (true) {
                 delay(4500.milliseconds)
 
@@ -1289,22 +1411,78 @@ private fun MangaFeaturedCarousel(
 
                     Spacer(modifier = Modifier.height(20.dp))
 
-                    Button(
-                        onClick = { onMangaClick(currentManga) },
-                        modifier = Modifier.height(50.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color.White.copy(alpha = 0.15f),
-                            contentColor = Color.White
-                        )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            Icons.Outlined.PlayArrow,
-                            contentDescription = "Read",
-                            modifier = Modifier.size(22.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Read Now", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                        val currentStatus = mangaStatusMap[currentManga.id]
+                        val isSaved = currentStatus != null
+                        val statusColor = when (currentStatus) {
+                            "COMPLETED" -> StatusCompleted
+                            "CURRENT" -> StatusCurrent
+                            "PLANNING" -> StatusPlanning
+                            "PAUSED" -> StatusPaused
+                            "DROPPED" -> StatusDropped
+                            else -> Color.White
+                        }
+
+                        IconButton(
+                            onClick = { onStatusClick(currentManga) },
+                            modifier = Modifier.size(44.dp)
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = (if (isSaved) statusColor else Color.White).copy(alpha = 0.15f),
+                                modifier = Modifier.size(44.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        if (isSaved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                                        contentDescription = "Save",
+                                        tint = if (isSaved) statusColor else Color.White,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        Button(
+                            onClick = { onReadClick(currentManga) },
+                            modifier = Modifier.height(50.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color.White.copy(alpha = 0.15f),
+                                contentColor = Color.White
+                            )
+                        ) {
+                            Icon(
+                                Icons.Outlined.PlayArrow,
+                                contentDescription = "Read",
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Read Now", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                        }
+
+                        IconButton(
+                            onClick = { onInfoClick(currentManga) },
+                            modifier = Modifier.size(44.dp)
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = Color.White.copy(alpha = 0.12f),
+                                modifier = Modifier.size(44.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.Outlined.Info,
+                                        contentDescription = "Info",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }

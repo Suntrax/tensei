@@ -27,7 +27,7 @@ val StatusLabels = mapOf(
 // Manga-specific status labels (same colors as anime, just different text)
 val MangaStatusLabels = mapOf(
     "CURRENT" to "Reading",
-    "PLANNING" to "Plan to Read",
+    "PLANNING" to "Planning to Read",
     "COMPLETED" to "Completed",
     "PAUSED" to "On Hold",
     "DROPPED" to "Dropped"

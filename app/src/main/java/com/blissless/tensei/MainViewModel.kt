@@ -71,6 +71,7 @@ import com.blissless.tensei.viewmodel.fetchMalList
 import com.blissless.tensei.viewmodel.initManga
 import com.blissless.tensei.viewmodel.fetchMangaExplore
 import com.blissless.tensei.viewmodel.fetchMangaLists
+import com.blissless.tensei.viewmodel.fetchMangaUserProfile
 import com.blissless.tensei.viewmodel.toggleMalFavoriteById
 import com.blissless.tensei.viewmodel.loadMalFavoritesFromCache
 import com.blissless.tensei.viewmodel.fetchAniListFavorites
@@ -736,7 +737,11 @@ class MainViewModel : ViewModel() {
                     _isLoadingHome.value = true
                     fetchUser()
                     fetchLists()
+                    fetchMangaLists()
                     _isLoadingHome.value = false
+                    fetchAiringSchedule(force = true)
+                    fetchMangaExplore()
+                    fetchMangaUserProfile()
                     // prefetchContinueWatchingStreams() // Disabled for now
                 }
             }

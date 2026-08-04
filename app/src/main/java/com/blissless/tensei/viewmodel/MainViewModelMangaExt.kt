@@ -232,6 +232,12 @@ val MainViewModel.mangaPlanningToRead: StateFlow<List<MangaMedia>> get() = _mang
 private val _mangaCompleted = MutableStateFlow<List<MangaMedia>>(emptyList())
 val MainViewModel.mangaCompleted: StateFlow<List<MangaMedia>> get() = _mangaCompleted.asStateFlow()
 
+private val _mangaPaused = MutableStateFlow<List<MangaMedia>>(emptyList())
+val MainViewModel.mangaPaused: StateFlow<List<MangaMedia>> get() = _mangaPaused.asStateFlow()
+
+private val _mangaDropped = MutableStateFlow<List<MangaMedia>>(emptyList())
+val MainViewModel.mangaDropped: StateFlow<List<MangaMedia>> get() = _mangaDropped.asStateFlow()
+
 private val _mangaExploreSections = MutableStateFlow<Map<String, List<MangaExploreMedia>>>(emptyMap())
 val MainViewModel.mangaExploreSections: StateFlow<Map<String, List<MangaExploreMedia>>> get() = _mangaExploreSections.asStateFlow()
 
@@ -304,10 +310,14 @@ private fun MainViewModel.loadLocalMangaTracking() {
     val currentlyReading = tracker.getCurrentlyReading().map { toMangaMedia(it) }
     val planning = tracker.getPlanningToRead().map { toMangaMedia(it) }
     val completed = tracker.getCompleted().map { toMangaMedia(it) }
+    val paused = tracker.getPaused().map { toMangaMedia(it) }
+    val dropped = tracker.getDropped().map { toMangaMedia(it) }
     _mangaContinueReading.value = reading
     _mangaCurrentlyReading.value = currentlyReading
     _mangaPlanningToRead.value = planning
     _mangaCompleted.value = completed
+    _mangaPaused.value = paused
+    _mangaDropped.value = dropped
 }
 
 private fun toMangaMedia(track: MangaTrack): MangaMedia {
@@ -380,6 +390,8 @@ suspend fun MainViewModel.fetchMangaLists(): Boolean {
     val anilistCurrent = lists["CURRENT"] ?: lists["Reading"]
     val anilistPlanning = lists["PLANNING"] ?: lists["Plan to Read"]
     val anilistCompleted = lists["COMPLETED"]
+    val anilistPaused = lists["PAUSED"]
+    val anilistDropped = lists["DROPPED"]
 
     // Build a merged list: start with local tracks, then add/update from AniList
     val localTracker = mangaTrackManager
@@ -397,6 +409,14 @@ suspend fun MainViewModel.fetchMangaLists(): Boolean {
         anilistCompleted?.forEach { m ->
             localTracker.ensureTrack(m.id, m.title, m.cover, m.totalChapters)
             localTracker.updateTrackingStatus(m.id, "COMPLETED")
+        }
+        anilistPaused?.forEach { m ->
+            localTracker.ensureTrack(m.id, m.title, m.cover, m.totalChapters)
+            localTracker.updateTrackingStatus(m.id, "PAUSED")
+        }
+        anilistDropped?.forEach { m ->
+            localTracker.ensureTrack(m.id, m.title, m.cover, m.totalChapters)
+            localTracker.updateTrackingStatus(m.id, "DROPPED")
         }
     }
 

@@ -124,6 +124,7 @@ import com.blissless.tensei.viewmodel.updateMangaProgress
 import com.blissless.tensei.viewmodel.removeMangaTracking
 import com.blissless.tensei.viewmodel.isMangaFavorited
 import com.blissless.tensei.viewmodel.clearMangaDetail
+import com.blissless.tensei.viewmodel.selectedExtensionAuthority
 import com.blissless.tensei.data.models.MangaExploreMedia
 import com.blissless.tensei.data.models.MangaMedia
 import eu.kanade.tachiyomi.animesource.model.Video
@@ -402,6 +403,8 @@ fun MainScreen(
     val onHold by viewModel.onHold.collectAsState()
     val dropped by viewModel.dropped.collectAsState()
 
+    val selectedMangaExtension by viewModel.selectedExtensionAuthority.collectAsState()
+
     val forwardSkipSeconds by viewModel.forwardSkipSeconds.collectAsState(initial = 10)
     val backwardSkipSeconds by viewModel.backwardSkipSeconds.collectAsState(initial = 10)
 
@@ -514,6 +517,7 @@ fun MainScreen(
     val currentManga = mangaDetailStack.lastOrNull()
     var showMangaDetailScreen by remember { mutableStateOf(false) }
     var mangaAutoShowChapters by remember { mutableStateOf(false) }
+    var showMangaNoExtensionDialog by remember { mutableStateOf(false) }
     var mangaOverlay by remember { mutableStateOf<MangaOverlay>(MangaOverlay.None) }
     // Manga All* grids that were suspended while navigating deeper (e.g. tapping a
     // relation opens a new manga detail / anime detail). Restored when back returns
@@ -1647,6 +1651,28 @@ fun MainScreen(
     // Scaffold. Before this, the reader was composed directly in the main window
     // and the Scaffold (composed later, always on top) covered it — the reader
     // opened (state/logs) but was never visible.
+    if (showMangaNoExtensionDialog) {
+        AlertDialog(
+            onDismissRequest = { showMangaNoExtensionDialog = false },
+            title = { Text("No Extension Selected") },
+            text = { Text("Select a default manga extension in Settings to load chapters for this title.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showMangaNoExtensionDialog = false
+                    showSettings = true
+                    pendingSettingsGroup = "reader"
+                }) {
+                    Text("Go to Settings")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showMangaNoExtensionDialog = false }) {
+                    Text("Close")
+                }
+            }
+        )
+    }
+
     if (showMangaReader && currentManga != null) {
         val readerManga = currentManga
         val closeReader: () -> Unit = {
@@ -2363,6 +2389,24 @@ fun MainScreen(
                                         averageScore = manga.averageScore
                                     )
                                 )
+                            },
+                            onMangaReadClick = { manga ->
+                                android.util.Log.d("MangaNav", "EXPLORE onMangaReadClick: id=${manga.id} title='${manga.title.romaji ?: manga.title.english}' -> READER (chapter selection)")
+                                mangaAutoShowChapters = true
+                                mangaDetailStack = mangaDetailStack + com.blissless.tensei.data.models.MangaMedia(
+                                    id = manga.id,
+                                    title = manga.title.romaji ?: manga.title.english ?: "Unknown",
+                                    titleEnglish = manga.title.english,
+                                    cover = manga.coverImage?.extraLarge ?: manga.coverImage?.large ?: "",
+                                    totalChapters = manga.chapters ?: 0,
+                                    averageScore = manga.averageScore
+                                )
+                                mangaReaderChapterIndex = -1
+                                showMangaReader = true
+                            },
+                            onMangaNoExtension = {
+                                showSettings = true
+                                pendingSettingsGroup = "reader"
                             }
                         )
                         2 -> HomeScreen(
@@ -2431,10 +2475,15 @@ fun MainScreen(
                             onMangaClick = { manga ->
                                 android.util.Log.d("MangaNav", "HOME onMangaClick: id=${manga.id} title='${manga.title}' " +
                                     "progress=${manga.progress} scrollProgress=${manga.scrollProgress}")
-                                mangaAutoShowChapters = true
-                                mangaDetailStack = mangaDetailStack + manga
-                                mangaReaderChapterIndex = -1
-                                showMangaReader = true
+                                if (selectedMangaExtension == null) {
+                                    android.util.Log.d("MangaNav", "HOME onMangaClick: no manga extension selected — showing dialog")
+                                    showMangaNoExtensionDialog = true
+                                } else {
+                                    mangaAutoShowChapters = true
+                                    mangaDetailStack = mangaDetailStack + manga
+                                    mangaReaderChapterIndex = -1
+                                    showMangaReader = true
+                                }
                             },
                             onMangaInfoClick = { manga ->
                                 android.util.Log.d("MangaNav", "HOME onMangaInfoClick: id=${manga.id} title='${manga.title}'")
@@ -2444,10 +2493,15 @@ fun MainScreen(
                             onMangaContinueReadingClick = { manga ->
                                 android.util.Log.d("MangaNav", "HOME onMangaContinueReading: id=${manga.id} title='${manga.title}' " +
                                     "progress=${manga.progress} scrollProgress=${manga.scrollProgress}")
-                                mangaAutoShowChapters = false
-                                mangaDetailStack = mangaDetailStack + manga
-                                mangaReaderChapterIndex = manga.progress.coerceAtLeast(0)
-                                showMangaReader = true
+                                if (selectedMangaExtension == null) {
+                                    android.util.Log.d("MangaNav", "HOME onMangaContinueReading: no manga extension selected — showing dialog")
+                                    showMangaNoExtensionDialog = true
+                                } else {
+                                    mangaAutoShowChapters = false
+                                    mangaDetailStack = mangaDetailStack + manga
+                                    mangaReaderChapterIndex = manga.progress.coerceAtLeast(0)
+                                    showMangaReader = true
+                                }
                             },
                             onMangaDismissClick = { manga ->
                                 android.util.Log.d("MangaNav", "HOME onMangaDismiss: removing local track for id=${manga.id} title='${manga.title}'")
