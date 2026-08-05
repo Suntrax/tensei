@@ -1,5 +1,10 @@
 package com.blissless.tensei.ui.screens.manga
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.pm.ActivityInfo
+import android.view.Surface
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
@@ -40,6 +45,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -63,6 +69,7 @@ import com.blissless.tensei.viewmodel.refreshMangaTracking
 import com.blissless.tensei.viewmodel.selectedExtensionAuthority
 import com.blissless.tensei.viewmodel.setMangaPageIndicator
 import com.blissless.tensei.viewmodel.setMangaReaderMode
+import com.blissless.tensei.viewmodel.setMangaLockRotation
 import com.blissless.tensei.viewmodel.startMangaChapter
 import com.blissless.tensei.viewmodel.updateMangaChapterPages
 import com.blissless.tensei.viewmodel.updateMangaScrollProgress
@@ -82,10 +89,18 @@ fun MangaReaderScreen(
     onOpenSettings: () -> Unit = {}
 ) {
     android.util.Log.d("MangaReader", "MangaReaderScreen compose: manga.id=${manga.id} title='${manga.title}' initialChapterIndex=$initialChapterIndex")
+    val context = LocalContext.current
+    // The reader is hosted in a Dialog, so LocalContext is the dialog's context (a
+    // ContextThemeWrapper), NOT an Activity. Walk the wrapper chain to find the real
+    // Activity so requestedOrientation changes actually take effect.
+    val activity = context.findActivity()
     DisposableEffect(Unit) {
         android.util.Log.d("MangaReader", "READER COMPOSED (disposable effect) manga.id=${manga.id}")
         onDispose {
             android.util.Log.d("MangaReader", "READER DISPOSED / LEAVING COMPOSITION manga.id=${manga.id} — screen is being removed (navigation close OR crash recovery)")
+            // Release any rotation lock applied by the reader so the rest of the app
+            // goes back to following the system orientation setting.
+            applyReaderRotationLock(activity, false)
             // Refresh the home Continue Reading card with the latest scroll progress
             // when leaving the reader mid-chapter.
             viewModel.refreshMangaTracking()
@@ -118,6 +133,14 @@ fun MangaReaderScreen(
     val selectedExtension by viewModel.selectedExtensionAuthority.collectAsState()
     val showPageIndicator by viewModel.mangaPageIndicator.collectAsState()
     val syncThreshold by viewModel.mangaSyncThreshold.collectAsState()
+    val lockRotation by viewModel.mangaLockRotation.collectAsState()
+
+    // Lock/unlock the screen rotation to the current orientation while reading.
+    // Runs on entry (with the persisted setting) and every time the toggle changes.
+    LaunchedEffect(lockRotation) {
+        android.util.Log.d("MangaReader", "ROTATION LOCK ${if (lockRotation) "ON" else "OFF"}")
+        applyReaderRotationLock(activity, lockRotation)
+    }
 
     android.util.Log.d("MangaReader", "MangaReaderScreen state: chapters.size=${chapters.size} showChapterList=$showChapterList currentChapterIndex=$currentChapterIndex chapterImages=${chapterImages?.size ?: "null"}")
 
@@ -249,7 +272,7 @@ fun MangaReaderScreen(
                     totalChapters = chapters.size,
                     currentIndex = currentChapterIndex,
                     scrollProgress = scrollProgress,
-                    restoreProgress = if (currentChapterIndex == manga.progress - 1) manga.scrollProgress else -1f,
+                    restoreProgress = if (currentChapterIndex == manga.progress) manga.scrollProgress else -1f,
                     showControls = showControls,
                     onScrollProgress = {
                         viewModel.onMangaScrollProgress(
@@ -424,6 +447,17 @@ fun MangaReaderScreen(
                         .background(Color.Black.copy(alpha = 0.95f))
                         .padding(horizontal = 16.dp, vertical = 10.dp)
                 ) {
+                    IconButton(
+                        onClick = { viewModel.setMangaLockRotation(!lockRotation) },
+                        modifier = Modifier.align(Alignment.CenterStart).size(32.dp)
+                    ) {
+                        Icon(
+                            if (lockRotation) Icons.Default.Lock else Icons.Default.LockOpen,
+                            contentDescription = "Toggle rotation lock",
+                            tint = if (lockRotation) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.5f),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                     ReaderModeSegmentedToggle(
                         currentMode = readerMode,
                         onSelect = { mode ->
@@ -1476,4 +1510,28 @@ private fun extractChapterNum(title: String): String {
         }
     }
     return "?"
+}
+
+// Locks the screen to the current orientation family while the reader is open, and
+// releases the lock (back to system auto-rotate) when disabled or on exit.
+private fun applyReaderRotationLock(activity: Activity?, enabled: Boolean) {
+    if (activity == null) return
+    if (!enabled) {
+        activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        return
+    }
+    @Suppress("DEPRECATION")
+    val rotation = activity.windowManager.defaultDisplay.rotation
+    activity.requestedOrientation = when (rotation) {
+        Surface.ROTATION_90, Surface.ROTATION_270 -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        else -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+    }
+}
+
+// Walks the ContextWrapper chain (e.g. a Dialog's ContextThemeWrapper) up to the host
+// Activity. Returns null when no Activity is reachable.
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }

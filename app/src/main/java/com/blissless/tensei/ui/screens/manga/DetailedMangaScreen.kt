@@ -144,6 +144,11 @@ import com.blissless.tensei.viewmodel.updateMangaStatus
 import com.blissless.tensei.viewmodel.updateMangaProgress
 import com.blissless.tensei.viewmodel.removeMangaTracking
 import com.blissless.tensei.viewmodel.selectedExtensionAuthority
+import com.blissless.tensei.viewmodel.mangaCurrentlyReading
+import com.blissless.tensei.viewmodel.mangaPlanningToRead
+import com.blissless.tensei.viewmodel.mangaCompleted
+import com.blissless.tensei.viewmodel.mangaPaused
+import com.blissless.tensei.viewmodel.mangaDropped
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Locale
@@ -165,7 +170,7 @@ fun DetailedMangaScreen(
     autoShowChapters: Boolean = false,
     onDismiss: () -> Unit,
     onSwipeToClose: () -> Unit = {},
-    onUpdateStatus: (String?) -> Unit = {},
+    onUpdateStatus: (String?, Int?) -> Unit = { _, _ -> },
     onUpdateProgress: (Int) -> Unit = {},
     onRemove: () -> Unit = {},
     onRelationClick: (MangaRelation) -> Unit = {},
@@ -197,6 +202,18 @@ fun DetailedMangaScreen(
     // Reactive favorite state from AniList (overrides the static isFavorite parameter)
     val isMangaFavorited = manga.id in favoritedMangaIds
 
+    // Live status/progress from the local tracking lists so the status dialog and
+    // status chip update immediately after a change (no need to reopen the screen).
+    val currentlyReadingManga by viewModel.mangaCurrentlyReading.collectAsState()
+    val planningToReadManga by viewModel.mangaPlanningToRead.collectAsState()
+    val completedManga by viewModel.mangaCompleted.collectAsState()
+    val pausedManga by viewModel.mangaPaused.collectAsState()
+    val droppedManga by viewModel.mangaDropped.collectAsState()
+    val liveTrack = (currentlyReadingManga + planningToReadManga + completedManga + pausedManga + droppedManga)
+        .find { it.id == manga.id }
+    val liveStatus = liveTrack?.listStatus
+    val liveProgress = liveTrack?.progress ?: currentProgress ?: manga.progress
+
     var showStatusDialog by remember { mutableStateOf(false) }
     var showDownloadDialog by remember { mutableStateOf(false) }
     var selectedTagForDescription by remember { mutableStateOf<TagData?>(null) }
@@ -212,11 +229,6 @@ fun DetailedMangaScreen(
                 onStartReader(-1)
             }
         }
-    }
-
-    var displayProgress by remember { mutableIntStateOf(currentProgress ?: manga.progress) }
-    LaunchedEffect(currentProgress, manga.progress) {
-        displayProgress = currentProgress ?: manga.progress
     }
 
     val slideOffset = remember { Animatable(1000f) }
@@ -261,8 +273,8 @@ fun DetailedMangaScreen(
 
     // Blank listStatus (default) means the user has no status — normalize to null so the
     // "Add to List" section doesn't show a stale chip or "0 / x" progress.
-    val statusToCheck = (currentStatus ?: manga.listStatus).takeIf { it.isNotBlank() }
-    val statusProgress = displayProgress
+    val statusToCheck = (liveStatus ?: currentStatus ?: manga.listStatus).takeIf { it.isNotBlank() }
+    val statusProgress = liveProgress
     val totalCh = manga.totalChapters
 
     val displayData = detail ?: manga.asDetail()
@@ -624,7 +636,7 @@ fun DetailedMangaScreen(
                                 Icon(Icons.Default.PlayArrow, null, Modifier.size(20.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    if (displayProgress > 0) "Read Now" else "Start Reading",
+                                    if (liveProgress > 0) "Read Now" else "Start Reading",
                                     fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge
                                 )
                             }
@@ -1268,8 +1280,8 @@ fun DetailedMangaScreen(
             currentProgress = statusProgress,
             totalChapters = totalCh,
             onUpdate = { status, progress ->
-                onUpdateStatus(status)
-                viewModel.updateMangaStatus(manga.id, status, progress)
+                android.util.Log.d("MangaSyncDebug", "MangaStatusDialog onUpdate: mangaId=${manga.id} status='$status' progress=$progress")
+                onUpdateStatus(status, progress)
                 if (progress != null) {
                     onUpdateProgress(progress)
                     viewModel.updateMangaProgress(manga.id, progress.toFloat())
@@ -1277,6 +1289,7 @@ fun DetailedMangaScreen(
                 showStatusDialog = false
             },
             onRemove = {
+                android.util.Log.d("MangaSyncDebug", "MangaStatusDialog onRemove: mangaId=${manga.id}")
                 onRemove()
                 viewModel.removeMangaTracking(manga.id)
                 showStatusDialog = false

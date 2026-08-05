@@ -120,6 +120,7 @@ import com.blissless.tensei.viewmodel.setKeepDownloadedFiles
 import com.blissless.tensei.viewmodel.setMangaReaderMode
 import com.blissless.tensei.viewmodel.setMangaDataSaver
 import com.blissless.tensei.viewmodel.setMangaPageIndicator
+import com.blissless.tensei.viewmodel.setMangaLockRotation
 import com.blissless.tensei.viewmodel.setMangaSyncThreshold
 import com.blissless.tensei.viewmodel.setStreamMethod
 import com.blissless.tensei.viewmodel.setPreferredCategory
@@ -1291,6 +1292,7 @@ private fun ReaderSettingsPage(
 ) {
     val readerMode by viewModel.mangaReaderMode.collectAsState()
     val showPageIndicator by viewModel.mangaPageIndicator.collectAsState()
+    val lockRotation by viewModel.mangaLockRotation.collectAsState()
     val syncThreshold by viewModel.mangaSyncThreshold.collectAsState()
     val installedMangaExtensions by viewModel.installedExtensions.collectAsState()
     val selectedMangaExtension by viewModel.selectedExtensionAuthority.collectAsState()
@@ -1346,6 +1348,17 @@ private fun ReaderSettingsPage(
                 description = "Show current page number in the bottom-right corner while reading.",
                 checked = showPageIndicator,
                 onCheckedChange = { viewModel.setMangaPageIndicator(it) }
+            )
+            HorizontalDivider(
+                modifier = Modifier.padding(start = 54.dp),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.15f),
+                thickness = 0.5.dp
+            )
+            SettingsToggle(
+                title = "Lock Rotation",
+                description = "Keep the screen in its current orientation while reading.",
+                checked = lockRotation,
+                onCheckedChange = { viewModel.setMangaLockRotation(it) }
             )
         }
 

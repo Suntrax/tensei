@@ -60,6 +60,7 @@ class MangaTrackManager(context: Context) {
     }
 
     fun markChapterComplete(mangaId: Int, chapter: MangaChapter) {
+        android.util.Log.d("MangaSyncDebug", "track.markChapterComplete mangaId=$mangaId chapterNumber=${chapter.chapterNumber}")
         val tracks = getTracks().toMutableList()
         val index = tracks.indexOfFirst { it.mangaId == mangaId }
         val newProgress = if (chapter.chapterNumber > 0f) chapter.chapterNumber else 1f
@@ -121,6 +122,7 @@ class MangaTrackManager(context: Context) {
     }
 
     fun updateChapterProgress(mangaId: Int, progress: Float) {
+        android.util.Log.d("MangaSyncDebug", "track.updateChapterProgress mangaId=$mangaId progress=$progress")
         val tracks = getTracks().toMutableList()
         val index = tracks.indexOfFirst { it.mangaId == mangaId }
         if (index >= 0) {
@@ -139,6 +141,7 @@ class MangaTrackManager(context: Context) {
     }
 
     fun updateTrackingStatus(mangaId: Int, status: String) {
+        android.util.Log.d("MangaSyncDebug", "track.updateTrackingStatus mangaId=$mangaId status='$status'")
         val tracks = getTracks().toMutableList()
         val index = tracks.indexOfFirst { it.mangaId == mangaId }
         if (index >= 0) {
@@ -176,6 +179,20 @@ class MangaTrackManager(context: Context) {
         val index = tracks.indexOfFirst { it.mangaId == mangaId }
         if (index >= 0) {
             tracks[index] = tracks[index].copy(currentChapterPages = pages)
+        }
+        saveTracks(tracks)
+    }
+
+    /**
+     * Clear the in-chapter reading state (scroll position + current chapter page count).
+     * Used when dismissing a "Continue Reading" card so the manga leaves the Continue
+     * Reading row while remaining tracked in its status list.
+     */
+    fun clearChapterProgress(mangaId: Int) {
+        val tracks = getTracks().toMutableList()
+        val index = tracks.indexOfFirst { it.mangaId == mangaId }
+        if (index >= 0) {
+            tracks[index] = tracks[index].copy(scrollProgress = 0f, currentChapterPages = 0)
         }
         saveTracks(tracks)
     }

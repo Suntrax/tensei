@@ -122,6 +122,7 @@ import com.blissless.tensei.viewmodel.setSwipeVolume
 import com.blissless.tensei.viewmodel.updateMangaStatus
 import com.blissless.tensei.viewmodel.updateMangaProgress
 import com.blissless.tensei.viewmodel.removeMangaTracking
+import com.blissless.tensei.viewmodel.dismissMangaContinueReading
 import com.blissless.tensei.viewmodel.isMangaFavorited
 import com.blissless.tensei.viewmodel.clearMangaDetail
 import com.blissless.tensei.viewmodel.selectedExtensionAuthority
@@ -1624,8 +1625,8 @@ fun MainScreen(
                     popMangaDetail()
                 }
             },
-            onUpdateStatus = { status ->
-                if (status != null) viewModel.updateMangaStatus(manga.id, status)
+            onUpdateStatus = { status, progress ->
+                if (status != null) viewModel.updateMangaStatus(manga.id, status, progress)
             },
             onUpdateProgress = { progress ->
                 viewModel.updateMangaProgress(manga.id, progress.toFloat())
@@ -2504,8 +2505,8 @@ fun MainScreen(
                                 }
                             },
                             onMangaDismissClick = { manga ->
-                                android.util.Log.d("MangaNav", "HOME onMangaDismiss: removing local track for id=${manga.id} title='${manga.title}'")
-                                viewModel.removeMangaTracking(manga.id)
+                                android.util.Log.d("MangaNav", "HOME onMangaDismiss: clearing continue-reading state for id=${manga.id} title='${manga.title}'")
+                                viewModel.dismissMangaContinueReading(manga.id)
                             },
                             playbackDurations = playbackDurations,
                             startedAt = startedAt

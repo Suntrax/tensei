@@ -749,6 +749,7 @@ fun MainViewModel.clearChapterImages() {
  * spam/rate-limit the API (which silently breaks later updates, including manual status changes).
  */
 fun MainViewModel.markMangaChapterRead(mangaId: Int, chapter: MangaChapter, mangaTitle: String = "", mangaCover: String = "") {
+    android.util.Log.d("MangaSyncDebug", "markMangaChapterRead mangaId=$mangaId chapterNumber=${chapter.chapterNumber} title='$mangaTitle'")
     // Ensure a track exists so progress is recorded for first-time readers
     mangaTrackManager?.ensureTrack(mangaId, mangaTitle, mangaCover)
     mangaTrackManager?.markChapterComplete(mangaId, chapter)
@@ -771,19 +772,101 @@ fun MainViewModel.refreshMangaTracking() {
 }
 
 fun MainViewModel.updateMangaProgress(mangaId: Int, progress: Float) {
+    android.util.Log.d("MangaSyncDebug", "updateMangaProgress mangaId=$mangaId progress=$progress")
     mangaTrackManager?.updateChapterProgress(mangaId, progress)
     loadLocalMangaTracking()
 }
 
-// Pending AniList progress update (debounced, matching oni's 3-second delay)
-private var pendingAnilistMangaUpdate: Job? = null
+// ─── Manga → AniList sync queue (local-first, debounced) ──────────────
+// Mirrors the anime queueSync/executePendingSyncs pattern: the UI is updated
+// immediately from local tracking and the AniList mutation is pushed in the
+// background after a short debounce. Rapid changes for the same manga coalesce
+// into a single mutation (status/progress fields merge, latest non-null wins).
+// Failed pushes are re-queued so they retry on the next debounce cycle.
+
+private data class PendingMangaSync(
+    val type: String,
+    val mediaId: Int,
+    val status: String? = null,
+    val progress: Int? = null,
+    val entryId: Int? = null
+)
+
+private val pendingMangaSyncs = mutableMapOf<Int, PendingMangaSync>()
+private var mangaSyncJob: Job? = null
+
+private fun MainViewModel.queueMangaSync(
+    mediaId: Int,
+    type: String,
+    status: String? = null,
+    progress: Int? = null,
+    entryId: Int? = null
+) {
+    val existing = pendingMangaSyncs[mediaId]
+    pendingMangaSyncs[mediaId] = PendingMangaSync(
+        type = type,
+        mediaId = mediaId,
+        status = status ?: existing?.status,
+        progress = progress ?: existing?.progress,
+        entryId = entryId ?: existing?.entryId
+    )
+    mangaSyncJob?.cancel()
+    mangaSyncJob = viewModelScope.launch {
+        delay(MainViewModel.SYNC_DEBOUNCE_MS)
+        executeMangaPendingSyncs()
+    }
+}
+
+private suspend fun MainViewModel.executeMangaPendingSyncs() {
+    val syncs = pendingMangaSyncs.toMap()
+    pendingMangaSyncs.clear()
+    if (syncs.isEmpty()) return
+
+    val token = authToken.value
+    var didPush = false
+    if (token != null) {
+        for ((_, sync) in syncs) {
+            val ok = when (sync.type) {
+                "status", "progress" -> {
+                    val status = sync.status
+                        ?: mangaTrackManager?.getTrack(sync.mediaId)?.status
+                        ?: "CURRENT"
+                    mangaRepository?.updateMangaStatus(sync.mediaId, status, token, sync.progress)
+                }
+                "delete" -> {
+                    val entryId = sync.entryId
+                    if (entryId != null) mangaRepository?.deleteMangaListEntry(entryId, token) else null
+                }
+                else -> null
+            }
+            android.util.Log.d("MangaSyncDebug", "executeMangaPendingSyncs: type=${sync.type} mediaId=${sync.mediaId} ok=$ok")
+            if (ok == true) {
+                didPush = true
+            } else {
+                // Re-queue the failed sync so it retries on the next debounce cycle
+                pendingMangaSyncs[sync.mediaId] = sync
+            }
+        }
+    } else {
+        android.util.Log.d("MangaSyncDebug", "executeMangaPendingSyncs: skipped — no auth token")
+    }
+
+    if (didPush) {
+        // Refresh from AniList so local + remote stay in sync
+        if (_userId.value != null) {
+            fetchMangaLists()
+        }
+        loadLocalMangaTracking()
+    }
+}
 
 /**
  * Handle scroll progress from the reader. This mirrors oni's onChapterScrollProgress flow:
  * - Always save scroll progress locally
  * - When scroll reaches the threshold (default 90%), mark the chapter as read
- * - If the chapter number is an integer (not partial like 12.5), schedule an AniList
- *   progress update with a 3-second debounce (so rapid chapter flips don't spam the API)
+ * - If the chapter number is an integer (not partial like 12.5), push the new progress
+ *   to AniList through the debounced background sync queue (rapid chapter flips coalesce
+ *   into a single mutation)
  *
  * @param mangaId The AniList manga ID
  * @param chapter The chapter being read
@@ -801,29 +884,24 @@ fun MainViewModel.onMangaScrollProgress(
     if (chapter == null) return
     if (!scrollPercent.isFinite()) return
 
+    android.util.Log.d("MangaSyncDebug", "onScrollProgress mangaId=$mangaId scrollPercent=$scrollPercent threshold=${userPreferences.mangaSyncThreshold.value}")
+
     // Always save scroll progress locally
     updateMangaScrollProgress(mangaId, scrollPercent)
 
     val threshold = userPreferences.mangaSyncThreshold.value / 100f
     if (scrollPercent >= threshold) {
+        android.util.Log.d("MangaSyncDebug", "THRESHOLD CROSSED mangaId=$mangaId scrollPercent=$scrollPercent chapterNumber=${chapter.chapterNumber}")
         // Mark chapter as read (creates track if needed, updates local progress)
         markMangaChapterRead(mangaId, chapter, mangaTitle, mangaCover)
 
-        // Schedule AniList progress update with 3-second debounce
+        // Schedule the AniList progress push through the debounced sync queue.
         // Only for integer chapter numbers (skip partial chapters like 12.5)
         val chapterNum = chapter.chapterNumber
-        if (chapterNum > 0f && chapterNum == chapterNum.toInt().toFloat()) {
-            pendingAnilistMangaUpdate?.cancel()
-            pendingAnilistMangaUpdate = viewModelScope.launch {
-                delay(3000)
-                val token = authToken.value ?: return@launch
-                mangaRepository?.updateMangaStatus(
-                    mediaId = mangaId,
-                    status = "CURRENT",
-                    token = token,
-                    progress = chapterNum.toInt()
-                )
-            }
+        val isIntegerChapter = chapterNum > 0f && chapterNum == chapterNum.toInt().toFloat()
+        android.util.Log.d("MangaSyncDebug", "chapterNum=$chapterNum isIntegerChapter=$isIntegerChapter")
+        if (isIntegerChapter) {
+            queueMangaSync(mangaId, "progress", progress = chapterNum.toInt())
         }
     }
 }
@@ -847,19 +925,31 @@ fun MainViewModel.updateMangaChapterPages(mangaId: Int, pages: Int) {
 
 fun MainViewModel.updateMangaStatus(mangaId: Int, status: String, progress: Int? = null) {
     val effectiveStatus = status.ifBlank { "CURRENT" }
+    android.util.Log.d("MangaSyncDebug", "updateMangaStatus mangaId=$mangaId status='$status' effectiveStatus='$effectiveStatus' progress=$progress")
+    // Local-first: apply the change immediately so the UI reacts instantly, then
+    // queue the AniList push for the background debounced sync.
     mangaTrackManager?.updateTrackingStatus(mangaId, effectiveStatus)
-    loadLocalMangaTracking()
-
-    viewModelScope.launch {
-        val token = authToken.value
-        if (token != null) {
-            mangaRepository?.updateMangaStatus(mangaId, effectiveStatus, token, progress)
-        }
+    if (progress != null) {
+        mangaTrackManager?.updateChapterProgress(mangaId, progress.toFloat())
     }
+    loadLocalMangaTracking()
+    queueMangaSync(mangaId, "status", status = effectiveStatus, progress = progress)
 }
 
 fun MainViewModel.removeMangaTracking(mangaId: Int) {
+    android.util.Log.d("MangaSyncDebug", "removeMangaTracking mangaId=$mangaId")
     mangaTrackManager?.removeTrack(mangaId)
+    loadLocalMangaTracking()
+}
+
+/**
+ * Dismiss a manga from the Continue Reading row only. Clears the in-chapter reading
+ * state so the resume card disappears, but keeps the manga in its status list
+ * (mirrors anime's removeContinueWatchingEntry, which doesn't untrack the anime).
+ */
+fun MainViewModel.dismissMangaContinueReading(mangaId: Int) {
+    android.util.Log.d("MangaSyncDebug", "dismissMangaContinueReading mangaId=$mangaId")
+    mangaTrackManager?.clearChapterProgress(mangaId)
     loadLocalMangaTracking()
 }
 

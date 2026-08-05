@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Check
@@ -38,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -152,9 +154,9 @@ fun MangaStatusDialog(
                 OutlinedTextField(
                     value = selectedProgress,
                     onValueChange = { newValue ->
-                        val filtered = newValue.filter { c -> c.isDigit() || c == '.' }
+                        val filtered = newValue.filter { c -> c.isDigit() }
                         val clamped = if (totalChapters > 0) {
-                            filtered.toDoubleOrNull()?.coerceIn(0.0, totalChapters.toDouble())?.toString() ?: filtered
+                            filtered.toIntOrNull()?.coerceIn(0, totalChapters)?.toString() ?: filtered
                         } else {
                             filtered
                         }
@@ -162,6 +164,7 @@ fun MangaStatusDialog(
                     },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     placeholder = { Text("Enter last read chapter", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)) },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = MaterialTheme.colorScheme.onSurface,
@@ -179,9 +182,7 @@ fun MangaStatusDialog(
                         if (markedForRemoval) {
                             onRemove()
                         } else {
-                            val progress = selectedProgress.toDoubleOrNull()?.let {
-                                if (it % 1.0 == 0.0) it.toInt() else it.toInt()
-                            }
+                            val progress = selectedProgress.toIntOrNull()
                             onUpdate(selectedStatus, progress)
                         }
                     },

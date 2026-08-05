@@ -115,6 +115,9 @@ fun MainViewModel.setMangaDataSaver(enabled: Boolean) =
 fun MainViewModel.setMangaPageIndicator(enabled: Boolean) =
     userPreferences.setMangaPageIndicator(enabled)
 
+fun MainViewModel.setMangaLockRotation(enabled: Boolean) =
+    userPreferences.setMangaLockRotation(enabled)
+
 fun MainViewModel.setDefaultMagnetExtension(authority: String) =
     userPreferences.setDefaultMagnetExtension(authority)
 

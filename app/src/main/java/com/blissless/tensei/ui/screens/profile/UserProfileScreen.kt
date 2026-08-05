@@ -1,7 +1,6 @@
 package com.blissless.tensei.ui.screens.profile
 
 import android.content.Intent
-import android.util.Log
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
@@ -213,7 +212,6 @@ fun UserProfileScreen(
                 }
                 statuses.add(activity.status)
                 progress.add(episodeDisplay ?: "")
-                Log.d("ProfileHistory", "anime status=${activity.status} rawProgress=${activity.progress} display=${episodeDisplay}")
                 JikanHistoryEntry(
                     malId = activity.mediaId,
                     title = activity.mediaTitle,
@@ -1142,7 +1140,6 @@ private fun MangaActivityItem(
 
     val progressSuffix = formatMangaProgress(node.progress)
     val statusText = if (progressSuffix != null) "$statusLabel $progressSuffix" else statusLabel
-    Log.d("ProfileHistory", "manga status=${node.status} rawProgress=${node.progress} display=$statusText")
 
     Card(
         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick),

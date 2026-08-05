@@ -572,23 +572,31 @@ fun HomeScreen(
 
                         // Manga "Continue Reading" — direct resume cards, same style as anime's
                         // Continue Watching, placed at the top alongside it.
-                        if (mangaContinueReading.isNotEmpty()) {
+                        // Only show cards for a chapter that is actively in progress — hide
+                        // entries whose current chapter hasn't been opened (no page count) or
+                        // was scrolled to the end (finished, e.g. 25/25).
+                        val activeMangaContinueReading = mangaContinueReading.filter { manga ->
+                            val pageTotal = manga.currentChapterPages
+                            val scrollProgress = manga.scrollProgress.coerceIn(0f, 1f)
+                            pageTotal > 1 && ((scrollProgress * pageTotal).toInt() + 1) in 1 until pageTotal
+                        }
+                        if (activeMangaContinueReading.isNotEmpty()) {
                             SectionHeader(
                                 title = "Continue Reading",
                                 icon = Icons.Default.Bookmark,
-                                count = mangaContinueReading.size,
+                                count = activeMangaContinueReading.size,
                                 iconTint = HomeStatusColors.getColor("CURRENT"),
                                 onClick = {
                                     statusListTitle = "Continue Reading"
                                     statusListIcon = Icons.Default.PlayArrow
                                     statusListType = "CURRENT"
-                                    statusListManga = mangaContinueReading
+                                    statusListManga = activeMangaContinueReading
                                     statusListIsManga = true
                                     showStatusListScreen = true
                                 }
                             )
                             MangaContinueReadingRow(
-                                mangaList = mangaContinueReading,
+                                mangaList = activeMangaContinueReading,
                                 isOled = isOled,
                                 onResumeClick = onMangaContinueReadingClick,
                                 onDismissClick = onMangaDismissClick
@@ -1384,8 +1392,10 @@ private fun MangaContinueReadingCard(
     val scrollProgress = manga.scrollProgress.coerceIn(0f, 1f)
     val hasScrollProgress = scrollProgress > 0f
     val pageTotal = manga.currentChapterPages
-    val pagesLeft = if (pageTotal > 0) {
-        (pageTotal - (scrollProgress * pageTotal).toInt()).coerceIn(0, pageTotal)
+    // The saved scroll fraction maps to the item index the reader restores to
+    // (0-based); the on-screen page number is that index + 1.
+    val currentPage = if (pageTotal > 0) {
+        ((scrollProgress * pageTotal).toInt() + 1).coerceIn(1, pageTotal)
     } else {
         null
     }
@@ -1396,7 +1406,7 @@ private fun MangaContinueReadingCard(
     }
     val barFraction = if (hasScrollProgress) scrollProgress else overallProgress
     val progressLabel = when {
-        pagesLeft != null -> "${(pageTotal - pagesLeft).coerceAtLeast(0)} of $pageTotal pages"
+        currentPage != null -> "$currentPage of $pageTotal pages"
         hasScrollProgress -> "${(scrollProgress * 100).toInt()}% through Ch. $nextChapter"
         manga.totalChapters > 0 -> "${manga.progress} / ${manga.totalChapters} ch."
         else -> "Ch. $nextChapter"
@@ -1451,7 +1461,7 @@ private fun MangaContinueReadingCard(
                         color = Color.Black.copy(alpha = 0.65f)
                     ) {
                         Text(
-                            text = pagesLeft?.let { "$it pages left" } ?: "Ch. $nextChapter",
+                            text = "Ch. $nextChapter",
                             style = MaterialTheme.typography.labelMedium,
                             color = Color.White,
                             fontWeight = FontWeight.Bold,

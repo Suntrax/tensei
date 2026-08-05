@@ -67,7 +67,10 @@ class MangaRepository {
         )
         android.util.Log.d(TAG, "executeQuery: result.data=${result.data != null} result.error=${result.error?.message} fromCache=${result.fromCache}")
         if (result.data != null) {
-            android.util.Log.d(TAG, "executeQuery: raw response (first 300 chars): ${result.data.take(300)}")
+            // GraphQL APIs return HTTP 200 with an "errors" array on failure, so a non-null
+            // body doesn't mean the mutation succeeded. Log whether errors are buried in the body.
+            val hasGraphQLErrors = result.data.contains("\"errors\"")
+            android.util.Log.d(TAG, "executeQuery: raw response (first 400 chars): ${result.data.take(400)} graphqlErrorsInBody=$hasGraphQLErrors")
         }
         return result.data
     }
@@ -581,7 +584,7 @@ class MangaRepository {
     }
     suspend fun updateMangaStatus(mediaId: Int, status: String, token: String, progress: Int? = null, progressVolumes: Int? = null, score: Int? = null): Boolean {
         val query = """
-            mutation (${'$'}mediaId: Int, ${'$'}status: MediaListStatus, ${'$'}progress: Int, ${'$'}progressVolumes: Int, ${'$'}score: Int) {
+            mutation (${'$'}mediaId: Int, ${'$'}status: MediaListStatus, ${'$'}progress: Int, ${'$'}progressVolumes: Int, ${'$'}score: Float) {
                 SaveMediaListEntry(mediaId: ${'$'}mediaId, status: ${'$'}status, progress: ${'$'}progress, progressVolumes: ${'$'}progressVolumes, score: ${'$'}score) { id }
             }
         """.trimIndent()
@@ -589,7 +592,10 @@ class MangaRepository {
         if (progress != null) vars["progress"] = progress
         if (progressVolumes != null) vars["progressVolumes"] = progressVolumes
         if (score != null) vars["score"] = score
-        val ok = executeQuery(query, vars, token, useCache = false) != null
+        val raw = executeQuery(query, vars, token, useCache = false)
+        // AniList returns HTTP 200 with an "errors" array when the mutation is rejected,
+        // so a non-null body alone is not success.
+        val ok = raw != null && !raw.contains("\"errors\"")
         if (ok) graphQLClient.clearCache()
         return ok
     }
@@ -598,7 +604,8 @@ class MangaRepository {
         val query = """
             mutation (${'$'}id: Int) { DeleteMediaListEntry(id: ${'$'}id) { deleted } }
         """.trimIndent()
-        val ok = executeQuery(query, mapOf("id" to entryId), token, useCache = false) != null
+        val raw = executeQuery(query, mapOf("id" to entryId), token, useCache = false)
+        val ok = raw != null && !raw.contains("\"errors\"")
         if (ok) graphQLClient.clearCache()
         return ok
     }
@@ -607,7 +614,8 @@ class MangaRepository {
         val query = """
             mutation (${'$'}mediaId: Int) { ToggleFavourite(mangaId: ${'$'}mediaId) { manga { favourites } } }
         """.trimIndent()
-        val ok = executeQuery(query, mapOf("mediaId" to mediaId), token, useCache = false) != null
+        val raw = executeQuery(query, mapOf("mediaId" to mediaId), token, useCache = false)
+        val ok = raw != null && !raw.contains("\"errors\"")
         if (ok) graphQLClient.clearCache()
         return ok
     }
