@@ -141,6 +141,11 @@ fun MangaReaderScreen(
     var showChapterList by remember { mutableStateOf(initialChapterIndex < 0) }
     var scrollProgress by remember { mutableFloatStateOf(0f) }
     var currentPageIndex by remember { mutableIntStateOf(0) }
+    // True while the "Next Chapter" button is shown (reader settled at the end of a chapter).
+    var showNextChapterButton by remember { mutableStateOf(false) }
+    // True when the current chapter was opened via the next-chapter button — suppresses restoring
+    // the saved (stale) scroll position so the new chapter always opens at the top.
+    var suppressResumeRestore by remember { mutableStateOf(false) }
     val readIndices = remember { mutableStateOf((0 until manga.progress.coerceAtLeast(0)).toSet()) }
     val scope = rememberCoroutineScope()
 
@@ -155,7 +160,7 @@ fun MangaReaderScreen(
     val syncThreshold by viewModel.mangaSyncThreshold.collectAsState()
     val lockRotation by viewModel.mangaLockRotation.collectAsState()
     val fullscreen by viewModel.mangaFullscreen.collectAsState()
-    val autoAdvance by viewModel.mangaAutoAdvance.collectAsState()
+    val nextChapterButton by viewModel.mangaAutoAdvance.collectAsState()
 
     // Lock/unlock the screen rotation to the current orientation while reading.
     // Runs on entry (with the persisted setting) and every time the toggle changes.
@@ -175,8 +180,8 @@ fun MangaReaderScreen(
     }
 
     // Prefetch the NEXT chapter's image list once the reader nears the end of the current
-    // chapter, so auto-advance (and manual next-chapter) switches instantly instead of
-    // waiting on a scrape round-trip.
+    // chapter, so the next-chapter button (and manual next-chapter) switches instantly instead
+    // of waiting on a scrape round-trip.
     LaunchedEffect(currentPageIndex, scrollProgress, currentChapterIndex, chapterImages, readerMode) {
         val images = chapterImages ?: return@LaunchedEffect
         if (images.isEmpty()) return@LaunchedEffect
@@ -245,8 +250,8 @@ fun MangaReaderScreen(
         }
     }
 
-    fun selectChapter(index: Int) {
-        android.util.Log.d("MangaReader", "selectChapter(index=$index) chapters.size=${chapters.size}")
+    fun selectChapter(index: Int, startAtTop: Boolean = false) {
+        android.util.Log.d("MangaReader", "selectChapter(index=$index startAtTop=$startAtTop) chapters.size=${chapters.size}")
         val chapter = chapters.getOrNull(index) ?: run {
             android.util.Log.w("MangaReader", "selectChapter: index $index out of range, IGNORED")
             return
@@ -260,35 +265,52 @@ fun MangaReaderScreen(
         readIndices.value = readIndices.value + index
         currentChapterIndex = index
         currentPageIndex = 0
+        scrollProgress = 0f
+        suppressResumeRestore = startAtTop
+        showNextChapterButton = false
+        // Advancing to the next chapter (via the next-chapter button): clear the saved scroll
+        // position so the new chapter starts at the top (both in-reader and for a later Continue
+        // Reading resume) instead of restoring the bottom of the just-finished chapter.
+        if (startAtTop) {
+            viewModel.updateMangaScrollProgress(manga.id, 0f)
+        }
         showChapterList = false
         showControls = false
     }
 
-    // Auto-advance to the next chapter when the reader settles on the final page of the
-    // current chapter. Debounced so rapid swipes/scrolling don't trigger it, and skipped
-    // for the last chapter. In vertical-scroll mode it fires only once the user has
-    // scrolled essentially to the very bottom.
-    LaunchedEffect(currentPageIndex, scrollProgress, chapterImages, showChapterList, autoAdvance, readerMode) {
-        if (!autoAdvance || showChapterList || isLastChapter) return@LaunchedEffect
-        val images = chapterImages ?: return@LaunchedEffect
-        if (images.isEmpty()) return@LaunchedEffect
+    // Show a "Next Chapter" button when the reader settles at the end of the current chapter,
+    // in BOTH vertical-scroll and single-page (LTR/RTL) modes. This replaces auto-advance:
+    // nothing is opened automatically — the user taps the button. Debounced so rapid swipes
+    // don't flash it, and hidden whenever the reader leaves the end of the chapter or the
+    // setting is off.
+    LaunchedEffect(currentPageIndex, scrollProgress, chapterImages, showChapterList, nextChapterButton, readerMode, isLastChapter) {
+        if (!nextChapterButton || showChapterList || isLastChapter) {
+            showNextChapterButton = false
+            return@LaunchedEffect
+        }
+        val images = chapterImages
+        if (images == null || images.isEmpty()) {
+            showNextChapterButton = false
+            return@LaunchedEffect
+        }
         val atEnd = if (readerMode == ReaderMode.VERTICAL_SCROLL) {
             currentPageIndex >= images.lastIndex && scrollProgress >= 0.95f
         } else {
             currentPageIndex >= images.lastIndex
         }
-        if (!atEnd) return@LaunchedEffect
-        android.util.Log.d("MangaReader", "AUTO-ADVANCE: end of chapter $currentChapterIndex reached, opening chapter ${currentChapterIndex + 1}")
+        if (!atEnd) {
+            showNextChapterButton = false
+            return@LaunchedEffect
+        }
+        android.util.Log.d("MangaReader", "NEXT-BUTTON: end of chapter $currentChapterIndex reached, showing next-chapter button")
         delay(700)
-        // Re-check after the debounce: still on the final page of the same chapter.
+        // Re-check after the debounce: still at the end of the same chapter.
         val stillAtEnd = if (readerMode == ReaderMode.VERTICAL_SCROLL) {
             currentPageIndex >= images.lastIndex && scrollProgress >= 0.95f
         } else {
             currentPageIndex >= images.lastIndex
         }
-        if (stillAtEnd) {
-            selectChapter(currentChapterIndex + 1)
-        }
+        showNextChapterButton = stillAtEnd
     }
 
     // Retry the current chapter image load (used by the error UI)
@@ -348,7 +370,14 @@ fun MangaReaderScreen(
                     totalChapters = chapters.size,
                     currentIndex = currentChapterIndex,
                     scrollProgress = scrollProgress,
-                    restoreProgress = if (currentChapterIndex == manga.progress) manga.scrollProgress else -1f,
+                    // Restore target for the vertical reader: prefer the LIVE scroll position (so
+                    // switching from a single-page mode back to vertical resumes where you were),
+                    // and fall back to the saved resume position only on the initial entry.
+                    restoreProgress = when {
+                        scrollProgress > 0f -> scrollProgress
+                        !suppressResumeRestore && currentChapterIndex == manga.progress -> manga.scrollProgress
+                        else -> -1f
+                    },
                     showControls = showControls,
                     onScrollProgress = {
                         viewModel.onMangaScrollProgress(
@@ -477,6 +506,40 @@ fun MangaReaderScreen(
                         )
                     }
                 }
+            }
+        }
+
+        // ─── Overlay: "Next Chapter" button ──────────────────────────
+        // Appears after the debounce once the reader settles at the end of a chapter (all modes)
+        // when the Next Chapter Button setting is on. Tapping it opens the next chapter from the
+        // top; scrolling away from the end hides it.
+        AnimatedVisibility(
+            visible = showNextChapterButton && !showChapterList && !isLastChapter,
+            enter = fadeIn(tween(150)),
+            exit = fadeOut(tween(150)),
+            modifier = Modifier.align(Alignment.BottomCenter)
+        ) {
+            Button(
+                onClick = {
+                    android.util.Log.d("MangaReader", "NEXT-BUTTON: tapped, opening chapter ${currentChapterIndex + 1}")
+                    selectChapter(currentChapterIndex + 1, startAtTop = true)
+                },
+                shape = RoundedCornerShape(24.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.95f),
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                ),
+                modifier = Modifier
+                    .padding(bottom = 72.dp)
+                    .height(48.dp)
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Next Chapter")
             }
         }
 

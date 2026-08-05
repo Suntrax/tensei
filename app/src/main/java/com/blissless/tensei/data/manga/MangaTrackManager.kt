@@ -15,9 +15,15 @@ class MangaTrackManager(context: Context) {
 
     fun getAllTracking(): List<MangaTrack> = getTracks()
 
+    /**
+     * Tracks with an in-progress chapter (a saved scroll position or page count) — the source
+     * for the home "Continue Reading" row. Deliberately NOT filtered by tracked status: manually
+     * changing a manga's status (Completed/Planning/etc.) must not yank its resume card out of
+     * the row; only dismissing the card or clearing its chapter progress does that.
+     */
     fun getContinueReading(): List<MangaTrack> =
         getTracks()
-            .filter { it.status == "CURRENT" && (it.scrollProgress > 0f || it.currentChapterPages > 0) }
+            .filter { it.scrollProgress > 0f || it.currentChapterPages > 0 }
             .sortedByDescending { it.progress }
 
     /** Every CURRENT-status track — the source for the home "Currently Reading" row. */
