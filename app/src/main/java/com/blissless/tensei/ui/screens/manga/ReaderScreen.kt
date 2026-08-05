@@ -5,7 +5,12 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
 import android.view.Surface
+import android.view.View
+import android.view.Window
 import androidx.activity.compose.BackHandler
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandVertically
@@ -32,6 +37,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -46,6 +52,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.window.DialogWindowProvider
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -56,6 +64,7 @@ import androidx.compose.ui.unit.toSize
 import com.blissless.tensei.MainViewModel
 import com.blissless.tensei.data.models.MangaChapter
 import com.blissless.tensei.data.models.MangaMedia
+import com.blissless.tensei.viewmodel.clearMangaChapterImagesCache
 import com.blissless.tensei.viewmodel.fetchMangaDetail
 import com.blissless.tensei.viewmodel.hasLoadedMangaChapters
 import com.blissless.tensei.viewmodel.isLoadingMangaChapters
@@ -65,8 +74,11 @@ import com.blissless.tensei.viewmodel.mangaChapterImages
 import com.blissless.tensei.viewmodel.mangaChapterImagesError
 import com.blissless.tensei.viewmodel.mangaChapters
 import com.blissless.tensei.viewmodel.onMangaScrollProgress
+import com.blissless.tensei.viewmodel.prefetchMangaChapterImages
 import com.blissless.tensei.viewmodel.refreshMangaTracking
 import com.blissless.tensei.viewmodel.selectedExtensionAuthority
+import com.blissless.tensei.viewmodel.setMangaAutoAdvance
+import com.blissless.tensei.viewmodel.setMangaFullscreen
 import com.blissless.tensei.viewmodel.setMangaPageIndicator
 import com.blissless.tensei.viewmodel.setMangaReaderMode
 import com.blissless.tensei.viewmodel.setMangaLockRotation
@@ -94,6 +106,10 @@ fun MangaReaderScreen(
     // ContextThemeWrapper), NOT an Activity. Walk the wrapper chain to find the real
     // Activity so requestedOrientation changes actually take effect.
     val activity = context.findActivity()
+    // The reader is hosted in a Dialog, so LocalView is a view inside the dialog's own
+    // window. System-bar control must target THAT window (not the activity's), otherwise
+    // hiding the bars has no visible effect. See applyReaderFullscreen.
+    val view = LocalView.current
     DisposableEffect(Unit) {
         android.util.Log.d("MangaReader", "READER COMPOSED (disposable effect) manga.id=${manga.id}")
         onDispose {
@@ -101,6 +117,10 @@ fun MangaReaderScreen(
             // Release any rotation lock applied by the reader so the rest of the app
             // goes back to following the system orientation setting.
             applyReaderRotationLock(activity, false)
+            // Restore the system bars if the reader hid them.
+            applyReaderFullscreen(view, false)
+            // Drop the prefetch cache so it doesn't hold stale image lists in memory.
+            viewModel.clearMangaChapterImagesCache()
             // Refresh the home Continue Reading card with the latest scroll progress
             // when leaving the reader mid-chapter.
             viewModel.refreshMangaTracking()
@@ -134,12 +154,41 @@ fun MangaReaderScreen(
     val showPageIndicator by viewModel.mangaPageIndicator.collectAsState()
     val syncThreshold by viewModel.mangaSyncThreshold.collectAsState()
     val lockRotation by viewModel.mangaLockRotation.collectAsState()
+    val fullscreen by viewModel.mangaFullscreen.collectAsState()
+    val autoAdvance by viewModel.mangaAutoAdvance.collectAsState()
 
     // Lock/unlock the screen rotation to the current orientation while reading.
     // Runs on entry (with the persisted setting) and every time the toggle changes.
     LaunchedEffect(lockRotation) {
         android.util.Log.d("MangaReader", "ROTATION LOCK ${if (lockRotation) "ON" else "OFF"}")
         applyReaderRotationLock(activity, lockRotation)
+    }
+
+    // Hide/show the system bars (status bar + navigation) on the DIALOG's window while
+    // reading, matching the anime player's fullscreen behavior. The dialog window may not
+    // be attached yet at first composition, so re-apply once shortly after.
+    LaunchedEffect(fullscreen) {
+        android.util.Log.d("MangaReader", "FULLSCREEN ${if (fullscreen) "ON" else "OFF"}")
+        applyReaderFullscreen(view, fullscreen)
+        delay(250)
+        applyReaderFullscreen(view, fullscreen)
+    }
+
+    // Prefetch the NEXT chapter's image list once the reader nears the end of the current
+    // chapter, so auto-advance (and manual next-chapter) switches instantly instead of
+    // waiting on a scrape round-trip.
+    LaunchedEffect(currentPageIndex, scrollProgress, currentChapterIndex, chapterImages, readerMode) {
+        val images = chapterImages ?: return@LaunchedEffect
+        if (images.isEmpty()) return@LaunchedEffect
+        val nearEnd = if (readerMode == ReaderMode.VERTICAL_SCROLL) {
+            scrollProgress >= 0.9f
+        } else {
+            currentPageIndex >= images.lastIndex - 1
+        }
+        if (nearEnd) {
+            val next = chapters.getOrNull(currentChapterIndex + 1) ?: return@LaunchedEffect
+            viewModel.prefetchMangaChapterImages(next, mangaTitle = manga.title, mangaId = manga.id)
+        }
     }
 
     android.util.Log.d("MangaReader", "MangaReaderScreen state: chapters.size=${chapters.size} showChapterList=$showChapterList currentChapterIndex=$currentChapterIndex chapterImages=${chapterImages?.size ?: "null"}")
@@ -213,6 +262,33 @@ fun MangaReaderScreen(
         currentPageIndex = 0
         showChapterList = false
         showControls = false
+    }
+
+    // Auto-advance to the next chapter when the reader settles on the final page of the
+    // current chapter. Debounced so rapid swipes/scrolling don't trigger it, and skipped
+    // for the last chapter. In vertical-scroll mode it fires only once the user has
+    // scrolled essentially to the very bottom.
+    LaunchedEffect(currentPageIndex, scrollProgress, chapterImages, showChapterList, autoAdvance, readerMode) {
+        if (!autoAdvance || showChapterList || isLastChapter) return@LaunchedEffect
+        val images = chapterImages ?: return@LaunchedEffect
+        if (images.isEmpty()) return@LaunchedEffect
+        val atEnd = if (readerMode == ReaderMode.VERTICAL_SCROLL) {
+            currentPageIndex >= images.lastIndex && scrollProgress >= 0.95f
+        } else {
+            currentPageIndex >= images.lastIndex
+        }
+        if (!atEnd) return@LaunchedEffect
+        android.util.Log.d("MangaReader", "AUTO-ADVANCE: end of chapter $currentChapterIndex reached, opening chapter ${currentChapterIndex + 1}")
+        delay(700)
+        // Re-check after the debounce: still on the final page of the same chapter.
+        val stillAtEnd = if (readerMode == ReaderMode.VERTICAL_SCROLL) {
+            currentPageIndex >= images.lastIndex && scrollProgress >= 0.95f
+        } else {
+            currentPageIndex >= images.lastIndex
+        }
+        if (stillAtEnd) {
+            selectChapter(currentChapterIndex + 1)
+        }
     }
 
     // Retry the current chapter image load (used by the error UI)
@@ -472,16 +548,32 @@ fun MangaReaderScreen(
                         },
                         modifier = Modifier.align(Alignment.Center)
                     )
-                    IconButton(
-                        onClick = { viewModel.setMangaPageIndicator(!showPageIndicator) },
-                        modifier = Modifier.align(Alignment.CenterEnd).size(32.dp)
+                    Row(
+                        modifier = Modifier.align(Alignment.CenterEnd),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Icon(
-                            Icons.Default.ViewAgenda,
-                            contentDescription = "Toggle page indicator",
-                            tint = if (showPageIndicator) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.5f),
-                            modifier = Modifier.size(18.dp)
-                        )
+                        IconButton(
+                            onClick = { viewModel.setMangaFullscreen(!fullscreen) },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                if (fullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                                contentDescription = "Toggle fullscreen",
+                                tint = if (fullscreen) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.5f),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        IconButton(
+                            onClick = { viewModel.setMangaPageIndicator(!showPageIndicator) },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.Article,
+                                contentDescription = "Toggle page indicator",
+                                tint = if (showPageIndicator) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.5f),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -1526,6 +1618,33 @@ private fun applyReaderRotationLock(activity: Activity?, enabled: Boolean) {
         Surface.ROTATION_90, Surface.ROTATION_270 -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         else -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
     }
+}
+
+// Hides/shows the system bars (status bar + navigation) on the DIALOG's window. The reader
+// runs inside a Dialog, whose window is separate from the activity's — controlling the
+// activity window has no visible effect while the dialog is on top. Falls back to the
+// activity window only if the dialog window can't be resolved (e.g. pre-attachment).
+private fun applyReaderFullscreen(view: View, fullscreen: Boolean) {
+    val window = view.findDialogWindow()
+        ?: (view.context.findActivity()?.window)
+        ?: return
+    val controller = WindowCompat.getInsetsController(window, window.decorView)
+    if (fullscreen) {
+        controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        controller.hide(WindowInsetsCompat.Type.systemBars())
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+    } else {
+        controller.show(WindowInsetsCompat.Type.systemBars())
+        WindowCompat.setDecorFitsSystemWindows(window, true)
+    }
+}
+
+// Walks the view parent chain looking for the DialogWindowProvider Compose installs in
+// dialogs, returning its window (the dialog's own window).
+private tailrec fun View.findDialogWindow(): Window? = when (val parent = parent) {
+    is DialogWindowProvider -> parent.window
+    is View -> parent.findDialogWindow()
+    else -> null
 }
 
 // Walks the ContextWrapper chain (e.g. a Dialog's ContextThemeWrapper) up to the host

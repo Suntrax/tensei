@@ -435,6 +435,8 @@ class MainViewModel : ViewModel() {
     val mangaImageScaling: StateFlow<String> get() = userPreferences.mangaImageScaling
     val mangaPageIndicator: StateFlow<Boolean> get() = userPreferences.mangaPageIndicator
     val mangaLockRotation: StateFlow<Boolean> get() = userPreferences.mangaLockRotation
+    val mangaFullscreen: StateFlow<Boolean> get() = userPreferences.mangaFullscreen
+    val mangaAutoAdvance: StateFlow<Boolean> get() = userPreferences.mangaAutoAdvance
     val mangaSyncThreshold: StateFlow<Int> get() = userPreferences.mangaSyncThreshold
 
     // Notification tap events

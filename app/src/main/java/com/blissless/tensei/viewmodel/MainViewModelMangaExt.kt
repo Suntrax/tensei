@@ -258,6 +258,22 @@ val MainViewModel.mangaChapterImages: StateFlow<List<String>?> get() = _mangaCha
 private val _mangaChapterImagesError = MutableStateFlow<String?>(null)
 val MainViewModel.mangaChapterImagesError: StateFlow<String?> get() = _mangaChapterImagesError.asStateFlow()
 
+/**
+ * Cached image URL lists keyed by chapterId. Populated by [loadChapterImages] on success and
+ * by [prefetchMangaChapterImages] (which scrapes the NEXT chapter while the reader is near the
+ * end of the current one). Serving from this cache makes chapter transitions — including
+ * auto-advance — instant instead of waiting on a scrape round-trip.
+ */
+private val _mangaChapterImagesCache = MutableStateFlow<Map<String, List<String>>>(emptyMap())
+
+/** Chapter IDs with an in-flight prefetch, to avoid duplicate scrapes. */
+private val _prefetchingChapterIds = mutableSetOf<String>()
+
+fun MainViewModel.clearMangaChapterImagesCache() {
+    _mangaChapterImagesCache.value = emptyMap()
+    _prefetchingChapterIds.clear()
+}
+
 private val _mangaDexId = MutableStateFlow<String?>(null)
 val MainViewModel.mangaDexId: StateFlow<String?> get() = _mangaDexId.asStateFlow()
 
@@ -677,6 +693,15 @@ suspend fun MainViewModel.loadMangaChapters(mangaId: Int, title: String) {
  */
 fun MainViewModel.loadChapterImages(chapterId: String, useDataSaver: Boolean = false, mangaTitle: String? = null, chapterTitle: String? = null, mangaId: Int = 0) {
     viewModelScope.launch {
+        // Serve from the prefetch cache first so chapter transitions (incl. auto-advance)
+        // load instantly instead of waiting on a scrape round-trip.
+        _mangaChapterImagesCache.value[chapterId]?.let { cached ->
+            android.util.Log.d("MangaReader", "loadChapterImages: served ${cached.size} images from cache for chapterId='$chapterId'")
+            _mangaChapterImages.value = cached
+            _mangaChapterImagesError.value = null
+            return@launch
+        }
+
         _mangaChapterImages.value = null
         _mangaChapterImagesError.value = null
 
@@ -727,7 +752,46 @@ fun MainViewModel.loadChapterImages(chapterId: String, useDataSaver: Boolean = f
             _mangaChapterImages.value = emptyList()
             _mangaChapterImagesError.value = "This chapter has no pages."
         } else {
+            _mangaChapterImagesCache.value = _mangaChapterImagesCache.value + (chapterId to images)
             _mangaChapterImages.value = images
+        }
+    }
+}
+
+/**
+ * Scrape the NEXT chapter's image list in the background and cache it, so that advancing to it
+ * (manually or via auto-advance) is instant. Never touches [mangaChapterImages], so the reader
+ * keeps showing the current chapter. Skips chapters that are already cached or in flight.
+ */
+fun MainViewModel.prefetchMangaChapterImages(chapter: MangaChapter?, mangaTitle: String? = null, mangaId: Int = 0) {
+    val next = chapter ?: return
+    if (_mangaChapterImagesCache.value.containsKey(next.chapterId)) return
+    if (!_prefetchingChapterIds.add(next.chapterId)) return
+
+    viewModelScope.launch {
+        try {
+            val authority = _selectedExtensionAuthority.value
+            if (authority == null) return@launch
+            val extTitle = _mangaExtensionTitle.value
+                ?: _mangaDetail.value?.titleEnglish?.takeIf { it.isNotBlank() }
+                ?: _mangaDetail.value?.title?.takeIf { it.isNotBlank() }
+                ?: mangaTitle
+                ?: return@launch
+            if (extTitle.isBlank()) return@launch
+
+            val chapterParam = next.title.removePrefix("Chapter ").substringBefore(":").trim()
+
+            android.util.Log.d("MangaReader", "prefetchMangaChapterImages: chapterId='${next.chapterId}' chapter='$chapterParam' title='$extTitle'")
+
+            val images = withContext(Dispatchers.IO) {
+                fetchExtensionChapterImages(extTitle, chapterParam, authority)
+            }
+            if (images != null && images.isNotEmpty()) {
+                _mangaChapterImagesCache.value = _mangaChapterImagesCache.value + (next.chapterId to images)
+                android.util.Log.d("MangaReader", "prefetchMangaChapterImages: cached ${images.size} images for chapterId='${next.chapterId}'")
+            }
+        } finally {
+            _prefetchingChapterIds.remove(next.chapterId)
         }
     }
 }

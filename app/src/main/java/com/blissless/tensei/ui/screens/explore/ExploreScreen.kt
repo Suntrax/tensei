@@ -1387,7 +1387,7 @@ private fun MangaFeaturedCarousel(
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        currentManga.seasonYear?.let { year ->
+                        (currentManga.seasonYear ?: currentManga.startDate?.year)?.let { year ->
                             Text(text = year.toString(), color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodyMedium)
                             Text(text = " • ", color = Color.White.copy(alpha = 0.4f), style = MaterialTheme.typography.bodyMedium)
                         }

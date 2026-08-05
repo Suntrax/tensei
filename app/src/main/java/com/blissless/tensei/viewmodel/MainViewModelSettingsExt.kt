@@ -118,6 +118,12 @@ fun MainViewModel.setMangaPageIndicator(enabled: Boolean) =
 fun MainViewModel.setMangaLockRotation(enabled: Boolean) =
     userPreferences.setMangaLockRotation(enabled)
 
+fun MainViewModel.setMangaFullscreen(enabled: Boolean) =
+    userPreferences.setMangaFullscreen(enabled)
+
+fun MainViewModel.setMangaAutoAdvance(enabled: Boolean) =
+    userPreferences.setMangaAutoAdvance(enabled)
+
 fun MainViewModel.setDefaultMagnetExtension(authority: String) =
     userPreferences.setDefaultMagnetExtension(authority)
 

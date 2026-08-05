@@ -75,6 +75,8 @@ class UserPreferences(context: Context) {
         private const val KEY_SELECTED_MANGA_EXTENSION = "selected_manga_extension_authority"
         private const val KEY_MANGA_SYNC_THRESHOLD = "manga_anilist_sync_threshold"
         private const val KEY_MANGA_LOCK_ROTATION = "manga_lock_rotation"
+        private const val KEY_MANGA_FULLSCREEN = "manga_fullscreen"
+        private const val KEY_MANGA_AUTO_ADVANCE = "manga_auto_advance"
     }
 
     private val sharedPreferences: SharedPreferences =
@@ -207,6 +209,14 @@ class UserPreferences(context: Context) {
     private val _mangaLockRotation = MutableStateFlow(false)
     val mangaLockRotation: StateFlow<Boolean> = _mangaLockRotation.asStateFlow()
 
+    // Hide system bars (status bar + navigation) while reading manga.
+    private val _mangaFullscreen = MutableStateFlow(true)
+    val mangaFullscreen: StateFlow<Boolean> = _mangaFullscreen.asStateFlow()
+
+    // Automatically open the next chapter when the reader reaches the end of a chapter.
+    private val _mangaAutoAdvance = MutableStateFlow(true)
+    val mangaAutoAdvance: StateFlow<Boolean> = _mangaAutoAdvance.asStateFlow()
+
     // Startup Screen
     private val _startupScreen = MutableStateFlow(2)
     val startupScreen: StateFlow<Int> = _startupScreen.asStateFlow()
@@ -328,6 +338,8 @@ class UserPreferences(context: Context) {
         _mangaPageIndicator.value = sharedPreferences.getBoolean(KEY_MANGA_PAGE_INDICATOR, true)
         _mangaSyncThreshold.value = sharedPreferences.getInt(KEY_MANGA_SYNC_THRESHOLD, 90).coerceIn(75, 100)
         _mangaLockRotation.value = sharedPreferences.getBoolean(KEY_MANGA_LOCK_ROTATION, false)
+        _mangaFullscreen.value = sharedPreferences.getBoolean(KEY_MANGA_FULLSCREEN, true)
+        _mangaAutoAdvance.value = sharedPreferences.getBoolean(KEY_MANGA_AUTO_ADVANCE, true)
 
         // Load local favorites
         loadLocalFavorites()
@@ -536,6 +548,16 @@ class UserPreferences(context: Context) {
     fun setMangaLockRotation(enabled: Boolean) {
         _mangaLockRotation.value = enabled
         sharedPreferences.edit { putBoolean(KEY_MANGA_LOCK_ROTATION, enabled) }
+    }
+
+    fun setMangaFullscreen(enabled: Boolean) {
+        _mangaFullscreen.value = enabled
+        sharedPreferences.edit { putBoolean(KEY_MANGA_FULLSCREEN, enabled) }
+    }
+
+    fun setMangaAutoAdvance(enabled: Boolean) {
+        _mangaAutoAdvance.value = enabled
+        sharedPreferences.edit { putBoolean(KEY_MANGA_AUTO_ADVANCE, enabled) }
     }
 
     fun setStartupScreen(screen: Int) {
