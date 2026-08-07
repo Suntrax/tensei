@@ -821,13 +821,12 @@ fun MainViewModel.markMangaChapterRead(mangaId: Int, chapter: MangaChapter, mang
 }
 
 /**
- * Called when a chapter is opened in the reader. Ensures a local track exists so the manga
- * shows up in "Continue Reading" on the home screen even if the user exits before reaching the
- * sync threshold. Does NOT mark the chapter read and does NOT push anything to AniList.
+ * Called when a chapter is opened in the reader. NOTE: this intentionally does nothing — a local
+ * track is created lazily only once the user actually reads (see updateMangaScrollProgress), so
+ * merely opening a chapter does not add the manga to tracking. Retained (empty) as a stable API
+ * so the reader's "opened" call site still documents the intended entry point.
  */
 fun MainViewModel.startMangaChapter(mangaId: Int, mangaTitle: String = "", mangaCover: String = "") {
-    mangaTrackManager?.ensureTrack(mangaId, mangaTitle, mangaCover)
-    loadLocalMangaTracking()
 }
 
 /** Reload the local manga tracking lists (Continue Reading / Planning / Completed). */
@@ -944,14 +943,14 @@ fun MainViewModel.onMangaScrollProgress(
     scrollPercent: Float,
     mangaTitle: String = "",
     mangaCover: String = ""
-) {
-    if (chapter == null) return
-    if (!scrollPercent.isFinite()) return
+): Boolean {
+    if (chapter == null) return false
+    if (!scrollPercent.isFinite()) return false
 
     android.util.Log.d("MangaSyncDebug", "onScrollProgress mangaId=$mangaId scrollPercent=$scrollPercent threshold=${userPreferences.mangaSyncThreshold.value}")
 
-    // Always save scroll progress locally
-    updateMangaScrollProgress(mangaId, scrollPercent)
+    // Always save scroll progress locally (this also lazily creates the track on first progress)
+    updateMangaScrollProgress(mangaId, scrollPercent, mangaTitle, mangaCover)
 
     val threshold = userPreferences.mangaSyncThreshold.value / 100f
     if (scrollPercent >= threshold) {
@@ -967,7 +966,9 @@ fun MainViewModel.onMangaScrollProgress(
         if (isIntegerChapter) {
             queueMangaSync(mangaId, "progress", progress = chapterNum.toInt())
         }
+        return true
     }
+    return false
 }
 
 /** Set the AniList sync threshold (75-100%). Persists across restarts. */
@@ -975,9 +976,20 @@ fun MainViewModel.setMangaSyncThreshold(percent: Int) {
     userPreferences.setMangaSyncThreshold(percent)
 }
 
-fun MainViewModel.updateMangaScrollProgress(mangaId: Int, scrollProgress: Float) {
+fun MainViewModel.updateMangaScrollProgress(mangaId: Int, scrollProgress: Float, mangaTitle: String = "", mangaCover: String = "") {
     // Guard against NaN/Infinity — same defensive pattern as oni's TrackingManager
     val safe = if (scrollProgress.isNaN() || scrollProgress.isInfinite()) 0f else scrollProgress
+    // Lazily create a local track on the first real reading progress (scroll > 0%) so the manga
+    // appears in "Continue Reading" once actually read — but NEVER from merely opening a chapter
+    // (scrollProgress == 0), which would add it to tracking without the user reading anything.
+    if (safe > 0f) {
+        // Create the track (and refresh the tracking rows) only on the first real reading
+        // progress — never when merely opening a chapter (scrollProgress == 0).
+        if (mangaTrackManager?.getTrack(mangaId) == null) {
+            mangaTrackManager?.ensureTrack(mangaId, mangaTitle, mangaCover)
+            loadLocalMangaTracking()
+        }
+    }
     mangaTrackManager?.updateScrollProgress(mangaId, safe)
 }
 

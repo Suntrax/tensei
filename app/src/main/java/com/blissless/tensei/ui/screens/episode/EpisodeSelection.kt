@@ -38,6 +38,8 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -45,6 +47,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -252,13 +255,15 @@ fun RichEpisodeScreen(
     isOled: Boolean,
     onDismiss: () -> Unit,
     onEpisodeSelect: (Int, String?) -> Unit,
-    onDownloadClick: (() -> Unit)? = null
+    onDownloadClick: (() -> Unit)? = null,
+    preferEnglishTitles: Boolean = true,
 ) {
     val context = LocalContext.current
     val total = anime.totalEpisodes
     val released = anime.latestEpisode ?: total
     val episodeCount = if (total > 0) total else released.coerceAtLeast(1)
     val currentProgress = anime.progress
+    val displayTitle = if (preferEnglishTitles && !anime.titleEnglish.isNullOrEmpty()) anime.titleEnglish else anime.title
     val playbackPositions by viewModel.playbackPositions.collectAsState()
     val playbackDurations by viewModel.playbackDurations.collectAsState()
 
@@ -628,7 +633,7 @@ fun RichEpisodeScreen(
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(text = anime.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis, color = Color.White)
+                            Text(text = displayTitle, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis, color = Color.White)
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(text = "Progress: $currentProgress / ${if (total > 0) total else "??"}", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.8f))
                             if (released > 0) {
@@ -923,8 +928,103 @@ fun RichEpisodeScreen(
     }
 }
 
+/**
+ * Compact rich episode list shown below the video player when it is not in fullscreen.
+ * Mirrors the rich episode screen styling but drops the anime banner header — the video
+ * itself acts as the header.
+ */
 @Composable
-private fun SimpleRichEpisodeCard(
+fun RichEpisodeList(
+    episodeCount: Int,
+    releasedCount: Int,
+    currentEpisode: Int,
+    currentProgress: Int = 0,
+    isOled: Boolean = false,
+    tmdbEpisodes: List<TmdbEpisode> = emptyList(),
+    playbackPositions: Map<String, Long> = emptyMap(),
+    playbackDurations: Map<String, Long> = emptyMap(),
+    animeId: Int = 0,
+    onEpisodeSelect: (Int) -> Unit,
+    onClose: (() -> Unit)? = null,
+    onEnterFullscreen: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
+) {
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = (currentEpisode - 1).coerceAtLeast(0))
+
+    // Keep the list anchored at the currently playing episode when it changes
+    LaunchedEffect(currentEpisode) {
+        val targetIndex = (currentEpisode - 1).coerceIn(0, (episodeCount - 1).coerceAtLeast(0))
+        listState.scrollToItem(targetIndex)
+    }
+
+    Column(modifier.fillMaxSize().background(if (isOled) Color.Black else MaterialTheme.colorScheme.background)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (onClose != null) {
+                IconButton(onClick = onClose) {
+                    Icon(Icons.Default.Close, contentDescription = "Close player")
+                }
+            }
+            Spacer(modifier = Modifier.weight(1f))
+            if (onEnterFullscreen != null) {
+                IconButton(onClick = onEnterFullscreen) {
+                    Icon(Icons.Default.Fullscreen, contentDescription = "Enter fullscreen")
+                }
+            }
+        }
+        HorizontalDivider(color = if (isOled) Color(0xFF333333) else MaterialTheme.colorScheme.outlineVariant)
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(vertical = 8.dp)
+        ) {
+            items(episodeCount) { index ->
+                val ep = index + 1
+                val tmdb = tmdbEpisodes.find { it.episode == ep }
+                val isWatched = ep <= currentProgress
+                val isCurrent = ep == currentEpisode
+                val hasAired = ep <= releasedCount
+                if (tmdb != null) {
+                    RichTmdbEpisodeCard(
+                        episodeNumber = ep,
+                        title = tmdb.title,
+                        description = tmdb.description,
+                        image = tmdb.image,
+                        isWatched = isWatched,
+                        isCurrent = isCurrent,
+                        hasAired = hasAired,
+                        isOled = isOled,
+                        isSelected = isCurrent,
+                        playbackPositions = playbackPositions,
+                        playbackDurations = playbackDurations,
+                        animeId = animeId,
+                        onSelect = {},
+                        onPlay = { onEpisodeSelect(ep) }
+                    )
+                } else {
+                    SimpleRichEpisodeCard(
+                        episodeNumber = ep,
+                        isWatched = isWatched,
+                        isCurrent = isCurrent,
+                        hasAired = hasAired,
+                        isOled = isOled,
+                        isSelected = isCurrent,
+                        playbackPositions = playbackPositions,
+                        playbackDurations = playbackDurations,
+                        animeId = animeId,
+                        onSelect = {},
+                        onPlay = { onEpisodeSelect(ep) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun SimpleRichEpisodeCard(
     episodeNumber: Int,
     isWatched: Boolean,
     isCurrent: Boolean,

@@ -7,7 +7,8 @@ import android.content.pm.ActivityInfo
 import android.view.Surface
 import android.view.View
 import android.view.Window
-import androidx.activity.compose.BackHandler
+import androidx.activity.ComponentDialog
+import androidx.activity.OnBackPressedCallback
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -17,6 +18,8 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -32,6 +35,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
@@ -82,9 +86,9 @@ import com.blissless.tensei.viewmodel.setMangaFullscreen
 import com.blissless.tensei.viewmodel.setMangaPageIndicator
 import com.blissless.tensei.viewmodel.setMangaReaderMode
 import com.blissless.tensei.viewmodel.setMangaLockRotation
-import com.blissless.tensei.viewmodel.startMangaChapter
 import com.blissless.tensei.viewmodel.updateMangaChapterPages
 import com.blissless.tensei.viewmodel.updateMangaScrollProgress
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
@@ -172,11 +176,14 @@ fun MangaReaderScreen(
     // Hide/show the system bars (status bar + navigation) on the DIALOG's window while
     // reading, matching the anime player's fullscreen behavior. The dialog window may not
     // be attached yet at first composition, so re-apply once shortly after.
-    LaunchedEffect(fullscreen) {
-        android.util.Log.d("MangaReader", "FULLSCREEN ${if (fullscreen) "ON" else "OFF"}")
-        applyReaderFullscreen(view, fullscreen)
+    // Fullscreen only applies while actually reading a chapter — the chapter selection
+    // screen keeps the system bars visible.
+    LaunchedEffect(fullscreen, showChapterList) {
+        val effectiveFullscreen = fullscreen && !showChapterList
+        android.util.Log.d("MangaReader", "FULLSCREEN ${if (effectiveFullscreen) "ON" else "OFF"} (showChapterList=$showChapterList)")
+        applyReaderFullscreen(view, effectiveFullscreen)
         delay(250)
-        applyReaderFullscreen(view, fullscreen)
+        applyReaderFullscreen(view, effectiveFullscreen)
     }
 
     // Prefetch the NEXT chapter's image list once the reader nears the end of the current
@@ -236,8 +243,19 @@ fun MangaReaderScreen(
         }
     }
 
-    // Handle system back button — if chapter list is open, close it first; otherwise close reader
-    BackHandler {
+    // When a chapter is opened that isn't the Continue-Reading resume target (index == progress),
+    // clear the saved scroll position so backing out of a merely-opened chapter never leaves a
+    // stale Continue Reading card (the page count is set on load, but scrollProgress 0 means the
+    // card won't show). Covers direct opens (Read Now / home card) that skip selectChapter.
+    LaunchedEffect(currentChapterIndex) {
+        if (currentChapterIndex != manga.progress) {
+            viewModel.updateMangaScrollProgress(manga.id, 0f)
+        }
+    }
+
+    // Handle the system back button — if a chapter is open, go back to the chapter list
+    // (which stays open in the background); back on the chapter list closes the reader.
+    fun handleReaderBack() {
         android.util.Log.d("MangaReader", "BACK pressed: showChapterList=$showChapterList chapters.size=${chapters.size} — " +
             if (!showChapterList && chapters.isNotEmpty()) "closing to chapter list" else "closing reader via onClose()")
         if (!showChapterList && chapters.isNotEmpty()) {
@@ -249,6 +267,36 @@ fun MangaReaderScreen(
             onClose()
         }
     }
+    // The reader lives in a Compose Dialog, whose content does NOT inherit the dialog's back
+    // dispatcher (Compose Dialog never provides LocalOnBackPressedDispatcherOwner), so a plain
+    // BackHandler registers on the ACTIVITY's dispatcher and never fires — the dialog's own
+    // back handling wins and dismisses the whole reader (landing on the home screen instead of
+    // the chapter list). Instead we register the callback directly on the DIALOG's
+    // OnBackPressedDispatcher. Compose hosts the dialog as an androidx.activity.ComponentDialog
+    // (an OnBackPressedDispatcherOwner on every API level), reachable as the window callback.
+    // This works both with predictive back (API 33+) and classic key events, so back always
+    // returns to the chapter list first. The window may not be attached at first composition,
+    // so the dialog is re-resolved shortly after; the callback is removed on dispose.
+    val backCallback = remember {
+        object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() = handleReaderBack()
+        }
+    }
+    LaunchedEffect(backCallback) {
+        var dialog = view.findDialogWindow()?.callback as? ComponentDialog
+        if (dialog == null) {
+            delay(250)
+            dialog = view.findDialogWindow()?.callback as? ComponentDialog
+        }
+        if (dialog != null) {
+            dialog.onBackPressedDispatcher.addCallback(backCallback)
+        }
+        try {
+            awaitCancellation()
+        } finally {
+            backCallback.remove()
+        }
+    }
 
     fun selectChapter(index: Int, startAtTop: Boolean = false) {
         android.util.Log.d("MangaReader", "selectChapter(index=$index startAtTop=$startAtTop) chapters.size=${chapters.size}")
@@ -257,25 +305,35 @@ fun MangaReaderScreen(
             return
         }
         android.util.Log.d("MangaReader", "selectChapter: opening chapterId='${chapter.chapterId}' title='${chapter.title}'")
-        // Create the local track on open so the manga appears in "Continue Reading" even if the
-        // user exits before reaching the sync threshold. Chapter is NOT marked read here and
-        // nothing is pushed to AniList — that only happens once the user scrolls past the
-        // threshold (see onMangaScrollProgress).
-        viewModel.startMangaChapter(manga.id, manga.title, manga.cover)
-        readIndices.value = readIndices.value + index
+        // Opening a chapter must NOT create a track or mark it read — otherwise merely opening
+        // a chapter (then backing out) would add the manga to tracking / "Currently Reading".
+        // A local track is only created once the user actually reads (first scroll/page past 0%,
+        // see onMangaScrollProgress), and the chapter is marked read only past the sync threshold.
+        // Opening the Continue-Reading resume chapter (index == progress) preserves its saved
+        // scroll position so the resume flow restores where the user left off.
+        val resuming = !startAtTop && index == manga.progress
         currentChapterIndex = index
         currentPageIndex = 0
         scrollProgress = 0f
-        suppressResumeRestore = startAtTop
+        suppressResumeRestore = !resuming
         showNextChapterButton = false
-        // Advancing to the next chapter (via the next-chapter button): clear the saved scroll
-        // position so the new chapter starts at the top (both in-reader and for a later Continue
-        // Reading resume) instead of restoring the bottom of the just-finished chapter.
-        if (startAtTop) {
+        // Opening a chapter that isn't the resume target clears the saved scroll position, so
+        // backing out of a merely-opened chapter never leaves a stale Continue Reading card
+        // (the page count is set on load, but with scrollProgress cleared the card won't show).
+        if (!resuming) {
             viewModel.updateMangaScrollProgress(manga.id, 0f)
         }
         showChapterList = false
         showControls = false
+    }
+
+    // A chapter only counts as read once it is actually read (scrolled past the sync
+    // threshold). Opening a chapter does NOT mark it read in the list — that happens here,
+    // triggered from the scroll callbacks when the threshold is crossed.
+    fun markChapterReadInListUi() {
+        if (currentChapterIndex in 0 until chapters.size) {
+            readIndices.value = readIndices.value + currentChapterIndex
+        }
     }
 
     // Show a "Next Chapter" button when the reader settles at the end of the current chapter,
@@ -320,7 +378,30 @@ fun MangaReaderScreen(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(if (isOled) Color.Black else Color(0xFF1a1a1a))) {
+    // The reader is hosted in a Dialog; make that window's background transparent so the
+    // chapter-loading overlays can be genuinely see-through (like the anime stream-loading
+    // overlay) and reveal the screen behind instead of a solid black box.
+    LaunchedEffect(Unit) {
+        view.findDialogWindow()?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+        delay(250)
+        view.findDialogWindow()?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+    }
+
+    // True while either loading state is showing (chapter list loading or chapter image
+    // loading). During those the reader background is transparent so the translucent
+    // overlay actually shows through; while reading it stays opaque dark.
+    val isLoadingAny = (chapters.isEmpty() && (isLoadingChapters || !hasLoadedChapters)) ||
+        (!showChapterList && chapterImagesError == null && (chapterImages?.isEmpty() ?: true))
+
+    Box(
+        modifier = Modifier.fillMaxSize().background(
+            when {
+                isLoadingAny -> Color.Transparent
+                isOled -> Color.Black
+                else -> Color(0xFF1a1a1a)
+            }
+        )
+    ) {
         val branch = when {
             showChapterList || chapters.isEmpty() -> "chapter_list"
             readerMode == ReaderMode.VERTICAL_SCROLL -> "vertical_scroll"
@@ -356,8 +437,8 @@ fun MangaReaderScreen(
                         }
                     },
                     onBack = {
-                        android.util.Log.d("MangaReader", "Chapter list back arrow tapped — calling onClose()")
-                        onClose()
+                        android.util.Log.d("MangaReader", "Chapter list back arrow tapped — handling like system back")
+                        handleReaderBack()
                     }
                 )
             }
@@ -380,13 +461,14 @@ fun MangaReaderScreen(
                     },
                     showControls = showControls,
                     onScrollProgress = {
-                        viewModel.onMangaScrollProgress(
-                            mangaId = manga.id,
-                            chapter = currentChapter,
-                            scrollPercent = it,
-                            mangaTitle = manga.title,
-                            mangaCover = manga.cover
-                        )
+                        if (viewModel.onMangaScrollProgress(
+                                mangaId = manga.id,
+                                chapter = currentChapter,
+                                scrollPercent = it,
+                                mangaTitle = manga.title,
+                                mangaCover = manga.cover
+                            )
+                        ) markChapterReadInListUi()
                         scrollProgress = it
                     },
                     onCurrentPage = { page -> currentPageIndex = page },
@@ -409,13 +491,14 @@ fun MangaReaderScreen(
                         currentPageIndex = page
                         if (total > 1) {
                             val progress = page.toFloat() / (total - 1).toFloat()
-                            viewModel.onMangaScrollProgress(
-                                mangaId = manga.id,
-                                chapter = currentChapter,
-                                scrollPercent = progress,
-                                mangaTitle = manga.title,
-                                mangaCover = manga.cover
-                            )
+                            if (viewModel.onMangaScrollProgress(
+                                    mangaId = manga.id,
+                                    chapter = currentChapter,
+                                    scrollPercent = progress,
+                                    mangaTitle = manga.title,
+                                    mangaCover = manga.cover
+                                )
+                            ) markChapterReadInListUi()
                             scrollProgress = progress
                         }
                     }
@@ -451,7 +534,7 @@ fun MangaReaderScreen(
                         }
                     },
                     navigationIcon = {
-                        IconButton(onClick = onClose) {
+                        IconButton(onClick = { handleReaderBack() }) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                         }
                     },
@@ -515,31 +598,60 @@ fun MangaReaderScreen(
         // top; scrolling away from the end hides it.
         AnimatedVisibility(
             visible = showNextChapterButton && !showChapterList && !isLastChapter,
-            enter = fadeIn(tween(150)),
-            exit = fadeOut(tween(150)),
+            enter = fadeIn(tween(150)) + slideInVertically(tween(200)) { it / 2 },
+            exit = fadeOut(tween(150)) + slideOutVertically(tween(200)) { it / 2 },
             modifier = Modifier.align(Alignment.BottomCenter)
         ) {
+            val nextChapter = chapters.getOrNull(currentChapterIndex + 1)
+            val nextLabel = nextChapter?.let { ch ->
+                val num = extractChapterNum(ch.title)
+                if (num != "?") "Ch. $num" else ch.title
+            } ?: ""
             Button(
                 onClick = {
                     android.util.Log.d("MangaReader", "NEXT-BUTTON: tapped, opening chapter ${currentChapterIndex + 1}")
                     selectChapter(currentChapterIndex + 1, startAtTop = true)
                 },
-                shape = RoundedCornerShape(24.dp),
+                shape = RoundedCornerShape(28.dp),
+                elevation = ButtonDefaults.buttonElevation(defaultElevation = 10.dp, pressedElevation = 14.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.95f),
+                    containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary
                 ),
+                contentPadding = PaddingValues(horizontal = 18.dp, vertical = 0.dp),
                 modifier = Modifier
-                    .padding(bottom = 72.dp)
-                    .height(48.dp)
+                    .padding(start = 16.dp, end = 16.dp, bottom = 84.dp)
+                    .height(60.dp)
             ) {
-                Icon(
-                    Icons.AutoMirrored.Filled.ArrowForward,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Next Chapter")
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .background(Color.White.copy(alpha = 0.22f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(horizontalAlignment = Alignment.Start) {
+                    Text(
+                        text = "Next Chapter",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    if (nextLabel.isNotBlank()) {
+                        Text(
+                            text = nextLabel,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
             }
         }
 
@@ -806,10 +918,16 @@ private fun ChapterLoadErrorView(
 @Composable
 private fun ChapterLoadingView(modifier: Modifier = Modifier) {
     Box(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.7f)),
         contentAlignment = Alignment.Center
     ) {
-        CircularProgressIndicator(color = Color.White)
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            CircularProgressIndicator(color = Color.White)
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("Loading chapter...", color = Color.White)
+        }
     }
 }
 
@@ -1087,30 +1205,43 @@ fun MangaChapterListWithGroups(
                 "hasLoadedChapters=$hasLoadedChapters onRetryLoadChapters=${onRetryLoadChapters != null} onBack=${onBack != null}")
         }
         Box(
-            modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+            modifier = modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                // Show the loading state immediately on first open (before loadMangaChapters
-                // has completed) instead of flashing the "No chapters found" empty state.
-                if (isLoadingChapters || !hasLoadedChapters) {
-                    CircularProgressIndicator()
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text("Loading chapters...", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 15.sp)
-                } else {
-                    Text("No chapters found", color = MaterialTheme.colorScheme.onSurface, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        "Could not load chapters for this manga. It may not be available on the configured source, or the source may be down.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 14.sp,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                        modifier = Modifier.padding(horizontal = 32.dp)
-                    )
-                    Spacer(modifier = Modifier.height(24.dp))
-                    if (onRetryLoadChapters != null) {
-                        Button(onClick = onRetryLoadChapters) {
-                            Text("Retry")
+            if (isLoadingChapters || !hasLoadedChapters) {
+                // Same transparent overlay design as the stream-fetching loading state
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.7f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator(color = Color.White)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("Loading chapters...", color = Color.White)
+                    }
+                }
+            } else {
+                Box(
+                    modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("No chapters found", color = MaterialTheme.colorScheme.onSurface, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "Could not load chapters for this manga. It may not be available on the configured source, or the source may be down.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 14.sp,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 32.dp)
+                        )
+                        Spacer(modifier = Modifier.height(24.dp))
+                        if (onRetryLoadChapters != null) {
+                            Button(onClick = onRetryLoadChapters) {
+                                Text("Retry")
+                            }
                         }
                     }
                 }

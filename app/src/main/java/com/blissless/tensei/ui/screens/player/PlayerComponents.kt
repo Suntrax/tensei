@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -38,6 +39,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -318,10 +320,11 @@ internal fun AutoplayFullscreenRow(
     isFullscreen: Boolean,
     onAutoPlayChange: (Boolean) -> Unit,
     onFullscreenToggle: () -> Unit,
+    isCompact: Boolean = false,
 ) {
     Row(
         modifier = Modifier
-            .background(Color.Black.copy(alpha = 0.5f), shape = RoundedCornerShape(14.dp)),
+            .background(Color.Black.copy(alpha = 0.5f), shape = RoundedCornerShape(if (isCompact) 8.dp else 14.dp)),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Surface(
@@ -329,20 +332,25 @@ internal fun AutoplayFullscreenRow(
             color = Color.Transparent
         ) {
             Row(
-                modifier = Modifier.padding(start = 12.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
+                modifier = Modifier.padding(
+                    start = if (isCompact) 6.dp else 12.dp,
+                    end = if (isCompact) 2.dp else 6.dp,
+                    top = if (isCompact) 3.dp else 8.dp,
+                    bottom = if (isCompact) 3.dp else 8.dp
+                ),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(if (isCompact) 2.dp else 8.dp)
             ) {
                 Text(
                     text = "Autoplay",
                     color = Color.White,
                     style = MaterialTheme.typography.labelSmall
                 )
-                Box(modifier = Modifier.size(20.dp), contentAlignment = Alignment.Center) {
+                Box(modifier = Modifier.size(if (isCompact) 14.dp else 20.dp), contentAlignment = Alignment.Center) {
                     Switch(
                         checked = autoPlayNextEpisode,
                         onCheckedChange = onAutoPlayChange,
-                        modifier = Modifier.scale(0.5f),
+                        modifier = Modifier.scale(if (isCompact) 0.35f else 0.5f),
                         colors = SwitchDefaults.colors(
                             checkedTrackColor = Color.White,
                             checkedThumbColor = Color.Black,
@@ -358,14 +366,19 @@ internal fun AutoplayFullscreenRow(
             color = Color.Transparent
         ) {
             Row(
-                modifier = Modifier.padding(start = 6.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+                modifier = Modifier.padding(
+                    start = if (isCompact) 2.dp else 6.dp,
+                    end = if (isCompact) 6.dp else 12.dp,
+                    top = if (isCompact) 3.dp else 8.dp,
+                    bottom = if (isCompact) 3.dp else 8.dp
+                ),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
                     imageVector = if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
                     contentDescription = if (isFullscreen) "Exit fullscreen" else "Enter fullscreen",
                     tint = Color.White,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(if (isCompact) 12.dp else 18.dp)
                 )
             }
         }
@@ -389,28 +402,29 @@ internal fun PlaybackSpeedSelector(
     showMenu: Boolean,
     onShowMenuChange: (Boolean) -> Unit,
     onSpeedChange: (Float) -> Unit,
+    isCompact: Boolean = false,
 ) {
     val speedOptions = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f)
     Box {
         Surface(
-            shape = RoundedCornerShape(14.dp),
+            shape = RoundedCornerShape(if (isCompact) 10.dp else 14.dp),
             color = Color.Black.copy(alpha = 0.5f),
             onClick = { onShowMenuChange(true) }
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                modifier = Modifier.padding(horizontal = if (isCompact) 8.dp else 12.dp, vertical = if (isCompact) 6.dp else 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(if (isCompact) 4.dp else 6.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.Speed,
                     contentDescription = "Playback speed",
                     tint = Color.White,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(if (isCompact) 14.dp else 18.dp)
                 )
                 Text(
                     text = "${currentSpeed}x",
-                    style = MaterialTheme.typography.labelMedium,
+                    style = if (isCompact) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelMedium,
                     color = Color.White
                 )
             }
@@ -451,14 +465,15 @@ internal fun PlaybackSpeedSelector(
 @Composable
 internal fun ResizeButton(
     onClick: () -> Unit,
+    isCompact: Boolean = false,
 ) {
     Surface(
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(if (isCompact) 10.dp else 14.dp),
         color = Color.Black.copy(alpha = 0.5f),
         onClick = onClick
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            modifier = Modifier.padding(horizontal = if (isCompact) 8.dp else 12.dp, vertical = if (isCompact) 6.dp else 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
@@ -466,7 +481,7 @@ internal fun ResizeButton(
                 Icons.Default.AspectRatio,
                 "Change aspect ratio",
                 tint = Color.White,
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(if (isCompact) 14.dp else 18.dp)
             )
         }
     }
@@ -499,15 +514,16 @@ internal fun PlayerSettingsButton(
     onSwipeVolumeChange: (Boolean) -> Unit,
     onSwipeBrightnessChange: (Boolean) -> Unit,
     onSwipeSwapChange: (Boolean) -> Unit,
+    isCompact: Boolean = false,
 ) {
     Box {
         Surface(
-            shape = RoundedCornerShape(14.dp),
+            shape = RoundedCornerShape(if (isCompact) 10.dp else 14.dp),
             color = Color.Black.copy(alpha = 0.5f),
             onClick = { onShowMenuChange(true) }
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                modifier = Modifier.padding(horizontal = if (isCompact) 8.dp else 12.dp, vertical = if (isCompact) 6.dp else 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
             ) {
@@ -515,7 +531,7 @@ internal fun PlayerSettingsButton(
                     Icons.Default.Settings,
                     "Player Settings",
                     tint = Color.White,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(if (isCompact) 14.dp else 18.dp)
                 )
             }
         }
@@ -619,3 +635,4 @@ internal fun SkipIndicatorOverlay(
         }
     }
 }
+

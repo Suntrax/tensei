@@ -14,6 +14,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -325,7 +327,7 @@ fun DetailedAnimeScreen(
 
     val windowInfo = LocalWindowInfo.current
     val screenHeightPx = windowInfo.containerSize.height.toFloat()
-    val dismissThreshold = screenHeightPx / 2f
+    val dismissThreshold = screenHeightPx / 3f
 
     val offsetY = remember { Animatable(0f) }
 
@@ -396,9 +398,14 @@ fun DetailedAnimeScreen(
 
                 if (currentOffset == 0f) return Velocity.Zero
 
-                val shouldDismiss = currentOffset > dismissThreshold || available.y > 500f
+                // The sheet can only reach offsetY > 0 while the list is at the top (see
+                // onPreScroll), so the old "isAtTop" gate here was redundant AND flaky: right
+                // after scrolling back to the top the flag lags a frame, so a dismissal fling
+                // was silently ignored and the sheet snapped back. Treat any release with the
+                // sheet past a third of the screen, or a brisk downward fling, as a dismissal.
+                val shouldDismiss = currentOffset > dismissThreshold || available.y > 300f
 
-                if (shouldDismiss && isAtTop) {
+                if (shouldDismiss) {
                     dismissWithAnimation()
                 } else {
                     scope.launch {
@@ -450,6 +457,7 @@ fun DetailedAnimeScreen(
                     anime = animeMedia,
                     viewModel = viewModel,
                     isOled = isOled,
+                    preferEnglishTitles = preferEnglishTitles,
                     onDismiss = { showEpisodeSelection = false },
                     onEpisodeSelect = { episode, _ ->
                         showEpisodeSelection = false
@@ -499,6 +507,35 @@ fun DetailedAnimeScreen(
                 .offset { IntOffset(0, offsetY.value.roundToInt()) }
                 .background(MaterialTheme.colorScheme.background)
                 .nestedScroll(nestedScrollConnection)
+                // Release-settle: a low-velocity release never produces a fling, so onPreFling is
+                // never invoked and the sheet would stay stuck half-translated; and a fling
+                // dismissal can be interrupted mid-animation, leaving the sheet faded but open.
+                // On pointer-up, wait for any fling handling to start, then settle the sheet:
+                // finish a stalled dismissal, dismiss past the threshold, or spring back.
+                .pointerInput(dismissThreshold) {
+                    awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false)
+                        var anyPressed = true
+                        while (anyPressed) {
+                            val event = awaitPointerEvent()
+                            anyPressed = event.changes.any { it.pressed }
+                        }
+                        // Defer the settle check to the composition scope: the gesture scope is a
+                        // restricted coroutine scope (can't delay() from inside it), and this
+                        // gives any fling-handling a moment to win first.
+                        scope.launch {
+                            delay(120)
+                            if (offsetY.isRunning || dismissSlideOffset.isRunning) return@launch
+                            if (dismissSlideOffset.value > 0f || offsetY.value > dismissThreshold) {
+                                // A fling dismissal started but stalled, or the sheet is past the
+                                // dismiss threshold — close it so it never stays stuck half-open.
+                                dismissWithAnimation()
+                            } else if (offsetY.value > 0f) {
+                                offsetY.animateTo(0f, spring(stiffness = Spring.StiffnessMediumLow))
+                            }
+                        }
+                    }
+                }
         ) {
             if (!displayData.banner.isNullOrEmpty() || displayData.cover.isNotEmpty()) {
                 val bannerImage = displayData.banner ?: displayData.cover

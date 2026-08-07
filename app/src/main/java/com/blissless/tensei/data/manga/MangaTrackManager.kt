@@ -23,7 +23,9 @@ class MangaTrackManager(context: Context) {
      */
     fun getContinueReading(): List<MangaTrack> =
         getTracks()
-            .filter { it.scrollProgress > 0f || it.currentChapterPages > 0 }
+            // Real reading progress only — a merely-opened chapter sets a page count but keeps
+            // scrollProgress at 0, and must NOT show a Continue Reading card.
+            .filter { it.scrollProgress > 0f }
             .sortedByDescending { it.progress }
 
     /** Every CURRENT-status track — the source for the home "Currently Reading" row. */

@@ -407,6 +407,7 @@ fun ExploreScreen(
                 anime = animeMedia,
                 viewModel = viewModel,
                 isOled = isOled,
+                preferEnglishTitles = preferEnglishTitles,
                 onDismiss = { showEpisodeSelection = false },
                 onEpisodeSelect = { episode, _ ->
                     onPlayEpisode(animeMedia, episode, null)

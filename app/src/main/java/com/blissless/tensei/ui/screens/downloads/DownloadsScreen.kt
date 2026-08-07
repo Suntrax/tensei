@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -85,6 +86,7 @@ import com.blissless.tensei.download.EpisodeDownloadManager
 import com.blissless.tensei.ui.components.ContinueWatchingRow
 import com.blissless.tensei.ui.components.SectionHeader
 import com.blissless.tensei.ui.screens.player.OfflinePlayerScreen
+import com.blissless.tensei.ui.screens.episode.RichEpisodeList
 // Extension functions on MainViewModel (defined in com.blissless.tensei.viewmodel)
 import com.blissless.tensei.viewmodel.getPlaybackPosition
 import com.blissless.tensei.viewmodel.savePlaybackPosition
@@ -161,6 +163,8 @@ fun DownloadsScreen(
     var showDownloadDialogFor by remember { mutableStateOf<Pair<Int, String>?>(null) }
     var playingDownload by remember { mutableStateOf<EpisodeDownloadManager.DownloadInfo?>(null) }
     var playerEpisodes by remember { mutableStateOf<List<EpisodeDownloadManager.DownloadInfo>>(emptyList()) }
+    var playerFullscreen by remember { mutableStateOf(true) }
+    var playerEpisodeRequest by remember { mutableStateOf<Int?>(null) }
     val useMonochrome by viewModel.disableMaterialColors.collectAsState()
     val defaultSubtitleLang by viewModel.defaultSubtitleLang.collectAsState()
     val tmdbEpisodeCache by viewModel.tmdbEpisodeCache.collectAsState()
@@ -392,6 +396,8 @@ fun DownloadsScreen(
                                 val group = groupedDownloads.find { it.animeName == anime.title }
                                 val download = group?.episodes?.find { it.episode == episode }
                                 if (download != null) {
+                                    playerFullscreen = true
+                                    playerEpisodeRequest = null
                                     playerEpisodes = group.episodes
                                     playingDownload = download
                                 }
@@ -626,6 +632,8 @@ fun DownloadsScreen(
                 isOled = isOled,
                 onDismiss = { selectedAnime = null },
                 onPlay = { info ->
+                    playerFullscreen = true
+                    playerEpisodeRequest = null
                     playerEpisodes = selectedAnime?.episodes ?: emptyList()
                     playingDownload = info
                 },
@@ -638,7 +646,7 @@ fun DownloadsScreen(
     }
 
     if (playingDownload != null) {
-        BackHandler { playingDownload = null }
+        BackHandler { playerFullscreen = true; playerEpisodeRequest = null; playingDownload = null }
     }
     } // end inner padded Box
 
@@ -646,7 +654,22 @@ fun DownloadsScreen(
         val savedPosition = remember(playingDownload) {
             viewModel.getPlaybackPosition(playingDownload!!.animeId, playingDownload!!.episode, isOffline = true)
         }
-        Box(modifier = Modifier.fillMaxSize()) {
+        val offlinePlaybackPositions = remember(playbackPositions) {
+            playbackPositions.filterKeys { it.endsWith("_offline") }.mapKeys { it.key.removeSuffix("_offline") }
+        }
+        val offlinePlaybackDurations = remember(playbackDurations) {
+            playbackDurations.filterKeys { it.endsWith("_offline") }.mapKeys { it.key.removeSuffix("_offline") }
+        }
+        val offlineWatchedCount = remember(playerEpisodes, offlinePlaybackPositions, offlinePlaybackDurations) {
+            playerEpisodes.count { info ->
+                val key = "${info.animeId}_${info.episode}"
+                val pos = offlinePlaybackPositions[key] ?: 0L
+                val dur = offlinePlaybackDurations[key] ?: 0L
+                pos > 5000L && dur > 0 && (pos.toFloat() / dur) >= 0.9f
+            }
+        }
+        @Composable
+        fun PlayerUi() {
             OfflinePlayerScreen(
                 downloadInfo = playingDownload!!,
                 downloadManager = downloadManager,
@@ -662,7 +685,7 @@ fun DownloadsScreen(
                 autoSkipEnding = autoSkipEnding,
                 autoPlayNextEpisode = autoPlayNextEpisode,
                 onAutoPlayNextEpisodeChanged = { viewModel.setAutoPlayNextEpisode(it) },
-                onDismiss = { playingDownload = null },
+                onDismiss = { playerFullscreen = true; playerEpisodeRequest = null; playingDownload = null },
                 allEpisodes = playerEpisodes,
                 onNavbarHidden = onNavbarHidden,
                 tmdbEpisodes = tmdbEpisodeCache[playingDownload!!.animeId]?.associate { it.episode to it } ?: emptyMap(),
@@ -670,7 +693,46 @@ fun DownloadsScreen(
                     viewModel.savePlaybackPosition(animeId, episode, pos, dur, isOffline = true)
                 },
                 initialPosition = savedPosition,
+                onFullscreenChanged = { playerFullscreen = it },
+                requestedEpisode = playerEpisodeRequest,
+                onGetSavedPosition = { animeId, episode ->
+                    viewModel.getPlaybackPosition(animeId, episode, isOffline = true)
+                },
             )
+        }
+
+        val currentDownload = playingDownload!!
+        // Player is always composed at the same position; only its size changes
+        // on fullscreen toggles so playback is not restarted.
+        Column(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+            Box(
+                modifier = if (playerFullscreen) {
+                    Modifier.fillMaxSize()
+                } else {
+                    Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(16f / 9f)
+                        .background(Color.Black)
+                }
+            ) {
+                PlayerUi()
+            }
+            if (!playerFullscreen) {
+                RichEpisodeList(
+                    episodeCount = maxOf(playerEpisodes.size, currentDownload.episode),
+                    releasedCount = maxOf(playerEpisodes.size, currentDownload.episode),
+                    currentEpisode = currentDownload.episode,
+                    currentProgress = maxOf(offlineWatchedCount, currentDownload.episode - 1),
+                    isOled = isOled,
+                    tmdbEpisodes = tmdbEpisodeCache[currentDownload.animeId] ?: emptyList(),
+                    playbackPositions = offlinePlaybackPositions,
+                    playbackDurations = offlinePlaybackDurations,
+                    animeId = currentDownload.animeId,
+                    onEpisodeSelect = { ep -> playerEpisodeRequest = ep },
+                    onClose = { playerFullscreen = true; playerEpisodeRequest = null; playingDownload = null },
+                    onEnterFullscreen = { playerFullscreen = true },
+                )
+            }
         }
     }
 

@@ -953,6 +953,7 @@ fun HomeScreen(
                 anime = selectedAnime!!,
                 viewModel = viewModel,
                 isOled = isOled,
+                preferEnglishTitles = preferEnglishTitles,
                 onDismiss = { showEpisodeSheet = false },
                 onEpisodeSelect = { episode, title ->
                     onPlayEpisode(selectedAnime!!, episode, title)

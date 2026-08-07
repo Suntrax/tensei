@@ -206,6 +206,8 @@ fun PlayerScreen(
     onPrefetchAdjacent: (() -> Unit)? = null,
     onGetCacheDataSourceFactory: (String) -> CacheDataSource.Factory? = { null },
     onBackClick: (() -> Unit)? = null,
+    isFullscreen: Boolean = true,
+    onFullscreenChanged: ((Boolean) -> Unit)? = null,
     extensionOkHttpClient: okhttp3.OkHttpClient? = null,
     extensionVideoHeaders: Map<String, String> = emptyMap(),
     extensionServers: List<ServerInfo> = emptyList(),
@@ -237,34 +239,45 @@ fun PlayerScreen(
         AspectRatioFrameLayout.RESIZE_MODE_FIXED_WIDTH to "16:9"
     )
 
-    var isFullscreen by remember { mutableStateOf(true) }
+    // Fullscreen state is owned by the host (lifted so it survives player recreation
+    // on episode changes). The host mirrors it back in as this parameter.
+    fun applyFullscreenWindow(fullscreen: Boolean) {
+        activity?.let { act ->
+            val window = act.window
+            if (fullscreen) {
+                window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                val controller = WindowCompat.getInsetsController(window, window.decorView)
+                controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                controller.hide(WindowInsetsCompat.Type.systemBars())
+                window.attributes.layoutInDisplayCutoutMode =
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                WindowCompat.setDecorFitsSystemWindows(window, false)
+                act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            } else {
+                @Suppress("DEPRECATION")
+                window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                val controller = WindowCompat.getInsetsController(window, window.decorView)
+                controller.show(WindowInsetsCompat.Type.systemBars())
+                WindowCompat.setDecorFitsSystemWindows(window, true)
+                act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            }
+        }
+    }
+
+    LaunchedEffect(isFullscreen) {
+        applyFullscreenWindow(isFullscreen)
+    }
 
     // Handle fullscreen toggle
     fun toggleFullscreen() {
-        isFullscreen = !isFullscreen
-        activity?.let { act ->
-            if (isFullscreen) {
-                @Suppress("DEPRECATION") act.window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
-                act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-            } else {
-                @Suppress("DEPRECATION") act.window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
-                act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-            }
-        }
+        onFullscreenChanged?.invoke(!isFullscreen)
     }
 
     // Exit fullscreen when closing
     fun exitFullscreen() {
         if (isFullscreen) {
-            isFullscreen = false
-            activity?.let { act ->
-                @Suppress("DEPRECATION") act.window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
-                act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-                // Restore system brightness when exiting the player
-                act.window.attributes = act.window.attributes.apply {
-                    screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
-                }
-            }
+            onFullscreenChanged?.invoke(false)
         }
     }
 
@@ -379,19 +392,6 @@ fun PlayerScreen(
     // Update selected quality when currentQuality prop changes
     LaunchedEffect(currentQuality) {
         selectedQuality = currentQuality
-    }
-
-    LaunchedEffect(Unit) {
-        activity?.window?.let { window ->
-            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            val controller = WindowCompat.getInsetsController(window, window.decorView)
-            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            controller.hide(WindowInsetsCompat.Type.systemBars())
-            window.attributes.layoutInDisplayCutoutMode =
-                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
-            WindowCompat.setDecorFitsSystemWindows(window, false)
-        }
-        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
     }
 
     val exoPlayer = remember(context, bufferAheadSeconds, referer, serverChangeTrigger, videoUrl, extensionOkHttpClient, extensionVideoHeaders) {
@@ -1191,6 +1191,10 @@ fun PlayerScreen(
             .fillMaxSize()
             .background(Color.Black)
     ) {
+        // Compact layout (video shown in a 16:9 box with the episode list below):
+        // shrink paddings, hide secondary text and use smaller buttons so the
+        // controls fit the reduced-height video area.
+        val isCompact = !isFullscreen
         // PlayerView - recreate when server changes
             key(serverChangeTrigger) {
             AndroidView(
@@ -1438,7 +1442,7 @@ fun PlayerScreen(
                             .fillMaxWidth()
                             .background(Brush.verticalGradient(colors = listOf(Color.Black.copy(alpha = 0.7f), Color.Transparent)))
                             .statusBarsPadding()
-                            .padding(16.dp)
+                            .padding(if (isCompact) 6.dp else 16.dp)
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -1454,18 +1458,18 @@ fun PlayerScreen(
                                         exitFullscreen()
                                         onBackClick?.invoke()
                                     },
-                                    modifier = Modifier.size(40.dp).background(Color.Black.copy(alpha = 0.5f), shape = MaterialTheme.shapes.small)
+                                    modifier = Modifier.size(if (isCompact) 28.dp else 40.dp).background(Color.Black.copy(alpha = 0.5f), shape = MaterialTheme.shapes.small)
                                 ) {
                                     Icon(
                                         Icons.AutoMirrored.Filled.ArrowBack,
                                         contentDescription = "Back",
                                         tint = Color.White,
-                                        modifier = Modifier.size(24.dp)
+                                        modifier = Modifier.size(if (isCompact) 20.dp else 24.dp)
                                     )
                                 }
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Column {
-                                    if (animeName.isNotEmpty()) {
+                                    if (!isCompact && animeName.isNotEmpty()) {
                                         Text(
                                             text = animeName,
                                             color = Color.White,
@@ -1474,7 +1478,7 @@ fun PlayerScreen(
                                             overflow = TextOverflow.Ellipsis
                                         )
                                     }
-                                    if (!episodeTitle.isNullOrEmpty()) {
+                                    if (!isCompact && !episodeTitle.isNullOrEmpty()) {
                                         Text(
                                             text = episodeTitle,
                                             color = Color.White.copy(alpha = 0.7f),
@@ -1530,7 +1534,7 @@ fun PlayerScreen(
                                         Row(
                                             modifier = Modifier
                                                 .defaultMinSize(minWidth = 44.dp)
-                                                .padding(horizontal = 12.dp, vertical = 16.dp),
+                                                .padding(horizontal = if (isCompact) 8.dp else 12.dp, vertical = if (isCompact) 4.dp else 16.dp),
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                                             ) {
@@ -1663,7 +1667,7 @@ fun PlayerScreen(
                                             onClick = { showSubtitleMenu = true }
                                         ) {
                                             Row(
-                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                                modifier = Modifier.padding(horizontal = if (isCompact) 8.dp else 12.dp, vertical = if (isCompact) 4.dp else 10.dp),
                                                 verticalAlignment = Alignment.CenterVertically,
                                                 horizontalArrangement = Arrangement.Center
                                             ) {
@@ -1671,7 +1675,7 @@ fun PlayerScreen(
                                                     Icons.Filled.ClosedCaption,
                                                     contentDescription = "Subtitles",
                                                     tint = if (subtitlesEnabled) Color.White else Color.Gray.copy(alpha = 0.5f),
-                                                    modifier = Modifier.size(20.dp)
+                                                    modifier = Modifier.size(if (isCompact) 16.dp else 20.dp)
                                                 )
                                             }
                                         }
@@ -1788,7 +1792,8 @@ fun PlayerScreen(
 
                                 // Resize button
                                 ResizeButton(
-                                    onClick = { resizeModeIndex = (resizeModeIndex + 1) % resizeModes.size }
+                                    onClick = { resizeModeIndex = (resizeModeIndex + 1) % resizeModes.size },
+                                    isCompact = isCompact,
                                 )
 
                                 // Player settings button
@@ -1801,6 +1806,7 @@ fun PlayerScreen(
                                     onSwipeVolumeChange = { onSwipeVolumeChange?.invoke(it) },
                                     onSwipeBrightnessChange = { onSwipeBrightnessChange?.invoke(it) },
                                     onSwipeSwapChange = { onSwipeSwapChange?.invoke(it) },
+                                    isCompact = isCompact,
                                 )
 
                             }
@@ -1817,15 +1823,15 @@ fun PlayerScreen(
                     ) {
                         Row(
                             modifier = Modifier.align(Alignment.Center),
-                            horizontalArrangement = Arrangement.spacedBy(32.dp),
+                            horizontalArrangement = Arrangement.spacedBy(if (isCompact) 24.dp else 32.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             IconButton(
                                 onClick = { onPreviousEpisode?.invoke() },
-                                modifier = Modifier.size(56.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape).alpha(if (onPreviousEpisode != null && !isLoadingStream && !isChangingServer) 1f else 0.3f),
+                                modifier = Modifier.size(if (isCompact) 36.dp else 56.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape).alpha(if (onPreviousEpisode != null && !isLoadingStream && !isChangingServer) 1f else 0.3f),
                                 enabled = onPreviousEpisode != null && !isLoadingStream && !isChangingServer
                             ) {
-                                Icon(Icons.Default.SkipPrevious, "Previous Episode", tint = Color.White, modifier = Modifier.size(32.dp))
+                                Icon(Icons.Default.SkipPrevious, "Previous Episode", tint = Color.White, modifier = Modifier.size(if (isCompact) 18.dp else 32.dp))
                             }
 
                             IconButton(
@@ -1838,12 +1844,12 @@ fun PlayerScreen(
                                         if (isPlaying) exoPlayer.pause() else exoPlayer.play()
                                     }
                                 },
-                                modifier = Modifier.size(72.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                                modifier = Modifier.size(if (isCompact) 48.dp else 72.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape)
                             ) {
                                 if (isBuffering || isOffline) {
                                     CircularProgressIndicator(
                                         color = Color.White,
-                                        modifier = Modifier.size(42.dp),
+                                        modifier = Modifier.size(if (isCompact) 26.dp else 42.dp),
                                         strokeWidth = 3.dp
                                     )
                                 } else {
@@ -1851,7 +1857,7 @@ fun PlayerScreen(
                                         imageVector = if (hasError) Icons.Default.Refresh else if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                                         contentDescription = if (hasError) "Retry" else if (isPlaying) "Pause" else "Play",
                                         tint = Color.White,
-                                        modifier = Modifier.size(42.dp)
+                                        modifier = Modifier.size(if (isCompact) 26.dp else 42.dp)
                                     )
                                 }
                             }
@@ -1860,10 +1866,10 @@ fun PlayerScreen(
                                 onClick = {
                                     onNextEpisode?.invoke()
                                 },
-                                modifier = Modifier.size(56.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape).alpha(if (onNextEpisode != null && !isLatestEpisode && !isLoadingStream && !isChangingServer) 1f else 0.3f),
+                                modifier = Modifier.size(if (isCompact) 36.dp else 56.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape).alpha(if (onNextEpisode != null && !isLatestEpisode && !isLoadingStream && !isChangingServer) 1f else 0.3f),
                                 enabled = onNextEpisode != null && !isLatestEpisode && !isLoadingStream && !isChangingServer
                             ) {
-                                Icon(Icons.Default.SkipNext, "Next Episode", tint = Color.White, modifier = Modifier.size(32.dp))
+                                Icon(Icons.Default.SkipNext, "Next Episode", tint = Color.White, modifier = Modifier.size(if (isCompact) 18.dp else 32.dp))
                             }
                         }
                     }
@@ -1941,7 +1947,7 @@ fun PlayerScreen(
                             .fillMaxWidth()
                             .background(Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f))))
                             .navigationBarsPadding()
-                            .padding(16.dp)
+                            .padding(if (isCompact) 6.dp else 16.dp)
                     ) {
                         // Timer above progress bar
                         Row(
@@ -1952,12 +1958,12 @@ fun PlayerScreen(
                             Text(if (duration > 0) formatTime(duration) else "--:--", color = Color.White, style = MaterialTheme.typography.labelMedium)
                         }
 
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(if (isCompact) 2.dp else 4.dp))
 
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(24.dp)
+                                .height(if (isCompact) 14.dp else 24.dp)
                                 .pointerInput(Unit) {
                                     detectTapGestures(
                                         onTap = { offset ->
@@ -2120,7 +2126,7 @@ fun PlayerScreen(
                         }
 
                         // Remaining time
-                        if (duration > 0) {
+                        if (duration > 0 && !isCompact) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.End
@@ -2151,6 +2157,7 @@ fun PlayerScreen(
                                     currentSpeed = speed
                                     exoPlayer.setPlaybackSpeed(speed)
                                 },
+                                isCompact = isCompact,
                             )
 
                             // Autoplay + Fullscreen (linked)
@@ -2159,6 +2166,7 @@ fun PlayerScreen(
                                 isFullscreen = isFullscreen,
                                 onAutoPlayChange = { onAutoPlayNextEpisodeChanged?.invoke(it) },
                                 onFullscreenToggle = { toggleFullscreen() },
+                                isCompact = isCompact,
                             )
                         }
                     }

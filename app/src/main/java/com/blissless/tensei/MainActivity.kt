@@ -23,7 +23,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -87,6 +89,7 @@ import com.blissless.tensei.ui.screens.downloads.DownloadsScreen
 import com.blissless.tensei.ui.screens.downloads.EpisodeDownloadDialog
 import com.blissless.tensei.ui.screens.explore.ExploreScreen
 import com.blissless.tensei.ui.screens.home.HomeScreen
+import com.blissless.tensei.ui.screens.episode.RichEpisodeList
 import com.blissless.tensei.ui.screens.player.PlayerScreen
 import com.blissless.tensei.ui.screens.relations.AllRecommendationsScreen
 import com.blissless.tensei.ui.screens.relations.AllRelationsScreen
@@ -442,6 +445,7 @@ fun MainScreen(
     val torrentStreamServer = remember { mutableStateOf<TorrentStreamServer?>(null) }
 
     var showPlayer by remember { mutableStateOf(false) }
+    var playerFullscreen by remember { mutableStateOf(true) }
     var isAutoRefreshing by remember { mutableStateOf(false) }
     var pendingSeekPosition by remember { mutableStateOf<Long?>(null) }
     var currentVideoUrl by remember { mutableStateOf<String?>(null) }
@@ -1699,7 +1703,15 @@ fun MainScreen(
                 android.util.Log.d("MangaNav", "READER dialog dismissed via system — calling closeReader (manga.id=${readerManga.id})")
                 closeReader()
             },
-            properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                decorFitsSystemWindows = false,
+                // Back navigation is owned by the reader itself (returns to the chapter
+                // list first, then closes). Letting the dialog auto-dismiss on back made
+                // the reader jump straight back to home.
+                dismissOnBackPress = false,
+                dismissOnClickOutside = false
+            )
         ) {
             MangaReaderScreen(
                 manga = readerManga,
@@ -2140,6 +2152,9 @@ fun MainScreen(
     if (showPlayer && currentVideoUrl != null) {
         currentAnime?.let { anime ->
             val released = anime.latestEpisode ?: anime.totalEpisodes
+            val tmdbEpisodes by viewModel.tmdbEpisodeCache.collectAsState()
+            @Composable
+            fun PlayerUi() {
             PlayerScreen(
                 videoUrl = currentVideoUrl!!,
                 referer = currentReferer,
@@ -2220,6 +2235,7 @@ fun MainScreen(
                 bufferAheadSeconds = bufferAheadSeconds,
                 onGetCacheDataSourceFactory = { referer -> viewModel.getCacheDataSourceFactory(referer, extensionOkHttpClient, extensionVideoHeaders) },
                 onBackClick = { 
+                    playerFullscreen = true
                     showPlayer = false
                     currentVideoUrl = null
                     pendingSeekPosition = null
@@ -2233,6 +2249,8 @@ fun MainScreen(
                     PlayerData.extensionEpisode = null
                     PlayerData.allHosters = emptyList()
                 },
+                isFullscreen = playerFullscreen,
+                onFullscreenChanged = { playerFullscreen = it },
                 extensionOkHttpClient = extensionOkHttpClient,
                 extensionVideoHeaders = extensionVideoHeaders,
                 extensionServers = extensionServers,
@@ -2245,6 +2263,66 @@ fun MainScreen(
                     if (fileSize > 0) torrentEngine.prioritizeForSeek(posMs, fileSize, durMs)
                 } else null,
             )
+            }
+
+            // Preload TMDB episode metadata (titles/descriptions/images) for the list
+            // shown below the player when it leaves fullscreen.
+            LaunchedEffect(anime.id, playerFullscreen) {
+                if (!playerFullscreen && viewModel.getCachedTmdbEpisodes(anime.id) == null) {
+                    try {
+                        val episodes = viewModel.fetchTmdbEpisodes(anime.title, anime.id, anime.year, anime.format)
+                        viewModel.cacheTmdbEpisodes(anime.id, episodes)
+                    } catch (_: Exception) {}
+                }
+            }
+
+            // Player is always composed at the same position; only its size changes
+            // on fullscreen toggles so playback is not restarted.
+            Column(
+                modifier = Modifier.fillMaxSize().background(Color.Black)
+            ) {
+                Box(
+                    modifier = if (playerFullscreen) {
+                        Modifier.fillMaxSize()
+                    } else {
+                        Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(16f / 9f)
+                            .background(Color.Black)
+                    }
+                ) {
+                    PlayerUi()
+                }
+                if (!playerFullscreen) {
+                    RichEpisodeList(
+                        episodeCount = maxOf(totalEpisodes, currentEpisode, released),
+                        releasedCount = released,
+                        currentEpisode = currentEpisode,
+                        currentProgress = maxOf(animeProgressMap[anime.id] ?: 0, currentEpisode - 1),
+                        isOled = isOled,
+                        tmdbEpisodes = tmdbEpisodes[anime.id] ?: emptyList(),
+                        playbackPositions = playbackPositions,
+                        playbackDurations = playbackDurations,
+                        animeId = anime.id,
+                        onEpisodeSelect = { ep -> loadAndPlayEpisode(anime, ep) },
+                        onClose = {
+                            showPlayer = false
+                            currentVideoUrl = null
+                            pendingSeekPosition = null
+                            extensionOkHttpClient = null
+                            extensionVideoHeaders = emptyMap()
+                            extensionHosters = null
+                            extensionServers = emptyList()
+                            extensionStreamEntries = emptyList()
+                            cachedExtensionNext = null
+                            PlayerData.extensionSource = null
+                            PlayerData.extensionEpisode = null
+                            PlayerData.allHosters = emptyList()
+                        },
+                        onEnterFullscreen = { playerFullscreen = true },
+                    )
+                }
+            }
         }
 
         androidx.activity.compose.BackHandler {
@@ -2256,6 +2334,7 @@ fun MainScreen(
                     onClearAnimeStack()
                 }
                 else -> {
+                    playerFullscreen = true
                     showPlayer = false
                     currentVideoUrl = null
                     extensionOkHttpClient = null

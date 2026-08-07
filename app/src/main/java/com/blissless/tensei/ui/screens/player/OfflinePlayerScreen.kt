@@ -149,6 +149,9 @@ fun OfflinePlayerScreen(
     onSavePlaybackPosition: ((Int, Int, Long, Long) -> Unit)? = null,
     onAutoPlayNextEpisodeChanged: ((Boolean) -> Unit)? = null,
     initialPosition: Long = 0L,
+    onFullscreenChanged: ((Boolean) -> Unit)? = null,
+    requestedEpisode: Int? = null,
+    onGetSavedPosition: ((Int, Int) -> Long)? = null,
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
@@ -247,6 +250,18 @@ fun OfflinePlayerScreen(
     var currentIndex by remember { mutableIntStateOf(initialIndex) }
     val currentDownload = if (sortedEpisodes.isNotEmpty()) sortedEpisodes[currentIndex] else downloadInfo
 
+    // Switch episodes when requested from the host (episode list below the player)
+    LaunchedEffect(requestedEpisode) {
+        val target = requestedEpisode ?: return@LaunchedEffect
+        if (target != currentDownload.episode) {
+            val idx = sortedEpisodes.indexOfFirst { it.episode == target }
+            if (idx >= 0) {
+                currentIndex = idx
+                showControls = true
+            }
+        }
+    }
+
     // Skip timestamp state
     var episodeTimestamps by remember { mutableStateOf<EpisodeTimestamps?>(null) }
     var showSkipOpeningButton by remember { mutableStateOf(false) }
@@ -285,9 +300,10 @@ fun OfflinePlayerScreen(
                 val controller = WindowCompat.getInsetsController(window, window.decorView)
                 controller.show(WindowInsetsCompat.Type.systemBars())
                 WindowCompat.setDecorFitsSystemWindows(window, true)
-                activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
             }
         }
+        onFullscreenChanged?.invoke(isFullscreen)
     }
 
     fun exitFullscreen() {
@@ -299,7 +315,8 @@ fun OfflinePlayerScreen(
                 controller.show(WindowInsetsCompat.Type.systemBars())
                 WindowCompat.setDecorFitsSystemWindows(window, true)
             }
-            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            onFullscreenChanged?.invoke(false)
         }
     }
 
@@ -417,8 +434,10 @@ fun OfflinePlayerScreen(
                     }
                 })
                 setMediaItem(buildMediaItem(subtitlesEnabled))
-                if (initialPosition > 0L) {
-                    seekTo(initialPosition)
+                val resumePosition = onGetSavedPosition?.invoke(currentDownload.animeId, currentDownload.episode)
+                    ?: if (currentDownload.animeId == downloadInfo.animeId && currentDownload.episode == downloadInfo.episode) initialPosition else 0L
+                if (resumePosition > 0L) {
+                    seekTo(resumePosition)
                 }
                 prepare()
                 playWhenReady = true
@@ -567,6 +586,11 @@ fun OfflinePlayerScreen(
             .fillMaxSize()
             .background(Color.Black)
     ) {
+        // Compact layout (video shown in a 16:9 box with the episode list below):
+        // shrink paddings, hide secondary text and use smaller buttons so the
+        // controls fit the reduced-height video area.
+        val isCompact = !isFullscreen
+
         AndroidView(
             factory = { ctx ->
                     PlayerView(ctx).apply {
@@ -781,7 +805,7 @@ fun OfflinePlayerScreen(
                                 )
                             )
                             .statusBarsPadding()
-                            .padding(16.dp)
+                            .padding(if (isCompact) 6.dp else 16.dp)
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -799,7 +823,7 @@ fun OfflinePlayerScreen(
                                         onDismiss()
                                     },
                                     modifier = Modifier
-                                        .size(40.dp)
+                                        .size(if (isCompact) 28.dp else 40.dp)
                                         .background(
                                             Color.Black.copy(alpha = 0.5f),
                                             shape = MaterialTheme.shapes.small
@@ -809,26 +833,36 @@ fun OfflinePlayerScreen(
                                         Icons.AutoMirrored.Filled.ArrowBack,
                                         contentDescription = "Back",
                                         tint = Color.White,
-                                        modifier = Modifier.size(24.dp)
+                                        modifier = Modifier.size(if (isCompact) 20.dp else 24.dp)
                                     )
                                 }
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Column {
-                                    Text(
-                                        text = animeName,
-                                        color = Color.White,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    val epTitle = tmdbEpisodes[currentDownload.episode]?.title
-                                    Text(
-                                        text = if (epTitle != null) "Ep ${currentDownload.episode} - $epTitle" else "Episode ${currentDownload.episode}",
-                                        color = Color.White.copy(alpha = 0.7f),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
+                                    if (!isCompact) {
+                                        Text(
+                                            text = animeName,
+                                            color = Color.White,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        val epTitle = tmdbEpisodes[currentDownload.episode]?.title
+                                        Text(
+                                            text = if (epTitle != null) "Ep ${currentDownload.episode} - $epTitle" else "Episode ${currentDownload.episode}",
+                                            color = Color.White.copy(alpha = 0.7f),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    } else {
+                                        Text(
+                                            text = "Episode ${currentDownload.episode}",
+                                            color = Color.White,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
                                 }
                             }
 
@@ -853,7 +887,7 @@ fun OfflinePlayerScreen(
                                         }
                                     ) {
                                         Row(
-                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                            modifier = Modifier.padding(horizontal = if (isCompact) 8.dp else 12.dp, vertical = if (isCompact) 4.dp else 10.dp),
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.Center
                                         ) {
@@ -861,7 +895,7 @@ fun OfflinePlayerScreen(
                                                 Icons.Filled.ClosedCaption,
                                                 contentDescription = "Subtitles",
                                                 tint = ccColor,
-                                                modifier = Modifier.size(20.dp)
+                                                modifier = Modifier.size(if (isCompact) 16.dp else 20.dp)
                                             )
                                         }
                                     }
@@ -950,19 +984,20 @@ fun OfflinePlayerScreen(
                             }
                             // Resize button only (no server selectors)
                             ResizeButton(
-                                onClick = { resizeModeIndex = (resizeModeIndex + 1) % resizeModes.size }
+                                onClick = { resizeModeIndex = (resizeModeIndex + 1) % resizeModes.size },
+                                isCompact = isCompact,
                             )
 
                             // Player settings button
                             var showPlayerSettings by remember { mutableStateOf(false) }
                             Box {
                                 Surface(
-                                    shape = RoundedCornerShape(14.dp),
+                                    shape = RoundedCornerShape(if (isCompact) 10.dp else 14.dp),
                                     color = Color.Black.copy(alpha = 0.5f),
                                     onClick = { showPlayerSettings = true }
                                 ) {
                                     Row(
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                        modifier = Modifier.padding(horizontal = if (isCompact) 8.dp else 12.dp, vertical = if (isCompact) 6.dp else 10.dp),
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.Center
                                     ) {
@@ -970,7 +1005,7 @@ fun OfflinePlayerScreen(
                                             Icons.Default.Settings,
                                             "Player Settings",
                                             tint = Color.White,
-                                            modifier = Modifier.size(18.dp)
+                                            modifier = Modifier.size(if (isCompact) 14.dp else 18.dp)
                                         )
                                     }
                                 }
@@ -1045,7 +1080,7 @@ fun OfflinePlayerScreen(
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(24.dp)
+                            horizontalArrangement = Arrangement.spacedBy(if (isCompact) 20.dp else 24.dp)
                         ) {
                             // Previous episode
                             val hasPrev = sortedEpisodes.isNotEmpty() && currentIndex > 0
@@ -1057,14 +1092,14 @@ fun OfflinePlayerScreen(
                                     }
                                 },
                                 modifier = Modifier
-                                    .size(52.dp)
+                                    .size(if (isCompact) 36.dp else 52.dp)
                                     .background(Color.Black.copy(alpha = if (hasPrev) 0.5f else 0.2f), CircleShape)
                             ) {
                                 Icon(
                                     Icons.Default.FastRewind,
                                     "Previous episode",
                                     tint = Color.White.copy(alpha = if (hasPrev) 1f else 0.3f),
-                                    modifier = Modifier.size(28.dp)
+                                    modifier = Modifier.size(if (isCompact) 18.dp else 28.dp)
                                 )
                             }
 
@@ -1078,13 +1113,13 @@ fun OfflinePlayerScreen(
                                     }
                                 },
                                 modifier = Modifier
-                                    .size(72.dp)
+                                    .size(if (isCompact) 48.dp else 72.dp)
                                     .background(Color.Black.copy(alpha = 0.5f), CircleShape)
                             ) {
                                 if (isBuffering) {
                                     CircularProgressIndicator(
                                         color = Color.White,
-                                        modifier = Modifier.size(42.dp),
+                                        modifier = Modifier.size(if (isCompact) 26.dp else 42.dp),
                                         strokeWidth = 3.dp
                                     )
                                 } else {
@@ -1095,7 +1130,7 @@ fun OfflinePlayerScreen(
                                         contentDescription = if (showError) "Retry"
                                         else if (isPlaying) "Pause" else "Play",
                                         tint = Color.White,
-                                        modifier = Modifier.size(42.dp)
+                                        modifier = Modifier.size(if (isCompact) 26.dp else 42.dp)
                                     )
                                 }
                             }
@@ -1110,14 +1145,14 @@ fun OfflinePlayerScreen(
                                     }
                                 },
                                 modifier = Modifier
-                                    .size(52.dp)
+                                    .size(if (isCompact) 36.dp else 52.dp)
                                     .background(Color.Black.copy(alpha = if (hasNext) 0.5f else 0.2f), CircleShape)
                             ) {
                                 Icon(
                                     Icons.Default.FastForward,
                                     "Next episode",
                                     tint = Color.White.copy(alpha = if (hasNext) 1f else 0.3f),
-                                    modifier = Modifier.size(28.dp)
+                                    modifier = Modifier.size(if (isCompact) 18.dp else 28.dp)
                                 )
                             }
                         }
@@ -1304,7 +1339,7 @@ fun OfflinePlayerScreen(
                                 )
                             )
                             .navigationBarsPadding()
-                            .padding(16.dp)
+                            .padding(if (isCompact) 6.dp else 16.dp)
                     ) {
                         // Time labels
                         Row(
@@ -1323,13 +1358,13 @@ fun OfflinePlayerScreen(
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(if (isCompact) 2.dp else 4.dp))
 
                         // Seek bar
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(24.dp)
+                                .height(if (isCompact) 14.dp else 24.dp)
                                 .pointerInput(Unit) {
                                     detectTapGestures(
                                         onTap = { offset ->
@@ -1478,7 +1513,7 @@ fun OfflinePlayerScreen(
                         }
 
                         // Remaining time
-                        if (duration > 0) {
+                        if (duration > 0 && !isCompact) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.End
@@ -1502,27 +1537,27 @@ fun OfflinePlayerScreen(
                         ) {
                             Box {
                                 Surface(
-                                    shape = RoundedCornerShape(14.dp),
+                                    shape = RoundedCornerShape(if (isCompact) 10.dp else 14.dp),
                                     color = Color.Black.copy(alpha = 0.5f),
                                     onClick = { showSpeedMenu = true }
                                 ) {
                                     Row(
                                         modifier = Modifier.padding(
-                                            horizontal = 12.dp,
-                                            vertical = 10.dp
+                                            horizontal = if (isCompact) 8.dp else 12.dp,
+                                            vertical = if (isCompact) 6.dp else 10.dp
                                         ),
                                         verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        horizontalArrangement = Arrangement.spacedBy(if (isCompact) 4.dp else 6.dp)
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Speed,
                                             contentDescription = "Playback speed",
                                             tint = Color.White,
-                                            modifier = Modifier.size(18.dp)
+                                            modifier = Modifier.size(if (isCompact) 14.dp else 18.dp)
                                         )
                                         Text(
                                             text = "${currentSpeed}x",
-                                            style = MaterialTheme.typography.labelMedium,
+                                            style = if (isCompact) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelMedium,
                                             color = Color.White
                                         )
                                     }
@@ -1562,7 +1597,7 @@ fun OfflinePlayerScreen(
                             // Autoplay + Fullscreen (linked)
                             Row(
                                 modifier = Modifier
-                                    .background(Color.Black.copy(alpha = 0.5f), shape = RoundedCornerShape(14.dp)),
+                                    .background(Color.Black.copy(alpha = 0.5f), shape = RoundedCornerShape(if (isCompact) 10.dp else 14.dp)),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Surface(
@@ -1570,20 +1605,25 @@ fun OfflinePlayerScreen(
                                     color = Color.Transparent
                                 ) {
                                     Row(
-                                        modifier = Modifier.padding(start = 12.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
+                                        modifier = Modifier.padding(
+                                            start = if (isCompact) 8.dp else 12.dp,
+                                            end = if (isCompact) 4.dp else 6.dp,
+                                            top = if (isCompact) 4.dp else 8.dp,
+                                            bottom = if (isCompact) 4.dp else 8.dp
+                                        ),
                                         verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        horizontalArrangement = Arrangement.spacedBy(if (isCompact) 4.dp else 8.dp)
                                     ) {
                                         Text(
                                             text = "Autoplay",
                                             color = Color.White,
                                             style = MaterialTheme.typography.labelSmall
                                         )
-                                        Box(modifier = Modifier.size(20.dp), contentAlignment = Alignment.Center) {
+                                        Box(modifier = Modifier.size(if (isCompact) 16.dp else 20.dp), contentAlignment = Alignment.Center) {
                                             Switch(
                                                 checked = autoPlayNextEpisode,
                                                 onCheckedChange = { onAutoPlayNextEpisodeChanged?.invoke(it) },
-                                                modifier = Modifier.scale(0.5f),
+                                                modifier = Modifier.scale(if (isCompact) 0.4f else 0.5f),
                                                 colors = SwitchDefaults.colors(
                                                     checkedTrackColor = Color.White,
                                                     checkedThumbColor = Color.Black,
@@ -1599,14 +1639,19 @@ fun OfflinePlayerScreen(
                                     color = Color.Transparent
                                 ) {
                                     Row(
-                                        modifier = Modifier.padding(start = 6.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+                                        modifier = Modifier.padding(
+                                            start = if (isCompact) 4.dp else 6.dp,
+                                            end = if (isCompact) 8.dp else 12.dp,
+                                            top = if (isCompact) 4.dp else 8.dp,
+                                            bottom = if (isCompact) 4.dp else 8.dp
+                                        ),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Icon(
                                             imageVector = if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
                                             contentDescription = if (isFullscreen) "Exit fullscreen" else "Enter fullscreen",
                                             tint = Color.White,
-                                            modifier = Modifier.size(18.dp)
+                                            modifier = Modifier.size(if (isCompact) 14.dp else 18.dp)
                                         )
                                     }
                                 }
