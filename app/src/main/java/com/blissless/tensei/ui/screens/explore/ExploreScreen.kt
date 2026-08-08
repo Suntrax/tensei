@@ -2,6 +2,13 @@ package com.blissless.tensei.ui.screens.explore
 
 import com.blissless.tensei.data.models.isAdultContent
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,11 +30,20 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SentimentSatisfied
 import androidx.compose.material.icons.filled.SignalWifiOff
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -53,6 +69,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -256,6 +273,32 @@ fun ExploreScreen(
     
     // Scope for coroutines - must be at composition level
     val scope = rememberCoroutineScope()
+
+    // Category list screen state (mirrors home's status list screen overlay)
+    var showCategoryList by remember { mutableStateOf(false) }
+    var categoryListTitle by remember { mutableStateOf("") }
+    var categoryListIcon by remember { mutableStateOf(Icons.Default.Star) }
+    var categoryListAnime by remember { mutableStateOf<List<ExploreAnime>>(emptyList()) }
+    var categoryListManga by remember { mutableStateOf<List<MangaExploreMedia>>(emptyList()) }
+    var categoryListIsManga by remember { mutableStateOf(false) }
+
+    fun openAnimeCategory(title: String, icon: ImageVector, list: List<ExploreAnime>) {
+        categoryListTitle = title
+        categoryListIcon = icon
+        categoryListAnime = list
+        categoryListManga = emptyList()
+        categoryListIsManga = false
+        showCategoryList = true
+    }
+
+    fun openMangaCategory(title: String, icon: ImageVector, list: List<MangaExploreMedia>) {
+        categoryListTitle = title
+        categoryListIcon = icon
+        categoryListManga = list
+        categoryListAnime = emptyList()
+        categoryListIsManga = true
+        showCategoryList = true
+    }
 
     // Show anime dialog
     if (showDialog && selectedAnime != null) {
@@ -645,7 +688,9 @@ fun ExploreScreen(
             }
 
             // This Season
-            SectionTitle("This Season", filteredSeasonalAnime.size, isOled)
+            SectionTitle("This Season", filteredSeasonalAnime.size, isOled, onClick = {
+                openAnimeCategory("This Season", Icons.Default.DateRange, filteredSeasonalAnime)
+            })
             if (filteredSeasonalAnime.isNotEmpty()) {
                 ExploreAnimeHorizontalList(
                     animeList = filteredSeasonalAnime,
@@ -686,7 +731,9 @@ fun ExploreScreen(
             }
 
             // Top Rated Series
-            SectionTitle("Top Rated Series", filteredTopSeries.size, isOled)
+            SectionTitle("Top Rated Series", filteredTopSeries.size, isOled, onClick = {
+                openAnimeCategory("Top Rated Series", Icons.Default.Star, filteredTopSeries)
+            })
             if (filteredTopSeries.isNotEmpty()) {
                 ExploreAnimeHorizontalList(
                     animeList = filteredTopSeries,
@@ -727,7 +774,9 @@ fun ExploreScreen(
             }
 
             // Top Rated Movies
-            SectionTitle("Top Rated Movies", filteredTopMovies.size, isOled)
+            SectionTitle("Top Rated Movies", filteredTopMovies.size, isOled, onClick = {
+                openAnimeCategory("Top Rated Movies", Icons.Default.PlayCircle, filteredTopMovies)
+            })
             if (filteredTopMovies.isNotEmpty()) {
                 ExploreAnimeHorizontalList(
                     animeList = filteredTopMovies,
@@ -767,191 +816,55 @@ fun ExploreScreen(
                 LoadingPlaceholder(isOled)
             }
 
-            // Genre Sections
-            GenreSection(
-                title = "Action",
-                animeList = filteredActionAnime,
-                animeStatusMap = animeStatusMap,
-                showStatusColors = showStatusColors,
-                showAnimeCardButtons = showAnimeCardButtons,
-                isLoading = isLoading,
-                isOled = isOled,
-                isLoggedIn = isLoggedIn,
-                onAnimeClick = onAnimeClickStable,
-                onBookmarkClick = onBookmarkClickStable,
-                localAnimeStatus = localAnimeStatus,
-                onAddToLocalPlanning = { anime ->
-                    viewModel.setLocalAnimeStatus(
-                        anime.id,
-                        LocalAnimeEntry(
-                            id = anime.id,
-                            status = "PLANNING",
-                            progress = 0,
-                            totalEpisodes = anime.episodes,
-                            title = anime.title,
-                            cover = anime.cover,
-                            banner = anime.banner,
-                            year = anime.year,
-                            averageScore = anime.averageScore
-                        )
-                    )
-                },
-                onRemoveFromLocalStatus = { anime ->
-                    viewModel.setLocalAnimeStatus(anime.id, null)
-                },
-                preferEnglishTitles = preferEnglishTitles,
-                listIndex = 3,
-                isVisible = isVisible,
-                viewModel = viewModel
+            // Genre Sections (alphabetical order)
+            val genreSections = listOf(
+                Triple("Action", filteredActionAnime, Icons.Default.Whatshot),
+                Triple("Comedy", filteredComedyAnime, Icons.Default.SentimentSatisfied),
+                Triple("Fantasy", filteredFantasyAnime, Icons.Default.AutoAwesome),
+                Triple("Romance", filteredRomanceAnime, Icons.Default.Favorite),
+                Triple("Sci-Fi", filteredScifiAnime, Icons.Default.Explore)
             )
-
-            GenreSection(
-                title = "Romance",
-                animeList = filteredRomanceAnime,
-                animeStatusMap = animeStatusMap,
-                showStatusColors = showStatusColors,
-                showAnimeCardButtons = showAnimeCardButtons,
-                isLoading = isLoading,
-                isOled = isOled,
-                isLoggedIn = isLoggedIn,
-                onAnimeClick = onAnimeClickStable,
-                onBookmarkClick = onBookmarkClickStable,
-                localAnimeStatus = localAnimeStatus,
-                onAddToLocalPlanning = { anime ->
-                    viewModel.setLocalAnimeStatus(
-                        anime.id,
-                        LocalAnimeEntry(
-                            id = anime.id,
-                            status = "PLANNING",
-                            progress = 0,
-                            totalEpisodes = anime.episodes,
-                            title = anime.title,
-                            cover = anime.cover,
-                            banner = anime.banner,
-                            year = anime.year,
-                            averageScore = anime.averageScore
+            genreSections.forEachIndexed { index, (genreTitle, genreList, genreIcon) ->
+                GenreSection(
+                    title = genreTitle,
+                    animeList = genreList,
+                    animeStatusMap = animeStatusMap,
+                    showStatusColors = showStatusColors,
+                    showAnimeCardButtons = showAnimeCardButtons,
+                    isLoading = isLoading,
+                    isOled = isOled,
+                    isLoggedIn = isLoggedIn,
+                    onAnimeClick = onAnimeClickStable,
+                    onBookmarkClick = onBookmarkClickStable,
+                    localAnimeStatus = localAnimeStatus,
+                    onAddToLocalPlanning = { anime ->
+                        viewModel.setLocalAnimeStatus(
+                            anime.id,
+                            LocalAnimeEntry(
+                                id = anime.id,
+                                status = "PLANNING",
+                                progress = 0,
+                                totalEpisodes = anime.episodes,
+                                title = anime.title,
+                                cover = anime.cover,
+                                banner = anime.banner,
+                                year = anime.year,
+                                averageScore = anime.averageScore
+                            )
                         )
-                    )
-                },
-                onRemoveFromLocalStatus = { anime ->
-                    viewModel.setLocalAnimeStatus(anime.id, null)
-                },
-                preferEnglishTitles = preferEnglishTitles,
-                listIndex = 4,
-                isVisible = isVisible,
-                viewModel = viewModel
-            )
-
-            GenreSection(
-                title = "Comedy",
-                animeList = filteredComedyAnime,
-                animeStatusMap = animeStatusMap,
-                showStatusColors = showStatusColors,
-                showAnimeCardButtons = showAnimeCardButtons,
-                isLoading = isLoading,
-                isOled = isOled,
-                isLoggedIn = isLoggedIn,
-                onAnimeClick = onAnimeClickStable,
-                onBookmarkClick = onBookmarkClickStable,
-                localAnimeStatus = localAnimeStatus,
-                onAddToLocalPlanning = { anime ->
-                    viewModel.setLocalAnimeStatus(
-                        anime.id,
-                        LocalAnimeEntry(
-                            id = anime.id,
-                            status = "PLANNING",
-                            progress = 0,
-                            totalEpisodes = anime.episodes,
-                            title = anime.title,
-                            cover = anime.cover,
-                            banner = anime.banner,
-                            year = anime.year,
-                            averageScore = anime.averageScore
-                        )
-                    )
-                },
-                onRemoveFromLocalStatus = { anime ->
-                    viewModel.setLocalAnimeStatus(anime.id, null)
-                },
-                preferEnglishTitles = preferEnglishTitles,
-                listIndex = 5,
-                isVisible = isVisible,
-                viewModel = viewModel
-            )
-
-            GenreSection(
-                title = "Fantasy",
-                animeList = filteredFantasyAnime,
-                animeStatusMap = animeStatusMap,
-                showStatusColors = showStatusColors,
-                showAnimeCardButtons = showAnimeCardButtons,
-                isLoading = isLoading,
-                isOled = isOled,
-                isLoggedIn = isLoggedIn,
-                onAnimeClick = onAnimeClickStable,
-                onBookmarkClick = onBookmarkClickStable,
-                localAnimeStatus = localAnimeStatus,
-                onAddToLocalPlanning = { anime ->
-                    viewModel.setLocalAnimeStatus(
-                        anime.id,
-                        LocalAnimeEntry(
-                            id = anime.id,
-                            status = "PLANNING",
-                            progress = 0,
-                            totalEpisodes = anime.episodes,
-                            title = anime.title,
-                            cover = anime.cover,
-                            banner = anime.banner,
-                            year = anime.year,
-                            averageScore = anime.averageScore
-                        )
-                    )
-                },
-                onRemoveFromLocalStatus = { anime ->
-                    viewModel.setLocalAnimeStatus(anime.id, null)
-                },
-                preferEnglishTitles = preferEnglishTitles,
-                listIndex = 6,
-                isVisible = isVisible,
-                viewModel = viewModel
-            )
-
-            GenreSection(
-                title = "Sci-Fi",
-                animeList = filteredScifiAnime,
-                animeStatusMap = animeStatusMap,
-                showStatusColors = showStatusColors,
-                showAnimeCardButtons = showAnimeCardButtons,
-                isLoading = isLoading,
-                isOled = isOled,
-                isLoggedIn = isLoggedIn,
-                onAnimeClick = onAnimeClickStable,
-                onBookmarkClick = onBookmarkClickStable,
-                localAnimeStatus = localAnimeStatus,
-                onAddToLocalPlanning = { anime ->
-                    viewModel.setLocalAnimeStatus(
-                        anime.id,
-                        LocalAnimeEntry(
-                            id = anime.id,
-                            status = "PLANNING",
-                            progress = 0,
-                            totalEpisodes = anime.episodes,
-                            title = anime.title,
-                            cover = anime.cover,
-                            banner = anime.banner,
-                            year = anime.year,
-                            averageScore = anime.averageScore
-                        )
-                    )
-                },
-                onRemoveFromLocalStatus = { anime ->
-                    viewModel.setLocalAnimeStatus(anime.id, null)
-                },
-                preferEnglishTitles = preferEnglishTitles,
-                listIndex = 7,
-                isVisible = isVisible,
-                viewModel = viewModel
-            )
+                    },
+                    onRemoveFromLocalStatus = { anime ->
+                        viewModel.setLocalAnimeStatus(anime.id, null)
+                    },
+                    onSectionClick = {
+                        openAnimeCategory(genreTitle, genreIcon, genreList)
+                    },
+                    preferEnglishTitles = preferEnglishTitles,
+                    listIndex = 3 + index,
+                    isVisible = isVisible,
+                    viewModel = viewModel
+                )
+            }
 
             Spacer(modifier = Modifier.height(20.dp))
 
@@ -965,14 +878,29 @@ fun ExploreScreen(
                     "favourites" to "Most Favourited",
                     "action" to "Action",
                     "romance" to "Romance",
+                    "comedy" to "Comedy",
                     "fantasy" to "Fantasy",
+                    "sci-fi" to "Sci-Fi",
                     "seinen" to "Seinen"
                 )
                 // Explicit render order so newly-added sections always land in the right spot.
                 // Trending is rendered as the featured carousel above the rows.
+                // Genre sections (action, comedy, fantasy, romance, sci-fi, seinen) are alphabetical.
                 val mangaSectionOrder = listOf(
                     "trending", "popular", "topRated", "favourites",
-                    "action", "romance", "fantasy", "seinen"
+                    "action", "comedy", "fantasy", "romance", "sci-fi", "seinen"
+                )
+                val mangaSectionIconMap = mapOf(
+                    "trending" to Icons.Default.Whatshot,
+                    "popular" to Icons.Default.Favorite,
+                    "topRated" to Icons.Default.Star,
+                    "favourites" to Icons.Default.Bookmark,
+                    "action" to Icons.Default.Whatshot,
+                    "romance" to Icons.Default.Favorite,
+                    "comedy" to Icons.Default.SentimentSatisfied,
+                    "fantasy" to Icons.Default.AutoAwesome,
+                    "sci-fi" to Icons.Default.Explore,
+                    "seinen" to Icons.Default.MenuBook
                 )
 
                 // Featured carousel fed by the trending section (mirrors anime FeaturedCarousel,
@@ -1002,13 +930,24 @@ fun ExploreScreen(
                     Spacer(modifier = Modifier.height(12.dp))
                 }
 
-                // Remaining section rows in fixed order (trending is rendered as carousel above)
+                // Section rows in fixed order. Trending now also renders as a row with the full
+                // 50 manga below the carousel (which only shows the first 10).
                 mangaSectionOrder.forEach { key ->
-                    if (key == "trending") return@forEach // already shown in the carousel
                     val list = mangaExploreSections[key].orEmpty()
                     if (list.isNotEmpty()) {
                         val label = sectionLabelMap[key] ?: key.replaceFirstChar { it.uppercase() }
-                        SectionTitle(label, list.size, isOled)
+                        SectionTitle(
+                            label,
+                            list.size,
+                            isOled,
+                            onClick = {
+                                openMangaCategory(
+                                    label,
+                                    mangaSectionIconMap[key] ?: Icons.Default.MenuBook,
+                                    list
+                                )
+                            }
+                        )
                         MangaExploreHorizontalRow(
                             mangaList = list,
                             isOled = isOled,
@@ -1077,6 +1016,28 @@ fun ExploreScreen(
         }
         }
 
+        // Full-screen category list overlay (mirrors home's status list screen)
+        AnimatedVisibility(
+            visible = showCategoryList,
+            enter = slideInVertically(animationSpec = tween(300, easing = FastOutSlowInEasing)) { (it * 0.15f).toInt() } + fadeIn(animationSpec = tween(300)),
+            exit = slideOutVertically(animationSpec = tween(250, easing = FastOutSlowInEasing)) { (it * 0.15f).toInt() } + fadeOut(animationSpec = tween(250))
+        ) {
+            ExploreCategoryListScreen(
+                title = categoryListTitle,
+                icon = categoryListIcon,
+                animeList = categoryListAnime,
+                mangaList = categoryListManga,
+                isManga = categoryListIsManga,
+                animeStatusMap = animeStatusMap,
+                showStatusColors = showStatusColors,
+                preferEnglishTitles = preferEnglishTitles,
+                onAnimeClick = onAnimeClickStable,
+                onBookmarkClick = onBookmarkClickStable,
+                onMangaClick = onMangaClick,
+                onBackClick = { showCategoryList = false },
+                onDismiss = { showCategoryList = false }
+            )
+        }
 
     }
 }
@@ -1191,12 +1152,13 @@ private fun GenreSection(
     preferEnglishTitles: Boolean = true,
     listIndex: Int = 0,
     isVisible: Boolean = true,
+    onSectionClick: (() -> Unit)? = null,
     viewModel: MainViewModel
 ) {
     if (animeList.isEmpty() && !isLoading) return
 
     Column {
-        SectionTitle(title, animeList.size, isOled)
+        SectionTitle(title, animeList.size, isOled, onClick = onSectionClick)
         if (animeList.isNotEmpty()) {
             ExploreAnimeHorizontalList(
                 animeList = animeList,
@@ -1340,6 +1302,41 @@ private fun MangaFeaturedCarousel(
                         )
                     )
                 )
+            }
+        }
+
+        // Page indicator dots (mirrors the anime FeaturedCarousel top indicator)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            Color.Black.copy(alpha = 0.7f),
+                            Color.Transparent
+                        )
+                    )
+                )
+                .padding(top = 32.dp)
+                .align(Alignment.TopCenter)
+        ) {
+            Row(
+                modifier = Modifier.align(Alignment.Center),
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val currentPage = pagerState.currentPage % actualCount
+                repeat(actualCount) { index ->
+                    Box(
+                        modifier = Modifier
+                            .size(if (index == currentPage) 16.dp else 5.dp, 5.dp)
+                            .background(
+                                if (index == currentPage) Color.White
+                                else Color.White.copy(alpha = 0.4f),
+                                RoundedCornerShape(3.dp)
+                            )
+                    )
+                }
             }
         }
 

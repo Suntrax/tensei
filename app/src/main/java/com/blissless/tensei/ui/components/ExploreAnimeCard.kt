@@ -28,6 +28,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.BookmarkAdd
 import androidx.compose.material3.Card
@@ -479,9 +480,11 @@ internal fun LoadingPlaceholder(isOled: Boolean = false) {
 }
 
 @Composable
-internal fun SectionTitle(title: String, count: Int? = null, isOled: Boolean = false) {
+internal fun SectionTitle(title: String, count: Int? = null, isOled: Boolean = false, onClick: (() -> Unit)? = null) {
     Row(
-        modifier = Modifier.padding(start = 16.dp, top = 22.dp, bottom = 10.dp),
+        modifier = Modifier
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(start = 16.dp, top = 22.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
@@ -511,6 +514,15 @@ internal fun SectionTitle(title: String, count: Int? = null, isOled: Boolean = f
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
                 )
             }
+        }
+        if (onClick != null) {
+            Spacer(modifier = Modifier.width(4.dp))
+            Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = "View all",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp)
+            )
         }
     }
 }

@@ -249,7 +249,7 @@ class AnimeRepository(
                         startDate { year }
                     }
                 }
-                seasonal: Page(page: 1, perPage: 20) {
+                seasonal: Page(page: 1, perPage: 50) {
                     media(type: ANIME, sort: POPULARITY_DESC, status: RELEASING) {
                         id
                         idMal
@@ -265,7 +265,7 @@ class AnimeRepository(
                         startDate { year }
                     }
                 }
-                topSeries: Page(page: 1, perPage: 20) {
+                topSeries: Page(page: 1, perPage: 50) {
                     media(type: ANIME, format: TV, sort: SCORE_DESC) {
                         id
                         idMal
@@ -281,7 +281,7 @@ class AnimeRepository(
                         startDate { year }
                     }
                 }
-                topMovies: Page(page: 1, perPage: 20) {
+                topMovies: Page(page: 1, perPage: 50) {
                     media(type: ANIME, format: MOVIE, sort: SCORE_DESC) {
                         id
                         idMal
@@ -297,7 +297,7 @@ class AnimeRepository(
                         startDate { year }
                     }
                 }
-                action: Page(page: 1, perPage: 20) {
+                action: Page(page: 1, perPage: 50) {
                     media(type: ANIME, genre: "Action", sort: POPULARITY_DESC) {
                         id
                         idMal
@@ -313,7 +313,7 @@ class AnimeRepository(
                         startDate { year }
                     }
                 }
-                romance: Page(page: 1, perPage: 20) {
+                romance: Page(page: 1, perPage: 50) {
                     media(type: ANIME, genre: "Romance", sort: POPULARITY_DESC) {
                         id
                         idMal
@@ -329,7 +329,7 @@ class AnimeRepository(
                         startDate { year }
                     }
                 }
-                comedy: Page(page: 1, perPage: 20) {
+                comedy: Page(page: 1, perPage: 50) {
                     media(type: ANIME, genre: "Comedy", sort: POPULARITY_DESC) {
                         id
                         idMal
@@ -345,7 +345,7 @@ class AnimeRepository(
                         startDate { year }
                     }
                 }
-                fantasy: Page(page: 1, perPage: 20) {
+                fantasy: Page(page: 1, perPage: 50) {
                     media(type: ANIME, genre: "Fantasy", sort: POPULARITY_DESC) {
                         id
                         idMal
@@ -361,7 +361,7 @@ class AnimeRepository(
                         startDate { year }
                     }
                 }
-                scifi: Page(page: 1, perPage: 20) {
+                scifi: Page(page: 1, perPage: 50) {
                     media(type: ANIME, genre: "Sci-Fi", sort: POPULARITY_DESC) {
                         id
                         idMal
