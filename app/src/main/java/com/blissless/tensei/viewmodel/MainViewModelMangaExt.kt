@@ -20,6 +20,7 @@ import com.blissless.tensei.data.models.MangaStaffEdge
 import com.blissless.tensei.data.models.MangaRelation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -416,7 +417,9 @@ suspend fun MainViewModel.fetchMangaLists(): Boolean {
         anilistCurrent?.forEach { m ->
             localTracker.ensureTrack(m.id, m.title, m.cover, m.totalChapters)
             localTracker.updateTrackingStatus(m.id, "CURRENT")
-            if (m.progress > 0) localTracker.updateChapterProgress(m.id, m.progress.toFloat())
+            // Never downgrade local progress: a stale AniList response (push still in
+            // flight, or a network hiccup) must not roll back chapters the user just read.
+            if (m.progress > 0) localTracker.updateChapterProgressKeepMax(m.id, m.progress.toFloat())
         }
         anilistPlanning?.forEach { m ->
             localTracker.ensureTrack(m.id, m.title, m.cover, m.totalChapters)
@@ -876,7 +879,24 @@ private fun MainViewModel.queueMangaSync(
     mangaSyncJob?.cancel()
     mangaSyncJob = viewModelScope.launch {
         delay(MainViewModel.SYNC_DEBOUNCE_MS)
-        executeMangaPendingSyncs()
+        // Run the push to completion even if a newer sync is queued mid-flight.
+        // Cancelling the executing job would abort the network call in progress and
+        // skip the re-queue for failed pushes — rapid chapter flips (next-chapter
+        // button) hit this constantly, silently dropping AniList updates.
+        withContext(NonCancellable) { executeMangaPendingSyncs() }
+    }
+}
+
+/**
+ * Flush any pending manga → AniList syncs immediately, skipping the debounce.
+ * Called when the reader closes so progress read in the last few seconds isn't
+ * lost if the app is killed within the debounce window.
+ */
+fun MainViewModel.flushMangaSync() {
+    if (pendingMangaSyncs.isEmpty()) return
+    mangaSyncJob?.cancel()
+    mangaSyncJob = viewModelScope.launch {
+        withContext(NonCancellable) { executeMangaPendingSyncs() }
     }
 }
 

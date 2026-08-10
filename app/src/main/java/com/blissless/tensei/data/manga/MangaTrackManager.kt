@@ -139,6 +139,20 @@ class MangaTrackManager(context: Context) {
         saveTracks(tracks)
     }
 
+    /**
+     * Update progress only if the new value is higher. Used when merging AniList data back
+     * into local tracking: a stale AniList response must never roll back chapters the user
+     * just read but whose push hasn't landed yet (or failed).
+     */
+    fun updateChapterProgressKeepMax(mangaId: Int, progress: Float) {
+        val tracks = getTracks().toMutableList()
+        val index = tracks.indexOfFirst { it.mangaId == mangaId }
+        if (index >= 0 && progress > tracks[index].progress) {
+            tracks[index] = tracks[index].copy(progress = progress)
+            saveTracks(tracks)
+        }
+    }
+
     fun updateScrollProgress(mangaId: Int, scrollProgress: Float) {
         val tracks = getTracks().toMutableList()
         val index = tracks.indexOfFirst { it.mangaId == mangaId }

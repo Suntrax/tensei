@@ -70,6 +70,7 @@ import com.blissless.tensei.data.models.MangaChapter
 import com.blissless.tensei.data.models.MangaMedia
 import com.blissless.tensei.viewmodel.clearMangaChapterImagesCache
 import com.blissless.tensei.viewmodel.fetchMangaDetail
+import com.blissless.tensei.viewmodel.flushMangaSync
 import com.blissless.tensei.viewmodel.hasLoadedMangaChapters
 import com.blissless.tensei.viewmodel.isLoadingMangaChapters
 import com.blissless.tensei.viewmodel.loadChapterImages
@@ -125,6 +126,9 @@ fun MangaReaderScreen(
             applyReaderFullscreen(view, false)
             // Drop the prefetch cache so it doesn't hold stale image lists in memory.
             viewModel.clearMangaChapterImagesCache()
+            // Push any debounced progress/status changes to AniList immediately so chapters
+            // read in the last few seconds aren't lost if the app is killed during the debounce.
+            viewModel.flushMangaSync()
             // Refresh the home Continue Reading card with the latest scroll progress
             // when leaving the reader mid-chapter.
             viewModel.refreshMangaTracking()
@@ -150,6 +154,9 @@ fun MangaReaderScreen(
     // True when the current chapter was opened via the next-chapter button — suppresses restoring
     // the saved (stale) scroll position so the new chapter always opens at the top.
     var suppressResumeRestore by remember { mutableStateOf(false) }
+    // True after a chapter is tapped in the chapter list, while its images are still loading.
+    // The list stays open with a loading overlay on top, then dismisses once the images arrive.
+    var pendingChapterLoad by remember { mutableStateOf(false) }
     val readIndices = remember { mutableStateOf((0 until manga.progress.coerceAtLeast(0)).toSet()) }
     val scope = rememberCoroutineScope()
 
@@ -205,9 +212,9 @@ fun MangaReaderScreen(
 
     android.util.Log.d("MangaReader", "MangaReaderScreen state: chapters.size=${chapters.size} showChapterList=$showChapterList currentChapterIndex=$currentChapterIndex chapterImages=${chapterImages?.size ?: "null"}")
 
-    LaunchedEffect(currentChapter, showChapterList) {
-        android.util.Log.d("MangaReader", "LaunchedEffect(currentChapter, showChapterList): showChapterList=$showChapterList currentChapter=${currentChapter != null}")
-        if (!showChapterList) {
+    LaunchedEffect(currentChapter, showChapterList, pendingChapterLoad) {
+        android.util.Log.d("MangaReader", "LaunchedEffect(currentChapter, showChapterList, pendingChapterLoad): showChapterList=$showChapterList pendingChapterLoad=$pendingChapterLoad currentChapter=${currentChapter != null}")
+        if (!showChapterList || pendingChapterLoad) {
             currentChapter?.let { chapter ->
                 android.util.Log.d("MangaReader", "Loading chapter images for chapterId='${chapter.chapterId}' title='${chapter.title}'")
                 viewModel.loadChapterImages(
@@ -218,6 +225,16 @@ fun MangaReaderScreen(
                     mangaId = manga.id
                 )
             }
+        }
+    }
+
+    // Once the tapped chapter's images finish loading (or fail — the reader then shows its own
+    // error/retry UI), dismiss the chapter list and enter the reader.
+    LaunchedEffect(chapterImages, chapterImagesError, pendingChapterLoad) {
+        if (pendingChapterLoad && (chapterImages != null || chapterImagesError != null)) {
+            android.util.Log.d("MangaReader", "Pending chapter load settled (images=${chapterImages?.size ?: "null"} error=${chapterImagesError != null}) — closing chapter list")
+            pendingChapterLoad = false
+            showChapterList = false
         }
     }
 
@@ -323,7 +340,9 @@ fun MangaReaderScreen(
         if (!resuming) {
             viewModel.updateMangaScrollProgress(manga.id, 0f)
         }
-        showChapterList = false
+        // Keep the chapter list open while the chapter's images load, with a loading overlay on
+        // top. The list is dismissed once the images arrive (or fail) — see the effect below.
+        pendingChapterLoad = true
         showControls = false
     }
 
@@ -504,6 +523,12 @@ fun MangaReaderScreen(
                     }
                 )
             }
+        }
+
+        // Loading overlay shown over the chapter list while a tapped chapter's images load.
+        // Drawn after the branch content so it sits on top of the chapter selection screen.
+        if (showChapterList && pendingChapterLoad) {
+            ChapterLoadingView()
         }
 
         // ─── Overlay: top bar (only when reading) ─────────────────────
