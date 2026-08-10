@@ -157,6 +157,15 @@ fun MangaReaderScreen(
     // True after a chapter is tapped in the chapter list, while its images are still loading.
     // The list stays open with a loading overlay on top, then dismisses once the images arrive.
     var pendingChapterLoad by remember { mutableStateOf(false) }
+    // The chapter index whose load is being awaited (set in selectChapter). -1 when idle.
+    var pendingChapterIndex by remember { mutableIntStateOf(-1) }
+    // The images/error actually on screen, and which chapter they belong to. Kept unchanged
+    // while a new chapter loads so the current screen (chapter list or current chapter) stays
+    // visible behind the loading overlay; it swaps to the new chapter only once its images are
+    // ready (or it failed).
+    var displayedImages by remember { mutableStateOf<List<String>?>(null) }
+    var displayedImagesError by remember { mutableStateOf<String?>(null) }
+    var displayedChapterIndex by remember { mutableIntStateOf(-1) }
     val readIndices = remember { mutableStateOf((0 until manga.progress.coerceAtLeast(0)).toSet()) }
     val scope = rememberCoroutineScope()
 
@@ -228,12 +237,31 @@ fun MangaReaderScreen(
         }
     }
 
-    // Once the tapped chapter's images finish loading (or fail — the reader then shows its own
-    // error/retry UI), dismiss the chapter list and enter the reader.
-    LaunchedEffect(chapterImages, chapterImagesError, pendingChapterLoad) {
-        if (pendingChapterLoad && (chapterImages != null || chapterImagesError != null)) {
-            android.util.Log.d("MangaReader", "Pending chapter load settled (images=${chapterImages?.size ?: "null"} error=${chapterImagesError != null}) — closing chapter list")
+    // Once the chapter images finish loading (or fail), put them on screen. The VM cancels any
+    // earlier chapter load when a new one starts, so the settled value is always for the
+    // currently-selected chapter. During the load the PREVIOUS screen (chapter list or current
+    // chapter) stays visible behind the loading overlay instead of flashing a blank loading view.
+    LaunchedEffect(chapterImages, chapterImagesError) {
+        if (chapterImages != null || chapterImagesError != null) {
+            android.util.Log.d("MangaReader", "Chapter images settled (images=${chapterImages?.size ?: "null"} error=${chapterImagesError != null}) — swapping display")
+            displayedImages = chapterImages
+            displayedImagesError = chapterImagesError
+            displayedChapterIndex = currentChapterIndex
+        }
+    }
+
+    // If a chapter load was started from the chapter list (or a chapter transition), dismiss the
+    // loading overlay once the NEW chapter's images are on screen, and close the list so the
+    // reader takes over. Guarded by displayedChapterIndex == pendingChapterIndex so stale
+    // displayed images from a previously-read chapter never close the list prematurely.
+    LaunchedEffect(displayedImages, displayedImagesError, displayedChapterIndex, pendingChapterLoad, pendingChapterIndex) {
+        if (pendingChapterLoad &&
+            displayedChapterIndex == pendingChapterIndex &&
+            (displayedImages != null || displayedImagesError != null)
+        ) {
+            android.util.Log.d("MangaReader", "Pending chapter load settled (images=${displayedImages?.size ?: "null"} error=${displayedImagesError != null}) — clearing overlay")
             pendingChapterLoad = false
+            pendingChapterIndex = -1
             showChapterList = false
         }
     }
@@ -343,6 +371,7 @@ fun MangaReaderScreen(
         // Keep the chapter list open while the chapter's images load, with a loading overlay on
         // top. The list is dismissed once the images arrive (or fail) — see the effect below.
         pendingChapterLoad = true
+        pendingChapterIndex = index
         showControls = false
     }
 
@@ -392,6 +421,8 @@ fun MangaReaderScreen(
 
     // Retry the current chapter image load (used by the error UI)
     fun retryChapterLoad() {
+        // Clear the stale error so the reader shows its loading state while retrying.
+        displayedImagesError = null
         currentChapter?.let { chapter ->
             viewModel.loadChapterImages(chapter.chapterId, useDataSaver, manga.title)
         }
@@ -406,11 +437,12 @@ fun MangaReaderScreen(
         view.findDialogWindow()?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
     }
 
-    // True while either loading state is showing (chapter list loading or chapter image
-    // loading). During those the reader background is transparent so the translucent
-    // overlay actually shows through; while reading it stays opaque dark.
+    // True while there is genuinely nothing to display (initial chapter-list or chapter-image
+    // loading). Once a screen is showing (chapter list, a chapter, or an error), the background
+    // stays opaque so that screen remains visible behind the translucent loading overlay during
+    // chapter transitions instead of showing through to whatever is behind the dialog.
     val isLoadingAny = (chapters.isEmpty() && (isLoadingChapters || !hasLoadedChapters)) ||
-        (!showChapterList && chapterImagesError == null && (chapterImages?.isEmpty() ?: true))
+        (!showChapterList && displayedImages == null && displayedImagesError == null)
 
     Box(
         modifier = Modifier.fillMaxSize().background(
@@ -463,71 +495,79 @@ fun MangaReaderScreen(
             }
 
             readerMode == ReaderMode.VERTICAL_SCROLL -> {
-                VerticalScrollReader(
-                    chapterImages = chapterImages ?: emptyList(),
-                    chapterImagesError = chapterImagesError,
-                    chapter = currentChapter,
-                    totalChapters = chapters.size,
-                    currentIndex = currentChapterIndex,
-                    scrollProgress = scrollProgress,
-                    // Restore target for the vertical reader: prefer the LIVE scroll position (so
-                    // switching from a single-page mode back to vertical resumes where you were),
-                    // and fall back to the saved resume position only on the initial entry.
-                    restoreProgress = when {
-                        scrollProgress > 0f -> scrollProgress
-                        !suppressResumeRestore && currentChapterIndex == manga.progress -> manga.scrollProgress
-                        else -> -1f
-                    },
-                    showControls = showControls,
-                    onScrollProgress = {
-                        if (viewModel.onMangaScrollProgress(
-                                mangaId = manga.id,
-                                chapter = currentChapter,
-                                scrollPercent = it,
-                                mangaTitle = manga.title,
-                                mangaCover = manga.cover
-                            )
-                        ) markChapterReadInListUi()
-                        scrollProgress = it
-                    },
-                    onCurrentPage = { page -> currentPageIndex = page },
-                    onToggleControls = { showControls = !showControls },
-                    onRetry = { retryChapterLoad() }
-                )
-            }
-
-            readerMode == ReaderMode.LEFT_TO_RIGHT || readerMode == ReaderMode.RIGHT_TO_LEFT -> {
-                PagedMangaReader(
-                    chapterImages = chapterImages ?: emptyList(),
-                    chapterImagesError = chapterImagesError,
-                    mode = readerMode,
-                    initialPage = currentPageIndex.coerceIn(0, (chapterImages?.size ?: 1) - 1),
-                    onToggleControls = { showControls = !showControls },
-                    onPrevChapter = { if (!isFirstChapter) selectChapter(currentChapterIndex - 1) },
-                    onNextChapter = { if (!isLastChapter) selectChapter(currentChapterIndex + 1) },
-                    onRetry = { retryChapterLoad() },
-                    onPageChanged = { page, total ->
-                        currentPageIndex = page
-                        if (total > 1) {
-                            val progress = page.toFloat() / (total - 1).toFloat()
+                // Keyed by chapter so a chapter change resets the scroll/pager state to the top;
+                // displayedImages (possibly still the previous chapter's) stays on screen behind
+                // the loading overlay until the new chapter's images arrive.
+                key(currentChapter?.chapterId) {
+                    VerticalScrollReader(
+                        chapterImages = displayedImages ?: emptyList(),
+                        chapterImagesError = displayedImagesError,
+                        chapter = currentChapter,
+                        totalChapters = chapters.size,
+                        currentIndex = currentChapterIndex,
+                        scrollProgress = scrollProgress,
+                        // Restore target for the vertical reader: prefer the LIVE scroll position (so
+                        // switching from a single-page mode back to vertical resumes where you were),
+                        // and fall back to the saved resume position only on the initial entry.
+                        restoreProgress = when {
+                            scrollProgress > 0f -> scrollProgress
+                            !suppressResumeRestore && currentChapterIndex == manga.progress -> manga.scrollProgress
+                            else -> -1f
+                        },
+                        showControls = showControls,
+                        onScrollProgress = {
                             if (viewModel.onMangaScrollProgress(
                                     mangaId = manga.id,
                                     chapter = currentChapter,
-                                    scrollPercent = progress,
+                                    scrollPercent = it,
                                     mangaTitle = manga.title,
                                     mangaCover = manga.cover
                                 )
                             ) markChapterReadInListUi()
-                            scrollProgress = progress
+                            scrollProgress = it
+                        },
+                        onCurrentPage = { page -> currentPageIndex = page },
+                        onToggleControls = { showControls = !showControls },
+                        onRetry = { retryChapterLoad() }
+                    )
+                }
+            }
+
+            readerMode == ReaderMode.LEFT_TO_RIGHT || readerMode == ReaderMode.RIGHT_TO_LEFT -> {
+                key(currentChapter?.chapterId) {
+                    PagedMangaReader(
+                        chapterImages = displayedImages ?: emptyList(),
+                        chapterImagesError = displayedImagesError,
+                        mode = readerMode,
+                        initialPage = currentPageIndex.coerceIn(0, (displayedImages?.size ?: 1) - 1),
+                        onToggleControls = { showControls = !showControls },
+                        onPrevChapter = { if (!isFirstChapter) selectChapter(currentChapterIndex - 1) },
+                        onNextChapter = { if (!isLastChapter) selectChapter(currentChapterIndex + 1) },
+                        onRetry = { retryChapterLoad() },
+                        onPageChanged = { page, total ->
+                            currentPageIndex = page
+                            if (total > 1) {
+                                val progress = page.toFloat() / (total - 1).toFloat()
+                                if (viewModel.onMangaScrollProgress(
+                                        mangaId = manga.id,
+                                        chapter = currentChapter,
+                                        scrollPercent = progress,
+                                        mangaTitle = manga.title,
+                                        mangaCover = manga.cover
+                                    )
+                                ) markChapterReadInListUi()
+                                scrollProgress = progress
+                            }
                         }
-                    }
-                )
+                    )
+                }
             }
         }
 
-        // Loading overlay shown over the chapter list while a tapped chapter's images load.
-        // Drawn after the branch content so it sits on top of the chapter selection screen.
-        if (showChapterList && pendingChapterLoad) {
+        // Loading overlay shown over whatever screen is currently displayed (the chapter list,
+        // or the current chapter while a next/prev transition loads). Drawn after the branch
+        // content so it sits on top, and dismissed once the new chapter's images are ready.
+        if (pendingChapterLoad) {
             ChapterLoadingView()
         }
 

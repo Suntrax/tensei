@@ -270,7 +270,13 @@ private val _mangaChapterImagesCache = MutableStateFlow<Map<String, List<String>
 /** Chapter IDs with an in-flight prefetch, to avoid duplicate scrapes. */
 private val _prefetchingChapterIds = mutableSetOf<String>()
 
+/** In-flight chapter-image load. Cancelled whenever a new chapter is requested so only the
+ *  most recent load can write to [MainViewModel.mangaChapterImages] — otherwise a slower,
+ *  stale fetch from a previous chapter (rapid next/prev taps) would overwrite the new one. */
+private var chapterImagesJob: Job? = null
+
 fun MainViewModel.clearMangaChapterImagesCache() {
+    chapterImagesJob?.cancel()
     _mangaChapterImagesCache.value = emptyMap()
     _prefetchingChapterIds.clear()
 }
@@ -695,7 +701,8 @@ suspend fun MainViewModel.loadMangaChapters(mangaId: Int, title: String) {
  * If no extension is selected, shows an error telling the user to pick one in Settings.
  */
 fun MainViewModel.loadChapterImages(chapterId: String, useDataSaver: Boolean = false, mangaTitle: String? = null, chapterTitle: String? = null, mangaId: Int = 0) {
-    viewModelScope.launch {
+    chapterImagesJob?.cancel()
+    chapterImagesJob = viewModelScope.launch {
         // Serve from the prefetch cache first so chapter transitions (incl. auto-advance)
         // load instantly instead of waiting on a scrape round-trip.
         _mangaChapterImagesCache.value[chapterId]?.let { cached ->
