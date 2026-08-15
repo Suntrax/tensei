@@ -115,6 +115,9 @@ fun StatusListScreen(
     onInfoClick: (AnimeMedia, HomeAnimeCardBounds?) -> Unit = { _, _ -> },
     onStatusClick: (AnimeMedia) -> Unit = {},
     onMangaClick: (MangaMedia) -> Unit = {},
+    onMangaInfoClick: (MangaMedia) -> Unit = {},
+    onMangaContinueReadingClick: (MangaMedia) -> Unit = {},
+    onMangaStatusClick: (MangaMedia) -> Unit = {},
     onBackClick: () -> Unit = {},
     onDismiss: () -> Unit = {}
 ) {
@@ -371,7 +374,11 @@ fun StatusListScreen(
                                 StatusListMangaCard(
                                     manga = manga,
                                     listType = listType,
-                                    onClick = { onMangaClick(manga) }
+                                    showStatusColors = showStatusColors,
+                                    onClick = { onMangaClick(manga) },
+                                    onInfoClick = { onMangaInfoClick(manga) },
+                                    onContinueReadingClick = { onMangaContinueReadingClick(manga) },
+                                    onStatusClick = { onMangaStatusClick(manga) }
                                 )
                             }
                         }
@@ -729,9 +736,14 @@ private fun StatusListAnimeCard(
 private fun StatusListMangaCard(
     manga: MangaMedia,
     listType: String,
-    onClick: () -> Unit
+    showStatusColors: Boolean,
+    onClick: () -> Unit,
+    onInfoClick: () -> Unit,
+    onContinueReadingClick: () -> Unit,
+    onStatusClick: () -> Unit
 ) {
     val context = LocalContext.current
+    val statusColor = HomeStatusColors.getColor(listType)
     val progressText = when (listType) {
         "CURRENT" -> if (manga.totalChapters > 0) "${manga.progress} / ${manga.totalChapters}" else "Ch. ${manga.progress}"
         "COMPLETED" -> if (manga.totalChapters > 0) "${manga.totalChapters} ch." else "Ch. ${manga.progress}"
@@ -759,11 +771,17 @@ private fun StatusListMangaCard(
                         .height(80.dp)
                         .background(Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.9f))))
                 )
-                if (progressText != null) {
-                    Row(
-                        modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(8.dp),
-                        horizontalArrangement = Arrangement.Start
-                    ) {
+
+                // Top Row: Chapter Counter (left) + Info Button (right)
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .fillMaxWidth()
+                        .padding(8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Top
+                ) {
+                    if (progressText != null) {
                         Surface(
                             shape = RoundedCornerShape(6.dp),
                             color = Color.Black.copy(alpha = 0.7f)
@@ -776,6 +794,83 @@ private fun StatusListMangaCard(
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
                             )
                         }
+                    }
+
+                    // Info Button
+                    FilledTonalIconButton(
+                        onClick = onInfoClick,
+                        modifier = Modifier.size(32.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = Color.Black.copy(alpha = 0.6f),
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Info,
+                            contentDescription = "Info",
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+
+                if (showStatusColors) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .fillMaxWidth()
+                            .height(3.dp)
+                            .padding(top = 52.dp)
+                            .background(statusColor)
+                    )
+                }
+
+                // Bottom Row: Edit Status Button (left) + Continue Reading Button (right)
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    FilledTonalIconButton(
+                        onClick = onStatusClick,
+                        modifier = Modifier.size(32.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = Color.Black.copy(alpha = 0.6f),
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Edit,
+                            contentDescription = "Edit Status",
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    FilledTonalIconButton(
+                        onClick = {
+                            if (listType == "CURRENT" || listType == "PAUSED") {
+                                onContinueReadingClick()
+                            } else {
+                                onClick()
+                            }
+                        },
+                        modifier = Modifier.size(32.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = Color.Black.copy(alpha = 0.6f),
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = if (listType == "CURRENT" || listType == "PAUSED") "Continue Reading" else "Read",
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
                 }
             }

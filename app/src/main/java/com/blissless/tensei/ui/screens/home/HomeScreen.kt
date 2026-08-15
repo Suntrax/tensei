@@ -97,6 +97,7 @@ import com.blissless.tensei.data.models.ExploreAnime
 import com.blissless.tensei.data.models.toDetailedAnimeData
 import com.blissless.tensei.dialogs.HomeAnimeStatusDialog
 import com.blissless.tensei.dialogs.OfflineFavoritesDialog
+import com.blissless.tensei.ui.screens.manga.MangaStatusDialog
 import com.blissless.tensei.ui.screens.profile.UserProfileScreen
 import com.blissless.tensei.ui.screens.episode.EpisodeSelectionDialog
 import com.blissless.tensei.ui.components.HomeAnimeCardBounds
@@ -121,6 +122,9 @@ import com.blissless.tensei.viewmodel.mangaContinueReading
 import com.blissless.tensei.viewmodel.mangaCurrentlyReading
 import com.blissless.tensei.viewmodel.mangaPlanningToRead
 import com.blissless.tensei.viewmodel.removeContinueWatchingEntry
+import com.blissless.tensei.viewmodel.removeMangaTracking
+import com.blissless.tensei.viewmodel.updateMangaProgress
+import com.blissless.tensei.viewmodel.updateMangaStatus
 import com.blissless.tensei.util.toast
 import com.blissless.tensei.util.longToast
 
@@ -189,6 +193,8 @@ fun HomeScreen(
     var showEpisodeSheet by remember { mutableStateOf(false) }
     var showDownloadDialog by remember { mutableStateOf(false) }
     var showStatusDialog by remember { mutableStateOf(false) }
+    var showMangaStatusDialog by remember { mutableStateOf(false) }
+    var statusListMangaForDialog by remember { mutableStateOf<MangaMedia?>(null) }
     var showOfflineFavoritesDialog by remember { mutableStateOf(false) }
     var showUserProfileDialog by remember { mutableStateOf(false) }
     var showProfileSheet by remember { mutableStateOf(false) }
@@ -310,7 +316,9 @@ fun HomeScreen(
             onRefresh = { isRefreshing = true; viewModel.refreshHome() },
             modifier = Modifier.fillMaxSize()
         ) {
-            Column(modifier = Modifier.fillMaxSize().padding(top = 20.dp)) {
+            Column(
+                modifier = Modifier.fillMaxSize().padding(top = if (apiError == null && !isOffline) 20.dp else 0.dp)
+            ) {
                 if (apiError != null || isOffline) {
                     Surface(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).windowInsetsPadding(WindowInsets.statusBars),
@@ -928,6 +936,12 @@ fun HomeScreen(
                     showDetailedAnimeScreen = true
                 },
                 onMangaClick = { manga -> onMangaClick(manga) },
+                onMangaInfoClick = onMangaInfoClick,
+                onMangaContinueReadingClick = onMangaContinueReadingClick,
+                onMangaStatusClick = { manga ->
+                    statusListMangaForDialog = manga
+                    showMangaStatusDialog = true
+                },
                 onBackClick = { showStatusListScreen = false },
                 onDismiss = { showStatusListScreen = false }
             )
@@ -1029,6 +1043,29 @@ fun HomeScreen(
                 ) else viewModel.updateAnimeStatus(selectedAnime!!.id, status)
                 showStatusDialog = false
             })
+    }
+
+    if (showMangaStatusDialog && statusListMangaForDialog != null) {
+        val sm = statusListMangaForDialog!!
+        MangaStatusDialog(
+            title = sm.title,
+            coverUrl = sm.cover,
+            currentStatus = sm.listStatus,
+            currentProgress = sm.progress,
+            totalChapters = sm.totalChapters,
+            onUpdate = { status, progress ->
+                android.util.Log.d("MangaSyncDebug", "MangaStatusDialog onUpdate: mangaId=${sm.id} status='$status' progress=$progress")
+                viewModel.updateMangaStatus(sm.id, status, progress)
+                if (progress != null) viewModel.updateMangaProgress(sm.id, progress.toFloat())
+                showMangaStatusDialog = false
+            },
+            onRemove = {
+                android.util.Log.d("MangaSyncDebug", "MangaStatusDialog onRemove: mangaId=${sm.id}")
+                viewModel.removeMangaTracking(sm.id)
+                showMangaStatusDialog = false
+            },
+            onDismiss = { showMangaStatusDialog = false }
+        )
     }
 
     // Collect card bounds from ViewModel

@@ -518,6 +518,9 @@ fun MainScreen(
     // ─── Manga state ──────────────────────────────────────────────────
     var showMangaReader by remember { mutableStateOf(false) }
     var mangaReaderChapterIndex by remember { mutableIntStateOf(0) }
+    // When the reader is opened from the Downloads tab (offline), the target chapter is
+    // identified by its NUMBER (indexes differ between the online and offline chapter lists).
+    var mangaReaderChapterNumber by remember { mutableStateOf<Float?>(null) }
     var mangaDetailStack by remember { mutableStateOf<List<com.blissless.tensei.data.models.MangaMedia>>(emptyList()) }
     val currentManga = mangaDetailStack.lastOrNull()
     var showMangaDetailScreen by remember { mutableStateOf(false) }
@@ -1686,6 +1689,7 @@ fun MainScreen(
                     "autoShowChapters=$mangaAutoShowChapters detailBehind=$showMangaDetailScreen stackDepth=${mangaDetailStack.size}")
                 mangaAutoShowChapters = false
                 showMangaReader = false
+                mangaReaderChapterNumber = null
                 if (!showMangaDetailScreen) {
                     // Reader was opened directly (e.g. from a home card) with no detail behind.
                     mangaDetailStack = mangaDetailStack.dropLast(1)
@@ -1716,6 +1720,7 @@ fun MainScreen(
             MangaReaderScreen(
                 manga = readerManga,
                 initialChapterIndex = mangaReaderChapterIndex,
+                initialChapterNumber = mangaReaderChapterNumber,
                 viewModel = viewModel,
                 isOled = isOled,
                 onClose = closeReader,
@@ -2595,6 +2600,17 @@ fun MainScreen(
                             downloadManager = viewModel.episodeDownloadManager,
                             isOled = isOled,
                             onNavbarHidden = viewModel::setHideNavbar,
+                            onOpenMangaReader = { manga, chapterNumber ->
+                                android.util.Log.d("MangaNav", "DOWNLOADS onOpenMangaReader: id=${manga.id} title='${manga.title}' chapterNumber=$chapterNumber")
+                                // Clear any chapter list left over from a previous manga so the
+                                // reader reloads the downloaded chapters for THIS title.
+                                viewModel.clearMangaDetail()
+                                mangaAutoShowChapters = false
+                                mangaDetailStack = mangaDetailStack + manga
+                                mangaReaderChapterIndex = 0
+                                mangaReaderChapterNumber = chapterNumber
+                                showMangaReader = true
+                            },
                         )
                     }
                 }

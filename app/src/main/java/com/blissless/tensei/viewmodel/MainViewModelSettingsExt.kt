@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.blissless.tensei.MainViewModel
 import com.blissless.tensei.widget.AiringScheduleWidget
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 /**
@@ -102,6 +103,16 @@ fun MainViewModel.setStreamMethod(method: String) =
 
 fun MainViewModel.setDownloadDirectoryUri(uri: String?) =
     userPreferences.setDownloadDirectoryUri(uri)
+
+/** Currently selected manga download location (SAF tree URI, null = app internal storage). */
+val MainViewModel.mangaDownloadDirectoryUri: StateFlow<String?>
+    get() = userPreferences.mangaDownloadDirectoryUri
+
+/** Persists the manga download location and switches the download manager to it. */
+fun MainViewModel.setMangaDownloadLocation(uri: String?) {
+    userPreferences.setMangaDownloadDirectoryUri(uri)
+    mangaDownloadManager?.setDownloadLocation(uri)
+}
 
 fun MainViewModel.setKeepDownloadedFiles(enabled: Boolean) =
     userPreferences.setKeepDownloadedFiles(enabled)

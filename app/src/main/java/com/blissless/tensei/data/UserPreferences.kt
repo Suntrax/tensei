@@ -66,6 +66,7 @@ class UserPreferences(context: Context) {
         private const val KEY_STREAM_METHOD = "stream_method"
         private const val KEY_DEFAULT_MAGNET_EXTENSION = "default_magnet_extension"
         private const val KEY_DOWNLOAD_DIRECTORY_URI = "download_directory_uri"
+        private const val KEY_MANGA_DOWNLOAD_DIRECTORY_URI = "manga_download_directory_uri"
         private const val KEY_KEEP_DOWNLOADED_FILES = "keep_downloaded_files"
         private const val KEY_MANGA_READER_MODE = "manga_reader_mode"
         private const val KEY_MANGA_DATA_SAVER = "manga_data_saver"
@@ -179,6 +180,10 @@ class UserPreferences(context: Context) {
     // Download Directory URI (SAF tree URI for custom download location)
     private val _downloadDirectoryUri = MutableStateFlow<String?>(null)
     val downloadDirectoryUri: StateFlow<String?> = _downloadDirectoryUri.asStateFlow()
+
+    // Manga Download Directory URI (SAF tree URI for custom manga download location)
+    private val _mangaDownloadDirectoryUri = MutableStateFlow<String?>(null)
+    val mangaDownloadDirectoryUri: StateFlow<String?> = _mangaDownloadDirectoryUri.asStateFlow()
 
     // Keep downloaded files after deletion from list
     private val _keepDownloadedFiles = MutableStateFlow(false)
@@ -330,6 +335,7 @@ class UserPreferences(context: Context) {
         _swipeSwap.value = sharedPreferences.getBoolean(KEY_SWIPE_SWAP, false)
         _autoUpdateExtensions.value = sharedPreferences.getBoolean(KEY_AUTO_UPDATE_EXTENSIONS, true)
         _downloadDirectoryUri.value = sharedPreferences.getString(KEY_DOWNLOAD_DIRECTORY_URI, null)
+        _mangaDownloadDirectoryUri.value = sharedPreferences.getString(KEY_MANGA_DOWNLOAD_DIRECTORY_URI, null)
         _keepDownloadedFiles.value = sharedPreferences.getBoolean(KEY_KEEP_DOWNLOADED_FILES, false)
         _mangaReaderMode.value = sharedPreferences.getString(KEY_MANGA_READER_MODE, "vertical_scroll") ?: "vertical_scroll"
         _mangaDataSaver.value = sharedPreferences.getBoolean(KEY_MANGA_DATA_SAVER, false)
@@ -513,6 +519,11 @@ class UserPreferences(context: Context) {
     fun setDownloadDirectoryUri(uri: String?) {
         _downloadDirectoryUri.value = uri
         sharedPreferences.edit { putString(KEY_DOWNLOAD_DIRECTORY_URI, uri) }
+    }
+
+    fun setMangaDownloadDirectoryUri(uri: String?) {
+        _mangaDownloadDirectoryUri.value = uri
+        sharedPreferences.edit { putString(KEY_MANGA_DOWNLOAD_DIRECTORY_URI, uri) }
     }
 
     fun setKeepDownloadedFiles(enabled: Boolean) {

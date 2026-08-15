@@ -174,13 +174,20 @@ class MangaTrackManager(context: Context) {
         saveTracks(tracks)
     }
 
+    /**
+     * Update the total chapter count, keeping the highest value seen. A manga's released
+     * chapter count only grows, and a stale or partial source (offline extension fetch falling
+     * back to downloaded chapters, or AniList's outdated count for releasing manga) must never
+     * regress the display total that home/tracking screens show.
+     */
     fun updateTotalChapters(mangaId: Int, totalChapters: Int, totalVolumes: Int?) {
         val tracks = getTracks().toMutableList()
         val index = tracks.indexOfFirst { it.mangaId == mangaId }
         if (index >= 0) {
-            tracks[index] = tracks[index].copy(
-                totalChapters = totalChapters,
-                totalVolumes = totalVolumes
+            val existing = tracks[index]
+            tracks[index] = existing.copy(
+                totalChapters = maxOf(existing.totalChapters, totalChapters),
+                totalVolumes = totalVolumes?.let { maxOf(existing.totalVolumes ?: 0, it) } ?: existing.totalVolumes
             )
         }
         saveTracks(tracks)

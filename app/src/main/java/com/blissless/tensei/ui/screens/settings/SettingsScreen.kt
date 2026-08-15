@@ -71,7 +71,6 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -116,6 +115,8 @@ import com.blissless.tensei.viewmodel.setStartupScreen
 import com.blissless.tensei.viewmodel.setPreventScheduleSync
 import com.blissless.tensei.viewmodel.setHideAdultContent
 import com.blissless.tensei.viewmodel.setDownloadDirectoryUri
+import com.blissless.tensei.viewmodel.mangaDownloadDirectoryUri
+import com.blissless.tensei.viewmodel.setMangaDownloadLocation
 import com.blissless.tensei.viewmodel.setKeepDownloadedFiles
 import com.blissless.tensei.viewmodel.setMangaReaderMode
 import com.blissless.tensei.viewmodel.setMangaDataSaver
@@ -183,15 +184,15 @@ fun SettingsScreen(
 
     val groups = remember {
         listOf(
-            SettingsGroup("account", "Account", "Login and manage your anime list", Icons.Default.Person),
+            SettingsGroup("account", "Account & Sync", "Login, tracking, and sync settings", Icons.Default.Person),
             SettingsGroup("appearance", "Appearance", "Theme, colors, and display options", Icons.Default.Palette),
-            SettingsGroup("general", "General", "Startup screen and sync settings", Icons.Default.Settings),
-            SettingsGroup("downloads", "Downloads", "Sub/dub, subtitles, and download preferences", Icons.Default.Download),
-            SettingsGroup("stream", "Stream Settings", "Audio preferences and buffering", Icons.Default.PlayArrow),
+            SettingsGroup("general", "General", "Startup screen and content preferences", Icons.Default.Settings),
+            SettingsGroup("extensions", "Extensions", "Manage source extensions", Icons.Default.Extension),
+            SettingsGroup("downloads", "Downloads", "Anime and manga download preferences", Icons.Default.Download),
+            SettingsGroup("stream", "Stream Settings", "Streaming method, audio, and buffering", Icons.Default.PlayArrow),
             SettingsGroup("player", "Player Settings", "Playback controls and skipping", Icons.Default.Subscriptions),
             SettingsGroup("reader", "Reader Settings", "Manga reading preferences", Icons.Default.Bookmark),
             SettingsGroup("cache", "Cache Management", "Storage and data cleanup", Icons.Default.Storage),
-            SettingsGroup("extensions", "Extensions", "Manage source extensions", Icons.Default.Extension),
             SettingsGroup("about", "About", "Version and updates", Icons.Default.Info)
         )
     }
@@ -244,8 +245,11 @@ private fun AccountSettingsPage(
 ) {
     var showLogoutConfirmation by remember { mutableStateOf(false) }
     val loginProvider by viewModel.loginProvider.collectAsState(initial = LoginProvider.NONE)
+    val trackingPercentage by viewModel.trackingPercentage.collectAsState(initial = 85)
+    val preventScheduleSync by viewModel.preventScheduleSync.collectAsState()
+    val mangaSyncThreshold by viewModel.mangaSyncThreshold.collectAsState()
 
-    SettingsPageScaffold(title = "Account", onBack = onBack) {
+    SettingsPageScaffold(title = "Account & Sync", onBack = onBack) {
         if (loginProvider != LoginProvider.NONE) {
             val userName by viewModel.userName.collectAsState()
             val userAvatar by viewModel.userAvatar.collectAsState()
@@ -284,7 +288,6 @@ private fun AccountSettingsPage(
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
             Button(
                 onClick = { showLogoutConfirmation = true },
                 modifier = Modifier.fillMaxWidth(),
@@ -295,8 +298,7 @@ private fun AccountSettingsPage(
             ) {
                 Text("Log Out", color = Color.White)
             }
-        } else {
-            SectionHeader("SIGN IN")
+        } else {            SectionHeader("SIGN IN")
             SettingsCard {
                 Spacer(modifier = Modifier.height(4.dp))
                 Button(
@@ -339,6 +341,41 @@ private fun AccountSettingsPage(
                 Spacer(modifier = Modifier.height(4.dp))
             }
         }
+
+        Spacer(modifier = Modifier.height(8.dp))
+        SectionHeader("TRACKING & SYNC")
+        SettingsCard {
+            SettingsToggle(
+                title = "Auto Sync Schedule",
+                description = "Automatically sync airing schedule when opening",
+                checked = !preventScheduleSync,
+                onCheckedChange = { viewModel.setPreventScheduleSync(!it) }
+            )
+        }
+        SettingsCard {
+            SettingsSliderRow(
+                title = "Episode Tracking",
+                description = "Auto-update anime progress when you've watched this percentage",
+                value = trackingPercentage.toFloat(),
+                valueRange = 50f..100f,
+                valueLabel = "${trackingPercentage}%",
+                onValueChange = { viewModel.setTrackingPercentage((round(it / 5f) * 5f).toInt()) },
+                minLabel = "50%",
+                maxLabel = "100%"
+            )
+        }
+        SettingsCard {
+            SettingsSliderRow(
+                title = "Manga Tracking",
+                description = "Auto-update manga progress when you've read this percentage",
+                value = mangaSyncThreshold.toFloat(),
+                valueRange = 75f..100f,
+                valueLabel = "${mangaSyncThreshold}%",
+                onValueChange = { viewModel.setMangaSyncThreshold(it.toInt()) },
+                minLabel = "75%",
+                maxLabel = "100%"
+            )
+        }
     }
 
     if (showLogoutConfirmation) {
@@ -375,7 +412,6 @@ private fun AppearanceSettingsPage(
     val showStatusColorsState by viewModel.showStatusColors.collectAsState(initial = true)
     val simplifyEpisodeMenuState by viewModel.simplifyEpisodeMenu.collectAsState(initial = false)
     val showAnimeCardButtons by viewModel.showAnimeCardButtons.collectAsState(initial = true)
-    val preferEnglishTitles by viewModel.preferEnglishTitles.collectAsState(initial = true)
 
     SettingsPageScaffold(title = "Appearance", onBack = onBack) {
         val currentThemeMode by viewModel.themeMode.collectAsState()
@@ -451,12 +487,6 @@ private fun AppearanceSettingsPage(
                 checked = showAnimeCardButtons,
                 onCheckedChange = { viewModel.setShowAnimeCardButtons(it) }
             )
-            SettingsToggle(
-                title = "English Titles",
-                description = "Show English titles instead of Romaji",
-                checked = preferEnglishTitles,
-                onCheckedChange = { viewModel.setPreferEnglishTitles(it) }
-            )
         }
 
         SectionHeader("EPISODES")
@@ -479,8 +509,8 @@ private fun GeneralSettingsPage(
     onBack: () -> Unit
 ) {
     val startupScreenState by viewModel.startupScreen.collectAsState()
-    val preventScheduleSync by viewModel.preventScheduleSync.collectAsState()
     val hideAdultContentState by viewModel.hideAdultContent.collectAsState(initial = false)
+    val preferEnglishTitles by viewModel.preferEnglishTitles.collectAsState(initial = true)
 
     SettingsPageScaffold(title = "General", onBack = onBack) {
         SectionHeader("LAUNCH")
@@ -530,16 +560,6 @@ private fun GeneralSettingsPage(
             )
         }
 
-        SectionHeader("SYNC")
-        SettingsCard {
-            SettingsToggle(
-                title = "Auto Sync Schedule",
-                description = "Automatically sync airing schedule when opening",
-                checked = !preventScheduleSync,
-                onCheckedChange = { viewModel.setPreventScheduleSync(!it) }
-            )
-        }
-
         SectionHeader("CONTENT")
         SettingsCard {
             SettingsToggle(
@@ -547,6 +567,17 @@ private fun GeneralSettingsPage(
                 description = "Exclude 18+ anime from showing up",
                 checked = hideAdultContentState,
                 onCheckedChange = { viewModel.setHideAdultContent(it) }
+            )
+            HorizontalDivider(
+                modifier = Modifier.padding(start = 54.dp),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.15f),
+                thickness = 0.5.dp
+            )
+            SettingsToggle(
+                title = "English Titles",
+                description = "Show English titles instead of Romaji",
+                checked = preferEnglishTitles,
+                onCheckedChange = { viewModel.setPreferEnglishTitles(it) }
             )
         }
     }
@@ -953,6 +984,7 @@ private fun DownloadsSettingsPage(
     var showSubtitleLangPicker by remember { mutableStateOf(false) }
     val streamMethod by viewModel.streamMethod.collectAsState()
     val downloadDirectoryUri by viewModel.downloadDirectoryUri.collectAsState()
+    val mangaDownloadDirectoryUri by viewModel.mangaDownloadDirectoryUri.collectAsState()
     val keepDownloadedFiles by viewModel.keepDownloadedFiles.collectAsState()
     val directoryPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
@@ -963,6 +995,16 @@ private fun DownloadsSettingsPage(
             } catch (e: Exception) { ErrorHandler.ignore("SettingsScreen", "best-effort operation failed", e) }
             viewModel.setDownloadDirectoryUri(uri.toString())
             viewModel.setKeepDownloadedFiles(true)
+        }
+    }
+    val mangaDirectoryPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            try {
+                context.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            } catch (e: Exception) { ErrorHandler.ignore("SettingsScreen", "best-effort operation failed", e) }
+            viewModel.setMangaDownloadLocation(uri.toString())
         }
     }
 
@@ -1106,6 +1148,62 @@ private fun DownloadsSettingsPage(
                 }
             }
         }
+
+        SectionHeader("MANGA DOWNLOADS")
+        SettingsCard {
+            val mangaDisplayPath = mangaDownloadDirectoryUri?.let { uri ->
+                try {
+                    java.net.URLDecoder.decode(
+                        uri.substringAfter("%3A").substringAfter(":"),
+                        "UTF-8"
+                    ).let { path ->
+                        if (path.isNotEmpty()) "/$path" else null
+                    }
+                } catch (e: Exception) { ErrorHandler.report("SettingsScreen", "operation failed, returning null", e); null }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(
+                            if (mangaDownloadDirectoryUri != null) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                            else MaterialTheme.colorScheme.error.copy(alpha = 0.1f)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Storage,
+                        contentDescription = null,
+                        tint = if (mangaDownloadDirectoryUri != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Manga Download Location", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                    Text(
+                        if (mangaDisplayPath != null) mangaDisplayPath else "Default — app internal storage",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
+                }
+                TextButton(onClick = { mangaDirectoryPickerLauncher.launch(null) }) {
+                    Text(
+                        if (mangaDownloadDirectoryUri != null) "Change" else "Select",
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                if (mangaDownloadDirectoryUri != null) {
+                    TextButton(onClick = { viewModel.setMangaDownloadLocation(null) }) {
+                        Text("Default", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
     }
 
     if (showSubtitleLangPicker) {
@@ -1189,7 +1287,6 @@ private fun PlayerSettingsPage(
     autoPlayNextEpisode: Boolean,
     onBack: () -> Unit
 ) {
-    val trackingPercentage by viewModel.trackingPercentage.collectAsState(initial = 85)
     val forwardSkipSeconds by viewModel.forwardSkipSeconds.collectAsState(initial = 10)
     val backwardSkipSeconds by viewModel.backwardSkipSeconds.collectAsState(initial = 10)
     val swipeVolume by viewModel.swipeVolume.collectAsState(initial = false)
@@ -1197,20 +1294,6 @@ private fun PlayerSettingsPage(
     val swipeSwap by viewModel.swipeSwap.collectAsState(initial = false)
 
     SettingsPageScaffold(title = "Player Settings", onBack = onBack) {
-        SectionHeader("TRACKING")
-        SettingsCard {
-            SettingsSliderRow(
-                title = "Episode Tracking",
-                description = "Auto-update progress when you've watched this percentage",
-                value = trackingPercentage.toFloat(),
-                valueRange = 50f..100f,
-                valueLabel = "${trackingPercentage}%",
-                onValueChange = { viewModel.setTrackingPercentage((round(it / 5f) * 5f).toInt()) },
-                minLabel = "50%",
-                maxLabel = "100%"
-            )
-        }
-
         SectionHeader("SKIP CONTROLS")
         SettingsCard {
             SettingsSliderRow(
@@ -1297,7 +1380,6 @@ private fun ReaderSettingsPage(
     val lockRotation by viewModel.mangaLockRotation.collectAsState()
     val fullscreen by viewModel.mangaFullscreen.collectAsState()
     val autoAdvance by viewModel.mangaAutoAdvance.collectAsState()
-    val syncThreshold by viewModel.mangaSyncThreshold.collectAsState()
     val installedMangaExtensions by viewModel.installedExtensions.collectAsState()
     val selectedMangaExtension by viewModel.selectedExtensionAuthority.collectAsState()
     var showMangaExtPicker by remember { mutableStateOf(false) }
@@ -1386,60 +1468,6 @@ private fun ReaderSettingsPage(
                 checked = autoAdvance,
                 onCheckedChange = { viewModel.setMangaAutoAdvance(it) }
             )
-        }
-
-        SectionHeader("ANILIST SYNC")
-        SettingsCard {
-            Column(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Auto-Track Threshold",
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = "Scroll percentage at which a chapter is marked as read and progress is synced to AniList.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Text(
-                        text = "$syncThreshold%",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-                Spacer(modifier = Modifier.height(12.dp))
-                Slider(
-                    value = syncThreshold.toFloat(),
-                    onValueChange = { viewModel.setMangaSyncThreshold(it.toInt()) },
-                    valueRange = 75f..100f,
-                    steps = 24,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("75%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("100%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Lower = syncs earlier (useful for long chapters). Higher = only syncs when you've nearly finished.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                )
-            }
         }
     }
 

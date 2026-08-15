@@ -22,8 +22,8 @@ android {
         applicationId = "com.blissless.tensei"
         minSdk = 26
         targetSdk = 37
-        versionCode = 13
-        versionName = "1.2.0"
+        versionCode = 14
+        versionName = "1.2.1"
 
         val anilistApiKey = localProperties.getProperty("CLIENT_ID_ANILIST")
         val tmdbApiKey = localProperties.getProperty("TMDB_API_KEY")

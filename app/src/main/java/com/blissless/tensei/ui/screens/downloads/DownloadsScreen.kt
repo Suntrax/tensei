@@ -59,8 +59,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -80,7 +82,9 @@ import androidx.media3.exoplayer.offline.Download
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.blissless.tensei.MainViewModel
+import com.blissless.tensei.data.manga.DownloadedManga
 import com.blissless.tensei.data.models.AnimeMedia
+import com.blissless.tensei.data.models.MangaMedia
 import com.blissless.tensei.data.models.TmdbEpisode
 import com.blissless.tensei.download.EpisodeDownloadManager
 import com.blissless.tensei.ui.components.ContinueWatchingRow
@@ -88,7 +92,10 @@ import com.blissless.tensei.ui.components.SectionHeader
 import com.blissless.tensei.ui.screens.player.OfflinePlayerScreen
 import com.blissless.tensei.ui.screens.episode.RichEpisodeList
 // Extension functions on MainViewModel (defined in com.blissless.tensei.viewmodel)
+import com.blissless.tensei.viewmodel.deleteMangaChapter
+import com.blissless.tensei.viewmodel.deleteMangaDownload
 import com.blissless.tensei.viewmodel.getPlaybackPosition
+import com.blissless.tensei.viewmodel.mangaDownloads
 import com.blissless.tensei.viewmodel.savePlaybackPosition
 import com.blissless.tensei.viewmodel.setAutoPlayNextEpisode
 import com.blissless.tensei.viewmodel.setSwipeVolume
@@ -104,6 +111,7 @@ fun DownloadsScreen(
     downloadManager: EpisodeDownloadManager,
     isOled: Boolean,
     onNavbarHidden: (Boolean) -> Unit = {},
+    onOpenMangaReader: (MangaMedia, Float) -> Unit = { _, _ -> },
 ) {
     val context = LocalContext.current
     val downloadsInfo by downloadManager.downloadsInfo.collectAsState()
@@ -160,11 +168,20 @@ fun DownloadsScreen(
 
     var showDeleteConfirm by remember { mutableStateOf<String?>(null) }
     var selectedAnime by remember { mutableStateOf<EpisodeDownloadManager.GroupedDownload?>(null) }
+    var selectedOfflineManga by remember { mutableStateOf<DownloadedManga?>(null) }
+    val mangaDownloads by viewModel.mangaDownloads.collectAsState()
     var showDownloadDialogFor by remember { mutableStateOf<Pair<Int, String>?>(null) }
     var playingDownload by remember { mutableStateOf<EpisodeDownloadManager.DownloadInfo?>(null) }
     var playerEpisodes by remember { mutableStateOf<List<EpisodeDownloadManager.DownloadInfo>>(emptyList()) }
     var playerFullscreen by remember { mutableStateOf(true) }
     var playerEpisodeRequest by remember { mutableStateOf<Int?>(null) }
+    var downloadsTab by rememberSaveable { mutableIntStateOf(0) }
+    var mangaLocationPromptShown by rememberSaveable { mutableStateOf(false) }
+    val downloadDirectoryUri by viewModel.downloadDirectoryUri.collectAsState()
+    val downloadLocationText = remember(downloadDirectoryUri) {
+        if (downloadDirectoryUri == null) "app cache"
+        else mangaLocationDisplayPath(downloadDirectoryUri) ?: "custom folder"
+    }
     val useMonochrome by viewModel.disableMaterialColors.collectAsState()
     val defaultSubtitleLang by viewModel.defaultSubtitleLang.collectAsState()
     val tmdbEpisodeCache by viewModel.tmdbEpisodeCache.collectAsState()
@@ -219,63 +236,86 @@ fun DownloadsScreen(
         viewModel.pruneTmdbEpisodeCache(downloadedIds)
     }
 
+    // The offline chapter selection is a full-screen view layered inside the Downloads tab —
+    // hide the bottom navigation bar while it is open, and restore it when it closes.
+    LaunchedEffect(selectedOfflineManga != null) {
+        onNavbarHidden(selectedOfflineManga != null)
+    }
+
     val hasContent = groupedDownloads.isNotEmpty() || inProgressDownloads.isNotEmpty() || failedDownloads.isNotEmpty()
     val batteryOptDismissed = remember { mutableStateOf(false) }
     val pm = remember { context.getSystemService(android.os.PowerManager::class.java) }
     val isIgnoringBattery = remember { pm?.isIgnoringBatteryOptimizations(context.packageName) == true }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .windowInsetsPadding(WindowInsets.statusBars)
                 .background(if (isOled) Color.Black else MaterialTheme.colorScheme.background)
         ) {
-        if (!hasContent) {
-            Column(
-                modifier = Modifier.align(Alignment.Center),
-                horizontalAlignment = Alignment.CenterHorizontally
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(80.dp)
-                        .background(
-                            if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant,
-                            RoundedCornerShape(20.dp)
-                        ),
-                    contentAlignment = Alignment.Center
+                DownloadsTabChip(label = "Anime", selected = downloadsTab == 0, isOled = isOled) { downloadsTab = 0 }
+                DownloadsTabChip(label = "Manga", selected = downloadsTab == 1, isOled = isOled) { downloadsTab = 1 }
+            }
+            if (downloadsTab == 1) {
+                MangaDownloadsContent(
+                    viewModel = viewModel,
+                    isOled = isOled,
+                    locationPromptShown = mangaLocationPromptShown,
+                    onLocationPromptShown = { mangaLocationPromptShown = true },
+                    onOpenMangaChapters = { selectedOfflineManga = it },
+                )
+            } else {
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            if (!hasContent) {
+                Column(
+                    modifier = Modifier.align(Alignment.Center),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Icon(
-                        Icons.Default.Storage,
-                        contentDescription = null,
-                        tint = if (isOled) Color.White.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(36.dp)
+                    Box(
+                        modifier = Modifier
+                            .size(80.dp)
+                            .background(
+                                if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant,
+                                RoundedCornerShape(20.dp)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Storage,
+                            contentDescription = null,
+                            tint = if (isOled) Color.White.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(36.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        "No Downloads",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "Downloaded episodes will appear here.\nOpen an anime to start downloading.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (isOled) Color.White.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 48.dp)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "Stored in $downloadLocationText",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (isOled) Color.White.copy(alpha = 0.3f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        modifier = Modifier.padding(horizontal = 24.dp)
                     )
                 }
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    "No Downloads",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    "Downloaded episodes will appear here.\nOpen an anime to start downloading.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (isOled) Color.White.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(horizontal = 48.dp)
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    "Stored in app cache",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (isOled) Color.White.copy(alpha = 0.3f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                    modifier = Modifier.padding(horizontal = 24.dp)
-                )
-            }
-        } else {
+            } else {
             LazyColumn(
                 contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -292,7 +332,7 @@ fun DownloadsScreen(
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                "Stored in app cache",
+                                "Stored in $downloadLocationText",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = if (isOled) Color.White.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                             )
@@ -419,11 +459,7 @@ fun DownloadsScreen(
                     }
                     filteredInProgressDownloads.forEach { (animeName, infos) ->
                         item(key = "in_progress_$animeName") {
-                            AnimatedVisibility(
-                                visible = true,
-                                enter = fadeIn(tween(300)) + slideInHorizontally(tween(300)) { it },
-                                exit = fadeOut(tween(200)) + slideOutHorizontally(tween(200)) { -it }
-                            ) {
+                            AnimatedDownloadCard {
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(12.dp),
@@ -508,11 +544,7 @@ fun DownloadsScreen(
                     }
                     filteredFailedDownloads.forEach { (animeName, infos) ->
                         item(key = "failed_$animeName") {
-                            AnimatedVisibility(
-                                visible = true,
-                                enter = fadeIn(tween(300)) + slideInHorizontally(tween(300)) { it },
-                                exit = fadeOut(tween(200)) + slideOutHorizontally(tween(200)) { -it }
-                            ) {
+                            AnimatedDownloadCard {
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(12.dp),
@@ -574,11 +606,7 @@ fun DownloadsScreen(
                         )
                     }
                     items(filteredGroupedDownloads, key = { it.animeName }) { group ->
-                        AnimatedVisibility(
-                            visible = true,
-                            enter = fadeIn(tween(300)) + slideInHorizontally(tween(300)) { it },
-                            exit = fadeOut(tween(200)) + slideOutHorizontally(tween(200)) { -it }
-                        ) {
+                        AnimatedDownloadCard {
                             DownloadsAnimeCard(
                                 anime = group,
                                 isOled = isOled,
@@ -590,7 +618,9 @@ fun DownloadsScreen(
                 }
             }
         }
-    }
+            }
+        }
+        }
 
     if (showDeleteConfirm != null) {
         AlertDialog(
@@ -642,6 +672,44 @@ fun DownloadsScreen(
                 playbackPositions = playbackPositions,
                 playbackDurations = playbackDurations,
             )
+        }
+    }
+
+    if (selectedOfflineManga != null) {
+        val selected = selectedOfflineManga!!
+        // Resolve the LIVE download entry so deletions (which trigger a rescan) are reflected
+        // immediately. If the manga is gone entirely (last chapter removed / delete all),
+        // close the screen.
+        val live = mangaDownloads.firstOrNull { it.mangaId == selected.mangaId }
+        if (live != null) {
+            BackHandler { if (playingDownload == null) selectedOfflineManga = null }
+            Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+                OfflineMangaChaptersScreen(
+                    manga = live,
+                    isOled = isOled,
+                    onDismiss = { selectedOfflineManga = null },
+                    onReadChapter = { chapterNumber ->
+                        onOpenMangaReader(
+                            MangaMedia(
+                                id = live.mangaId,
+                                title = live.mangaTitle,
+                                titleEnglish = live.mangaTitle,
+                                cover = live.coverUrl,
+                            ),
+                            chapterNumber
+                        )
+                    },
+                    onDeleteChapter = { chapterNumber ->
+                        viewModel.deleteMangaChapter(live.mangaId, chapterNumber)
+                    },
+                    onDeleteAll = {
+                        viewModel.deleteMangaDownload(live.mangaId)
+                        selectedOfflineManga = null
+                    },
+                )
+            }
+        } else {
+            LaunchedEffect(Unit) { selectedOfflineManga = null }
         }
     }
 
@@ -1188,6 +1256,45 @@ private fun DownloadedEpisodesDialog(
         )
     }
 
+}
+
+@Composable
+private fun DownloadsTabChip(
+    label: String,
+    selected: Boolean,
+    isOled: Boolean,
+    onClick: () -> Unit,
+) {
+    Text(
+        text = label,
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(
+                if (selected) MaterialTheme.colorScheme.primary
+                else if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 18.dp, vertical = 8.dp),
+        style = MaterialTheme.typography.labelLarge,
+        fontWeight = FontWeight.SemiBold,
+        color = if (selected) MaterialTheme.colorScheme.onPrimary
+        else if (isOled) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
+    )
+}
+
+/**
+ * Wraps download cards in a fade/slide animation. Extracted so the call site is not inside
+ * a ColumnScope (where the receiver-scoped AnimatedVisibility overload would be selected).
+ */
+@Composable
+private fun AnimatedDownloadCard(content: @Composable () -> Unit) {
+    AnimatedVisibility(
+        visible = true,
+        enter = fadeIn(tween(300)) + slideInHorizontally(tween(300)) { it },
+        exit = fadeOut(tween(200)) + slideOutHorizontally(tween(200)) { -it }
+    ) {
+        content()
+    }
 }
 
 

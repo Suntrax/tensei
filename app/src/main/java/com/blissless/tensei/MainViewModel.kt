@@ -69,6 +69,7 @@ import com.blissless.tensei.viewmodel.startApiRetryLoop
 import com.blissless.tensei.viewmodel.queueSync
 import com.blissless.tensei.viewmodel.fetchMalList
 import com.blissless.tensei.viewmodel.initManga
+import com.blissless.tensei.viewmodel.mangaDownloadManager
 import com.blissless.tensei.viewmodel.fetchMangaExplore
 import com.blissless.tensei.viewmodel.fetchMangaLists
 import com.blissless.tensei.viewmodel.fetchMangaUserProfile
@@ -548,6 +549,7 @@ class MainViewModel : ViewModel() {
         startApiRetryLoop()
 
         userPreferences.loadPreferences(hasToken)
+        mangaDownloadManager?.setDownloadLocation(userPreferences.mangaDownloadDirectoryUri.value)
         cacheManager.loadStreamCache()
         cacheManager.loadExtensionStreamCache()
         cacheManager.loadPlaybackPositions()

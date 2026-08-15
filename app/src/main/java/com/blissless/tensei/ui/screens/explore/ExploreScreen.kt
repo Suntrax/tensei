@@ -621,7 +621,7 @@ fun ExploreScreen(
             ) {
             if (apiError != null || isOffline) {
                 Surface(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).windowInsetsPadding(WindowInsets.statusBars),
                     shape = RoundedCornerShape(14.dp),
                     color = if (isOffline) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.errorContainer,
                     tonalElevation = 2.dp

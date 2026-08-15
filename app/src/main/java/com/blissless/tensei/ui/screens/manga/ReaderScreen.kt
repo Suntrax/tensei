@@ -30,6 +30,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -56,6 +57,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.window.DialogWindowProvider
 import androidx.compose.ui.text.TextStyle
@@ -78,6 +80,7 @@ import com.blissless.tensei.viewmodel.loadMangaChapters
 import com.blissless.tensei.viewmodel.mangaChapterImages
 import com.blissless.tensei.viewmodel.mangaChapterImagesError
 import com.blissless.tensei.viewmodel.mangaChapters
+import com.blissless.tensei.viewmodel.mangaDownloads
 import com.blissless.tensei.viewmodel.onMangaScrollProgress
 import com.blissless.tensei.viewmodel.prefetchMangaChapterImages
 import com.blissless.tensei.viewmodel.refreshMangaTracking
@@ -100,12 +103,13 @@ enum class ReaderMode { VERTICAL_SCROLL, LEFT_TO_RIGHT, RIGHT_TO_LEFT }
 fun MangaReaderScreen(
     manga: MangaMedia,
     initialChapterIndex: Int,
+    initialChapterNumber: Float? = null,
     viewModel: MainViewModel,
     isOled: Boolean,
     onClose: () -> Unit,
     onOpenSettings: () -> Unit = {}
 ) {
-    android.util.Log.d("MangaReader", "MangaReaderScreen compose: manga.id=${manga.id} title='${manga.title}' initialChapterIndex=$initialChapterIndex")
+    android.util.Log.d("MangaReader", "MangaReaderScreen compose: manga.id=${manga.id} title='${manga.title}' initialChapterIndex=$initialChapterIndex initialChapterNumber=$initialChapterNumber")
     val context = LocalContext.current
     // The reader is hosted in a Dialog, so LocalContext is the dialog's context (a
     // ContextThemeWrapper), NOT an Activity. Walk the wrapper chain to find the real
@@ -115,6 +119,10 @@ fun MangaReaderScreen(
     // window. System-bar control must target THAT window (not the activity's), otherwise
     // hiding the bars has no visible effect. See applyReaderFullscreen.
     val view = LocalView.current
+    // True when the reader was opened from the Downloads tab (offline). Offline reading must
+    // never touch tracking or AniList: no progress push, no sync-threshold mark-as-read, no
+    // sync marker, and no lag from the threshold-crossing work.
+    val offlineOpen = initialChapterNumber != null
     DisposableEffect(Unit) {
         android.util.Log.d("MangaReader", "READER COMPOSED (disposable effect) manga.id=${manga.id}")
         onDispose {
@@ -128,7 +136,8 @@ fun MangaReaderScreen(
             viewModel.clearMangaChapterImagesCache()
             // Push any debounced progress/status changes to AniList immediately so chapters
             // read in the last few seconds aren't lost if the app is killed during the debounce.
-            viewModel.flushMangaSync()
+            // Offline reading never queues syncs, so there is nothing to flush.
+            if (!offlineOpen) viewModel.flushMangaSync()
             // Refresh the home Continue Reading card with the latest scroll progress
             // when leaving the reader mid-chapter.
             viewModel.refreshMangaTracking()
@@ -137,6 +146,13 @@ fun MangaReaderScreen(
     val chapters by viewModel.mangaChapters.collectAsState()
     val chapterImages by viewModel.mangaChapterImages.collectAsState()
     val chapterImagesError by viewModel.mangaChapterImagesError.collectAsState()
+    val downloadedManga by viewModel.mangaDownloads.collectAsState()
+    // Chapter numbers that exist on disk for this manga. Used to mark downloaded chapters
+    // in the chapter list and to allow reading without an extension/network.
+    val downloadedChapterNumbers = remember(downloadedManga, manga.id) {
+        downloadedManga.firstOrNull { it.mangaId == manga.id }?.chapters
+            ?.map { it.chapterNumber }?.toSet() ?: emptySet()
+    }
     var currentChapterIndex by remember { mutableIntStateOf(initialChapterIndex.coerceAtLeast(0)) }
     var readerMode by remember { mutableStateOf(
         when (viewModel.mangaReaderMode.value) {
@@ -215,7 +231,12 @@ fun MangaReaderScreen(
         }
         if (nearEnd) {
             val next = chapters.getOrNull(currentChapterIndex + 1) ?: return@LaunchedEffect
-            viewModel.prefetchMangaChapterImages(next, mangaTitle = manga.title, mangaId = manga.id)
+            viewModel.prefetchMangaChapterImages(
+                next,
+                mangaTitle = manga.title,
+                mangaId = manga.id,
+                downloadedChapterNumbers = downloadedChapterNumbers
+            )
         }
     }
 
@@ -266,24 +287,51 @@ fun MangaReaderScreen(
         }
     }
 
-    // Auto-load chapters if the list is empty — always fetch, regardless of showChapterList.
-    // The reader needs chapters both for the chapter list view AND for direct reading.
-    // Skipped while no manga extension is selected: without a source there's no real chapter
-    // list, and the synthetic fallback produces wrong chapter numbers for releasing manga.
-    LaunchedEffect(manga.id, selectedExtension) {
-        android.util.Log.d("MangaReader", "LaunchedEffect(manga.id=${manga.id}, selectedExtension=${selectedExtension != null}): chapters.isEmpty()=${chapters.isEmpty()}")
-        if (chapters.isEmpty() && selectedExtension != null) {
+    // Load chapters when the list is empty (needed both for the chapter list view and for
+    // direct reading), AND refetch the fresh extension list every time the chapter selection
+    // screen opens (showChapterList -> true) so it always reflects the extension's current
+    // chapters instead of a stale or downloaded-only fallback. Skipped while no manga
+    // extension is selected: without a source there's no real chapter list, and the synthetic
+    // fallback produces wrong chapter numbers for releasing manga. Exception: if this manga
+    // has downloaded chapters, load them so the reader works offline.
+    LaunchedEffect(manga.id, selectedExtension, showChapterList, downloadedChapterNumbers.isNotEmpty()) {
+        val hasDownloads = downloadedChapterNumbers.isNotEmpty()
+        val shouldLoad = chapters.isEmpty() || showChapterList
+        android.util.Log.d("MangaReader", "LaunchedEffect(manga.id=${manga.id}, selectedExtension=${selectedExtension != null}, hasDownloads=$hasDownloads, showChapterList=$showChapterList): chapters.isEmpty()=${chapters.isEmpty()} shouldLoad=$shouldLoad")
+        if (shouldLoad && (selectedExtension != null || hasDownloads)) {
             android.util.Log.d("MangaReader", "Fetching manga detail + chapters for manga.id=${manga.id}")
-            viewModel.fetchMangaDetail(manga.id)
+            // Best-effort detail fetch — when offline it may fail, but downloaded chapters
+            // still load so the reader keeps working.
+            runCatching { viewModel.fetchMangaDetail(manga.id) }
             viewModel.loadMangaChapters(manga.id, manga.title)
         }
     }
 
+    // When the reader is opened from the Downloads tab (offline), the target chapter is
+    // identified by its NUMBER, not its index in the online chapter list. Once chapters are
+    // available, resolve the matching index and jump straight to it (the chapter list stays
+    // closed — the caller already knows exactly which chapter to open).
+    if (initialChapterNumber != null) {
+        LaunchedEffect(chapters) {
+            val target = initialChapterNumber
+            val idx = chapters.indexOfFirst { it.chapterNumber == target }
+            if (idx >= 0 && currentChapterIndex != idx) {
+                android.util.Log.d("MangaReader", "Resolving initialChapterNumber=$target -> index $idx")
+                currentChapterIndex = idx
+                currentPageIndex = 0
+                scrollProgress = 0f
+                suppressResumeRestore = true
+                showNextChapterButton = false
+            }
+        }
+    }
+
     // Persist the page count of the loaded chapter so home's Continue Reading card can show
-    // "pages left" for the manga being read.
+    // "pages left" for the manga being read. Skipped for offline reading, which must not write
+    // to local tracking.
     LaunchedEffect(chapterImages) {
         val images = chapterImages
-        if (images != null && images.isNotEmpty()) {
+        if (!offlineOpen && images != null && images.isNotEmpty()) {
             viewModel.updateMangaChapterPages(manga.id, images.size)
         }
     }
@@ -292,23 +340,27 @@ fun MangaReaderScreen(
     // clear the saved scroll position so backing out of a merely-opened chapter never leaves a
     // stale Continue Reading card (the page count is set on load, but scrollProgress 0 means the
     // card won't show). Covers direct opens (Read Now / home card) that skip selectChapter.
+    // Skipped for offline reading — no local tracking writes.
     LaunchedEffect(currentChapterIndex) {
-        if (currentChapterIndex != manga.progress) {
+        if (!offlineOpen && currentChapterIndex != manga.progress) {
             viewModel.updateMangaScrollProgress(manga.id, 0f)
         }
     }
 
     // Handle the system back button — if a chapter is open, go back to the chapter list
     // (which stays open in the background); back on the chapter list closes the reader.
+    // Exception: when opened from the Downloads tab (offline), back always closes the reader —
+    // the offline chapter selection screen already provides the list, so landing on the
+    // reader's own (online) chapter list with download icons would be wrong.
     fun handleReaderBack() {
-        android.util.Log.d("MangaReader", "BACK pressed: showChapterList=$showChapterList chapters.size=${chapters.size} — " +
-            if (!showChapterList && chapters.isNotEmpty()) "closing to chapter list" else "closing reader via onClose()")
-        if (!showChapterList && chapters.isNotEmpty()) {
+        android.util.Log.d("MangaReader", "BACK pressed: showChapterList=$showChapterList chapters.size=${chapters.size} offlineOpen=$offlineOpen — " +
+            if (!showChapterList && chapters.isNotEmpty() && !offlineOpen) "closing to chapter list" else "closing reader via onClose()")
+        if (!showChapterList && chapters.isNotEmpty() && !offlineOpen) {
             // Was reading — go back to chapter list
             showChapterList = true
             showControls = false
         } else {
-            // Was on chapter list — close reader
+            // Was on chapter list (or opened offline) — close reader
             onClose()
         }
     }
@@ -424,7 +476,7 @@ fun MangaReaderScreen(
         // Clear the stale error so the reader shows its loading state while retrying.
         displayedImagesError = null
         currentChapter?.let { chapter ->
-            viewModel.loadChapterImages(chapter.chapterId, useDataSaver, manga.title)
+            viewModel.loadChapterImages(chapter.chapterId, useDataSaver, manga.title, chapter.title, manga.id)
         }
     }
 
@@ -476,6 +528,10 @@ fun MangaReaderScreen(
                     hasLoadedChapters = hasLoadedChapters,
                     readIndices = readIndices.value,
                     nextChapterToRead = manga.progress.coerceAtLeast(0),
+                    // The online chapter list never shows download badges — the manga may have
+                    // downloaded chapters, but this is the online source list (the Downloads
+                    // screen's own list is the place for download UI).
+                    downloadedChapterNumbers = emptySet(),
                     onChapterClick = { selectChapter(it) },
                     onContinueReading = {
                         val next = manga.progress.coerceAtLeast(0)
@@ -483,7 +539,7 @@ fun MangaReaderScreen(
                     },
                     onRetryLoadChapters = {
                         scope.launch {
-                            viewModel.fetchMangaDetail(manga.id)
+                            runCatching { viewModel.fetchMangaDetail(manga.id) }
                             viewModel.loadMangaChapters(manga.id, manga.title)
                         }
                     },
@@ -516,14 +572,16 @@ fun MangaReaderScreen(
                         },
                         showControls = showControls,
                         onScrollProgress = {
-                            if (viewModel.onMangaScrollProgress(
-                                    mangaId = manga.id,
-                                    chapter = currentChapter,
-                                    scrollPercent = it,
-                                    mangaTitle = manga.title,
-                                    mangaCover = manga.cover
-                                )
-                            ) markChapterReadInListUi()
+                            if (!offlineOpen) {
+                                if (viewModel.onMangaScrollProgress(
+                                        mangaId = manga.id,
+                                        chapter = currentChapter,
+                                        scrollPercent = it,
+                                        mangaTitle = manga.title,
+                                        mangaCover = manga.cover
+                                    )
+                                ) markChapterReadInListUi()
+                            }
                             scrollProgress = it
                         },
                         onCurrentPage = { page -> currentPageIndex = page },
@@ -548,14 +606,16 @@ fun MangaReaderScreen(
                             currentPageIndex = page
                             if (total > 1) {
                                 val progress = page.toFloat() / (total - 1).toFloat()
-                                if (viewModel.onMangaScrollProgress(
-                                        mangaId = manga.id,
-                                        chapter = currentChapter,
-                                        scrollPercent = progress,
-                                        mangaTitle = manga.title,
-                                        mangaCover = manga.cover
-                                    )
-                                ) markChapterReadInListUi()
+                                if (!offlineOpen) {
+                                    if (viewModel.onMangaScrollProgress(
+                                            mangaId = manga.id,
+                                            chapter = currentChapter,
+                                            scrollPercent = progress,
+                                            mangaTitle = manga.title,
+                                            mangaCover = manga.cover
+                                        )
+                                    ) markChapterReadInListUi()
+                                }
                                 scrollProgress = progress
                             }
                         }
@@ -639,19 +699,23 @@ fun MangaReaderScreen(
                             .height(3.dp)
                             .background(MaterialTheme.colorScheme.primary)
                     )
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth(syncThreshold / 100f)
-                            .fillMaxHeight()
-                            .background(Color.Transparent)
-                    ) {
+                    // AniList sync-threshold marker — only meaningful when progress is pushed to
+                    // AniList, so it is hidden while reading offline.
+                    if (!offlineOpen) {
                         Box(
                             modifier = Modifier
-                                .align(Alignment.CenterEnd)
-                                .width(2.dp)
+                                .fillMaxWidth(syncThreshold / 100f)
                                 .fillMaxHeight()
-                                .background(Color.White.copy(alpha = 0.8f))
-                        )
+                                .background(Color.Transparent)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.CenterEnd)
+                                    .width(2.dp)
+                                    .fillMaxHeight()
+                                    .background(Color.White.copy(alpha = 0.8f))
+                            )
+                        }
                     }
                 }
             }
@@ -820,8 +884,9 @@ fun MangaReaderScreen(
         }
 
         // No manga extension selected — replace the entire reader content (including the
-        // chapter selection screen) so the user is forced to pick a source first.
-        if (selectedExtension == null) {
+        // chapter selection screen) so the user is forced to pick a source first. Exception:
+        // when this manga has downloaded chapters, keep reading offline without a source.
+        if (selectedExtension == null && downloadedChapterNumbers.isEmpty()) {
             MangaNoExtensionScreen(
                 isOled = isOled,
                 onClose = onClose,
@@ -1248,6 +1313,10 @@ private fun PagedMangaReader(
 
 // ─── Chapter list (Oni-style) ──────────────────────────────────────────
 
+// Estimated heights (dp) used to center the current chapter inside its expanded group:
+// the group header (title + subtitle + paddings) and one chapter row.
+private val MangaChapterRowHeightDp = 56.dp
+
 @Composable
 fun MangaChapterListWithGroups(
     chapters: List<MangaChapter>,
@@ -1257,9 +1326,12 @@ fun MangaChapterListWithGroups(
     modifier: Modifier = Modifier,
     isLoadingChapters: Boolean = true,
     hasLoadedChapters: Boolean = false,
+    downloadedChapterNumbers: Set<Float> = emptySet(),
     onContinueReading: (() -> Unit)? = null,
     onRetryLoadChapters: (() -> Unit)? = null,
-    onBack: (() -> Unit)? = null
+    onBack: (() -> Unit)? = null,
+    onDeleteChapter: ((Int) -> Unit)? = null,
+    onDeleteAll: (() -> Unit)? = null
 ) {
     if (chapters.isEmpty()) {
         var lastEmptySig by remember { mutableStateOf("") }
@@ -1348,17 +1420,63 @@ fun MangaChapterListWithGroups(
         val totalCount = integerChapterCount.coerceAtLeast(chapters.size)
         val progress = if (totalCount > 0) readCount.toFloat() / totalCount else 0f
         val statusBarPadding = WindowInsets.statusBars.asPaddingValues()
+        val listDensity = LocalDensity.current
 
         LaunchedEffect(chapters, nextChapterToRead) {
-            if (nextChapterToRead >= 0) {
-                val targetGroupIndex = filteredGroups.indexOfFirst { (_, groupList) ->
-                    groupList.any { it.first == nextChapterToRead }
-                }
-                if (targetGroupIndex >= 0) {
-                    delay(100)
-                    listState.animateScrollToItem(maxOf(0, targetGroupIndex + 2))
-                }
+            if (nextChapterToRead < 0) return@LaunchedEffect
+            val targetGroupIndex = filteredGroups.indexOfFirst { (_, groupList) ->
+                groupList.any { it.first == nextChapterToRead }
             }
+            if (targetGroupIndex < 0) {
+                android.util.Log.w("MangaChapterList", "AUTOSCROLL no group holds index $nextChapterToRead (chapters=${chapters.size})")
+                return@LaunchedEffect
+            }
+            val groupKey = filteredGroups[targetGroupIndex].first
+            val groupList = filteredGroups[targetGroupIndex].second
+            val targetChapterTitle = chapters.getOrNull(nextChapterToRead)?.title ?: "?"
+            // Let the list finish its first layout before jumping.
+            delay(100)
+            // LazyColumn item index: 0=header, 1=search, then one item per group.
+            val targetItem = targetGroupIndex + 2
+            val rowInGroup = groupList.indexOfFirst { it.first == nextChapterToRead }
+            if (rowInGroup < 0) {
+                android.util.Log.w("MangaChapterList", "AUTOSCROLL row not found in group $groupKey for index $nextChapterToRead")
+                return@LaunchedEffect
+            }
+            // Jump straight to the target chapter's group (instant, single frame — no
+            // scroll-down-then-scroll-back-up dance), then glide it to roughly the
+            // vertical center. The target row sits inside the auto-expanded group, so
+            // measure the group's REAL viewport offset and size, then derive the row's
+            // offset from the measured group height (header + N rows). contentPadding is
+            // already included in the measured offset, so the centering is accurate.
+            listState.scrollToItem(targetItem)
+            // Wait until the jump is reflected in the layout before measuring.
+            var attempts = 0
+            while (attempts < 10 && listState.layoutInfo.visibleItemsInfo.none { it.index == targetItem }) {
+                attempts++
+                delay(16)
+            }
+            val layoutInfo = listState.layoutInfo
+            val viewportHeight = layoutInfo.viewportSize.height
+            val groupItem = layoutInfo.visibleItemsInfo.firstOrNull { it.index == targetItem }
+            if (viewportHeight <= 0 || groupItem == null) {
+                android.util.Log.w("MangaChapterList", "AUTOSCROLL measure failed viewport=$viewportHeight item=${groupItem?.index}")
+                return@LaunchedEffect
+            }
+            val rowHeightPx = with(listDensity) { MangaChapterRowHeightDp.toPx() }
+            // Non-row portion of the group (header + padding) comes straight from the
+            // MEASURED group height, so a wrong header constant can't throw it off.
+            val nonRowHeightPx = (groupItem.size - groupList.size * rowHeightPx).coerceAtLeast(0f)
+            val rowCenterInGroup = nonRowHeightPx + rowInGroup * rowHeightPx + rowHeightPx / 2f
+            // scrollBy() is forward-positive: content moves UP the screen as delta grows, so
+            // to bring the row center UP to the viewport center we scroll forward by the
+            // row's current distance below center.
+            val delta = (groupItem.offset + rowCenterInGroup) - viewportHeight / 2f
+            android.util.Log.d("MangaChapterList", "AUTOSCROLL next=$nextChapterToRead ch=$targetChapterTitle " +
+                "group=$groupKey item=$targetItem row=$rowInGroup/${groupList.size} " +
+                "groupTop=${groupItem.offset} groupH=${groupItem.size} viewportH=$viewportHeight " +
+                "rowH=$rowHeightPx nonRow=${nonRowHeightPx.toInt()} delta=${delta.toInt()}")
+            if (delta != 0f) listState.animateScrollBy(delta)
         }
 
         LazyColumn(
@@ -1381,7 +1499,8 @@ fun MangaChapterListWithGroups(
                     onContinueReading = onContinueReading ?: {
                         if (nextChapterToRead in chapters.indices) onChapterClick(nextChapterToRead)
                     },
-                    onBack = onBack
+                    onBack = onBack,
+                    onDeleteAll = onDeleteAll
                 )
             }
 
@@ -1416,8 +1535,12 @@ fun MangaChapterListWithGroups(
                             groupChapters = groupList,
                             readIndices = readIndices,
                             nextChapterToRead = nextChapterToRead,
+                            downloadedChapterNumbers = downloadedChapterNumbers,
                             initiallyExpanded = containsTarget,
-                            onChapterClick = onChapterClick
+                            onChapterClick = onChapterClick,
+                            onDeleteChapter = onDeleteChapter?.let { delete ->
+                                { absoluteIndex -> delete(absoluteIndex) }
+                            }
                         )
                     }
                 }
@@ -1434,7 +1557,8 @@ private fun MangaChapterListHeader(
     nextChapterToRead: Int,
     chapters: List<MangaChapter>,
     onContinueReading: () -> Unit,
-    onBack: (() -> Unit)? = null
+    onBack: (() -> Unit)? = null,
+    onDeleteAll: (() -> Unit)? = null
 ) {
     Column {
         Row(
@@ -1476,6 +1600,18 @@ private fun MangaChapterListHeader(
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.SemiBold
                 )
+            }
+
+            if (onDeleteAll != null) {
+                Spacer(modifier = Modifier.width(4.dp))
+                IconButton(onClick = onDeleteAll) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Delete all",
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
 
@@ -1617,7 +1753,9 @@ private fun MangaChapterGroup(
     readIndices: Set<Int>,
     nextChapterToRead: Int,
     initiallyExpanded: Boolean = false,
-    onChapterClick: (Int) -> Unit
+    downloadedChapterNumbers: Set<Float> = emptySet(),
+    onChapterClick: (Int) -> Unit,
+    onDeleteChapter: ((Int) -> Unit)? = null
 ) {
     var expanded by remember { mutableStateOf(initiallyExpanded) }
     LaunchedEffect(initiallyExpanded) {
@@ -1712,7 +1850,9 @@ private fun MangaChapterGroup(
                             chapter = chapter,
                             isRead = absoluteIndex in readIndices,
                             isNextToRead = absoluteIndex == nextChapterToRead,
-                            onClick = { onChapterClick(absoluteIndex) }
+                            isDownloaded = chapter.chapterNumber in downloadedChapterNumbers,
+                            onClick = { onChapterClick(absoluteIndex) },
+                            onDelete = onDeleteChapter?.let { delete -> { delete(absoluteIndex) } }
                         )
                     }
                 }
@@ -1726,7 +1866,9 @@ private fun MangaChapterRow(
     chapter: MangaChapter,
     isRead: Boolean,
     isNextToRead: Boolean,
-    onClick: () -> Unit
+    isDownloaded: Boolean = false,
+    onClick: () -> Unit,
+    onDelete: (() -> Unit)? = null
 ) {
     val accentColor = when {
         isNextToRead && !isRead -> MaterialTheme.colorScheme.primaryContainer
@@ -1764,6 +1906,16 @@ private fun MangaChapterRow(
 
         Spacer(modifier = Modifier.weight(1f))
 
+        if (isDownloaded) {
+            Icon(
+                Icons.Default.Download,
+                contentDescription = "Downloaded",
+                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+        }
+
         if (isRead) {
             Icon(
                 Icons.Default.CheckCircle,
@@ -1778,6 +1930,21 @@ private fun MangaChapterRow(
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(18.dp)
             )
+        }
+
+        if (onDelete != null) {
+            Spacer(modifier = Modifier.width(10.dp))
+            IconButton(
+                onClick = onDelete,
+                modifier = Modifier.size(28.dp)
+            ) {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = "Delete chapter",
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
         }
     }
 }

@@ -314,26 +314,27 @@ fun ScheduleScreen(
     Column(modifier = Modifier.fillMaxSize().background(bg).windowInsetsPadding(WindowInsets.statusBars)) {
         if (apiError != null || isOffline) {
             Surface(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                shape = RoundedCornerShape(14.dp),
                 color = if (isOffline) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.errorContainer,
-                tonalElevation = 4.dp
+                tonalElevation = 2.dp
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
                         imageVector = if (isOffline) Icons.Default.SignalWifiOff else Icons.Default.CloudOff,
                         contentDescription = null,
-                        tint = if (isOffline) Color.White else MaterialTheme.colorScheme.onErrorContainer,
-                        modifier = Modifier.size(20.dp)
+                        tint = if (isOffline) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f),
+                        modifier = Modifier.size(18.dp)
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
                         if (isOffline) "No internet connection" else "AniList is currently unavailable",
-                        color = if (isOffline) Color.White else MaterialTheme.colorScheme.onErrorContainer,
-                        style = MaterialTheme.typography.bodyMedium
+                        color = if (isOffline) Color.White.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onErrorContainer,
+                        style = MaterialTheme.typography.bodySmall
                     )
                 }
             }
