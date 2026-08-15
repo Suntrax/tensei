@@ -907,14 +907,7 @@ fun DetailedMangaScreen(
                                         modifier = Modifier
                                             .size(38.dp)
                                             .clip(RoundedCornerShape(12.dp))
-                                            .background(
-                                                Brush.linearGradient(
-                                                    listOf(
-                                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
-                                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)
-                                                    )
-                                                )
-                                            ),
+                                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(Icons.Default.Link, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
@@ -1001,7 +994,7 @@ fun DetailedMangaScreen(
                                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                                     Box(
                                         modifier = Modifier.size(38.dp).clip(RoundedCornerShape(12.dp))
-                                            .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary.copy(alpha = 0.22f), MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)))),
+                                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(Icons.Default.Star, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
@@ -1146,7 +1139,7 @@ fun DetailedMangaScreen(
                                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                                     Box(
                                         modifier = Modifier.size(38.dp).clip(RoundedCornerShape(12.dp))
-                                            .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary.copy(alpha = 0.22f), MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)))),
+                                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(Icons.Default.Group, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
@@ -1204,7 +1197,7 @@ fun DetailedMangaScreen(
                                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                                     Box(
                                         modifier = Modifier.size(38.dp).clip(RoundedCornerShape(12.dp))
-                                            .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary.copy(alpha = 0.22f), MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)))),
+                                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
@@ -1261,7 +1254,10 @@ fun DetailedMangaScreen(
                         Card(
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                             shape = RoundedCornerShape(20.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                contentColor = MaterialTheme.colorScheme.onSurface
+                            ),
                             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f))
                         ) {
@@ -1269,7 +1265,7 @@ fun DetailedMangaScreen(
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Box(
                                         modifier = Modifier.size(38.dp).clip(RoundedCornerShape(12.dp))
-                                            .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary.copy(alpha = 0.22f), MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)))),
+                                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(Icons.AutoMirrored.Filled.TrendingUp, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
@@ -1279,16 +1275,42 @@ fun DetailedMangaScreen(
                                 }
                                 Spacer(modifier = Modifier.height(12.dp))
                                 rankings.forEach { ranking ->
+                                    val rankingTypeLabel = when (ranking.type) {
+                                        "RATED" -> "Highest Rated"
+                                        "POPULAR" -> "Most Popular"
+                                        else -> ranking.type ?: "Ranking"
+                                    }
+                                    val rawContext = ranking.context?.trim()
+                                    val rankingContextLabel = when {
+                                        rawContext?.startsWith("ALL TIME") == true -> "All Time"
+                                        rawContext?.startsWith("SEASON") == true ->
+                                            rawContext.removePrefix("SEASON").trim().ifBlank { "Seasonal" }
+                                                .replaceFirstChar { it.uppercaseChar() }
+                                        rawContext?.startsWith("YEAR") == true ->
+                                            rawContext.removePrefix("YEAR").trim().ifBlank { "This Year" }
+                                        rawContext?.startsWith("DECADE") == true ->
+                                            rawContext.removePrefix("DECADE").trim().ifBlank { "This Decade" }
+                                        rawContext?.startsWith("WEEK") == true ->
+                                            rawContext.removePrefix("WEEK").trim().ifBlank { "This Week" }
+                                        !rawContext.isNullOrBlank() -> rawContext.lowercase().replaceFirstChar { it.uppercaseChar() }
+                                        ranking.allTime == true -> "All Time"
+                                        ranking.season != null && ranking.year != null ->
+                                            "${ranking.season.lowercase().replaceFirstChar { it.uppercaseChar() }} ${ranking.year}"
+                                        ranking.year != null -> ranking.year.toString()
+                                        ranking.season != null -> ranking.season.lowercase().replaceFirstChar { it.uppercaseChar() }
+                                        else -> "Seasonal"
+                                    }
                                     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                                         Text("#${ranking.rank ?: "-"}", fontWeight = FontWeight.Bold, fontSize = 18.sp,
                                             color = if (ranking.allTime == true) Color(0xFFfbbf24) else MaterialTheme.colorScheme.primary)
                                         Spacer(Modifier.width(12.dp))
                                         Column {
-                                            Text("${ranking.context ?: ""} ${ranking.type ?: ""}".trim(),
-                                                style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                                            if (ranking.allTime == true) {
-                                                Text("All Time", style = MaterialTheme.typography.labelSmall, color = Color(0xFFfbbf24))
-                                            }
+                                            Text(rankingTypeLabel,
+                                                style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium,
+                                                color = MaterialTheme.colorScheme.onSurface)
+                                            Text(rankingContextLabel,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = if (ranking.allTime == true) Color(0xFFfbbf24) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f))
                                         }
                                     }
                                 }
@@ -1396,7 +1418,7 @@ private fun MangaInfoCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier.size(38.dp).clip(RoundedCornerShape(12.dp))
-                        .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary.copy(alpha = 0.22f), MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)))),
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
@@ -1409,12 +1431,9 @@ private fun MangaInfoCard(
             }
             Spacer(modifier = Modifier.height(18.dp))
 
-            // Hero stats: Score / Chapters / Volumes / Popularity / Favorites
-            val chaptersCount = extensionTotalChapters.takeIf { it > 0 }
-                ?: displayData.chapters.takeIf { it > 0 }
+            // Hero stats: Score / Volumes / Popularity / Favorites
             val heroStats = buildList {
                 displayData.averageScore?.takeIf { it > 0 }?.let { add("Score" to String.format(Locale.US, "%.1f", it / 10.0)) }
-                chaptersCount?.let { add("Chapters" to it.toString()) }
                 displayData.volumes?.takeIf { it > 0 }?.let { add("Volumes" to it.toString()) }
                 displayData.popularity?.takeIf { it > 0 }?.let { add("Popularity" to formatNumber(it)) }
                 displayData.favourites?.takeIf { it > 0 }?.let { add("Favorites" to formatNumber(it)) }
@@ -1430,7 +1449,6 @@ private fun MangaInfoCard(
                     heroStats.forEachIndexed { index, (label, value) ->
                         val accent = when (label) {
                             "Score" -> Color(0xFFFFB300)
-                            "Chapters" -> MaterialTheme.colorScheme.primary
                             "Volumes" -> MaterialTheme.colorScheme.tertiary
                             "Popularity" -> MaterialTheme.colorScheme.primary
                             "Favorites" -> Color(0xFFEC4899)
@@ -1464,6 +1482,8 @@ private fun MangaInfoCard(
             }
 
             // Bento spec grid
+            val chaptersCount = extensionTotalChapters.takeIf { it > 0 }
+                ?: displayData.chapters.takeIf { it > 0 }
             val specs = buildList {
                 displayData.format?.let {
                     add(SpecEntry(label = "Format", value = it.replace("_", " ").lowercase().replaceFirstChar { c -> c.uppercase() }, icon = Icons.Default.Category))

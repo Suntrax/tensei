@@ -1,6 +1,11 @@
 package com.blissless.tensei.ui.components
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -43,6 +48,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -76,71 +83,97 @@ fun LoadingSkeleton() {
         MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
         MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
     )
+    val shineColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
 
-    Column(verticalArrangement = Arrangement.spacedBy(28.dp)) {
-        repeat(3) { sectionIndex ->
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
-            ) {
-                Box(
-                    modifier = Modifier.width(3.dp).height(20.dp).background(
-                        shimmerColors[0], RoundedCornerShape(2.dp)
-                    )
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Box(
-                    modifier = Modifier.width(16.dp).height(16.dp).background(
-                        shimmerColors[0], RoundedCornerShape(4.dp)
-                    )
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Box(
-                    modifier = Modifier.width(140.dp).height(16.dp).background(
-                        shimmerColors[0], RoundedCornerShape(4.dp)
-                    )
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                Box(
-                    modifier = Modifier.width(32.dp).height(20.dp).background(
-                        shimmerColors[0], RoundedCornerShape(10.dp)
-                    )
-                )
-            }
+    val shineTransition = rememberInfiniteTransition(label = "skeletonShine")
+    val shineProgress by shineTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1400, easing = LinearEasing)
+        ),
+        label = "skeletonShineProgress"
+    )
 
-            Spacer(modifier = Modifier.height(8.dp))
+    Box(
+        modifier = Modifier.drawWithContent {
+            drawContent()
+            val sweepHalf = size.width * 0.6f
+            val centerX = -sweepHalf + shineProgress * (size.width + 2 * sweepHalf)
+            drawRect(
+                brush = Brush.linearGradient(
+                    colors = listOf(Color.Transparent, shineColor, Color.Transparent),
+                    start = Offset(centerX - sweepHalf, 0f),
+                    end = Offset(centerX + sweepHalf, size.height)
+                )
+            )
+        }
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(28.dp)) {
+            repeat(3) { sectionIndex ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+                ) {
+                    Box(
+                        modifier = Modifier.width(3.dp).height(20.dp).background(
+                            shimmerColors[0], RoundedCornerShape(2.dp)
+                        )
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Box(
+                        modifier = Modifier.width(16.dp).height(16.dp).background(
+                            shimmerColors[0], RoundedCornerShape(4.dp)
+                        )
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Box(
+                        modifier = Modifier.width(140.dp).height(16.dp).background(
+                            shimmerColors[0], RoundedCornerShape(4.dp)
+                        )
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                    Box(
+                        modifier = Modifier.width(32.dp).height(20.dp).background(
+                            shimmerColors[0], RoundedCornerShape(10.dp)
+                        )
+                    )
+                }
 
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                contentPadding = PaddingValues(horizontal = 16.dp)
-            ) {
-                items(4, key = { "skeleton_${sectionIndex}_$it" }) {
-                    Column(modifier = Modifier.width(140.dp)) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(195.dp)
-                                .background(shimmerColors[0], RoundedCornerShape(14.dp))
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(0.8f)
-                                .height(12.dp)
-                                .padding(horizontal = 2.dp)
-                                .background(shimmerColors[0], RoundedCornerShape(4.dp))
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(0.5f)
-                                .height(3.dp)
-                                .padding(horizontal = 2.dp)
-                                .background(
-                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.08f),
-                                    RoundedCornerShape(2.dp)
-                                )
-                        )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp)
+                ) {
+                    items(4, key = { "skeleton_${sectionIndex}_$it" }) {
+                        Column(modifier = Modifier.width(140.dp)) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(195.dp)
+                                    .background(shimmerColors[0], RoundedCornerShape(14.dp))
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.8f)
+                                    .height(12.dp)
+                                    .padding(horizontal = 2.dp)
+                                    .background(shimmerColors[0], RoundedCornerShape(4.dp))
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.5f)
+                                    .height(3.dp)
+                                    .padding(horizontal = 2.dp)
+                                    .background(
+                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.08f),
+                                        RoundedCornerShape(2.dp)
+                                    )
+                            )
+                        }
                     }
                 }
             }

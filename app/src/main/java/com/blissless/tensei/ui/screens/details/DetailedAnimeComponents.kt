@@ -39,7 +39,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -278,14 +277,7 @@ internal fun TrailerCard(
                     modifier = Modifier
                         .size(38.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(
-                            Brush.linearGradient(
-                                listOf(
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)
-                                )
-                            )
-                        ),
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -421,14 +413,7 @@ internal fun InfoCard(
                     modifier = Modifier
                         .size(38.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(
-                            Brush.linearGradient(
-                                listOf(
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)
-                                )
-                            )
-                        ),
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -635,14 +620,7 @@ internal fun GenresCard(
                     modifier = Modifier
                         .size(38.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(
-                            Brush.linearGradient(
-                                listOf(
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)
-                                )
-                            )
-                        ),
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -724,14 +702,7 @@ internal fun TagsCard(
                     modifier = Modifier
                         .size(38.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(
-                            Brush.linearGradient(
-                                listOf(
-                                    MaterialTheme.colorScheme.secondary.copy(alpha = 0.22f),
-                                    MaterialTheme.colorScheme.secondary.copy(alpha = 0.06f)
-                                )
-                            )
-                        ),
+                        .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -838,14 +809,7 @@ internal fun SynopsisCard(
                     modifier = Modifier
                         .size(38.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(
-                            Brush.linearGradient(
-                                listOf(
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)
-                                )
-                            )
-                        ),
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(

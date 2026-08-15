@@ -83,6 +83,7 @@ import com.blissless.tensei.dialogs.HomeAnimeStatusDialog
 import com.blissless.tensei.ui.components.AnimeCardBounds
 import com.blissless.tensei.ui.components.ExploreAnimeHorizontalList
 import com.blissless.tensei.ui.components.LoadingPlaceholder
+import com.blissless.tensei.ui.components.LoadingSkeleton
 import com.blissless.tensei.ui.screens.episode.EpisodeSelectionDialog
 import com.blissless.tensei.ui.screens.episode.RichEpisodeScreen
 import com.blissless.tensei.ui.components.SectionTitle
@@ -209,6 +210,13 @@ fun ExploreScreen(
     val filteredComedyAnime = remember(comedyAnime, hideAdultContent) { if (hideAdultContent) comedyAnime.filter { !isAdultContent(it.isAdult, it.genres) } else comedyAnime }
     val filteredFantasyAnime = remember(fantasyAnime, hideAdultContent) { if (hideAdultContent) fantasyAnime.filter { !isAdultContent(it.isAdult, it.genres) } else fantasyAnime }
     val filteredScifiAnime = remember(scifiAnime, hideAdultContent) { if (hideAdultContent) scifiAnime.filter { !isAdultContent(it.isAdult, it.genres) } else scifiAnime }
+
+    // True once the AniList API has returned anything at all (anime batch or manga sections).
+    val hasAnyExploreData = filteredFeaturedAnime.isNotEmpty() || filteredSeasonalAnime.isNotEmpty() ||
+        filteredTopSeries.isNotEmpty() || filteredTopMovies.isNotEmpty() ||
+        filteredActionAnime.isNotEmpty() || filteredRomanceAnime.isNotEmpty() ||
+        filteredComedyAnime.isNotEmpty() || filteredFantasyAnime.isNotEmpty() ||
+        filteredScifiAnime.isNotEmpty() || mangaExploreSections.isNotEmpty()
 
     // Create a map of animeId -> status for quick lookup
     val animeStatusMap = remember(currentlyWatching, planningToWatch, completed, onHold, dropped) {
@@ -587,6 +595,17 @@ fun ExploreScreen(
             isRefreshing = false
         }
     }
+
+    // Debounce loading UI so quick failures (e.g. API down) don't flash placeholders
+    var showLoadingUi by remember { mutableStateOf(false) }
+    LaunchedEffect(isLoading, isLoadingManga) {
+        if (isLoading || isLoadingManga) {
+            delay(500)
+            if (isLoading || isLoadingManga) showLoadingUi = true
+        } else {
+            showLoadingUi = false
+        }
+    }
     
     // Refresh data when screen becomes visible
     LaunchedEffect(isVisible, seasonalAnime) {
@@ -596,23 +615,62 @@ fun ExploreScreen(
         }
     }
 
-    LaunchedEffect(isVisible, isLoadingManga) {
-        android.util.Log.d("MangaExplore", "LaunchedEffect: isVisible=$isVisible mangaExploreSections.isEmpty=${mangaExploreSections.isEmpty()} isLoadingManga=$isLoadingManga")
-        if (isVisible && mangaExploreSections.isEmpty() && !isLoadingManga) {
-            android.util.Log.d("MangaExplore", "Triggering fetchMangaExplore()")
+    // Manga explore load cycle: show a loading screen until data arrives or the fetch concludes.
+    var mangaTimedOut by remember { mutableStateOf(false) }
+
+    // Whole-screen skeleton: show it immediately on first open (before any fetch has
+    // started) and keep it until the API returns anything or the fetch cycle concludes.
+    var exploreFetchesStarted by remember { mutableStateOf(false) }
+    LaunchedEffect(isLoading, isLoadingManga) {
+        if (isLoading || isLoadingManga) exploreFetchesStarted = true
+    }
+    val showExploreSkeleton =
+        !hasAnyExploreData && (!exploreFetchesStarted || isLoading || isLoadingManga)
+
+    // Fetch trigger — keyed only on visibility/timeout, so a failed fetch can't re-trigger
+    // itself into a request loop when the API is down.
+    LaunchedEffect(isVisible, mangaTimedOut) {
+        if (isVisible && mangaExploreSections.isEmpty() && !isLoadingManga && !mangaTimedOut) {
             viewModel.fetchMangaExplore()
         }
+    }
+
+    // When the manga fetch concludes without data, surface the API banner immediately
+    // (no artificial delay). This flag also stops the fetch trigger from retry-looping.
+    LaunchedEffect(isLoadingManga, mangaExploreSections, mangaTimedOut) {
+        if (!isLoadingManga && mangaExploreSections.isEmpty()) mangaTimedOut = true
+    }
+
+    // Quit the failure state as soon as data arrives.
+    LaunchedEffect(mangaExploreSections) {
+        if (mangaExploreSections.isNotEmpty()) mangaTimedOut = false
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
         PullToRefreshBox(
             isRefreshing = isRefreshing,
             onRefresh = {
-                isRefreshing = true
-                viewModel.forceRefreshExplore()
+                if (viewModel.tryManualRefresh("explore")) {
+                    isRefreshing = true
+                    viewModel.forceRefreshExplore()
+                    mangaTimedOut = false
+                }
             },
             modifier = Modifier.fillMaxSize()
         ) {
+            if (showExploreSkeleton) {
+                // Loading skeleton while the AniList API is still fetching results.
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(scrollState)
+                        .padding(bottom = 80.dp)
+                ) {
+                    Spacer(modifier = Modifier.height(24.dp))
+                    LoadingSkeleton()
+                    Spacer(modifier = Modifier.height(80.dp))
+                }
+            } else {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -623,7 +681,7 @@ fun ExploreScreen(
                 Surface(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).windowInsetsPadding(WindowInsets.statusBars),
                     shape = RoundedCornerShape(14.dp),
-                    color = if (isOffline) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.errorContainer,
+                    color = if (isOffline) Color(0xFF1A1A1A) else if (isOled) Color(0xFF93000A) else MaterialTheme.colorScheme.errorContainer,
                     tonalElevation = 2.dp
                 ) {
                     Row(
@@ -636,13 +694,13 @@ fun ExploreScreen(
                         Icon(
                             imageVector = if (isOffline) Icons.Default.SignalWifiOff else Icons.Default.CloudOff,
                             contentDescription = null,
-                            tint = if (isOffline) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f),
+                            tint = if (isOffline) Color.White.copy(alpha = 0.7f) else if (isOled) Color(0xFFFFDAD6).copy(alpha = 0.7f) else MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f),
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = if (isOffline) "No internet connection" else "AniList is currently unavailable",
-                            color = if (isOffline) Color.White.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onErrorContainer,
+                            color = if (isOffline) Color.White.copy(alpha = 0.8f) else if (isOled) Color(0xFFFFDAD6) else MaterialTheme.colorScheme.onErrorContainer,
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
@@ -675,7 +733,7 @@ fun ExploreScreen(
                     isDialogOpen = showDialog || showStatusDialog || showEpisodeSelection || showNoExtensionDialog,
                     autoScrollEnabled = isVisible && !showDialog
                 )
-            } else if (apiError == null && !isOffline) {
+            } else if (apiError == null && !isOffline && showLoadingUi) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -688,9 +746,11 @@ fun ExploreScreen(
             }
 
             // This Season
-            SectionTitle("This Season", filteredSeasonalAnime.size, isOled, onClick = {
-                openAnimeCategory("This Season", Icons.Default.DateRange, filteredSeasonalAnime)
-            })
+            if (filteredSeasonalAnime.isNotEmpty() || showLoadingUi) {
+                SectionTitle("This Season", filteredSeasonalAnime.size, isOled, onClick = {
+                    openAnimeCategory("This Season", Icons.Default.DateRange, filteredSeasonalAnime)
+                })
+            }
             if (filteredSeasonalAnime.isNotEmpty()) {
                 ExploreAnimeHorizontalList(
                     animeList = filteredSeasonalAnime,
@@ -726,14 +786,16 @@ fun ExploreScreen(
                     isVisible = isVisible,
                     viewModel = viewModel
                 )
-            } else if (isLoading) {
+            } else if (showLoadingUi) {
                 LoadingPlaceholder(isOled)
             }
 
             // Top Rated Series
-            SectionTitle("Top Rated Series", filteredTopSeries.size, isOled, onClick = {
-                openAnimeCategory("Top Rated Series", Icons.Default.Star, filteredTopSeries)
-            })
+            if (filteredTopSeries.isNotEmpty() || showLoadingUi) {
+                SectionTitle("Top Rated Series", filteredTopSeries.size, isOled, onClick = {
+                    openAnimeCategory("Top Rated Series", Icons.Default.Star, filteredTopSeries)
+                })
+            }
             if (filteredTopSeries.isNotEmpty()) {
                 ExploreAnimeHorizontalList(
                     animeList = filteredTopSeries,
@@ -769,14 +831,16 @@ fun ExploreScreen(
                     isVisible = isVisible,
                     viewModel = viewModel
                 )
-            } else if (isLoading) {
+            } else if (showLoadingUi) {
                 LoadingPlaceholder(isOled)
             }
 
             // Top Rated Movies
-            SectionTitle("Top Rated Movies", filteredTopMovies.size, isOled, onClick = {
-                openAnimeCategory("Top Rated Movies", Icons.Default.PlayCircle, filteredTopMovies)
-            })
+            if (filteredTopMovies.isNotEmpty() || showLoadingUi) {
+                SectionTitle("Top Rated Movies", filteredTopMovies.size, isOled, onClick = {
+                    openAnimeCategory("Top Rated Movies", Icons.Default.PlayCircle, filteredTopMovies)
+                })
+            }
             if (filteredTopMovies.isNotEmpty()) {
                 ExploreAnimeHorizontalList(
                     animeList = filteredTopMovies,
@@ -812,7 +876,7 @@ fun ExploreScreen(
                     isVisible = isVisible,
                     viewModel = viewModel
                 )
-            } else if (isLoading) {
+            } else if (showLoadingUi) {
                 LoadingPlaceholder(isOled)
             }
 
@@ -831,7 +895,7 @@ fun ExploreScreen(
                     animeStatusMap = animeStatusMap,
                     showStatusColors = showStatusColors,
                     showAnimeCardButtons = showAnimeCardButtons,
-                    isLoading = isLoading,
+                    isLoading = showLoadingUi,
                     isOled = isOled,
                     isLoggedIn = isLoggedIn,
                     onAnimeClick = onAnimeClickStable,
@@ -956,7 +1020,7 @@ fun ExploreScreen(
                         )
                     }
                 }
-            } else if (isLoadingManga) {
+            } else if (!mangaTimedOut) {
                 Box(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
                     contentAlignment = Alignment.Center
@@ -972,7 +1036,7 @@ fun ExploreScreen(
                     }
                 }
             } else {
-                // Fetch completed but returned empty — show retry button with explanatory text
+                // Manga fetch concluded with nothing returned — show the AniList unavailable banner.
                 Box(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
                     contentAlignment = Alignment.Center
@@ -986,13 +1050,13 @@ fun ExploreScreen(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Couldn't load manga sections",
+                            text = "AniList is currently unavailable",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "AniList may be experiencing issues. Tap retry to try again.",
+                            text = "Nothing was returned. Tap retry to try again.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center,
@@ -1000,9 +1064,7 @@ fun ExploreScreen(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         TextButton(onClick = {
-                            viewModel.viewModelScope.launch {
-                                viewModel.fetchMangaExplore()
-                            }
+                            mangaTimedOut = false
                         }) {
                             Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(4.dp))
@@ -1013,7 +1075,8 @@ fun ExploreScreen(
             }
 
             Spacer(modifier = Modifier.height(20.dp))
-        }
+            }
+            }
         }
 
         // Full-screen category list overlay (mirrors home's status list screen)

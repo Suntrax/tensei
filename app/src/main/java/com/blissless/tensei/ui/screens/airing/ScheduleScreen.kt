@@ -199,7 +199,12 @@ fun ScheduleScreen(
     }
 
     LaunchedEffect(isLoading) { if (!isLoading && isRefreshing) isRefreshing = false }
-    LaunchedEffect(Unit) { if (!preventAutoSync) viewModel.fetchAiringSchedule() }
+    LaunchedEffect(Unit) {
+        if (!preventAutoSync) {
+            delay(800.milliseconds)
+            viewModel.fetchAiringSchedule()
+        }
+    }
     LaunchedEffect(isLoading) { if (!isLoading && isRefreshing) isRefreshing = false }
     LaunchedEffect(Unit) {
         while (true) { delay(300000.milliseconds); currentTime = System.currentTimeMillis() / 1000; if (!preventAutoSync) viewModel.fetchAiringSchedule() }
@@ -316,7 +321,7 @@ fun ScheduleScreen(
             Surface(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 shape = RoundedCornerShape(14.dp),
-                color = if (isOffline) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.errorContainer,
+                color = if (isOffline) Color(0xFF1A1A1A) else if (isOled) Color(0xFF93000A) else MaterialTheme.colorScheme.errorContainer,
                 tonalElevation = 2.dp
             ) {
                 Row(
@@ -327,13 +332,13 @@ fun ScheduleScreen(
                     Icon(
                         imageVector = if (isOffline) Icons.Default.SignalWifiOff else Icons.Default.CloudOff,
                         contentDescription = null,
-                        tint = if (isOffline) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f),
+                        tint = if (isOffline) Color.White.copy(alpha = 0.7f) else if (isOled) Color(0xFFFFDAD6).copy(alpha = 0.7f) else MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f),
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
                         if (isOffline) "No internet connection" else "AniList is currently unavailable",
-                        color = if (isOffline) Color.White.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onErrorContainer,
+                        color = if (isOffline) Color.White.copy(alpha = 0.8f) else if (isOled) Color(0xFFFFDAD6) else MaterialTheme.colorScheme.onErrorContainer,
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
@@ -434,7 +439,7 @@ fun ScheduleScreen(
 
         PullToRefreshBox(
             isRefreshing = isRefreshing,
-            onRefresh = { isRefreshing = true; currentTime = System.currentTimeMillis() / 1000; viewModel.fetchAiringSchedule(force = true) },
+            onRefresh = { if (viewModel.tryManualRefresh("schedule")) { isRefreshing = true; currentTime = System.currentTimeMillis() / 1000; viewModel.fetchAiringSchedule(force = true) } },
             modifier = Modifier.fillMaxSize()
         ) {
             if (isLoading && airingList.isEmpty()) {

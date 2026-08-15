@@ -1217,7 +1217,8 @@ data class MangaRankingEntry(
     val type: String? = null,
     val context: String? = null,
     val allTime: Boolean? = null,
-    val season: String? = null
+    val season: String? = null,
+    val year: Int? = null
 )
 
 @Serializable

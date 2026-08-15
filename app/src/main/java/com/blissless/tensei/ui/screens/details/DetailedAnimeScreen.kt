@@ -505,7 +505,7 @@ fun DetailedAnimeScreen(
                     this.alpha = alpha
                 }
                 .offset { IntOffset(0, offsetY.value.roundToInt()) }
-                .background(MaterialTheme.colorScheme.background)
+                .background(if (isOled) Color.Black else MaterialTheme.colorScheme.background)
                 .nestedScroll(nestedScrollConnection)
                 // Release-settle: a low-velocity release never produces a fling, so onPreFling is
                 // never invoked and the sheet would stay stuck half-translated; and a fling
@@ -827,10 +827,12 @@ fun DetailedAnimeScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp),
-                        shape = RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(20.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            containerColor = MaterialTheme.colorScheme.surface
                         ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f))
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             val totalEps = anime.episodes.takeIf { it > 0 } ?: anime.episodes
@@ -1100,14 +1102,7 @@ fun DetailedAnimeScreen(
                                         modifier = Modifier
                                             .size(38.dp)
                                             .clip(RoundedCornerShape(12.dp))
-                                            .background(
-                                                Brush.linearGradient(
-                                                    listOf(
-                                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
-                                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)
-                                                    )
-                                                )
-                                            ),
+                                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
@@ -1322,7 +1317,7 @@ fun DetailedAnimeScreen(
                                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                                     Box(
                                         modifier = Modifier.size(38.dp).clip(RoundedCornerShape(12.dp))
-                                            .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary.copy(alpha = 0.22f), MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)))),
+                                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(Icons.Default.Star, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
@@ -1489,14 +1484,7 @@ fun DetailedAnimeScreen(
                                         modifier = Modifier
                                             .size(38.dp)
                                             .clip(RoundedCornerShape(12.dp))
-                                            .background(
-                                                Brush.linearGradient(
-                                                    listOf(
-                                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
-                                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)
-                                                    )
-                                                )
-                                            ),
+                                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
@@ -1660,14 +1648,7 @@ fun DetailedAnimeScreen(
                                         modifier = Modifier
                                             .size(38.dp)
                                             .clip(RoundedCornerShape(12.dp))
-                                            .background(
-                                                Brush.linearGradient(
-                                                    listOf(
-                                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
-                                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)
-                                                    )
-                                                )
-                                            ),
+                                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(

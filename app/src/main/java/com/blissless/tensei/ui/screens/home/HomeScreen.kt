@@ -313,7 +313,7 @@ fun HomeScreen(
     Box(modifier = Modifier.fillMaxSize()) {
         PullToRefreshBox(
             isRefreshing = isRefreshing,
-            onRefresh = { isRefreshing = true; viewModel.refreshHome() },
+            onRefresh = { if (viewModel.tryManualRefresh("home")) { isRefreshing = true; viewModel.refreshHome() } },
             modifier = Modifier.fillMaxSize()
         ) {
             Column(
@@ -323,7 +323,7 @@ fun HomeScreen(
                     Surface(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).windowInsetsPadding(WindowInsets.statusBars),
                         shape = RoundedCornerShape(14.dp),
-                        color = if (isOffline) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.errorContainer,
+                        color = if (isOffline) Color(0xFF1A1A1A) else if (isOled) Color(0xFF93000A) else MaterialTheme.colorScheme.errorContainer,
                         tonalElevation = 2.dp
                     ) {
                         Row(
@@ -334,13 +334,13 @@ fun HomeScreen(
                             Icon(
                                 imageVector = if (isOffline) Icons.Default.SignalWifiOff else Icons.Default.CloudOff,
                                 contentDescription = null,
-                                tint = if (isOffline) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f),
+                                tint = if (isOffline) Color.White.copy(alpha = 0.7f) else if (isOled) Color(0xFFFFDAD6).copy(alpha = 0.7f) else MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f),
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = if (isOffline) "No internet connection" else "AniList is currently unavailable",
-                                color = if (isOffline) Color.White.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onErrorContainer,
+                                color = if (isOffline) Color.White.copy(alpha = 0.8f) else if (isOled) Color(0xFFFFDAD6) else MaterialTheme.colorScheme.onErrorContainer,
                                 style = MaterialTheme.typography.bodySmall
                             )
                         }
@@ -1211,19 +1211,12 @@ fun HomeScreen(
                     modifier = Modifier.padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Header icon with gradient
+                    // Header icon
                     Box(
                         modifier = Modifier
                             .size(64.dp)
                             .clip(RoundedCornerShape(20.dp))
-                            .background(
-                                Brush.linearGradient(
-                                    listOf(
-                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
-                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.05f)
-                                    )
-                                )
-                            ),
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
                         contentAlignment = Alignment.Center
                     ) {
                         AsyncImage(
@@ -1578,19 +1571,12 @@ private fun ProfileSheetItem(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Gradient frosted icon tile
+            // Icon tile
             Box(
                 modifier = Modifier
                     .size(44.dp)
                     .clip(RoundedCornerShape(14.dp))
-                    .background(
-                        Brush.linearGradient(
-                            listOf(
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.05f)
-                            )
-                        )
-                    ),
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(

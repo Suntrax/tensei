@@ -26,6 +26,7 @@ import com.blissless.tensei.data.models.DetailedAnimeData
 import com.blissless.tensei.data.models.EpisodeStreams
 import com.blissless.tensei.data.models.ExploreCacheData
 import com.blissless.tensei.data.models.HomeCacheData
+import com.blissless.tensei.data.models.MangaExploreMedia
 import com.blissless.tensei.data.models.PlaybackPositionCache
 import com.blissless.tensei.data.models.QualityOption
 import com.blissless.tensei.data.models.ServerInfo
@@ -49,6 +50,8 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
         private const val CACHE_EXPLORE_TIME = "cache_explore_time"
         private const val CACHE_HOME_TIME = "cache_home_time"
         private const val CACHE_EXPLORE_DATA = "cache_explore_data"
+        private const val CACHE_MANGA_EXPLORE_TIME = "cache_manga_explore_time"
+        private const val CACHE_MANGA_EXPLORE_DATA = "cache_manga_explore_data"
         private const val CACHE_HOME_DATA = "cache_home_data"
         private const val CACHE_STREAM_DATA = "cache_stream_data"
         private const val CACHE_AIRING_TIME = "cache_airing_time"
@@ -351,6 +354,25 @@ class CacheManager(private val sharedPreferences: SharedPreferences) {
         if (cachedData != null && isCacheValid(CACHE_EXPLORE_TIME)) {
             return try {
                 json.decodeFromString<ExploreCacheData>(cachedData)
+            } catch (e: Exception) { ErrorHandler.report("CacheManager", "operation failed, returning null", e); null }
+        }
+        return null
+    }
+
+    fun saveMangaExploreToCache(sections: Map<String, List<MangaExploreMedia>>) {
+        try {
+            val jsonString = json.encodeToString(sections)
+            sharedPreferences.edit { putString(CACHE_MANGA_EXPLORE_DATA, jsonString) }
+            setCacheTime(CACHE_MANGA_EXPLORE_TIME)
+        } catch (_: Exception) {
+        }
+    }
+
+    fun loadMangaExploreFromCache(): Map<String, List<MangaExploreMedia>>? {
+        val cachedData = sharedPreferences.getString(CACHE_MANGA_EXPLORE_DATA, null)
+        if (cachedData != null && isCacheValid(CACHE_MANGA_EXPLORE_TIME)) {
+            return try {
+                json.decodeFromString<Map<String, List<MangaExploreMedia>>>(cachedData)
             } catch (e: Exception) { ErrorHandler.report("CacheManager", "operation failed, returning null", e); null }
         }
         return null

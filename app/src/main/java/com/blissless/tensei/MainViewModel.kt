@@ -71,6 +71,7 @@ import com.blissless.tensei.viewmodel.fetchMalList
 import com.blissless.tensei.viewmodel.initManga
 import com.blissless.tensei.viewmodel.mangaDownloadManager
 import com.blissless.tensei.viewmodel.fetchMangaExplore
+import com.blissless.tensei.viewmodel.restoreMangaExploreFromCache
 import com.blissless.tensei.viewmodel.fetchMangaLists
 import com.blissless.tensei.viewmodel.fetchMangaUserProfile
 import com.blissless.tensei.viewmodel.toggleMalFavoriteById
@@ -102,6 +103,7 @@ class MainViewModel : ViewModel() {
         internal const val TAG = "MainViewModel"
         private const val CLIENT_ID = BuildConfig.CLIENT_ID_ANILIST
         internal const val MIN_REFRESH_INTERVAL_MS = 5 * 60 * 1000L // 5 minutes
+        internal const val MANUAL_REFRESH_COOLDOWN_MS = 30_000L // 30 seconds between manual refreshes
         internal const val SYNC_DEBOUNCE_MS = 2000L // 2 seconds debounce for API sync
         internal const val FAVORITE_DEBOUNCE_MS = 1000L // 1 second debounce for favorite toggles
     }
@@ -582,7 +584,11 @@ class MainViewModel : ViewModel() {
 
             val exploreDeferred = async { loadExploreDataWithCache() }
             val scheduleDeferred = async { fetchAiringSchedule() }
-            val mangaDeferred = async { fetchMangaExplore() }
+            val mangaDeferred = async {
+                // Show persisted manga sections immediately, then refresh in the background.
+                restoreMangaExploreFromCache()
+                fetchMangaExplore()
+            }
 
             // Wait for all to complete (they run in parallel)
             homeDeferred.await()
@@ -1605,6 +1611,25 @@ class MainViewModel : ViewModel() {
             _isLoadingHome.value = false
             // prefetchContinueWatchingStreams() // Disabled for now
         }
+    }
+
+    // Per-screen manual refresh timestamps so pull-to-refresh can't be spammed.
+    private val manualRefreshTimes = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    /**
+     * Returns true if a manual refresh for [key] is allowed right now and records it.
+     * Returns false (with a toast) if the user just refreshed [key] within
+     * [MANUAL_REFRESH_COOLDOWN_MS].
+     */
+    fun tryManualRefresh(key: String): Boolean {
+        val now = System.currentTimeMillis()
+        val last = manualRefreshTimes[key] ?: 0L
+        if (now - last < MANUAL_REFRESH_COOLDOWN_MS) {
+            viewModelScope.launch { _toastMessage.emit("Please wait a moment before refreshing again") }
+            return false
+        }
+        manualRefreshTimes[key] = now
+        return true
     }
 
     fun forceRefreshExplore() = fetchExploreData(force = true)

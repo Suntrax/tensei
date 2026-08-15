@@ -14,7 +14,6 @@ import androidx.activity.viewModels
 import androidx.annotation.OptIn
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -2383,21 +2382,16 @@ fun MainScreen(
             contentWindowInsets = WindowInsets(0, 0, 0, 0)
         ) { padding ->
             Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-                Crossfade(
-                    targetState = currentPage,
-                    animationSpec = tween(280),
-                    label = "screenCrossfade"
-                ) { page ->
-                    when (page) {
-                        0 -> ScheduleScreen(
-                            viewModel = viewModel,
-                            isOled = isOled,
-                            isVisible = true,
-                            preventAutoSync = preventScheduleSync,
-                            hideAdultContent = hideAdultContent,
-                            preferEnglishTitles = preferEnglishTitles,
-                            isLoggedIn = isLoggedIn,
-                            onPlayEpisode = onPlayEpisode,
+                when (currentPage) {
+                    0 -> ScheduleScreen(
+                        viewModel = viewModel,
+                        isOled = isOled,
+                        isVisible = true,
+                        preventAutoSync = preventScheduleSync,
+                        hideAdultContent = hideAdultContent,
+                        preferEnglishTitles = preferEnglishTitles,
+                        isLoggedIn = isLoggedIn,
+                        onPlayEpisode = onPlayEpisode,
                             onAnimeDialogOpen = { isOpen -> scheduleDialogOpen = isOpen },
                             onCharacterClick = { characterId ->
                                 overlayState = OverlayState.CharacterDialog(characterId = characterId, animeId = 0)
@@ -2613,7 +2607,6 @@ fun MainScreen(
                             },
                         )
                     }
-                }
 
                 AnimatedVisibility(
                     visible = showSearchScreen,

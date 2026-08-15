@@ -203,15 +203,15 @@ class MangaRepository {
         query: String,
         variables: Map<String, Any?> = emptyMap(),
         token: String? = null,
-        maxRetries: Int = 3,
+        maxRetries: Int = 2,
         useCache: Boolean = true
     ): String? {
         var lastError: String? = null
         repeat(maxRetries) { attempt ->
             val raw = executeQuery(query, variables, token, useCache)
             if (raw != null) return raw
-            // If the query failed, wait and retry (exponential backoff: 1s, 2s, 4s)
-            val delayMs = 1000L * (1 shl attempt)
+            // If the query failed, wait and retry with short backoff (400ms, 800ms)
+            val delayMs = 400L * (1 shl attempt)
             android.util.Log.w(TAG, "executeWithRetry: attempt ${attempt + 1}/$maxRetries failed, retrying in ${delayMs}ms")
             kotlinx.coroutines.delay(delayMs)
             lastError = "Retries exhausted"
@@ -234,7 +234,7 @@ class MangaRepository {
                     characters { nodes { id name { full native } image { large } } }
                     staff { edges { node { id name { full native } image { large } } role } }
                     recommendations { nodes { mediaRecommendation { id idMal title { romaji english } coverImage { extraLarge } chapters volumes averageScore format } } }
-                    rankings { id rank type context allTime season }
+                    rankings { id rank type context allTime season year }
                     synonyms externalLinks { url site }
                 }
             }

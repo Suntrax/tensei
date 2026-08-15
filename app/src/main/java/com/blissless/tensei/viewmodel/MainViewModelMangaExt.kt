@@ -414,8 +414,24 @@ suspend fun MainViewModel.fetchMangaExplore() {
         emptyMap()
     }
     android.util.Log.d("MangaExplore", "fetchMangaExplore: got ${sections.size} sections, keys=${sections.keys}")
-    _mangaExploreSections.value = sections
+    // Only overwrite existing data with a successful fetch — never wipe cached sections
+    // with an empty response (network hiccup or API outage).
+    if (sections.isNotEmpty()) {
+        _mangaExploreSections.value = sections
+        cacheManager.saveMangaExploreToCache(sections)
+    }
     _isLoadingManga.value = false
+}
+
+/**
+ * Restore the persisted manga explore sections so the Explore screen shows content
+ * immediately on startup instead of waiting for a fresh fetch.
+ */
+fun MainViewModel.restoreMangaExploreFromCache() {
+    val cached = cacheManager.loadMangaExploreFromCache()
+    if (!cached.isNullOrEmpty()) {
+        _mangaExploreSections.value = cached
+    }
 }
 
 suspend fun MainViewModel.fetchMangaLists(): Boolean {
