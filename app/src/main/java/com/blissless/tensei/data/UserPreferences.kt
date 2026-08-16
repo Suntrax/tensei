@@ -26,6 +26,8 @@ class UserPreferences(context: Context) {
         private const val KEY_PREFERRED_CATEGORY = "preferred_category"
         private const val KEY_SHOW_STATUS_COLORS = "show_status_colors"
         private const val KEY_SHOW_ANIME_CARD_BUTTONS = "show_anime_card_buttons"
+        private const val KEY_SHOW_MANGA_CARD_BUTTONS = "show_manga_card_buttons"
+        private const val KEY_SHOW_MANGA_STATUS_COLORS = "show_manga_status_colors"
         private const val KEY_PREFER_ENGLISH_TITLES = "prefer_english_titles"
         private const val KEY_PREVENT_SCHEDULE_SYNC = "prevent_schedule_sync"
         private const val KEY_TRACKING_PERCENTAGE = "tracking_percentage"
@@ -78,6 +80,7 @@ class UserPreferences(context: Context) {
         private const val KEY_MANGA_LOCK_ROTATION = "manga_lock_rotation"
         private const val KEY_MANGA_FULLSCREEN = "manga_fullscreen"
         private const val KEY_MANGA_AUTO_ADVANCE = "manga_auto_advance"
+        private const val KEY_APP_ICON = "app_icon"
     }
 
     private val sharedPreferences: SharedPreferences =
@@ -94,6 +97,9 @@ class UserPreferences(context: Context) {
     private val _isOled = MutableStateFlow(false)
     val isOled: StateFlow<Boolean> = _isOled.asStateFlow()
 
+    private val _appIcon = MutableStateFlow("default")
+    val appIcon: StateFlow<String> = _appIcon.asStateFlow()
+
     private val _disableMaterialColors = MutableStateFlow(true)
     val disableMaterialColors: StateFlow<Boolean> = _disableMaterialColors.asStateFlow()
 
@@ -105,6 +111,12 @@ class UserPreferences(context: Context) {
 
     private val _showAnimeCardButtons = MutableStateFlow(false)
     val showAnimeCardButtons: StateFlow<Boolean> = _showAnimeCardButtons.asStateFlow()
+
+    private val _showMangaCardButtons = MutableStateFlow(false)
+    val showMangaCardButtons: StateFlow<Boolean> = _showMangaCardButtons.asStateFlow()
+
+    private val _showMangaStatusColors = MutableStateFlow(false)
+    val showMangaStatusColors: StateFlow<Boolean> = _showMangaStatusColors.asStateFlow()
 
     private val _preferEnglishTitles = MutableStateFlow(true)
     val preferEnglishTitles: StateFlow<Boolean> = _preferEnglishTitles.asStateFlow()
@@ -298,10 +310,13 @@ class UserPreferences(context: Context) {
         // Load UI preferences
         _themeMode.value = sharedPreferences.getString(KEY_THEME_MODE, "system") ?: "system"
         _isOled.value = _themeMode.value == "oled"
+        _appIcon.value = sharedPreferences.getString(KEY_APP_ICON, "default") ?: "default"
         _disableMaterialColors.value = sharedPreferences.getBoolean(KEY_DISABLE_MATERIAL_COLORS, true)
         _preferredCategory.value = sharedPreferences.getString(KEY_PREFERRED_CATEGORY, "sub") ?: "sub"
         _showStatusColors.value = sharedPreferences.getBoolean(KEY_SHOW_STATUS_COLORS, false)
         _showAnimeCardButtons.value = sharedPreferences.getBoolean(KEY_SHOW_ANIME_CARD_BUTTONS, false)
+        _showMangaCardButtons.value = sharedPreferences.getBoolean(KEY_SHOW_MANGA_CARD_BUTTONS, false)
+        _showMangaStatusColors.value = sharedPreferences.getBoolean(KEY_SHOW_MANGA_STATUS_COLORS, false)
         _preferEnglishTitles.value = sharedPreferences.getBoolean(KEY_PREFER_ENGLISH_TITLES, true)
 
         _preventScheduleSync.value = sharedPreferences.getBoolean(KEY_PREVENT_SCHEDULE_SYNC, false)
@@ -384,6 +399,11 @@ class UserPreferences(context: Context) {
         sharedPreferences.edit { putString(KEY_THEME_MODE, mode) }
     }
 
+    fun setAppIcon(key: String) {
+        _appIcon.value = key
+        sharedPreferences.edit { putString(KEY_APP_ICON, key) }
+    }
+
     fun setDisableMaterialColors(enabled: Boolean) {
         _disableMaterialColors.value = enabled
         sharedPreferences.edit { putBoolean(KEY_DISABLE_MATERIAL_COLORS, enabled) }
@@ -402,6 +422,16 @@ class UserPreferences(context: Context) {
     fun setShowAnimeCardButtons(enabled: Boolean) {
         _showAnimeCardButtons.value = enabled
         sharedPreferences.edit { putBoolean(KEY_SHOW_ANIME_CARD_BUTTONS, enabled) }
+    }
+
+    fun setShowMangaCardButtons(enabled: Boolean) {
+        _showMangaCardButtons.value = enabled
+        sharedPreferences.edit { putBoolean(KEY_SHOW_MANGA_CARD_BUTTONS, enabled) }
+    }
+
+    fun setShowMangaStatusColors(enabled: Boolean) {
+        _showMangaStatusColors.value = enabled
+        sharedPreferences.edit { putBoolean(KEY_SHOW_MANGA_STATUS_COLORS, enabled) }
     }
 
     fun setPreferEnglishTitles(enabled: Boolean) {

@@ -370,7 +370,8 @@ private fun toMangaMedia(track: MangaTrack): MangaMedia {
         totalVolumes = track.totalVolumes,
         listStatus = track.status,
         scrollProgress = track.scrollProgress,
-        currentChapterPages = track.currentChapterPages
+        currentChapterPages = track.currentChapterPages,
+        userScore = track.score
     )
 }
 
@@ -459,22 +460,27 @@ suspend fun MainViewModel.fetchMangaLists(): Boolean {
             // Never downgrade local progress: a stale AniList response (push still in
             // flight, or a network hiccup) must not roll back chapters the user just read.
             if (m.progress > 0) localTracker.updateChapterProgressKeepMax(m.id, m.progress.toFloat())
+            if (m.userScore != null) localTracker.updateScore(m.id, m.userScore)
         }
         anilistPlanning?.forEach { m ->
             localTracker.ensureTrack(m.id, m.title, m.cover, m.totalChapters)
             localTracker.updateTrackingStatus(m.id, "PLANNING")
+            if (m.userScore != null) localTracker.updateScore(m.id, m.userScore)
         }
         anilistCompleted?.forEach { m ->
             localTracker.ensureTrack(m.id, m.title, m.cover, m.totalChapters)
             localTracker.updateTrackingStatus(m.id, "COMPLETED")
+            if (m.userScore != null) localTracker.updateScore(m.id, m.userScore)
         }
         anilistPaused?.forEach { m ->
             localTracker.ensureTrack(m.id, m.title, m.cover, m.totalChapters)
             localTracker.updateTrackingStatus(m.id, "PAUSED")
+            if (m.userScore != null) localTracker.updateScore(m.id, m.userScore)
         }
         anilistDropped?.forEach { m ->
             localTracker.ensureTrack(m.id, m.title, m.cover, m.totalChapters)
             localTracker.updateTrackingStatus(m.id, "DROPPED")
+            if (m.userScore != null) localTracker.updateScore(m.id, m.userScore)
         }
     }
 
@@ -1000,7 +1006,8 @@ private data class PendingMangaSync(
     val mediaId: Int,
     val status: String? = null,
     val progress: Int? = null,
-    val entryId: Int? = null
+    val entryId: Int? = null,
+    val score: Int? = null
 )
 
 private val pendingMangaSyncs = mutableMapOf<Int, PendingMangaSync>()
@@ -1027,7 +1034,8 @@ private fun MainViewModel.queueMangaSync(
     type: String,
     status: String? = null,
     progress: Int? = null,
-    entryId: Int? = null
+    entryId: Int? = null,
+    score: Int? = null
 ) {
     val existing = pendingMangaSyncs[mediaId]
     pendingMangaSyncs[mediaId] = PendingMangaSync(
@@ -1035,7 +1043,8 @@ private fun MainViewModel.queueMangaSync(
         mediaId = mediaId,
         status = status ?: existing?.status,
         progress = progress ?: existing?.progress,
-        entryId = entryId ?: existing?.entryId
+        entryId = entryId ?: existing?.entryId,
+        score = score ?: existing?.score
     )
     mangaSyncJob?.cancel()
     // Run the push on a background dispatcher. The mutation is a network call, and the
@@ -1080,7 +1089,16 @@ private suspend fun MainViewModel.executeMangaPendingSyncs() {
                     val status = sync.status
                         ?: mangaTrackManager?.getTrack(sync.mediaId)?.status
                         ?: "CURRENT"
-                    mangaRepository?.updateMangaStatus(sync.mediaId, status, token, sync.progress)
+                    mangaRepository?.updateMangaStatus(sync.mediaId, status, token, sync.progress, score = sync.score)
+                }
+                "score" -> {
+                    val score = sync.score
+                        ?: mangaTrackManager?.getTrack(sync.mediaId)?.score
+                        ?: 0
+                    val status = sync.status
+                        ?: mangaTrackManager?.getTrack(sync.mediaId)?.status
+                        ?: "CURRENT"
+                    mangaRepository?.updateMangaStatus(sync.mediaId, status, token, sync.progress, score = score)
                 }
                 "delete" -> {
                     val entryId = sync.entryId
@@ -1196,17 +1214,28 @@ fun MainViewModel.updateMangaChapterPages(mangaId: Int, pages: Int) {
     mangaTrackManager?.updateChapterPages(mangaId, pages)
 }
 
-fun MainViewModel.updateMangaStatus(mangaId: Int, status: String, progress: Int? = null) {
+fun MainViewModel.updateMangaStatus(mangaId: Int, status: String, progress: Int? = null, score: Int? = null) {
     val effectiveStatus = status.ifBlank { "CURRENT" }
-    android.util.Log.d("MangaSyncDebug", "updateMangaStatus mangaId=$mangaId status='$status' effectiveStatus='$effectiveStatus' progress=$progress")
+    android.util.Log.d("MangaSyncDebug", "updateMangaStatus mangaId=$mangaId status='$status' effectiveStatus='$effectiveStatus' progress=$progress score=$score")
     // Local-first: apply the change immediately so the UI reacts instantly, then
     // queue the AniList push for the background debounced sync.
     mangaTrackManager?.updateTrackingStatus(mangaId, effectiveStatus)
     if (progress != null) {
         mangaTrackManager?.updateChapterProgress(mangaId, progress.toFloat())
     }
+    if (score != null) {
+        mangaTrackManager?.updateScore(mangaId, score)
+    }
     loadLocalMangaTracking()
-    queueMangaSync(mangaId, "status", status = effectiveStatus, progress = progress)
+    queueMangaSync(mangaId, "status", status = effectiveStatus, progress = progress, score = score)
+}
+
+/** Set the AniList score (0-100) for a manga, local-first with a debounced remote push. */
+fun MainViewModel.updateMangaScore(mangaId: Int, score: Int) {
+    android.util.Log.d("MangaSyncDebug", "updateMangaScore mangaId=$mangaId score=$score")
+    mangaTrackManager?.updateScore(mangaId, score)
+    loadLocalMangaTracking()
+    queueMangaSync(mangaId, "score", score = score)
 }
 
 fun MainViewModel.removeMangaTracking(mangaId: Int) {

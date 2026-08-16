@@ -82,6 +82,7 @@ fun ExploreAnimeHorizontalList(
     preferEnglishTitles: Boolean = true,
     onAnimeClick: (ExploreAnime, AnimeCardBounds?) -> Unit,
     onBookmarkClick: (ExploreAnime) -> Unit,
+    onPlayClick: (ExploreAnime) -> Unit = { _ -> },
     isLoggedIn: Boolean = false,
     isOled: Boolean = false,
     localAnimeStatus: Map<Int, com.blissless.tensei.data.models.LocalAnimeEntry> = emptyMap(),
@@ -191,6 +192,7 @@ fun ExploreAnimeHorizontalList(
                         onAnimeClick(anime, bounds)
                     },
                     onBookmarkClick = { onBookmarkClick(anime) },
+                    onPlayClick = { onPlayClick(anime) },
                     isLoggedIn = isLoggedIn,
                     isOled = isOled,
                     localStatus = localStatus,
@@ -216,6 +218,7 @@ fun ExploreAnimeCard(
     preferEnglishTitles: Boolean = true,
     onClick: (AnimeCardBounds?) -> Unit,
     onBookmarkClick: () -> Unit,
+    onPlayClick: () -> Unit = {},
     isLoggedIn: Boolean = false,
     isOled: Boolean = false,
     localStatus: String? = null,
@@ -412,7 +415,7 @@ fun ExploreAnimeCard(
                         Spacer(modifier = Modifier.weight(1f))
 
                         FilledTonalIconButton(
-                            onClick = { onClick(null) },
+                            onClick = onPlayClick,
                             modifier = Modifier.size(34.dp),
                             shape = RoundedCornerShape(4.dp),
                             colors = IconButtonDefaults.filledTonalIconButtonColors(

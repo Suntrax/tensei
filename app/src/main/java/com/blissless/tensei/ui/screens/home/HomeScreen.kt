@@ -60,10 +60,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -98,15 +100,15 @@ import com.blissless.tensei.data.models.toDetailedAnimeData
 import com.blissless.tensei.dialogs.HomeAnimeStatusDialog
 import com.blissless.tensei.dialogs.OfflineFavoritesDialog
 import com.blissless.tensei.ui.screens.manga.MangaStatusDialog
-import com.blissless.tensei.ui.screens.profile.UserProfileScreen
 import com.blissless.tensei.ui.screens.episode.EpisodeSelectionDialog
+import com.blissless.tensei.ui.screens.episode.RichEpisodeScreen
 import com.blissless.tensei.ui.components.HomeAnimeCardBounds
 import com.blissless.tensei.ui.components.HomeAnimeHorizontalList
 import com.blissless.tensei.ui.components.HomeStatusColors
 import com.blissless.tensei.ui.components.LoadingSkeleton
-import com.blissless.tensei.ui.screens.episode.RichEpisodeScreen
 import com.blissless.tensei.ui.components.SectionHeader
 import com.blissless.tensei.ui.components.ContinueWatchingEpisodeRow
+import com.blissless.tensei.ui.components.appIconDrawable
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.blissless.tensei.ui.screens.details.DetailedAnimeScreen
@@ -153,6 +155,7 @@ fun HomeScreen(
     onNavigateToSettings: (() -> Unit)? = null,
     onNoExtension: () -> Unit = {},
     onNavigateToSearch: () -> Unit = {},
+    onProfileClick: () -> Unit = {},
     onMangaClick: (MangaMedia) -> Unit = {},
     onMangaInfoClick: (MangaMedia) -> Unit = {},
     onMangaContinueReadingClick: (MangaMedia) -> Unit = {},
@@ -181,6 +184,8 @@ fun HomeScreen(
     val userName by viewModel.userName.collectAsState()
     val userAvatar by viewModel.userAvatar.collectAsState()
 
+    val appIcon by viewModel.appIcon.collectAsState()
+
     // ─── Manga state ─────────────────────────────────────────────────
     val mangaContinueReading by viewModel.mangaContinueReading.collectAsState()
     val mangaCurrentlyReading by viewModel.mangaCurrentlyReading.collectAsState()
@@ -196,7 +201,6 @@ fun HomeScreen(
     var showMangaStatusDialog by remember { mutableStateOf(false) }
     var statusListMangaForDialog by remember { mutableStateOf<MangaMedia?>(null) }
     var showOfflineFavoritesDialog by remember { mutableStateOf(false) }
-    var showUserProfileDialog by remember { mutableStateOf(false) }
     var showProfileSheet by remember { mutableStateOf(false) }
     var showDetailedAnimeScreen by remember { mutableStateOf(false) }
     var showNoExtensionDialog by remember { mutableStateOf(false) }
@@ -407,9 +411,9 @@ fun HomeScreen(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     AsyncImage(
-                                        model = R.mipmap.ic_launcher_round,
+                                        model = appIconDrawable(appIcon),
                                         contentDescription = "App",
-                                        modifier = Modifier.size(36.dp).clip(CircleShape)
+                                        modifier = Modifier.size(40.dp).clip(CircleShape)
                                     )
                                 }
                                 Spacer(modifier = Modifier.width(12.dp))
@@ -470,7 +474,7 @@ fun HomeScreen(
                                     modifier = Modifier.size(80.dp)
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
-                                        AsyncImage(model = R.mipmap.ic_launcher_round, contentDescription = null, modifier = Modifier.size(56.dp).clip(CircleShape))
+                                        AsyncImage(model = appIconDrawable(appIcon), contentDescription = null, modifier = Modifier.size(60.dp).clip(CircleShape))
                                     }
                                 }
                                 Spacer(modifier = Modifier.height(20.dp))
@@ -1035,12 +1039,8 @@ fun HomeScreen(
                 viewModel.removeAnimeFromList(selectedAnime!!.id)
                 showStatusDialog = false
             },
-            onUpdate = { status, progress ->
-                if (progress != null) viewModel.updateAnimeStatus(
-                    selectedAnime!!.id,
-                    status,
-                    progress
-                ) else viewModel.updateAnimeStatus(selectedAnime!!.id, status)
+            onUpdate = { status, progress, score ->
+                viewModel.updateAnimeStatus(selectedAnime!!.id, status, progress, score)
                 showStatusDialog = false
             })
     }
@@ -1053,9 +1053,11 @@ fun HomeScreen(
             currentStatus = sm.listStatus,
             currentProgress = sm.progress,
             totalChapters = sm.totalChapters,
-            onUpdate = { status, progress ->
-                android.util.Log.d("MangaSyncDebug", "MangaStatusDialog onUpdate: mangaId=${sm.id} status='$status' progress=$progress")
-                viewModel.updateMangaStatus(sm.id, status, progress)
+            isOled = isOled,
+            currentScore = sm.userScore,
+            onUpdate = { status, progress, score ->
+                android.util.Log.d("MangaSyncDebug", "MangaStatusDialog onUpdate: mangaId=${sm.id} status='$status' progress=$progress score=$score")
+                viewModel.updateMangaStatus(sm.id, status, progress, score)
                 if (progress != null) viewModel.updateMangaProgress(sm.id, progress.toFloat())
                 showMangaStatusDialog = false
             },
@@ -1197,98 +1199,99 @@ fun HomeScreen(
     }
 
     if (showProfileSheet) {
-        Dialog(
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
             onDismissRequest = { showProfileSheet = false },
-            properties = DialogProperties(usePlatformDefaultWidth = true)
+            sheetState = sheetState,
+            containerColor = MaterialTheme.colorScheme.surface
         ) {
-            Surface(
-                shape = RoundedCornerShape(24.dp),
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 2.dp,
-                shadowElevation = 2.dp
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp, bottom = 20.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Header icon
-                    Box(
-                        modifier = Modifier
-                            .size(64.dp)
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        AsyncImage(
-                            model = R.mipmap.ic_launcher_round,
-                            contentDescription = "App",
-                            modifier = Modifier.size(40.dp).clip(CircleShape)
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        if (isLoggedIn) "Account" else "More",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        if (isLoggedIn) "Profile, settings & more" else "Favorites & settings",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                    )
-                    Spacer(modifier = Modifier.height(24.dp))
                     if (isLoggedIn) {
-                        ProfileSheetItem(
-                            icon = Icons.Default.AccountCircle,
-                            label = "My Profile",
-                            onClick = {
-                                showProfileSheet = false
-                                showUserProfileDialog = true
+                        if (userAvatar != null) {
+                            AsyncImage(
+                                model = ImageRequest.Builder(LocalContext.current).data(userAvatar).crossfade(true).build(),
+                                contentDescription = "User Avatar",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.size(52.dp).clip(CircleShape)
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier.size(52.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.AccountCircle, contentDescription = "User", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(32.dp))
                             }
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                    } else {
-                        ProfileSheetItem(
-                            icon = Icons.Default.Favorite,
-                            label = "Favorites",
-                            onClick = {
-                                showProfileSheet = false
-                                showOfflineFavoritesDialog = true
-                            }
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
-                    ProfileSheetItem(
-                        icon = Icons.Default.Settings,
-                        label = "Settings",
-                        onClick = {
-                            showProfileSheet = false
-                            onNavigateToSettings?.invoke()
                         }
-                    )
-                    Spacer(modifier = Modifier.height(20.dp))
-                    TextButton(
-                        onClick = { showProfileSheet = false },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        Box(
+                            modifier = Modifier.size(52.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            AsyncImage(
+                                model = appIconDrawable(appIcon),
+                                contentDescription = "App",
+                                modifier = Modifier.size(44.dp).clip(CircleShape)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Column {
+                        Text(
+                            if (isLoggedIn) (userName ?: "My Anime") else "Tensei",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            if (isLoggedIn) "Profile, favorites & activity" else "Local favorites & app settings",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
+
+                if (isLoggedIn) {
+                    ProfileSheetItem(
+                        icon = Icons.Default.AccountCircle,
+                        label = "My Profile",
+                        onClick = {
+                            showProfileSheet = false
+                            onProfileClick()
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                } else {
+                    ProfileSheetItem(
+                        icon = Icons.Default.Favorite,
+                        label = "Favorites",
+                        onClick = {
+                            showProfileSheet = false
+                            showOfflineFavoritesDialog = true
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
+                ProfileSheetItem(
+                    icon = Icons.Default.Settings,
+                    label = "Settings",
+                    onClick = {
+                        showProfileSheet = false
+                        onNavigateToSettings?.invoke()
+                    }
+                )
+                Spacer(modifier = Modifier.height(28.dp))
             }
         }
-    }
-
-    if (showUserProfileDialog) {
-        UserProfileScreen(
-            viewModel = viewModel,
-            preferEnglishTitles = preferEnglishTitles,
-            onDismiss = { showUserProfileDialog = false },
-            onShowDetailedAnimeFromMal = onShowDetailedAnimeFromMal,
-            onShowDetailedAnimeFromAniList = onShowDetailedAnimeFromAniList,
-            onMangaClick = onMangaClick
-        )
     }
 
     // Stop refreshing when loading completes or after timeout

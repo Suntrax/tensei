@@ -1,10 +1,7 @@
 package com.blissless.tensei.ui.screens.profile
 
 import android.content.Intent
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
@@ -31,9 +28,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.History
@@ -53,23 +50,19 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import com.blissless.tensei.MainViewModel
 import com.blissless.tensei.api.jikan.JikanFavoriteAnime
@@ -86,11 +79,9 @@ import com.blissless.tensei.ui.theme.StatusLabels
 import com.blissless.tensei.ui.theme.MangaStatusLabels
 import com.blissless.tensei.ui.theme.StatusPaused
 import com.blissless.tensei.ui.theme.StatusPlanning
-import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlin.math.roundToInt
 // Extension functions on MainViewModel (defined in com.blissless.tensei.viewmodel)
 import com.blissless.tensei.viewmodel.fetchAniListFavorites
 import com.blissless.tensei.viewmodel.fetchUserActivity
@@ -127,7 +118,7 @@ enum class UserProfileSection {
 fun UserProfileScreen(
     viewModel: MainViewModel,
     preferEnglishTitles: Boolean = true,
-    onDismiss: () -> Unit,
+    onBack: () -> Unit,
     onShowDetailedAnimeFromMal: (Int) -> Unit,
     onShowDetailedAnimeFromAniList: (Int) -> Unit,
     onMangaClick: (MangaMedia) -> Unit = {}
@@ -238,201 +229,171 @@ fun UserProfileScreen(
     val statusBarsPadding = WindowInsets.statusBars.asPaddingValues()
     val navigationBarsPadding = WindowInsets.navigationBars.asPaddingValues()
 
-    val slideOffset = remember { Animatable(1000f) }
-    val dismissSlideOffset = remember { Animatable(0f) }
-    val scope = rememberCoroutineScope()
+    BackHandler { onBack() }
 
-    LaunchedEffect(Unit) {
-        slideOffset.animateTo(targetValue = 0f, animationSpec = tween(200, easing = LinearEasing))
-    }
-
-    fun dismissWithAnimation() {
-        scope.launch {
-            dismissSlideOffset.snapTo(0f)
-            dismissSlideOffset.animateTo(targetValue = 1000f, animationSpec = tween(150, easing = LinearEasing))
-            onDismiss()
-        }
-    }
-
-    val alpha by animateFloatAsState(
-        targetValue = if (slideOffset.value > 0 || dismissSlideOffset.value > 0) 0f else 1f,
-        animationSpec = tween(durationMillis = 200, easing = LinearEasing), label = "alpha"
-    )
-
-    Dialog(
-        onDismissRequest = { dismissWithAnimation() },
-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
     ) {
-        Card(
+        Row(
             modifier = Modifier
-                .fillMaxSize()
-                .offset { IntOffset(0, (slideOffset.value + dismissSlideOffset.value).roundToInt()) }
-                .graphicsLayer { this.alpha = alpha }
-                .padding(0.dp),
-            shape = RoundedCornerShape(0.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.background)
+                .fillMaxWidth()
+                .padding(top = statusBarsPadding.calculateTopPadding() + 8.dp, start = 8.dp, end = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = statusBarsPadding.calculateTopPadding() + 8.dp, start = 8.dp, end = 8.dp, bottom = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = { dismissWithAnimation() }) {
-                        Icon(
-                            Icons.Default.Close, "Close",
-                            tint = MaterialTheme.colorScheme.onSurface
-                        )
+            IconButton(onClick = onBack) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack, "Back",
+                    tint = MaterialTheme.colorScheme.onSurface
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            Text(
+                when (selectedSection) {
+                    UserProfileSection.ABOUT_ME -> "About Me"
+                    UserProfileSection.FAVORITES -> "Favorites"
+                    UserProfileSection.HISTORY -> "History"
+                },
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+            Spacer(Modifier.weight(1f))
+            if (selectedSection == UserProfileSection.ABOUT_ME && userSiteUrl != null) {
+                IconButton(onClick = {
+                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, userSiteUrl)
                     }
-                    Spacer(Modifier.weight(1f))
-                    Text(
-                        when (selectedSection) {
-                            UserProfileSection.ABOUT_ME -> "About Me"
-                            UserProfileSection.FAVORITES -> "Favorites"
-                            UserProfileSection.HISTORY -> "History"
-                        },
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Spacer(Modifier.weight(1f))
-                    if (selectedSection == UserProfileSection.ABOUT_ME && userSiteUrl != null) {
-                        IconButton(onClick = {
-                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                type = "text/plain"
-                                putExtra(Intent.EXTRA_TEXT, userSiteUrl)
-                            }
-                            context.startActivity(Intent.createChooser(shareIntent, "Share Profile"))
-                        }) {
-                            Icon(Icons.Default.Share, "Share", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    } else {
-                        Spacer(Modifier.width(48.dp))
-                    }
+                    context.startActivity(Intent.createChooser(shareIntent, "Share Profile"))
+                }) {
+                    Icon(Icons.Default.Share, "Share", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+            } else {
+                Spacer(Modifier.width(48.dp))
+            }
+        }
 
-                Box(
-                    modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp)
-                ) {
-                    when (selectedSection) {
-                        UserProfileSection.ABOUT_ME -> AboutMeContent(
-                            username = userName ?: "User",
-                            userAvatar = userAvatar, userBanner = userBanner,
-                            userBio = userBio,
-                            userCreatedAt = userCreatedAt, userStats = userStats,
-                            mangaUserProfile = mangaUserProfile,
-                            animeLibrary = listOf(
-                                LibraryStatus("CURRENT", viewModel.currentlyWatching.value.size),
-                                LibraryStatus("PLANNING", viewModel.planningToWatch.value.size),
-                                LibraryStatus("COMPLETED", viewModel.completed.value.size),
-                                LibraryStatus("PAUSED", viewModel.onHold.value.size),
-                                LibraryStatus("DROPPED", viewModel.dropped.value.size)
-                            ),
-                            mangaLibrary = listOf(
-                                LibraryStatus("CURRENT", mangaReading.size),
-                                LibraryStatus("PLANNING", mangaPlanning.size),
-                                LibraryStatus("COMPLETED", mangaFinished.size),
-                                LibraryStatus("PAUSED", mangaHeld.size),
-                                LibraryStatus("DROPPED", mangaAbandoned.size)
+        Box(
+            modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp)
+        ) {
+            when (selectedSection) {
+                UserProfileSection.ABOUT_ME -> AboutMeContent(
+                    username = userName ?: "User",
+                    userAvatar = userAvatar, userBanner = userBanner,
+                    userBio = userBio,
+                    userCreatedAt = userCreatedAt, userStats = userStats,
+                    mangaUserProfile = mangaUserProfile,
+                    animeLibrary = listOf(
+                        LibraryStatus("CURRENT", viewModel.currentlyWatching.value.size),
+                        LibraryStatus("PLANNING", viewModel.planningToWatch.value.size),
+                        LibraryStatus("COMPLETED", viewModel.completed.value.size),
+                        LibraryStatus("PAUSED", viewModel.onHold.value.size),
+                        LibraryStatus("DROPPED", viewModel.dropped.value.size)
+                    ),
+                    mangaLibrary = listOf(
+                        LibraryStatus("CURRENT", mangaReading.size),
+                        LibraryStatus("PLANNING", mangaPlanning.size),
+                        LibraryStatus("COMPLETED", mangaFinished.size),
+                        LibraryStatus("PAUSED", mangaHeld.size),
+                        LibraryStatus("DROPPED", mangaAbandoned.size)
+                    )
+                )
+                UserProfileSection.FAVORITES -> FavoritesContent(
+                    favorites = favorites,
+                    mangaFavorites = mangaFavorites,
+                    preferEnglishTitles = preferEnglishTitles,
+                    onAnimeClick = { anime ->
+                        if (anime.malId != 0) {
+                            onShowDetailedAnimeFromMal(anime.malId)
+                        } else if (anime.id != 0) {
+                            onShowDetailedAnimeFromAniList(anime.id)
+                        }
+                    },
+                    onRemoveFavorite = {
+                        viewModel.toggleAniListFavorite(it.malId)
+                    },
+                    onMangaClick = { manga ->
+                        onMangaClick(
+                            MangaMedia(
+                                id = manga.id,
+                                title = if (preferEnglishTitles) {
+                                    manga.title?.english ?: manga.title?.romaji ?: "Unknown"
+                                } else {
+                                    manga.title?.romaji ?: manga.title?.english ?: "Unknown"
+                                },
+                                titleEnglish = manga.title?.english,
+                                cover = manga.coverImage?.extraLarge ?: manga.coverImage?.large ?: "",
+                                totalChapters = manga.chapters ?: 0,
+                                averageScore = manga.averageScore,
+                                siteUrl = manga.siteUrl
                             )
                         )
-                        UserProfileSection.FAVORITES -> FavoritesContent(
-                            favorites = favorites,
-                            mangaFavorites = mangaFavorites,
-                            preferEnglishTitles = preferEnglishTitles,
-                            onAnimeClick = { anime ->
-                                if (anime.malId != 0) {
-                                    onShowDetailedAnimeFromMal(anime.malId)
-                                } else if (anime.id != 0) {
-                                    onShowDetailedAnimeFromAniList(anime.id)
-                                }
-                            },
-                            onRemoveFavorite = {
-                                viewModel.toggleAniListFavorite(it.malId)
-                            },
-                            onMangaClick = { manga ->
-                                onMangaClick(
-                                    MangaMedia(
-                                        id = manga.id,
-                                        title = if (preferEnglishTitles) {
-                                            manga.title?.english ?: manga.title?.romaji ?: "Unknown"
-                                        } else {
-                                            manga.title?.romaji ?: manga.title?.english ?: "Unknown"
-                                        },
-                                        titleEnglish = manga.title?.english,
-                                        cover = manga.coverImage?.extraLarge ?: manga.coverImage?.large ?: "",
-                                        totalChapters = manga.chapters ?: 0,
-                                        averageScore = manga.averageScore,
-                                        siteUrl = manga.siteUrl
-                                    )
-                                )
-                            },
-                            onRemoveMangaFavorite = { manga ->
-                                viewModel.toggleMangaFavorite(manga.id)
-                            }
-                        )
-                        UserProfileSection.HISTORY -> HistoryContent(
-                            history = history,
-                            mangaHistory = mangaActivity,
-                            preferEnglishTitles = preferEnglishTitles,
-                            onAnimeClick = { entry ->
-                                if (loginProvider == LoginProvider.MAL) {
-                                    onShowDetailedAnimeFromMal(entry.malId)
-                                } else {
-                                    onShowDetailedAnimeFromAniList(entry.malId)
-                                }
-                            },
-                            onMangaClick = { node ->
-                                node.media?.let { media ->
-                                    onMangaClick(
-                                        MangaMedia(
-                                            id = media.id,
-                                            title = if (preferEnglishTitles) {
-                                                media.title?.english ?: media.title?.romaji ?: "Unknown"
-                                            } else {
-                                                media.title?.romaji ?: media.title?.english ?: "Unknown"
-                                            },
-                                            titleEnglish = media.title?.english,
-                                            cover = media.coverImage?.extraLarge ?: media.coverImage?.large ?: "",
-                                            totalChapters = media.chapters ?: 0,
-                                            siteUrl = media.siteUrl
-                                        )
-                                    )
-                                }
-                            },
-                            statuses = statuses, progressList = progressDisplay
-                        )
+                    },
+                    onRemoveMangaFavorite = { manga ->
+                        viewModel.toggleMangaFavorite(manga.id)
                     }
-                }
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
-                        .padding(start = 24.dp, end = 24.dp, top = 12.dp, bottom = navigationBarsPadding.calculateBottomPadding() + 12.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    UserProfileNavButton(
-                        icon = Icons.Default.Person, title = "About Me",
-                        isSelected = selectedSection == UserProfileSection.ABOUT_ME,
-                        onClick = { selectedSection = UserProfileSection.ABOUT_ME }
-                    )
-                    UserProfileNavButton(
-                        icon = Icons.Default.Favorite, title = "Favorites",
-                        isSelected = selectedSection == UserProfileSection.FAVORITES,
-                        onClick = { selectedSection = UserProfileSection.FAVORITES },
-                        badge = favorites.size + mangaFavorites.size
-                    )
-                    UserProfileNavButton(
-                        icon = Icons.Default.History, title = "History",
-                        isSelected = selectedSection == UserProfileSection.HISTORY,
-                        onClick = { selectedSection = UserProfileSection.HISTORY },
-                        badge = history.size + mangaActivity.size
-                    )
-                }
+                )
+                UserProfileSection.HISTORY -> HistoryContent(
+                    history = history,
+                    mangaHistory = mangaActivity,
+                    preferEnglishTitles = preferEnglishTitles,
+                    onAnimeClick = { entry ->
+                        if (loginProvider == LoginProvider.MAL) {
+                            onShowDetailedAnimeFromMal(entry.malId)
+                        } else {
+                            onShowDetailedAnimeFromAniList(entry.malId)
+                        }
+                    },
+                    onMangaClick = { node ->
+                        node.media?.let { media ->
+                            onMangaClick(
+                                MangaMedia(
+                                    id = media.id,
+                                    title = if (preferEnglishTitles) {
+                                        media.title?.english ?: media.title?.romaji ?: "Unknown"
+                                    } else {
+                                        media.title?.romaji ?: media.title?.english ?: "Unknown"
+                                    },
+                                    titleEnglish = media.title?.english,
+                                    cover = media.coverImage?.extraLarge ?: media.coverImage?.large ?: "",
+                                    totalChapters = media.chapters ?: 0,
+                                    siteUrl = media.siteUrl
+                                )
+                            )
+                        }
+                    },
+                    statuses = statuses, progressList = progressDisplay
+                )
             }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                .padding(start = 24.dp, end = 24.dp, top = 12.dp, bottom = navigationBarsPadding.calculateBottomPadding() + 12.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            UserProfileNavButton(
+                icon = Icons.Default.Person, title = "About Me",
+                isSelected = selectedSection == UserProfileSection.ABOUT_ME,
+                onClick = { selectedSection = UserProfileSection.ABOUT_ME }
+            )
+            UserProfileNavButton(
+                icon = Icons.Default.Favorite, title = "Favorites",
+                isSelected = selectedSection == UserProfileSection.FAVORITES,
+                onClick = { selectedSection = UserProfileSection.FAVORITES },
+                badge = favorites.size + mangaFavorites.size
+            )
+            UserProfileNavButton(
+                icon = Icons.Default.History, title = "History",
+                isSelected = selectedSection == UserProfileSection.HISTORY,
+                onClick = { selectedSection = UserProfileSection.HISTORY },
+                badge = history.size + mangaActivity.size
+            )
         }
     }
 }

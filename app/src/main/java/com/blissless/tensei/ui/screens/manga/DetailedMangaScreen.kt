@@ -52,11 +52,13 @@ import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Description             
+import androidx.compose.material.icons.filled.Download                
+import androidx.compose.material.icons.filled.EmojiEvents            
+import androidx.compose.material.icons.filled.Favorite                
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Info
@@ -160,6 +162,7 @@ import com.blissless.tensei.viewmodel.startMangaBatchDownload
 import com.blissless.tensei.viewmodel.toggleMangaFavorite
 import com.blissless.tensei.viewmodel.favoritedMangaIds
 import com.blissless.tensei.viewmodel.updateMangaStatus
+import com.blissless.tensei.viewmodel.updateMangaScore
 import com.blissless.tensei.viewmodel.updateMangaProgress
 import com.blissless.tensei.viewmodel.removeMangaTracking
 import com.blissless.tensei.viewmodel.selectedExtensionAuthority
@@ -294,6 +297,7 @@ fun DetailedMangaScreen(
     // "Add to List" section doesn't show a stale chip or "0 / x" progress.
     val statusToCheck = (liveStatus ?: currentStatus ?: manga.listStatus).takeIf { it.isNotBlank() }
     val statusProgress = liveProgress
+    val liveScore = liveTrack?.userScore ?: manga.userScore
     // Total chapters from the user-selected extension (current release count). Overrides the
     // stale AniList value once loadMangaChapters has run for this manga.
     val extensionTotalChapters by viewModel.mangaTotalChapters.collectAsState()
@@ -512,7 +516,7 @@ fun DetailedMangaScreen(
                     .background(Color.Black.copy(alpha = 0.6f), CircleShape)
                     .zIndex(10f)
             ) {
-                Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(24.dp))
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White, modifier = Modifier.size(24.dp))
             }
 
             // Top bar pill
@@ -745,16 +749,38 @@ fun DetailedMangaScreen(
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
                                 }
-                                if (statusToCheck != null) {
+                                if (statusToCheck != null || liveScore != null) {
                                     val statusColor = StatusColors[statusToCheck] ?: MaterialTheme.colorScheme.primary
                                     Column(horizontalAlignment = Alignment.End) {
-                                        Surface(shape = RoundedCornerShape(6.dp), color = statusColor.copy(alpha = 0.12f)) {
-                                            Text(
-                                                text = MangaStatusLabels[statusToCheck] ?: statusToCheck,
-                                                style = MaterialTheme.typography.labelMedium,
-                                                color = statusColor, fontWeight = FontWeight.SemiBold,
-                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                                            )
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            if (statusToCheck != null) {
+                                                Surface(shape = RoundedCornerShape(6.dp), color = statusColor.copy(alpha = 0.12f)) {
+                                                    Text(
+                                                        text = MangaStatusLabels[statusToCheck] ?: statusToCheck,
+                                                        style = MaterialTheme.typography.labelMedium,
+                                                        color = statusColor, fontWeight = FontWeight.SemiBold,
+                                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                                    )
+                                                }
+                                            }
+                                            if (liveScore != null) {
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Icon(
+                                                        Icons.Default.Star,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(13.dp),
+                                                        tint = Color(0xFFFBBF24)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(2.dp))
+                                                    Text(
+                                                        text = "${liveScore / 10}",
+                                                        style = MaterialTheme.typography.labelMedium,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = Color(0xFFFBBF24)
+                                                    )
+                                                }
+                                            }
                                         }
                                         if (totalCh > 0) {
                                             Spacer(modifier = Modifier.height(4.dp))
@@ -1274,15 +1300,15 @@ fun DetailedMangaScreen(
                                     Text("Rankings", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                                 }
                                 Spacer(modifier = Modifier.height(12.dp))
-                                rankings.forEach { ranking ->
+                                rankings.forEachIndexed { index, ranking ->
                                     val rankingTypeLabel = when (ranking.type) {
                                         "RATED" -> "Highest Rated"
                                         "POPULAR" -> "Most Popular"
                                         else -> ranking.type ?: "Ranking"
                                     }
-                                    val rawContext = ranking.context?.trim()
+                                    val rawContext = ranking.context?.trim()?.uppercase()
                                     val rankingContextLabel = when {
-                                        rawContext?.startsWith("ALL TIME") == true -> "All Time"
+                                        rawContext?.contains("ALL TIME") == true -> "All Time"
                                         rawContext?.startsWith("SEASON") == true ->
                                             rawContext.removePrefix("SEASON").trim().ifBlank { "Seasonal" }
                                                 .replaceFirstChar { it.uppercaseChar() }
@@ -1292,26 +1318,74 @@ fun DetailedMangaScreen(
                                             rawContext.removePrefix("DECADE").trim().ifBlank { "This Decade" }
                                         rawContext?.startsWith("WEEK") == true ->
                                             rawContext.removePrefix("WEEK").trim().ifBlank { "This Week" }
-                                        !rawContext.isNullOrBlank() -> rawContext.lowercase().replaceFirstChar { it.uppercaseChar() }
                                         ranking.allTime == true -> "All Time"
                                         ranking.season != null && ranking.year != null ->
                                             "${ranking.season.lowercase().replaceFirstChar { it.uppercaseChar() }} ${ranking.year}"
                                         ranking.year != null -> ranking.year.toString()
                                         ranking.season != null -> ranking.season.lowercase().replaceFirstChar { it.uppercaseChar() }
+                                        !rawContext.isNullOrBlank() -> rawContext.lowercase().replaceFirstChar { it.uppercaseChar() }
                                         else -> "Seasonal"
                                     }
-                                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                                        Text("#${ranking.rank ?: "-"}", fontWeight = FontWeight.Bold, fontSize = 18.sp,
-                                            color = if (ranking.allTime == true) Color(0xFFfbbf24) else MaterialTheme.colorScheme.primary)
-                                        Spacer(Modifier.width(12.dp))
-                                        Column {
-                                            Text(rankingTypeLabel,
-                                                style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium,
-                                                color = MaterialTheme.colorScheme.onSurface)
-                                            Text(rankingContextLabel,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = if (ranking.allTime == true) Color(0xFFfbbf24) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f))
+                                    val isAllTime = ranking.allTime == true
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(46.dp)
+                                                .clip(RoundedCornerShape(13.dp))
+                                                .background(
+                                                    if (isAllTime) {
+                                                        Brush.linearGradient(listOf(Color(0xFFd97706), Color(0xFFfbbf24)))
+                                                    } else {
+                                                        Brush.linearGradient(listOf(
+                                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                                                        ))
+                                                    }
+                                                ),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                "#${ranking.rank ?: "-"}",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 16.sp,
+                                                color = if (isAllTime) Color(0xFF1a1205) else MaterialTheme.colorScheme.primary
+                                            )
                                         }
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                rankingTypeLabel,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                if (isAllTime) {
+                                                    Icon(
+                                                        imageVector = Icons.Filled.EmojiEvents,
+                                                        contentDescription = null,
+                                                        tint = Color(0xFFfbbf24),
+                                                        modifier = Modifier.size(14.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                }
+                                                Text(
+                                                    rankingContextLabel,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = if (isAllTime) Color(0xFFfbbf24) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                                                )
+                                            }
+                                        }
+                                    }
+                                    if (index != rankings.lastIndex) {
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.08f))
+                                        Spacer(modifier = Modifier.height(12.dp))
                                     }
                                 }
                             }
@@ -1370,12 +1444,17 @@ fun DetailedMangaScreen(
             currentStatus = statusToCheck,
             currentProgress = statusProgress,
             totalChapters = totalCh,
-            onUpdate = { status, progress ->
-                android.util.Log.d("MangaSyncDebug", "MangaStatusDialog onUpdate: mangaId=${manga.id} status='$status' progress=$progress")
+            isOled = isOled,
+            currentScore = liveScore,
+            onUpdate = { status, progress, score ->
+                android.util.Log.d("MangaSyncDebug", "MangaStatusDialog onUpdate: mangaId=${manga.id} status='$status' progress=$progress score=$score")
                 onUpdateStatus(status, progress)
                 if (progress != null) {
                     onUpdateProgress(progress)
                     viewModel.updateMangaProgress(manga.id, progress.toFloat())
+                }
+                if (score != null) {
+                    viewModel.updateMangaScore(manga.id, score)
                 }
                 showStatusDialog = false
             },

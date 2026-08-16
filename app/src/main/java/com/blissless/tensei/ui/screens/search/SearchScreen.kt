@@ -513,6 +513,41 @@ fun SearchScreen(
                     Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(28.dp))
                 }
                 Text("Search", color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.titleLarge)
+                Spacer(modifier = Modifier.weight(1f))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("anime" to "Anime", "manga" to "Manga", "both" to "Both").forEach { (value, label) ->
+                        FilterChip(
+                            selected = searchType == value,
+                            onClick = {
+                                searchType = value
+                                results = emptyList()
+                                mangaResults = emptyList()
+                                currentAnimePage = 1
+                                currentMangaPage = 1
+                                hasMoreAnime = true
+                                hasMoreManga = true
+                                hasMore = true
+                                hasSearched = false
+                                if (filters.query.isNotBlank()) {
+                                    performSearch()
+                                }
+                            },
+                            label = { Text(label, style = MaterialTheme.typography.labelMedium) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                containerColor = Color(0xFF2A2A2A),
+                                selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
+                                labelColor = Color.White.copy(alpha = 0.6f),
+                                selectedLabelColor = MaterialTheme.colorScheme.primary
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                borderColor = Color.Transparent,
+                                selectedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                                enabled = true,
+                                selected = searchType == value
+                            )
+                        )
+                    }
+                }
             }
 
             Card(
@@ -558,44 +593,6 @@ fun SearchScreen(
                     ) {
                         Icon(Icons.Default.Close, contentDescription = "Clear", tint = Color.White.copy(alpha = if (filters.query.isNotEmpty()) 0.5f else 0f), modifier = Modifier.size(18.dp))
                     }
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                listOf("anime" to "Anime", "manga" to "Manga", "both" to "Both").forEach { (value, label) ->
-                    FilterChip(
-                        selected = searchType == value,
-                        onClick = {
-                            searchType = value
-                            results = emptyList()
-                            mangaResults = emptyList()
-                            currentAnimePage = 1
-                            currentMangaPage = 1
-                            hasMoreAnime = true
-                            hasMoreManga = true
-                            hasMore = true
-                            hasSearched = false
-                            if (filters.query.isNotBlank()) {
-                                performSearch()
-                            }
-                        },
-                        label = { Text(label, style = MaterialTheme.typography.labelMedium) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            containerColor = Color(0xFF2A2A2A),
-                            selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
-                            labelColor = Color.White.copy(alpha = 0.6f),
-                            selectedLabelColor = MaterialTheme.colorScheme.primary
-                        ),
-                        border = FilterChipDefaults.filterChipBorder(
-                            borderColor = Color.Transparent,
-                            selectedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
-                            enabled = true,
-                            selected = searchType == value
-                        )
-                    )
                 }
             }
 

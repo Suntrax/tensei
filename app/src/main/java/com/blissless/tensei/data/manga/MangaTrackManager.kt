@@ -174,6 +174,18 @@ class MangaTrackManager(context: Context) {
         saveTracks(tracks)
     }
 
+    fun updateScore(mangaId: Int, score: Int) {
+        android.util.Log.d("MangaSyncDebug", "track.updateScore mangaId=$mangaId score=$score")
+        val tracks = getTracks().toMutableList()
+        val index = tracks.indexOfFirst { it.mangaId == mangaId }
+        if (index >= 0) {
+            tracks[index] = tracks[index].copy(score = score)
+        } else {
+            tracks.add(MangaTrack(mangaId = mangaId, score = score))
+        }
+        saveTracks(tracks)
+    }
+
     /**
      * Update the total chapter count, keeping the highest value seen. A manga's released
      * chapter count only grows, and a stale or partial source (offline extension fetch falling

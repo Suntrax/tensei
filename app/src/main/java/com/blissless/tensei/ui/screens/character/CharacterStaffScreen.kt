@@ -27,7 +27,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Work
@@ -261,8 +261,8 @@ fun CharacterScreen(
                                     .zIndex(10f)
                             ) {
                                 Icon(
-                                    Icons.Default.Close,
-                                    contentDescription = "Close",
+                                    Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "Back",
                                     tint = Color.White,
                                     modifier = Modifier.size(24.dp)
                                 )
@@ -544,8 +544,8 @@ fun StaffScreen(
                                     .zIndex(10f)
                             ) {
                                 Icon(
-                                    Icons.Default.Close,
-                                    contentDescription = "Close",
+                                    Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "Back",
                                     tint = Color.White,
                                     modifier = Modifier.size(24.dp)
                                 )

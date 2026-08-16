@@ -119,7 +119,7 @@ internal suspend fun MainViewModel.executePendingSyncs() {
                             }
                         }
                     } else {
-                        repository.updateStatus(sync.mediaId, it, sync.progress)
+                        repository.updateStatus(sync.mediaId, it, sync.progress, sync.score)
                     }
                 }
             }

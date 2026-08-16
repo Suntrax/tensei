@@ -90,6 +90,7 @@ import com.blissless.tensei.ui.screens.explore.ExploreScreen
 import com.blissless.tensei.ui.screens.home.HomeScreen
 import com.blissless.tensei.ui.screens.episode.RichEpisodeList
 import com.blissless.tensei.ui.screens.player.PlayerScreen
+import com.blissless.tensei.ui.screens.profile.UserProfileScreen
 import com.blissless.tensei.ui.screens.relations.AllRecommendationsScreen
 import com.blissless.tensei.ui.screens.relations.AllRelationsScreen
 import com.blissless.tensei.ui.screens.search.SearchScreen
@@ -177,20 +178,13 @@ class MainActivity : ComponentActivity() {
         handleAuthCallback(intent)
 
         setContent {
-            var showSplash by remember { mutableStateOf(true) }
-
-            if (showSplash) {
-                com.blissless.tensei.ui.components.SplashScreen(
-                    splashReady = { mainViewModel.splashReady.value },
-                    onFinished = { showSplash = false },
-                    splashDrawableRes = R.drawable.splash,
-                )
-            } else {
             val themeModeStr by mainViewModel.themeMode.collectAsState()
             val isOled by mainViewModel.isOled.collectAsState()
             val disableMaterialColors by mainViewModel.disableMaterialColors.collectAsState()
             val showStatusColors by mainViewModel.showStatusColors.collectAsState()
             val showAnimeCardButtons by mainViewModel.showAnimeCardButtons.collectAsState()
+            val showMangaCardButtons by mainViewModel.showMangaCardButtons.collectAsState()
+            val showMangaStatusColors by mainViewModel.showMangaStatusColors.collectAsState()
             val preferEnglishTitles by mainViewModel.preferEnglishTitles.collectAsState()
             val preventScheduleSync by mainViewModel.preventScheduleSync.collectAsState()
 
@@ -263,11 +257,12 @@ class MainActivity : ComponentActivity() {
                     isOled = isOled,
                     showStatusColors = showStatusColors,
                     showAnimeCardButtons = showAnimeCardButtons,
+                    showMangaCardButtons = showMangaCardButtons,
+                    showMangaStatusColors = showMangaStatusColors,
                     preferEnglishTitles = preferEnglishTitles,
                     preventScheduleSync = preventScheduleSync,
                     isLoggedIn = isLoggedIn
                 )
-            }
             }
         }
     }
@@ -380,6 +375,8 @@ fun MainScreen(
     isOled: Boolean,
     showStatusColors: Boolean,
     showAnimeCardButtons: Boolean,
+    showMangaCardButtons: Boolean,
+    showMangaStatusColors: Boolean,
     preferEnglishTitles: Boolean,
     preventScheduleSync: Boolean,
     isLoggedIn: Boolean
@@ -501,6 +498,7 @@ fun MainScreen(
     var overlayState by remember { mutableStateOf<OverlayState>(OverlayState.None) }
     var scheduleDialogOpen by remember { mutableStateOf(false) }
     var showSearchScreen by remember { mutableStateOf(false) }
+    var showUserProfilePage by remember { mutableStateOf(false) }
     var detailedAnimeFromMal by remember { mutableStateOf<DetailedAnimeData?>(null) }
     var showNoExtDialog2 by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
@@ -2422,6 +2420,8 @@ fun MainScreen(
                             isOled = isOled,
                             showStatusColors = showStatusColors,
                             showAnimeCardButtons = showAnimeCardButtons,
+                            showMangaCardButtons = showMangaCardButtons,
+                            showMangaStatusColors = showMangaStatusColors,
                             preferEnglishTitles = preferEnglishTitles,
                             hideAdultContent = hideAdultContent,
                             favoriteIds = if (viewModel.loginProvider.collectAsState().value == LoginProvider.MAL) malFavorites.map { it.id }.toSet() else aniListFavoriteIds,
@@ -2550,6 +2550,7 @@ fun MainScreen(
                                 overlayState = OverlayState.AllRecommendationsDialog(animeId = animeId, animeTitle = animeTitle)
                             },
                             onNavigateToSearch = { showSearchScreen = true },
+                            onProfileClick = { showUserProfilePage = true },
                             playbackPositions = playbackPositions,
                             onMangaClick = { manga ->
                                 android.util.Log.d("MangaNav", "HOME onMangaClick: id=${manga.id} title='${manga.title}' " +
@@ -2740,13 +2741,59 @@ fun MainScreen(
                     )
                 }
 
+                AnimatedVisibility(
+                    visible = showUserProfilePage,
+                    enter = fadeIn(animationSpec = tween(300)),
+                    exit = fadeOut(animationSpec = tween(250))
+                ) {
+                    UserProfileScreen(
+                        viewModel = viewModel,
+                        preferEnglishTitles = preferEnglishTitles,
+                        onBack = { showUserProfilePage = false },
+                        onShowDetailedAnimeFromMal = onShowDetailedAnimeFromMal,
+                        onShowDetailedAnimeFromAniList = { aniListId ->
+                            scope.launch {
+                                val detailedData = viewModel.fetchDetailedAnimeData(aniListId)
+                                if (detailedData != null) {
+                                    val newAnime = ExploreAnime(
+                                        id = detailedData.id,
+                                        title = detailedData.title,
+                                        titleEnglish = detailedData.titleEnglish,
+                                        cover = detailedData.cover,
+                                        banner = detailedData.banner,
+                                        episodes = detailedData.episodes,
+                                        latestEpisode = detailedData.latestEpisode,
+                                        averageScore = detailedData.averageScore,
+                                        genres = detailedData.genres,
+                                        year = detailedData.year,
+                                        format = detailedData.format
+                                    )
+                                    overlayState = OverlayState.ExploreAnimeDialog(anime = newAnime, firstAnime = newAnime, isFirstOpen = false)
+                                } else {
+                                    context.toast("Anime not found")
+                                }
+                            }
+                        },
+                        onMangaClick = { manga ->
+                            if (selectedMangaExtension == null) {
+                                showMangaNoExtensionDialog = true
+                            } else {
+                                mangaAutoShowChapters = true
+                                mangaDetailStack = mangaDetailStack + manga
+                                mangaReaderChapterIndex = -1
+                                showMangaReader = true
+                            }
+                        }
+                    )
+                }
+
                 com.blissless.tensei.ui.components.BottomNavigationBar(
                     selectedIndex = currentPage,
                     isOled = isOled,
                     disableMaterialColors = disableMaterialColors,
                     hideNavbar = hideNavbar,
                     isLoadingStream = isLoadingStream,
-                    showSearchScreen = showSearchScreen,
+                    showSearchScreen = showSearchScreen || showUserProfilePage,
                     onSelect = { currentPage = it },
                     scope = scope,
                 )

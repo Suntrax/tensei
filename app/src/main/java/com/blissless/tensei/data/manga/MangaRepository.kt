@@ -470,6 +470,7 @@ class MangaRepository {
             genres = media.genres ?: emptyList(),
             listStatus = entry.status ?: "",
             listEntryId = entry.id,
+            userScore = entry.score,
             year = media.seasonYear,
             malId = media.idMal,
             format = media.format

@@ -46,7 +46,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Category
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Favorite
@@ -200,6 +200,11 @@ fun DetailedAnimeScreen(
     val localFavorites by viewModel.localFavorites.collectAsState()
     val aniListFavorites by viewModel.aniListFavorites.collectAsState()
     val localAnimeStatus by viewModel.localAnimeStatus.collectAsState()
+    val currentlyWatching by viewModel.currentlyWatching.collectAsState()
+    val planningToWatch by viewModel.planningToWatch.collectAsState()
+    val completed by viewModel.completed.collectAsState()
+    val onHold by viewModel.onHold.collectAsState()
+    val dropped by viewModel.dropped.collectAsState()
     val localFavExists = localFavorites.containsKey(anime.id)
     val aniListIsFavorite = aniListFavorites.any { it.id == anime.id }
     val effectiveIsFavorite = when {
@@ -237,6 +242,10 @@ fun DetailedAnimeScreen(
     val statusToCheck = if (isLoggedIn) currentStatus else effectiveLocalStatus
     val statusProgress = displayProgress
     val totalEps = anime.episodes
+
+    val listUserScore = (currentlyWatching + planningToWatch + completed + onHold + dropped)
+        .firstOrNull { it.id == anime.id }?.userScore
+    val effectiveUserScore = if (isLoggedIn) listUserScore else localAnimeStatus[anime.id]?.score
 
     val slideOffset = remember { Animatable(1000f) }
     val dismissSlideOffset = remember { Animatable(0f) }
@@ -606,7 +615,7 @@ fun DetailedAnimeScreen(
                     .background(Color.Black.copy(alpha = 0.6f), CircleShape)
                     .zIndex(10f)
             ) {
-                Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(24.dp))
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White, modifier = Modifier.size(24.dp))
             }
 
             Box(
@@ -872,20 +881,42 @@ fun DetailedAnimeScreen(
                                         )
                                     }
                                 }
-                                if (statusToCheck != null) {
+                                if (statusToCheck != null || effectiveUserScore != null) {
                                     val statusColor = StatusColors[statusToCheck] ?: MaterialTheme.colorScheme.primary
                                     Column(horizontalAlignment = Alignment.End) {
-                                        Surface(
-                                            shape = RoundedCornerShape(6.dp),
-                                            color = statusColor.copy(alpha = 0.12f)
-                                        ) {
-                                            Text(
-                                                text = StatusLabels[statusToCheck] ?: statusToCheck,
-                                                style = MaterialTheme.typography.labelMedium,
-                                                color = statusColor,
-                                                fontWeight = FontWeight.SemiBold,
-                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                                            )
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            if (statusToCheck != null) {
+                                                Surface(
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    color = statusColor.copy(alpha = 0.12f)
+                                                ) {
+                                                    Text(
+                                                        text = StatusLabels[statusToCheck] ?: statusToCheck,
+                                                        style = MaterialTheme.typography.labelMedium,
+                                                        color = statusColor,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                                    )
+                                                }
+                                            }
+                                            if (effectiveUserScore != null) {
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Icon(
+                                                        Icons.Default.Star,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(13.dp),
+                                                        tint = Color(0xFFFBBF24)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(2.dp))
+                                                    Text(
+                                                        text = "${effectiveUserScore / 10}",
+                                                        style = MaterialTheme.typography.labelMedium,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = Color(0xFFFBBF24)
+                                                    )
+                                                }
+                                            }
                                         }
                                         if (totalEps > 0) {
                                             Spacer(modifier = Modifier.height(4.dp))
@@ -1888,6 +1919,7 @@ fun DetailedAnimeScreen(
             latestEpisode = displayData.latestEpisode,
             listStatus = statusToCheck ?: "",
             averageScore = anime.averageScore,
+            userScore = effectiveUserScore,
             year = anime.year
         )
         HomeAnimeStatusDialog(
@@ -1898,32 +1930,29 @@ fun DetailedAnimeScreen(
                 effectiveOnRemove()
                 showStatusDialog = false
             },
-            onUpdate = { status: String, progress: Int? ->
-                if (progress != null) {
-                    if (isLoggedIn) {
-                        viewModel.updateAnimeStatus(anime.id, status, progress)
-                    } else {
-                        effectiveOnUpdateStatus(status)
-                        effectiveOnUpdateProgress(progress)
-                        viewModel.setLocalAnimeStatus(
-                            anime.id,
-                            LocalAnimeEntry(
-                                id = anime.id,
-                                status = status,
-                                progress = progress,
-                                totalEpisodes = anime.episodes,
-                                title = anime.title,
-                                cover = anime.cover,
-                                banner = anime.banner,
-                                year = anime.year,
-                                averageScore = anime.averageScore
-                            )
-                        )
-                    }
-                    displayProgress = progress
+            onUpdate = { status: String, progress: Int?, score: Int? ->
+                if (isLoggedIn) {
+                    viewModel.updateAnimeStatus(anime.id, status, progress, score)
                 } else {
                     effectiveOnUpdateStatus(status)
+                    if (progress != null) effectiveOnUpdateProgress(progress)
+                    viewModel.setLocalAnimeStatus(
+                        anime.id,
+                        LocalAnimeEntry(
+                            id = anime.id,
+                            status = status,
+                            progress = progress ?: localAnimeStatus[anime.id]?.progress ?: 0,
+                            totalEpisodes = anime.episodes,
+                            title = anime.title,
+                            cover = anime.cover,
+                            banner = anime.banner,
+                            year = anime.year,
+                            averageScore = anime.averageScore,
+                            score = score ?: localAnimeStatus[anime.id]?.score
+                        )
+                    )
                 }
+                if (progress != null) displayProgress = progress
                 showStatusDialog = false
             }
         )

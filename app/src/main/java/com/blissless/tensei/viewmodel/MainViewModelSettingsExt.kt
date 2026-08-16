@@ -1,11 +1,16 @@
 package com.blissless.tensei.viewmodel
 
+import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
 import androidx.glance.appwidget.updateAll
 import androidx.lifecycle.viewModelScope
+import com.blissless.tensei.MainActivity
 import com.blissless.tensei.MainViewModel
 import com.blissless.tensei.widget.AiringScheduleWidget
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
@@ -31,6 +36,12 @@ fun MainViewModel.setShowStatusColors(enabled: Boolean) =
 
 fun MainViewModel.setShowAnimeCardButtons(enabled: Boolean) =
     userPreferences.setShowAnimeCardButtons(enabled)
+
+fun MainViewModel.setShowMangaCardButtons(enabled: Boolean) =
+    userPreferences.setShowMangaCardButtons(enabled)
+
+fun MainViewModel.setShowMangaStatusColors(enabled: Boolean) =
+    userPreferences.setShowMangaStatusColors(enabled)
 
 fun MainViewModel.setPreferEnglishTitles(enabled: Boolean) =
     userPreferences.setPreferEnglishTitles(enabled)
@@ -143,6 +154,40 @@ fun MainViewModel.setDefaultMagnetExtension(authority: String) =
 fun MainViewModel.setThemeMode(mode: String) {
     userPreferences.setThemeMode(mode)
     viewModelScope.launch { AiringScheduleWidget.updateAll(context) }
+}
+
+/**
+ * Switches the launcher icon. Persists the choice and toggles the matching
+ * [activity-alias] so exactly one icon variant is enabled at a time.
+ * The app then restarts so launchers pick up the new icon.
+ */
+fun MainViewModel.setAppIcon(key: String) {
+    if (key == userPreferences.appIcon.value) return
+    userPreferences.setAppIcon(key)
+    val pm = context.packageManager
+    val aliases = mapOf(
+        "default" to ComponentName(context, "com.blissless.tensei.MainActivityDefault"),
+        "wob" to ComponentName(context, "com.blissless.tensei.MainActivityWob"),
+        "bow" to ComponentName(context, "com.blissless.tensei.MainActivityBow")
+    )
+    aliases.forEach { (aliasKey, component) ->
+        val state = if (aliasKey == key) {
+            PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+        } else {
+            PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+        }
+        pm.setComponentEnabledSetting(component, state, PackageManager.DONT_KILL_APP)
+    }
+    val intent = pm.getLaunchIntentForPackage(context.packageName)?.apply {
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+    } ?: Intent(context, MainActivity::class.java).apply {
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+    }
+    context.startActivity(intent)
+    viewModelScope.launch {
+        delay(400)
+        Runtime.getRuntime().exit(0)
+    }
 }
 
 fun MainViewModel.setDefaultExtensionPackage(packageName: String) {

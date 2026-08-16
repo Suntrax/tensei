@@ -97,6 +97,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.blissless.tensei.MainViewModel
 import com.blissless.tensei.R
+import com.blissless.tensei.ui.components.appIconDrawable
 import com.blissless.tensei.ui.theme.ThemeMode
 import com.blissless.tensei.api.myanimelist.LoginProvider
 import com.blissless.tensei.extensions.ExtensionsScreen
@@ -106,9 +107,12 @@ import kotlin.math.round
 import androidx.core.net.toUri
 // Extension functions on MainViewModel (defined in com.blissless.tensei.viewmodel)
 import com.blissless.tensei.viewmodel.setThemeMode
+import com.blissless.tensei.viewmodel.setAppIcon
 import com.blissless.tensei.viewmodel.setDisableMaterialColors
 import com.blissless.tensei.viewmodel.setShowStatusColors
 import com.blissless.tensei.viewmodel.setShowAnimeCardButtons
+import com.blissless.tensei.viewmodel.setShowMangaCardButtons
+import com.blissless.tensei.viewmodel.setShowMangaStatusColors
 import com.blissless.tensei.viewmodel.setPreferEnglishTitles
 import com.blissless.tensei.viewmodel.setSimplifyEpisodeMenu
 import com.blissless.tensei.viewmodel.setStartupScreen
@@ -182,6 +186,8 @@ fun SettingsScreen(
         viewModel.setHideNavbar(selectedGroup != null)
     }
 
+    val appIcon by viewModel.appIcon.collectAsState()
+
     val groups = remember {
         listOf(
             SettingsGroup("account", "Account & Sync", "Login, tracking, and sync settings", Icons.Default.Person),
@@ -213,6 +219,7 @@ fun SettingsScreen(
         if (targetGroup == null) {
             SettingsLandingPage(
                 groups = groups,
+                appIcon = appIcon,
                 onGroupClick = { selectedGroup = it }
             )
         } else {
@@ -412,6 +419,8 @@ private fun AppearanceSettingsPage(
     val showStatusColorsState by viewModel.showStatusColors.collectAsState(initial = true)
     val simplifyEpisodeMenuState by viewModel.simplifyEpisodeMenu.collectAsState(initial = false)
     val showAnimeCardButtons by viewModel.showAnimeCardButtons.collectAsState(initial = true)
+    val showMangaCardButtons by viewModel.showMangaCardButtons.collectAsState(initial = true)
+    val showMangaStatusColors by viewModel.showMangaStatusColors.collectAsState(initial = true)
 
     SettingsPageScaffold(title = "Appearance", onBack = onBack) {
         val currentThemeMode by viewModel.themeMode.collectAsState()
@@ -473,6 +482,65 @@ private fun AppearanceSettingsPage(
             )
         }
 
+        val appIcon by viewModel.appIcon.collectAsState()
+
+        SectionHeader("APP ICON")
+        SettingsCard {
+            AppIconRadioItem(
+                selected = appIcon == "default",
+                onClick = { viewModel.setAppIcon("default") },
+                previewRes = R.drawable.ic_icon_default,
+                title = "Default",
+                description = "Standard app icon"
+            )
+            HorizontalDivider(
+                modifier = Modifier.padding(start = 54.dp),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.15f),
+                thickness = 0.5.dp
+            )
+            AppIconRadioItem(
+                selected = appIcon == "wob",
+                onClick = { viewModel.setAppIcon("wob") },
+                previewRes = R.drawable.ic_icon_wob,
+                title = "White on Black",
+                description = "Light logo on a dark background"
+            )
+            HorizontalDivider(
+                modifier = Modifier.padding(start = 54.dp),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.15f),
+                thickness = 0.5.dp
+            )
+            AppIconRadioItem(
+                selected = appIcon == "bow",
+                onClick = { viewModel.setAppIcon("bow") },
+                previewRes = R.drawable.ic_icon_bow,
+                title = "Black on White",
+                description = "Dark logo on a light background"
+            )
+            HorizontalDivider(
+                modifier = Modifier.padding(start = 54.dp),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.15f),
+                thickness = 0.5.dp
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    modifier = Modifier.size(16.dp)
+                )
+                Text(
+                    "The app will restart to apply the new icon",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+            }
+        }
+
         SectionHeader("DISPLAY")
         SettingsCard {
             SettingsToggle(
@@ -486,6 +554,18 @@ private fun AppearanceSettingsPage(
                 description = "Bookmark and play buttons on anime cards in Explore",
                 checked = showAnimeCardButtons,
                 onCheckedChange = { viewModel.setShowAnimeCardButtons(it) }
+            )
+            SettingsToggle(
+                title = "Manga Status Color Indicators",
+                description = "Show colored status bars on manga cards",
+                checked = showMangaStatusColors,
+                onCheckedChange = { viewModel.setShowMangaStatusColors(it) }
+            )
+            SettingsToggle(
+                title = "Manga Card Buttons",
+                description = "Bookmark and read buttons on manga cards in Explore",
+                checked = showMangaCardButtons,
+                onCheckedChange = { viewModel.setShowMangaCardButtons(it) }
             )
         }
 
@@ -1675,6 +1755,7 @@ private fun AboutSettingsPage(
     val updateViewModel: UpdateViewModel = viewModel()
     val updateState by updateViewModel.uiState.collectAsState()
     val checkOnStart by viewModel.checkUpdatesOnStart.collectAsState()
+    val appIcon by viewModel.appIcon.collectAsState()
     val packageInfo = remember {
         @Suppress("DEPRECATION")
         context.packageManager.getPackageInfo(context.packageName, 0)
@@ -1697,9 +1778,9 @@ private fun AboutSettingsPage(
                     contentAlignment = Alignment.Center
                 ) {
                     AsyncImage(
-                        model = R.mipmap.ic_launcher_round,
+                        model = appIconDrawable(appIcon),
                         contentDescription = "App",
-                        modifier = Modifier.size(36.dp).clip(CircleShape)
+                        modifier = Modifier.size(40.dp).clip(CircleShape)
                     )
                 }
                 Column(modifier = Modifier.weight(1f)) {

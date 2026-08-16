@@ -62,6 +62,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.blissless.tensei.data.models.ExploreAnime
+import com.blissless.tensei.ui.components.appIconDrawable
 import com.blissless.tensei.ui.theme.StatusCompleted
 import com.blissless.tensei.ui.theme.StatusCurrent
 import com.blissless.tensei.ui.theme.StatusDropped
@@ -82,6 +83,7 @@ fun FeaturedCarousel(
     onSearchClick: () -> Unit = {},
     animeStatusMap: Map<Int, String> = emptyMap(),
     preferEnglishTitles: Boolean = true,
+    appIcon: String = "default",
     isDialogOpen: Boolean = false,
     autoScrollEnabled: Boolean = true,
     isVisible: Boolean = true
@@ -219,9 +221,9 @@ fun FeaturedCarousel(
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 AsyncImage(
-                                    model = com.blissless.tensei.R.mipmap.ic_launcher_round,
+                                    model = appIconDrawable(appIcon),
                                     contentDescription = "App",
-                                    modifier = Modifier.size(28.dp).clip(CircleShape)
+                                    modifier = Modifier.size(32.dp).clip(CircleShape)
                                 )
                             }
                         }

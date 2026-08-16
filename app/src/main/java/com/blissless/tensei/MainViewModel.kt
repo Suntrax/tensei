@@ -302,9 +302,6 @@ class MainViewModel : ViewModel() {
     private val _isLoadingSchedule = MutableStateFlow(false)
     val isLoadingSchedule: StateFlow<Boolean> = _isLoadingSchedule.asStateFlow()
 
-    private val _splashReady = MutableStateFlow(false)
-    val splashReady: StateFlow<Boolean> = _splashReady.asStateFlow()
-
     // Anime lists
     internal val _currentlyWatching = MutableStateFlow<List<AnimeMedia>>(emptyList())
     val currentlyWatching: StateFlow<List<AnimeMedia>> = _currentlyWatching.asStateFlow()
@@ -401,10 +398,13 @@ class MainViewModel : ViewModel() {
     val authToken: StateFlow<String?> get() = userPreferences.authToken
     val themeMode: StateFlow<String> get() = userPreferences.themeMode
     val isOled: StateFlow<Boolean> get() = userPreferences.isOled
+    val appIcon: StateFlow<String> get() = userPreferences.appIcon
     val disableMaterialColors: StateFlow<Boolean> get() = userPreferences.disableMaterialColors
     val preferredCategory: StateFlow<String> get() = userPreferences.preferredCategory
     val showStatusColors: StateFlow<Boolean> get() = userPreferences.showStatusColors
     val showAnimeCardButtons: StateFlow<Boolean> get() = userPreferences.showAnimeCardButtons
+    val showMangaCardButtons: StateFlow<Boolean> get() = userPreferences.showMangaCardButtons
+    val showMangaStatusColors: StateFlow<Boolean> get() = userPreferences.showMangaStatusColors
     val preferEnglishTitles: StateFlow<Boolean> get() = userPreferences.preferEnglishTitles
     val preventScheduleSync: StateFlow<Boolean> get() = userPreferences.preventScheduleSync
     val trackingPercentage: StateFlow<Int> get() = userPreferences.trackingPercentage
@@ -571,36 +571,24 @@ class MainViewModel : ViewModel() {
             // Pre-load extension sources so they're available when episode screen opens
             preLoadExtensionSources()
             // Run home data, explore data, and airing schedule in PARALLEL for faster startup
-            val homeDeferred = async {
+            launch {
                 if (hasToken || _loginProvider.value != LoginProvider.NONE) {
                     loadHomeDataWithCache()
                     if (hasToken) {
                         loadAniListFavoritesFromStorage()
+                        fetchAniListFavorites()
                     }
                 } else {
                     // prefetchOfflineWatchingStreams() // Disabled for now
                 }
             }
 
-            val exploreDeferred = async { loadExploreDataWithCache() }
-            val scheduleDeferred = async { fetchAiringSchedule() }
-            val mangaDeferred = async {
+            launch { loadExploreDataWithCache() }
+            launch { fetchAiringSchedule() }
+            launch {
                 // Show persisted manga sections immediately, then refresh in the background.
                 restoreMangaExploreFromCache()
                 fetchMangaExplore()
-            }
-
-            // Wait for all to complete (they run in parallel)
-            homeDeferred.await()
-            exploreDeferred.await()
-            scheduleDeferred.await()
-            mangaDeferred.await()
-
-            _splashReady.value = true
-
-            // Fetch AniList favorites in background after initial load completes
-            if (hasToken) {
-                fetchAniListFavorites()
             }
 
             // Check for updates on start if enabled
@@ -821,7 +809,8 @@ class MainViewModel : ViewModel() {
                     listStatus = entry.status,
                     year = cachedAnime.year,
                     malId = cachedAnime.malId,
-                    format = cachedAnime.format
+                    format = cachedAnime.format,
+                    userScore = entry.score
                 )
             } else if (favorite != null) {
                 AnimeMedia(
@@ -833,7 +822,8 @@ class MainViewModel : ViewModel() {
                     totalEpisodes = entry.totalEpisodes,
                     listStatus = entry.status,
                     year = favorite.year,
-                    averageScore = favorite.averageScore
+                    averageScore = favorite.averageScore,
+                    userScore = entry.score
                 )
             } else if (entry.title.isNotEmpty()) {
                 // Use data stored in LocalAnimeEntry itself
@@ -846,7 +836,8 @@ class MainViewModel : ViewModel() {
                     totalEpisodes = entry.totalEpisodes,
                     listStatus = entry.status,
                     year = entry.year,
-                    averageScore = entry.averageScore
+                    averageScore = entry.averageScore,
+                    userScore = entry.score
                 )
             } else {
                 null
@@ -992,6 +983,7 @@ class MainViewModel : ViewModel() {
                     genres = entry.media.genres ?: emptyList(),
                     listStatus = list.status ?: list.name,
                     listEntryId = entry.id,
+                    userScore = entry.score,
                     year = entry.media.seasonYear,
                     malId = entry.media.idMal
                 )
@@ -1173,10 +1165,23 @@ class MainViewModel : ViewModel() {
         updateInList(_dropped) { it.copy(progress = progress) }
     }
 
-    fun updateAnimeStatus(mediaId: Int, status: String, progress: Int? = null) {
+    private fun updateScoreInLists(mediaId: Int, score: Int) {
+        val updateInList: (MutableStateFlow<List<AnimeMedia>>, (AnimeMedia) -> AnimeMedia) -> Unit = { list, updater ->
+            list.value = list.value.map { if (it.id == mediaId) updater(it) else it }
+        }
+
+        updateInList(_currentlyWatching) { it.copy(userScore = score) }
+        updateInList(_planningToWatch) { it.copy(userScore = score) }
+        updateInList(_completed) { it.copy(userScore = score) }
+        updateInList(_onHold) { it.copy(userScore = score) }
+        updateInList(_dropped) { it.copy(userScore = score) }
+    }
+
+    fun updateAnimeStatus(mediaId: Int, status: String, progress: Int? = null, score: Int? = null) {
         val currentEntry = userPreferences.getLocalAnimeStatus(mediaId)
         val cachedAnime = cacheManager.detailedAnimeCache.value[mediaId]
         val malId = cachedAnime?.malId
+        val resolvedScore = score ?: currentEntry?.score
 
         if (_loginProvider.value == LoginProvider.MAL && malId == null) {
             viewModelScope.launch {
@@ -1200,11 +1205,12 @@ class MainViewModel : ViewModel() {
                         id = mediaId,
                         status = status,
                         progress = progress ?: currentEntry?.progress ?: 0,
-                        totalEpisodes = details?.episodes ?: currentEntry?.totalEpisodes ?: 0
+                        totalEpisodes = details?.episodes ?: currentEntry?.totalEpisodes ?: 0,
+                        score = resolvedScore
                     )
                 )
                 moveAnimeBetweenLists(mediaId, status, progress)
-                queueSync(mediaId, "status", malId = resolvedMalId, status = status, progress = progress)
+                queueSync(mediaId, "status", malId = resolvedMalId, status = status, progress = progress, score = resolvedScore)
             }
             return
         }
@@ -1215,14 +1221,18 @@ class MainViewModel : ViewModel() {
                 id = mediaId,
                 status = status,
                 progress = progress ?: currentEntry?.progress ?: 0,
-                totalEpisodes = cachedAnime?.episodes ?: currentEntry?.totalEpisodes ?: 0
+                totalEpisodes = cachedAnime?.episodes ?: currentEntry?.totalEpisodes ?: 0,
+                score = resolvedScore
             )
         )
 
         // Immediately update logged-in lists for instant visual feedback
         moveAnimeBetweenLists(mediaId, status, progress)
+        if (resolvedScore != null) {
+            updateScoreInLists(mediaId, resolvedScore)
+        }
 
-        queueSync(mediaId, "status", malId = malId, status = status, progress = progress)
+        queueSync(mediaId, "status", malId = malId, status = status, progress = progress, score = resolvedScore)
     }
 
     private fun moveAnimeBetweenLists(mediaId: Int, newStatus: String, newProgress: Int?) {
@@ -1701,9 +1711,9 @@ class MainViewModel : ViewModel() {
         }
     }
 
-    fun addExploreAnimeToList(anime: ExploreAnime, status: String) {
-        queueSync(anime.id, "status", malId = anime.malId, status = status, progress = if (status == "CURRENT") 0 else null)
-        updateAnimeStatus(anime.id, status, if (status == "CURRENT") 0 else null)
+    fun addExploreAnimeToList(anime: ExploreAnime, status: String, score: Int? = null) {
+        queueSync(anime.id, "status", malId = anime.malId, status = status, progress = if (status == "CURRENT") 0 else null, score = score)
+        updateAnimeStatus(anime.id, status, if (status == "CURRENT") 0 else null, score)
     }
 
     data class ExtensionStreamResult(

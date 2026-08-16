@@ -196,6 +196,7 @@ class AnimeRepository(
                             mediaId
                             progress
                             status
+                            score
                             media {
                                 id
                                 idMal
@@ -937,21 +938,23 @@ class AnimeRepository(
         return graphqlRequest(query, mapOf("mediaId" to mediaId, "progress" to progress)) != null
     }
 
-    suspend fun updateStatus(mediaId: Int, status: String, progress: Int? = null): Boolean {
+    suspend fun updateStatus(mediaId: Int, status: String, progress: Int? = null, score: Int? = null): Boolean {
         cacheManager.invalidateUserCache()
         graphQLClient.clearCache()
 
         val query = $$"""
-            mutation ($mediaId: Int, $status: MediaListStatus$${if (progress != null) $$", $progress: Int" else ""}) {
-                SaveMediaListEntry(mediaId: $mediaId, status: $status$${if (progress != null) $$", progress: $progress" else ""}) {
+            mutation ($mediaId: Int, $status: MediaListStatus$${if (progress != null || score != null) $$", $progress: Int" else ""}$${if (score != null) $$", $score: Float" else ""}) {
+                SaveMediaListEntry(mediaId: $mediaId, status: $status$${if (progress != null) $$", progress: $progress" else ""}$${if (score != null) $$", score: $score" else ""}) {
                     id
                     status
+                    score
                 }
             }
         """.trimIndent()
 
         val variables = mutableMapOf<String, Any?>("mediaId" to mediaId, "status" to status)
         if (progress != null) variables["progress"] = progress
+        if (score != null) variables["score"] = score
 
         return graphqlRequest(query, variables) != null
     }

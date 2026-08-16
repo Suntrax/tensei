@@ -459,6 +459,7 @@ data class MediaListEntry(
     val mediaId: Int,
     val progress: Int?,
     val status: String?,
+    val score: Int? = null,
     val media: MediaEntryMedia
 )
 
@@ -947,7 +948,8 @@ data class LocalAnimeEntry(
     val cover: String = "",
     val banner: String? = null,
     val year: Int? = null,
-    val averageScore: Int? = null
+    val averageScore: Int? = null,
+    val score: Int? = null
 )
 
 @Serializable
@@ -1233,7 +1235,8 @@ data class MangaTrack(
     val status: String = "PLANNING",
     val mangaDexId: String? = null,
     val lastReadChapter: MangaChapter? = null,
-    val currentChapterPages: Int = 0
+    val currentChapterPages: Int = 0,
+    val score: Int? = null
 )
 
 @Serializable

@@ -2,11 +2,15 @@ package com.blissless.tensei.ui.screens.explore
 
 import com.blissless.tensei.data.models.isAdultContent
 import android.widget.Toast
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -38,18 +42,22 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SentimentSatisfied
 import androidx.compose.material.icons.filled.SignalWifiOff
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Whatshot
+import androidx.compose.material.icons.outlined.BookmarkAdd
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -95,6 +103,7 @@ import com.blissless.tensei.ui.theme.StatusCurrent
 import com.blissless.tensei.ui.theme.StatusDropped
 import com.blissless.tensei.ui.theme.StatusPaused
 import com.blissless.tensei.ui.theme.StatusPlanning
+import com.blissless.tensei.ui.theme.StatusColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.lifecycle.viewModelScope
@@ -149,6 +158,8 @@ fun ExploreScreen(
     isOled: Boolean = false,
     showStatusColors: Boolean = true,
     showAnimeCardButtons: Boolean = true,
+    showMangaCardButtons: Boolean = false,
+    showMangaStatusColors: Boolean = false,
     preferEnglishTitles: Boolean = true,
     hideAdultContent: Boolean = true,
     favoriteIds: Set<Int> = emptySet(),
@@ -189,6 +200,7 @@ fun ExploreScreen(
     val defaultMagnetExt by viewModel.defaultMagnetExtension.collectAsState()
     val streamMethod by viewModel.streamMethod.collectAsState()
     val defaultExtPkg by viewModel.defaultExtensionPackage.collectAsState()
+    val appIcon by viewModel.appIcon.collectAsState()
     val localAnimeStatus by viewModel.localAnimeStatus.collectAsState()
     val mangaExploreSections by viewModel.mangaExploreSections.collectAsState()
     val isLoadingManga by viewModel.isLoadingManga.collectAsState()
@@ -492,8 +504,8 @@ fun ExploreScreen(
                 viewModel.removeAnimeFromList(anime.id)
                 showStatusDialog = false
             },
-            onUpdate = { status, _ ->
-                viewModel.addExploreAnimeToList(anime, status)
+            onUpdate = { status, _, score ->
+                viewModel.addExploreAnimeToList(anime, status, score)
                 showStatusDialog = false
             }
         )
@@ -543,13 +555,14 @@ fun ExploreScreen(
             currentStatus = mangaStatusMap[manga.id],
             currentProgress = mangaProgressMap[manga.id] ?: 0,
             totalChapters = manga.chapters ?: 0,
+            isOled = isOled,
             onDismiss = { showMangaStatusDialog = false },
             onRemove = {
                 viewModel.removeMangaTracking(manga.id)
                 showMangaStatusDialog = false
             },
-            onUpdate = { status, progress ->
-                viewModel.updateMangaStatus(manga.id, status, progress)
+            onUpdate = { status, progress, score ->
+                viewModel.updateMangaStatus(manga.id, status, progress, score)
                 if (progress != null) {
                     viewModel.updateMangaProgress(manga.id, progress.toFloat())
                 }
@@ -583,6 +596,19 @@ fun ExploreScreen(
             currentCardBounds = null
             selectedAnime = anime
             showDialog = true
+        }
+    }
+
+    val onPlayClickStable = remember<(ExploreAnime) -> Unit> {
+        { anime ->
+            selectedAnime = anime
+            val hasDefault = streamMethod == "magnet" && defaultMagnetExt != null || streamMethod == "direct" && defaultExtPkg.isNotEmpty()
+            if (simplifyEpisodeMenu || hasDefault) {
+                showEpisodeSelection = true
+            } else {
+                showEpisodeSelection = false
+                showNoExtensionDialog = true
+            }
         }
     }
 
@@ -730,6 +756,7 @@ fun ExploreScreen(
                     onSearchClick = onSearchClick,
                     animeStatusMap = animeStatusMap,
                     preferEnglishTitles = preferEnglishTitles,
+                    appIcon = appIcon,
                     isDialogOpen = showDialog || showStatusDialog || showEpisodeSelection || showNoExtensionDialog,
                     autoScrollEnabled = isVisible && !showDialog
                 )
@@ -760,6 +787,7 @@ fun ExploreScreen(
                     preferEnglishTitles = preferEnglishTitles,
                     onAnimeClick = onAnimeClickStable,
                     onBookmarkClick = onBookmarkClickStable,
+                    onPlayClick = onPlayClickStable,
                     isLoggedIn = isLoggedIn,
                     isOled = isOled,
                     localAnimeStatus = localAnimeStatus,
@@ -805,6 +833,7 @@ fun ExploreScreen(
                     preferEnglishTitles = preferEnglishTitles,
                     onAnimeClick = onAnimeClickStable,
                     onBookmarkClick = onBookmarkClickStable,
+                    onPlayClick = onPlayClickStable,
                     isLoggedIn = isLoggedIn,
                     isOled = isOled,
                     localAnimeStatus = localAnimeStatus,
@@ -850,6 +879,7 @@ fun ExploreScreen(
                     preferEnglishTitles = preferEnglishTitles,
                     onAnimeClick = onAnimeClickStable,
                     onBookmarkClick = onBookmarkClickStable,
+                    onPlayClick = onPlayClickStable,
                     isLoggedIn = isLoggedIn,
                     isOled = isOled,
                     localAnimeStatus = localAnimeStatus,
@@ -900,6 +930,7 @@ fun ExploreScreen(
                     isLoggedIn = isLoggedIn,
                     onAnimeClick = onAnimeClickStable,
                     onBookmarkClick = onBookmarkClickStable,
+                    onPlayClick = onPlayClickStable,
                     localAnimeStatus = localAnimeStatus,
                     onAddToLocalPlanning = { anime ->
                         viewModel.setLocalAnimeStatus(
@@ -1016,7 +1047,21 @@ fun ExploreScreen(
                             mangaList = list,
                             isOled = isOled,
                             preferEnglishTitles = preferEnglishTitles,
-                            onMangaClick = onMangaClick
+                            showMangaCardButtons = showMangaCardButtons,
+                            showMangaStatusColors = showMangaStatusColors,
+                            mangaStatusMap = mangaStatusMap,
+                            onMangaClick = onMangaClick,
+                            onStatusClick = { manga ->
+                                selectedMangaForStatus = manga
+                                showMangaStatusDialog = true
+                            },
+                            onReadClick = { manga ->
+                                if (selectedMangaExtension == null) {
+                                    showMangaNoExtensionDialog = true
+                                } else {
+                                    onMangaReadClick(manga)
+                                }
+                            }
                         )
                     }
                 }
@@ -1110,7 +1155,12 @@ private fun MangaExploreHorizontalRow(
     mangaList: List<MangaExploreMedia>,
     isOled: Boolean,
     preferEnglishTitles: Boolean,
-    onMangaClick: (MangaExploreMedia) -> Unit
+    showMangaCardButtons: Boolean = false,
+    showMangaStatusColors: Boolean = false,
+    mangaStatusMap: Map<Int, String> = emptyMap(),
+    onMangaClick: (MangaExploreMedia) -> Unit,
+    onStatusClick: (MangaExploreMedia) -> Unit = {},
+    onReadClick: (MangaExploreMedia) -> Unit = {}
 ) {
     val context = LocalContext.current
     LazyRow(
@@ -1122,6 +1172,18 @@ private fun MangaExploreHorizontalRow(
             val title = if (preferEnglishTitles && !manga.title.english.isNullOrBlank()) manga.title.english!!
                        else manga.title.romaji ?: "Unknown"
             val coverUrl = manga.coverImage?.extraLarge ?: manga.coverImage?.large ?: manga.coverImage?.medium ?: ""
+            val status = mangaStatusMap[manga.id]
+            val hasStatus = status != null
+            val statusIndicatorColor = if (showMangaStatusColors && status != null) {
+                (StatusColors[status] ?: Color.Transparent)
+            } else {
+                Color.Transparent
+            }
+            val buttonContainerColor = if (showMangaStatusColors && status != null) {
+                (StatusColors[status] ?: Color.Black).copy(alpha = 0.8f)
+            } else {
+                Color.Black.copy(alpha = 0.6f)
+            }
             // Match anime card dimensions exactly: 120dp wide, 170dp tall, RoundedCornerShape(4.dp)
             Column(modifier = Modifier.width(120.dp)) {
                 Card(
@@ -1146,6 +1208,16 @@ private fun MangaExploreHorizontalRow(
                             .background(Brush.verticalGradient(colors = listOf(Color.Black.copy(alpha = 0.6f), Color.Transparent))))
                         Box(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(80.dp)
                             .background(Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f)))))
+
+                        if (statusIndicatorColor != Color.Transparent) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopCenter)
+                                    .fillMaxWidth()
+                                    .height(3.dp)
+                                    .background(statusIndicatorColor)
+                            )
+                        }
 
                         manga.averageScore?.let { score ->
                             Surface(
@@ -1179,6 +1251,59 @@ private fun MangaExploreHorizontalRow(
                                 )
                             }
                         }
+
+                        if (showMangaCardButtons) {
+                            Row(
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                FilledTonalIconButton(
+                                    onClick = { onStatusClick(manga) },
+                                    modifier = Modifier.size(34.dp),
+                                    shape = RoundedCornerShape(4.dp),
+                                    colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                        containerColor = buttonContainerColor,
+                                        contentColor = Color.White
+                                    )
+                                ) {
+                                    AnimatedContent(
+                                        targetState = hasStatus,
+                                        transitionSpec = {
+                                            (scaleIn(animationSpec = tween(200)) + fadeIn())
+                                                .togetherWith(scaleOut(animationSpec = tween(200)) + fadeOut())
+                                        },
+                                        label = "mangaBookmarkIcon"
+                                    ) { statusExists ->
+                                        Icon(
+                                            imageVector = if (statusExists) Icons.Filled.Bookmark else Icons.Outlined.BookmarkAdd,
+                                            contentDescription = if (statusExists) "Change status" else "Add status",
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.weight(1f))
+
+                                FilledTonalIconButton(
+                                    onClick = { onReadClick(manga) },
+                                    modifier = Modifier.size(34.dp),
+                                    shape = RoundedCornerShape(4.dp),
+                                    colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                        containerColor = Color.Black.copy(alpha = 0.5f),
+                                        contentColor = Color.White
+                                    )
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.PlayArrow,
+                                        contentDescription = "Read",
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
                 Box(modifier = Modifier.width(120.dp).height(36.dp)) {
@@ -1209,6 +1334,7 @@ private fun GenreSection(
     isLoggedIn: Boolean,
     onAnimeClick: (ExploreAnime, AnimeCardBounds?) -> Unit,
     onBookmarkClick: (ExploreAnime) -> Unit,
+    onPlayClick: (ExploreAnime) -> Unit = { _ -> },
     localAnimeStatus: Map<Int, LocalAnimeEntry> = emptyMap(),
     onAddToLocalPlanning: (ExploreAnime) -> Unit = {},
     onRemoveFromLocalStatus: (ExploreAnime) -> Unit = {},
@@ -1231,6 +1357,7 @@ private fun GenreSection(
                 preferEnglishTitles = preferEnglishTitles,
                 onAnimeClick = onAnimeClick,
                 onBookmarkClick = onBookmarkClick,
+                onPlayClick = onPlayClick,
                 isLoggedIn = isLoggedIn,
                 isOled = isOled,
                 localAnimeStatus = localAnimeStatus,
