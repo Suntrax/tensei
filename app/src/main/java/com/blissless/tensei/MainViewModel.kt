@@ -399,6 +399,7 @@ class MainViewModel : ViewModel() {
     val themeMode: StateFlow<String> get() = userPreferences.themeMode
     val isOled: StateFlow<Boolean> get() = userPreferences.isOled
     val appIcon: StateFlow<String> get() = userPreferences.appIcon
+    val maxPerformance: StateFlow<Boolean> get() = userPreferences.maxPerformance
     val disableMaterialColors: StateFlow<Boolean> get() = userPreferences.disableMaterialColors
     val preferredCategory: StateFlow<String> get() = userPreferences.preferredCategory
     val showStatusColors: StateFlow<Boolean> get() = userPreferences.showStatusColors

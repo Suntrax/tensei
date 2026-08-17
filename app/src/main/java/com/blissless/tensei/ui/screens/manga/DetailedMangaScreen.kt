@@ -47,7 +47,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Label
-import androidx.compose.material.icons.filled.AddTask
+import androidx.compose.material.icons.outlined.BookmarkAdd
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Check
@@ -750,7 +750,7 @@ fun DetailedMangaScreen(
                                         modifier = Modifier.size(36.dp)
                                     ) {
                                         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                                            Icon(Icons.Default.AddTask, contentDescription = null,
+                                            Icon(Icons.Outlined.BookmarkAdd, contentDescription = null,
                                                 tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                                         }
                                     }
@@ -815,7 +815,7 @@ fun DetailedMangaScreen(
                                         shape = RoundedCornerShape(12.dp),
                                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                                     ) {
-                                        Icon(Icons.Default.AddTask, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Icon(Icons.Outlined.BookmarkAdd, contentDescription = null, modifier = Modifier.size(18.dp))
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Text("Change", fontWeight = FontWeight.SemiBold)
                                     }
@@ -873,7 +873,7 @@ fun DetailedMangaScreen(
                                         shape = RoundedCornerShape(12.dp),
                                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                                     ) {
-                                        Icon(Icons.Default.AddTask, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Icon(Icons.Outlined.BookmarkAdd, contentDescription = null, modifier = Modifier.size(18.dp))
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Text("Add to List", fontWeight = FontWeight.SemiBold)
                                     }

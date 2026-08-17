@@ -43,6 +43,9 @@ fun MainViewModel.setShowMangaCardButtons(enabled: Boolean) =
 fun MainViewModel.setShowMangaStatusColors(enabled: Boolean) =
     userPreferences.setShowMangaStatusColors(enabled)
 
+fun MainViewModel.setMaxPerformance(enabled: Boolean) =
+    userPreferences.setMaxPerformance(enabled)
+
 fun MainViewModel.setPreferEnglishTitles(enabled: Boolean) =
     userPreferences.setPreferEnglishTitles(enabled)
 

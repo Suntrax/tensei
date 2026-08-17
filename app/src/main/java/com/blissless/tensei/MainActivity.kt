@@ -202,8 +202,12 @@ class MainActivity : ComponentActivity() {
                 isLoggedIn = isAnyLoggedIn
             }
 
-            LaunchedEffect(Unit) {
-                enableHighRefreshRate()
+            val maxPerformance by mainViewModel.maxPerformance.collectAsState()
+
+            LaunchedEffect(maxPerformance) {
+                if (maxPerformance) {
+                    enableHighRefreshRate()
+                }
             }
 
             val notifPermissionLauncher = rememberLauncherForActivityResult(

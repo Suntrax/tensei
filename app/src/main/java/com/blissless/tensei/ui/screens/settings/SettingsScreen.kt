@@ -113,6 +113,7 @@ import com.blissless.tensei.viewmodel.setShowStatusColors
 import com.blissless.tensei.viewmodel.setShowAnimeCardButtons
 import com.blissless.tensei.viewmodel.setShowMangaCardButtons
 import com.blissless.tensei.viewmodel.setShowMangaStatusColors
+import com.blissless.tensei.viewmodel.setMaxPerformance
 import com.blissless.tensei.viewmodel.setPreferEnglishTitles
 import com.blissless.tensei.viewmodel.setSimplifyEpisodeMenu
 import com.blissless.tensei.viewmodel.setStartupScreen
@@ -544,13 +545,13 @@ private fun AppearanceSettingsPage(
         SectionHeader("DISPLAY")
         SettingsCard {
             SettingsToggle(
-                title = "Status Color Indicators",
+                title = "Anime Status Color Indicators",
                 description = "Show colored status bars on anime cards",
                 checked = showStatusColorsState,
                 onCheckedChange = { viewModel.setShowStatusColors(it) }
             )
             SettingsToggle(
-                title = "Show Card Buttons",
+                title = "Anime Card Buttons",
                 description = "Bookmark and play buttons on anime cards in Explore",
                 checked = showAnimeCardButtons,
                 onCheckedChange = { viewModel.setShowAnimeCardButtons(it) }
@@ -618,7 +619,7 @@ private fun GeneralSettingsPage(
                 onClick = { viewModel.setStartupScreen(1) },
                 icon = Icons.Default.Explore,
                 title = "Explore",
-                description = "Browse and discover anime"
+                description = "Browse and discover anime and manga"
             )
             HorizontalDivider(
                 modifier = Modifier.padding(start = 54.dp),
@@ -630,7 +631,7 @@ private fun GeneralSettingsPage(
                 onClick = { viewModel.setStartupScreen(2) },
                 icon = Icons.Default.Home,
                 title = "Home",
-                description = "Your anime lists"
+                description = "Your anime and manga lists"
             )
             HorizontalDivider(
                 modifier = Modifier.padding(start = 54.dp),
@@ -642,7 +643,7 @@ private fun GeneralSettingsPage(
                 onClick = { viewModel.setStartupScreen(3) },
                 icon = Icons.Default.FileDownload,
                 title = "Downloads",
-                description = "Downloaded episodes"
+                description = "Downloaded episodes and chapters"
             )
         }
 
@@ -664,6 +665,17 @@ private fun GeneralSettingsPage(
                 description = "Show English titles instead of Romaji",
                 checked = preferEnglishTitles,
                 onCheckedChange = { viewModel.setPreferEnglishTitles(it) }
+            )
+        }
+
+        SectionHeader("PERFORMANCE")
+        SettingsCard {
+            val maxPerformanceState by viewModel.maxPerformance.collectAsState(initial = false)
+            SettingsToggle(
+                title = "Max Performance",
+                description = "Force the app to run at the highest refresh rate available",
+                checked = maxPerformanceState,
+                onCheckedChange = { viewModel.setMaxPerformance(it) }
             )
         }
     }

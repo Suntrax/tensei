@@ -408,7 +408,10 @@ fun CharacterScreen(
                                             color = MaterialTheme.colorScheme.onBackground
                                         )
                                         Spacer(modifier = Modifier.height(12.dp))
-                                        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        LazyRow(
+                                            contentPadding = PaddingValues(horizontal = 16.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                        ) {
                                             items(animeList) { anime ->
                                                     Column(
                                                         modifier = Modifier
@@ -694,7 +697,10 @@ fun StaffScreen(
                                             color = MaterialTheme.colorScheme.onBackground
                                         )
                                         Spacer(modifier = Modifier.height(12.dp))
-                                        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        LazyRow(
+                                            contentPadding = PaddingValues(horizontal = 16.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                        ) {
                                             items(edges) { edge ->
                                                 val anime = edge.node
                                                 val role = edge.staffRole
@@ -734,7 +740,7 @@ fun StaffScreen(
                                                                 it,
                                                                 style = MaterialTheme.typography.labelSmall,
                                                                 color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
-                                                                maxLines = 1,
+                                                                maxLines = 2,
                                                                 overflow = TextOverflow.Ellipsis,
                                                                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
                                                             )

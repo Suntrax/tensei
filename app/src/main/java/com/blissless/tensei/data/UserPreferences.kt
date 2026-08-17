@@ -81,6 +81,7 @@ class UserPreferences(context: Context) {
         private const val KEY_MANGA_FULLSCREEN = "manga_fullscreen"
         private const val KEY_MANGA_AUTO_ADVANCE = "manga_auto_advance"
         private const val KEY_APP_ICON = "app_icon"
+        private const val KEY_MAX_PERFORMANCE = "max_performance"
     }
 
     private val sharedPreferences: SharedPreferences =
@@ -99,6 +100,9 @@ class UserPreferences(context: Context) {
 
     private val _appIcon = MutableStateFlow("default")
     val appIcon: StateFlow<String> = _appIcon.asStateFlow()
+
+    private val _maxPerformance = MutableStateFlow(false)
+    val maxPerformance: StateFlow<Boolean> = _maxPerformance.asStateFlow()
 
     private val _disableMaterialColors = MutableStateFlow(true)
     val disableMaterialColors: StateFlow<Boolean> = _disableMaterialColors.asStateFlow()
@@ -311,6 +315,7 @@ class UserPreferences(context: Context) {
         _themeMode.value = sharedPreferences.getString(KEY_THEME_MODE, "system") ?: "system"
         _isOled.value = _themeMode.value == "oled"
         _appIcon.value = sharedPreferences.getString(KEY_APP_ICON, "default") ?: "default"
+        _maxPerformance.value = sharedPreferences.getBoolean(KEY_MAX_PERFORMANCE, false)
         _disableMaterialColors.value = sharedPreferences.getBoolean(KEY_DISABLE_MATERIAL_COLORS, true)
         _preferredCategory.value = sharedPreferences.getString(KEY_PREFERRED_CATEGORY, "sub") ?: "sub"
         _showStatusColors.value = sharedPreferences.getBoolean(KEY_SHOW_STATUS_COLORS, false)
@@ -402,6 +407,11 @@ class UserPreferences(context: Context) {
     fun setAppIcon(key: String) {
         _appIcon.value = key
         sharedPreferences.edit { putString(KEY_APP_ICON, key) }
+    }
+
+    fun setMaxPerformance(enabled: Boolean) {
+        _maxPerformance.value = enabled
+        sharedPreferences.edit { putBoolean(KEY_MAX_PERFORMANCE, enabled) }
     }
 
     fun setDisableMaterialColors(enabled: Boolean) {
