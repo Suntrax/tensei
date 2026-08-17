@@ -145,6 +145,7 @@ import com.blissless.tensei.ui.screens.details.easeOut
 import com.blissless.tensei.ui.theme.StatusColors
 import com.blissless.tensei.ui.theme.StatusLabels
 import com.blissless.tensei.ui.theme.MangaStatusLabels
+import com.blissless.tensei.dialogs.userScoreToDisplay
 import com.blissless.tensei.viewmodel.cancelMangaBatchDownload
 import com.blissless.tensei.viewmodel.clearMangaDetail
 import com.blissless.tensei.viewmodel.fetchChapterImagesForDownload
@@ -297,7 +298,7 @@ fun DetailedMangaScreen(
     // "Add to List" section doesn't show a stale chip or "0 / x" progress.
     val statusToCheck = (liveStatus ?: currentStatus ?: manga.listStatus).takeIf { it.isNotBlank() }
     val statusProgress = liveProgress
-    val liveScore = liveTrack?.userScore ?: manga.userScore
+    val liveScore = (liveTrack?.userScore ?: manga.userScore)?.takeIf { it > 0 }
     // Total chapters from the user-selected extension (current release count). Overrides the
     // stale AniList value once loadMangaChapters has run for this manga.
     val extensionTotalChapters by viewModel.mangaTotalChapters.collectAsState()
@@ -753,18 +754,7 @@ fun DetailedMangaScreen(
                                     val statusColor = StatusColors[statusToCheck] ?: MaterialTheme.colorScheme.primary
                                     Column(horizontalAlignment = Alignment.End) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
-                                            if (statusToCheck != null) {
-                                                Surface(shape = RoundedCornerShape(6.dp), color = statusColor.copy(alpha = 0.12f)) {
-                                                    Text(
-                                                        text = MangaStatusLabels[statusToCheck] ?: statusToCheck,
-                                                        style = MaterialTheme.typography.labelMedium,
-                                                        color = statusColor, fontWeight = FontWeight.SemiBold,
-                                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                                                    )
-                                                }
-                                            }
                                             if (liveScore != null) {
-                                                Spacer(modifier = Modifier.width(6.dp))
                                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                                     Icon(
                                                         Icons.Default.Star,
@@ -774,10 +764,21 @@ fun DetailedMangaScreen(
                                                     )
                                                     Spacer(modifier = Modifier.width(2.dp))
                                                     Text(
-                                                        text = "${liveScore / 10}",
+                                                        text = "${userScoreToDisplay(liveScore)}",
                                                         style = MaterialTheme.typography.labelMedium,
                                                         fontWeight = FontWeight.Bold,
                                                         color = Color(0xFFFBBF24)
+                                                    )
+                                                }
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                            }
+                                            if (statusToCheck != null) {
+                                                Surface(shape = RoundedCornerShape(6.dp), color = statusColor.copy(alpha = 0.12f)) {
+                                                    Text(
+                                                        text = MangaStatusLabels[statusToCheck] ?: statusToCheck,
+                                                        style = MaterialTheme.typography.labelMedium,
+                                                        color = statusColor, fontWeight = FontWeight.SemiBold,
+                                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                                                     )
                                                 }
                                             }

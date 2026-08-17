@@ -30,6 +30,13 @@ fun MainViewModel.fetchUserActivity() {
     viewModelScope.launch { repository.fetchUserActivity(userId)?.let { _userActivity.value = it } }
 }
 
+/** The user's rating (raw 0-100) for an anime, from the loaded lists or local status. */
+private fun MainViewModel.animeUserScore(mediaId: Int): Int? {
+    val allAnime = _currentlyWatching.value + _planningToWatch.value + _completed.value + _onHold.value + _dropped.value
+    return allAnime.firstOrNull { it.id == mediaId }?.userScore
+        ?: userPreferences.getLocalAnimeStatus(mediaId)?.score
+}
+
 fun MainViewModel.fetchUserStats() {
     val userId = _userId.value ?: return
     viewModelScope.launch {
@@ -47,11 +54,13 @@ fun MainViewModel.fetchAniListFavorites() {
             // Merge API favorites with locally stored favorites to preserve offline additions
             val localFavoriteIds = userPreferences.aniListFavorites.value
             val mergedFavorites = apiFavorites.map { apiFav ->
+                apiFav.copy(userScore = apiFav.userScore ?: animeUserScore(apiFav.id))
+            }.map { apiFav ->
                 val isLocalFavorite = localFavoriteIds.contains(apiFav.id)
                 if (isLocalFavorite) {
                     // Keep local version which might have more up-to-date info
                     val localFav = _aniListFavorites.value.find { it.id == apiFav.id }
-                    localFav ?: apiFav
+                    localFav?.copy(userScore = localFav.userScore ?: apiFav.userScore) ?: apiFav
                 } else {
                     apiFav
                 }
@@ -92,7 +101,8 @@ fun MainViewModel.loadAniListFavoritesFromStorage() {
                 episodes = cached.episodes,
                 averageScore = cached.averageScore,
                 genres = cached.genres,
-                seasonYear = cached.year
+                seasonYear = cached.year,
+                userScore = animeUserScore(cached.id)
             )
         } else {
             // Try to find in currently watching lists
@@ -106,7 +116,8 @@ fun MainViewModel.loadAniListFavoritesFromStorage() {
                     episodes = anime.totalEpisodes,
                     averageScore = anime.averageScore,
                     genres = anime.genres,
-                    seasonYear = anime.year
+                    seasonYear = anime.year,
+                    userScore = anime.userScore
                 )
             } else {
                 UserFavoriteAnime(
@@ -116,7 +127,8 @@ fun MainViewModel.loadAniListFavoritesFromStorage() {
                     episodes = null,
                     averageScore = null,
                     genres = emptyList(),
-                    seasonYear = null
+                    seasonYear = null,
+                    userScore = userPreferences.getLocalAnimeStatus(id)?.score
                 )
             }
         }
@@ -151,7 +163,8 @@ fun MainViewModel.toggleAniListFavorite(mediaId: Int, anime: AnimeMedia? = null)
                     episodes = anime.totalEpisodes,
                     averageScore = anime.averageScore,
                     genres = anime.genres,
-                    seasonYear = anime.year
+                    seasonYear = anime.year,
+                    userScore = anime.userScore
                 )
                 _aniListFavorites.value += userFavorite
             } else {
@@ -163,7 +176,8 @@ fun MainViewModel.toggleAniListFavorite(mediaId: Int, anime: AnimeMedia? = null)
                     episodes = cachedAnime?.episodes,
                     averageScore = cachedAnime?.averageScore,
                     genres = cachedAnime?.genres ?: emptyList(),
-                    seasonYear = cachedAnime?.year
+                    seasonYear = cachedAnime?.year,
+                    userScore = animeUserScore(mediaId)
                 )
                 _aniListFavorites.value += placeholder
             }

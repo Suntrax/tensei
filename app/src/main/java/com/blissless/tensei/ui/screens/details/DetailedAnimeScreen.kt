@@ -124,6 +124,7 @@ import com.blissless.tensei.data.models.DetailedAnimeData
 import com.blissless.tensei.data.models.LocalAnimeEntry
 import com.blissless.tensei.data.models.TagData
 import com.blissless.tensei.dialogs.HomeAnimeStatusDialog
+import com.blissless.tensei.dialogs.userScoreToDisplay
 import com.blissless.tensei.ui.components.rememberCinematicAnimation
 import com.blissless.tensei.ui.theme.StatusColors
 import com.blissless.tensei.ui.theme.StatusLabels
@@ -245,7 +246,8 @@ fun DetailedAnimeScreen(
 
     val listUserScore = (currentlyWatching + planningToWatch + completed + onHold + dropped)
         .firstOrNull { it.id == anime.id }?.userScore
-    val effectiveUserScore = if (isLoggedIn) listUserScore else localAnimeStatus[anime.id]?.score
+    val effectiveUserScore = (if (isLoggedIn) listUserScore else localAnimeStatus[anime.id]?.score)
+        ?.takeIf { it > 0 }
 
     val slideOffset = remember { Animatable(1000f) }
     val dismissSlideOffset = remember { Animatable(0f) }
@@ -885,6 +887,24 @@ fun DetailedAnimeScreen(
                                     val statusColor = StatusColors[statusToCheck] ?: MaterialTheme.colorScheme.primary
                                     Column(horizontalAlignment = Alignment.End) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
+                                            if (effectiveUserScore != null) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Icon(
+                                                        Icons.Default.Star,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(13.dp),
+                                                        tint = Color(0xFFFBBF24)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(2.dp))
+                                                    Text(
+                                                        text = "${userScoreToDisplay(effectiveUserScore)}",
+                                                        style = MaterialTheme.typography.labelMedium,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = Color(0xFFFBBF24)
+                                                    )
+                                                }
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                            }
                                             if (statusToCheck != null) {
                                                 Surface(
                                                     shape = RoundedCornerShape(6.dp),
@@ -896,24 +916,6 @@ fun DetailedAnimeScreen(
                                                         color = statusColor,
                                                         fontWeight = FontWeight.SemiBold,
                                                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                                                    )
-                                                }
-                                            }
-                                            if (effectiveUserScore != null) {
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                                    Icon(
-                                                        Icons.Default.Star,
-                                                        contentDescription = null,
-                                                        modifier = Modifier.size(13.dp),
-                                                        tint = Color(0xFFFBBF24)
-                                                    )
-                                                    Spacer(modifier = Modifier.width(2.dp))
-                                                    Text(
-                                                        text = "${effectiveUserScore / 10}",
-                                                        style = MaterialTheme.typography.labelMedium,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = Color(0xFFFBBF24)
                                                     )
                                                 }
                                             }

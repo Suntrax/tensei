@@ -24,7 +24,8 @@ data class JikanFavoriteAnime(
     val episodes: Int? = null,
     val averageScore: Int? = null,
     val format: String? = null,
-    val status: String? = null
+    val status: String? = null,
+    val userScore: Int? = null
 )
 
 data class JikanFavoriteManga(

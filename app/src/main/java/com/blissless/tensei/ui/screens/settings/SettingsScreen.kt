@@ -1544,7 +1544,7 @@ private fun ReaderSettingsPage(
             )
             SettingsToggle(
                 title = "Next Chapter Button",
-                description = "Shows a button to jump to the next chapter when you reach the end of the current one. Works in all reader modes (Vertical Scroll and single-page LTR/RTL).",
+                description = "Shows a button to jump to the next chapter when you reach the end of the current one.",
                 checked = autoAdvance,
                 onCheckedChange = { viewModel.setMangaAutoAdvance(it) }
             )

@@ -119,6 +119,7 @@ internal suspend fun MainViewModel.executePendingSyncs() {
                             }
                         }
                     } else {
+                        android.util.Log.d("AniListScoreDebug", "executePendingSyncs -> repository.updateStatus mediaId=${sync.mediaId} status=$it progress=${sync.progress} score=${sync.score}")
                         repository.updateStatus(sync.mediaId, it, sync.progress, sync.score)
                     }
                 }

@@ -178,7 +178,8 @@ fun UserProfileScreen(
                     episodes = aniListFavorite.episodes,
                     averageScore = aniListFavorite.averageScore,
                     format = aniListFavorite.format,
-                    status = aniListFavorite.status
+                    status = aniListFavorite.status,
+                    userScore = aniListFavorite.userScore
                 )
             }
         }
@@ -300,9 +301,15 @@ fun UserProfileScreen(
                         LibraryStatus("DROPPED", mangaAbandoned.size)
                     )
                 )
-                UserProfileSection.FAVORITES -> FavoritesContent(
+                UserProfileSection.FAVORITES -> {
+                    val allManga = mangaReading + mangaPlanning + mangaFinished + mangaHeld + mangaAbandoned
+                    val mangaScoreLookup = allManga.associate { it.id to it.userScore }
+                    val enrichedMangaFavorites = mangaFavorites.map { mf ->
+                        mf.copy(userScore = mf.userScore ?: mangaScoreLookup[mf.id])
+                    }
+                    FavoritesContent(
                     favorites = favorites,
-                    mangaFavorites = mangaFavorites,
+                    mangaFavorites = enrichedMangaFavorites,
                     preferEnglishTitles = preferEnglishTitles,
                     onAnimeClick = { anime ->
                         if (anime.malId != 0) {
@@ -335,6 +342,7 @@ fun UserProfileScreen(
                         viewModel.toggleMangaFavorite(manga.id)
                     }
                 )
+                }
                 UserProfileSection.HISTORY -> HistoryContent(
                     history = history,
                     mangaHistory = mangaActivity,
@@ -842,20 +850,11 @@ private fun FavoriteItem(
                         style = MaterialTheme.typography.labelSmall
                     )
                 }
-                anime.episodes?.let { eps ->
-                    if (eps > 0) {
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            "$eps episodes", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                            style = MaterialTheme.typography.labelSmall
-                        )
-                    }
-                }
-                anime.averageScore?.let { score ->
+                anime.userScore?.let { score ->
                     if (score > 0) {
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            "${score / 10}.${score % 10}", color = Color(0xFFFFD700),
+                            "★ ${com.blissless.tensei.dialogs.userScoreToDisplay(score)}/10", color = Color(0xFFFFD700),
                             style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold
                         )
                     }
@@ -1038,20 +1037,11 @@ private fun MangaFavoriteItem(
                         }
                     }
                 }
-                manga.chapters?.let { chapters ->
-                    if (chapters > 0) {
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            "$chapters chapters", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                            style = MaterialTheme.typography.labelSmall
-                        )
-                    }
-                }
-                manga.averageScore?.let { score ->
+                manga.userScore?.let { score ->
                     if (score > 0) {
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            "${score / 10}.${score % 10}", color = Color(0xFFFFD700),
+                            "★ ${com.blissless.tensei.dialogs.userScoreToDisplay(score)}/10", color = Color(0xFFFFD700),
                             style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold
                         )
                     }

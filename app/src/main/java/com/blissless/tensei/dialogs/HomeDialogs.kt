@@ -51,6 +51,14 @@ import com.blissless.tensei.data.models.AnimeMedia
 import com.blissless.tensei.ui.components.HomeStatusColors
 import com.blissless.tensei.ui.components.StatusButton
 
+/**
+ * Converts a stored AniList score (0-100 raw) to its 0-10 display value.
+ * Scores <= 10 are treated as legacy 0-10 values (written by the previous 0-100
+ * input before ratings were switched to the 0-10 scale) so a rating of "10" set
+ * there still shows as 10.
+ */
+fun userScoreToDisplay(raw: Int?): Int? = raw?.let { if (it > 10) it / 10 else it }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeAnimeStatusDialog(
@@ -238,7 +246,7 @@ fun HomeAnimeStatusDialog(
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    placeholder = { Text(if (anime.userScore != null) "Your rating: ${anime.userScore / 10}" else "Rating (0-10)", color = Color.White.copy(alpha = 0.4f)) },
+                    placeholder = { Text(anime.userScore?.takeIf { it > 0 }?.let { "Your rating: ${userScoreToDisplay(it)}" } ?: "Rating (0-10)", color = Color.White.copy(alpha = 0.4f)) },
                     trailingIcon = {
                         if (selectedScore.isNotEmpty()) {
                             Text("/10", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.5f), modifier = Modifier.padding(end = 12.dp))
@@ -258,7 +266,7 @@ fun HomeAnimeStatusDialog(
                 Button(
                     onClick = {
                         if (markedForRemoval) { onRemove() }
-                        else { val progress = selectedProgress.toIntOrNull(); val score = selectedScore.toIntOrNull()?.times(10); onUpdate(selectedStatus, progress, score) }
+                        else { val progress = selectedProgress.toIntOrNull(); val score = selectedScore.toIntOrNull(); onUpdate(selectedStatus, progress, score) }
                     },
                     modifier = Modifier.fillMaxWidth().height(48.dp),
                     shape = RoundedCornerShape(12.dp),

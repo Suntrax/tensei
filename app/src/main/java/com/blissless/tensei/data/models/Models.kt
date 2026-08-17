@@ -608,7 +608,8 @@ data class UserFavoriteAnime(
     val genres: List<String>?,
     val seasonYear: Int? = null,
     val format: String? = null,
-    val status: String? = null
+    val status: String? = null,
+    val userScore: Int? = null
 )
 
 @Serializable
@@ -1524,7 +1525,8 @@ data class MangaFavorite(
     val startDate: MangaFuzzyDate? = null,
     val chapters: Int? = null,
     val averageScore: Int? = null,
-    val siteUrl: String? = null
+    val siteUrl: String? = null,
+    val userScore: Int? = null
 )
 
 @Serializable

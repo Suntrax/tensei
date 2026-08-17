@@ -50,6 +50,7 @@ import coil.compose.AsyncImage
 import com.blissless.tensei.ui.components.HomeStatusColors
 import com.blissless.tensei.ui.components.StatusButton
 import com.blissless.tensei.ui.theme.MangaStatusLabels
+import com.blissless.tensei.dialogs.userScoreToDisplay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -254,7 +255,7 @@ fun MangaStatusDialog(
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                placeholder = { Text(if (currentScore != null) "Your rating: ${currentScore / 10}" else "Rating (0-10)", color = Color.White.copy(alpha = 0.4f)) },
+                placeholder = { Text(currentScore?.takeIf { it > 0 }?.let { "Your rating: ${userScoreToDisplay(it)}" } ?: "Rating (0-10)", color = Color.White.copy(alpha = 0.4f)) },
                 trailingIcon = {
                     if (selectedScore.isNotEmpty()) {
                         Text("/10", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.5f), modifier = Modifier.padding(end = 12.dp))
@@ -277,7 +278,7 @@ fun MangaStatusDialog(
                         onRemove()
                     } else {
                         val progress = selectedProgress.toIntOrNull()
-                        val score = selectedScore.toIntOrNull()?.times(10)
+                        val score = selectedScore.toIntOrNull()
                         onUpdate(selectedStatus, progress, score)
                     }
                 },

@@ -87,6 +87,8 @@ class AnimeRepository(
     suspend fun graphqlMutation(query: String, variables: Map<String, Any?>): String? {
         val token = userPreferences.authToken.value ?: return null
 
+        Log.d("AniListScoreDebug", "graphqlMutation variables=$variables")
+
         val result = graphQLClient.execute(
             query = query,
             variables = variables,
@@ -96,6 +98,8 @@ class AnimeRepository(
             useCache = false, // Mutations should never be cached
             parser = { it }
         )
+
+        Log.d("AniListScoreDebug", "graphqlMutation result data=${result.data?.take(200)} error=${result.error?.message}")
 
         return result.data
     }
@@ -942,8 +946,10 @@ class AnimeRepository(
         cacheManager.invalidateUserCache()
         graphQLClient.clearCache()
 
+        Log.d("AniListScoreDebug", "updateStatus mediaId=$mediaId status=$status progress=$progress score=$score")
+
         val query = $$"""
-            mutation ($mediaId: Int, $status: MediaListStatus$${if (progress != null || score != null) $$", $progress: Int" else ""}$${if (score != null) $$", $score: Float" else ""}) {
+            mutation ($mediaId: Int, $status: MediaListStatus$${if (progress != null) $$", $progress: Int" else ""}$${if (score != null) $$", $score: Float" else ""}) {
                 SaveMediaListEntry(mediaId: $mediaId, status: $status$${if (progress != null) $$", progress: $progress" else ""}$${if (score != null) $$", score: $score" else ""}) {
                     id
                     status
@@ -956,7 +962,7 @@ class AnimeRepository(
         if (progress != null) variables["progress"] = progress
         if (score != null) variables["score"] = score
 
-        return graphqlRequest(query, variables) != null
+        return graphqlMutation(query, variables) != null
     }
 
     suspend fun deleteListEntry(entryId: Int): Boolean {
@@ -979,7 +985,7 @@ class AnimeRepository(
         graphQLClient.clearCache()
 
         val query = $$"""
-            mutation ($mediaId: Int, $score: Int) {
+            mutation ($mediaId: Int, $score: Float) {
                 SaveMediaListEntry(mediaId: $mediaId, score: $score) {
                     id
                     score
@@ -987,7 +993,7 @@ class AnimeRepository(
             }
         """.trimIndent()
 
-        return graphqlRequest(query, mapOf("mediaId" to mediaId, "score" to score)) != null
+        return graphqlMutation(query, mapOf("mediaId" to mediaId, "score" to score)) != null
     }
 
     // ============================================
