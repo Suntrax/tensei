@@ -594,6 +594,12 @@ private fun GeneralSettingsPage(
 
     SettingsPageScaffold(title = "General", onBack = onBack) {
         SectionHeader("LAUNCH")
+        Text(
+            text = "Choose which screen appears when you open the app",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 0.dp, bottom = 8.dp)
+        )
         SettingsCard {
             SettingsRadioItem(
                 selected = startupScreenState == 0,

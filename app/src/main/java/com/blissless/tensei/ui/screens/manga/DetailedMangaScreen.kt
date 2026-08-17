@@ -238,6 +238,7 @@ fun DetailedMangaScreen(
     val liveProgress = liveTrack?.progress ?: currentProgress ?: manga.progress
 
     var showStatusDialog by remember { mutableStateOf(false) }
+    var showRatingSheet by remember { mutableStateOf(false) }
     var showDownloadDialog by remember { mutableStateOf(false) }
     var selectedTagForDescription by remember { mutableStateOf<TagData?>(null) }
     var fullscreenImageUrl by remember { mutableStateOf<String?>(null) }
@@ -807,6 +808,26 @@ fun DetailedMangaScreen(
                                         Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = null, modifier = Modifier.size(18.dp))
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Text("Change", fontWeight = FontWeight.SemiBold)
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    OutlinedButton(
+                                        onClick = { showRatingSheet = true },
+                                        modifier = Modifier.height(44.dp),
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            containerColor = if (liveScore != null && liveScore > 0) Color(0xFFFFD700).copy(alpha = 0.15f) else Color.Transparent,
+                                            contentColor = if (liveScore != null && liveScore > 0) Color(0xFFFFD700) else MaterialTheme.colorScheme.onSurface
+                                        ),
+                                        border = BorderStroke(
+                                            1.5.dp,
+                                            if (liveScore != null && liveScore > 0) Color(0xFFFFD700) else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                                        )
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Star,
+                                            contentDescription = "Rate",
+                                            modifier = Modifier.size(20.dp)
+                                        )
                                     }
                                     Spacer(modifier = Modifier.width(8.dp))
                                     OutlinedButton(
@@ -1446,16 +1467,12 @@ fun DetailedMangaScreen(
             currentProgress = statusProgress,
             totalChapters = totalCh,
             isOled = isOled,
-            currentScore = liveScore,
-            onUpdate = { status, progress, score ->
-                android.util.Log.d("MangaSyncDebug", "MangaStatusDialog onUpdate: mangaId=${manga.id} status='$status' progress=$progress score=$score")
+            onUpdate = { status, progress ->
+                android.util.Log.d("MangaSyncDebug", "MangaStatusDialog onUpdate: mangaId=${manga.id} status='$status' progress=$progress")
                 onUpdateStatus(status, progress)
                 if (progress != null) {
                     onUpdateProgress(progress)
                     viewModel.updateMangaProgress(manga.id, progress.toFloat())
-                }
-                if (score != null) {
-                    viewModel.updateMangaScore(manga.id, score)
                 }
                 showStatusDialog = false
             },
@@ -1466,6 +1483,22 @@ fun DetailedMangaScreen(
                 showStatusDialog = false
             },
             onDismiss = { showStatusDialog = false }
+        )
+    }
+
+    if (showRatingSheet) {
+        MangaRatingSheet(
+            title = manga.title,
+            coverUrl = manga.cover,
+            currentScore = liveScore,
+            isOled = isOled,
+            onDismiss = { showRatingSheet = false },
+            onScoreSaved = { score ->
+                if (score != null) {
+                    viewModel.updateMangaScore(manga.id, score)
+                }
+                showRatingSheet = false
+            }
         )
     }
 

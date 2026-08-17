@@ -123,6 +123,7 @@ import com.blissless.tensei.data.models.AnimeRelation
 import com.blissless.tensei.data.models.DetailedAnimeData
 import com.blissless.tensei.data.models.LocalAnimeEntry
 import com.blissless.tensei.data.models.TagData
+import com.blissless.tensei.dialogs.AnimeRatingSheet
 import com.blissless.tensei.dialogs.HomeAnimeStatusDialog
 import com.blissless.tensei.dialogs.userScoreToDisplay
 import com.blissless.tensei.ui.components.rememberCinematicAnimation
@@ -193,6 +194,7 @@ fun DetailedAnimeScreen(
     var showEpisodeSelection by remember { mutableStateOf(false) }
     var showNoDefaultExtDialog by remember { mutableStateOf(false) }
     var showStatusDialog by remember { mutableStateOf(false) }
+    var showRatingSheet by remember { mutableStateOf(false) }
 
     val defaultExtPkg by viewModel.defaultExtensionPackage.collectAsState()
     val defaultMagnetExt by viewModel.defaultMagnetExtension.collectAsState()
@@ -952,6 +954,26 @@ fun DetailedAnimeScreen(
                                         Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = null, modifier = Modifier.size(18.dp))
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Text("Change", fontWeight = FontWeight.SemiBold)
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    OutlinedButton(
+                                        onClick = { showRatingSheet = true },
+                                        modifier = Modifier.height(44.dp),
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            containerColor = if (effectiveUserScore != null && effectiveUserScore > 0) Color(0xFFFFD700).copy(alpha = 0.15f) else Color.Transparent,
+                                            contentColor = if (effectiveUserScore != null && effectiveUserScore > 0) Color(0xFFFFD700) else MaterialTheme.colorScheme.onSurface
+                                        ),
+                                        border = BorderStroke(
+                                            1.5.dp,
+                                            if (effectiveUserScore != null && effectiveUserScore > 0) Color(0xFFFFD700) else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                                        )
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Star,
+                                            contentDescription = "Rate",
+                                            modifier = Modifier.size(20.dp)
+                                        )
                                     }
                                     Spacer(modifier = Modifier.width(8.dp))
                                     OutlinedButton(
@@ -1932,9 +1954,9 @@ fun DetailedAnimeScreen(
                 effectiveOnRemove()
                 showStatusDialog = false
             },
-            onUpdate = { status: String, progress: Int?, score: Int? ->
+            onUpdate = { status: String, progress: Int? ->
                 if (isLoggedIn) {
-                    viewModel.updateAnimeStatus(anime.id, status, progress, score)
+                    viewModel.updateAnimeStatus(anime.id, status, progress, null)
                 } else {
                     effectiveOnUpdateStatus(status)
                     if (progress != null) effectiveOnUpdateProgress(progress)
@@ -1950,12 +1972,53 @@ fun DetailedAnimeScreen(
                             banner = anime.banner,
                             year = anime.year,
                             averageScore = anime.averageScore,
-                            score = score ?: localAnimeStatus[anime.id]?.score
+                            score = localAnimeStatus[anime.id]?.score
                         )
                     )
                 }
                 if (progress != null) displayProgress = progress
                 showStatusDialog = false
+            }
+        )
+    }
+
+    if (showRatingSheet) {
+        val animeMedia = AnimeMedia(
+            id = anime.id,
+            title = anime.title,
+            titleEnglish = anime.titleEnglish,
+            cover = anime.cover,
+            banner = anime.banner,
+            totalEpisodes = anime.episodes,
+            averageScore = anime.averageScore,
+            userScore = effectiveUserScore,
+            year = anime.year
+        )
+        AnimeRatingSheet(
+            anime = animeMedia,
+            isOled = isOled,
+            onDismiss = { showRatingSheet = false },
+            onScoreSaved = { score ->
+                if (isLoggedIn) {
+                    viewModel.updateAnimeStatus(anime.id, statusToCheck ?: "CURRENT", null, score)
+                } else {
+                    viewModel.setLocalAnimeStatus(
+                        anime.id,
+                        LocalAnimeEntry(
+                            id = anime.id,
+                            status = statusToCheck ?: "CURRENT",
+                            progress = statusProgress,
+                            totalEpisodes = anime.episodes,
+                            title = anime.title,
+                            cover = anime.cover,
+                            banner = anime.banner,
+                            year = anime.year,
+                            averageScore = anime.averageScore,
+                            score = score
+                        )
+                    )
+                }
+                showRatingSheet = false
             }
         )
     }

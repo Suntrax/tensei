@@ -1039,8 +1039,8 @@ fun HomeScreen(
                 viewModel.removeAnimeFromList(selectedAnime!!.id)
                 showStatusDialog = false
             },
-            onUpdate = { status, progress, score ->
-                viewModel.updateAnimeStatus(selectedAnime!!.id, status, progress, score)
+            onUpdate = { status, progress ->
+                viewModel.updateAnimeStatus(selectedAnime!!.id, status, progress, null)
                 showStatusDialog = false
             })
     }
@@ -1054,10 +1054,9 @@ fun HomeScreen(
             currentProgress = sm.progress,
             totalChapters = sm.totalChapters,
             isOled = isOled,
-            currentScore = sm.userScore,
-            onUpdate = { status, progress, score ->
-                android.util.Log.d("MangaSyncDebug", "MangaStatusDialog onUpdate: mangaId=${sm.id} status='$status' progress=$progress score=$score")
-                viewModel.updateMangaStatus(sm.id, status, progress, score)
+            onUpdate = { status, progress ->
+                android.util.Log.d("MangaSyncDebug", "MangaStatusDialog onUpdate: mangaId=${sm.id} status='$status' progress=$progress")
+                viewModel.updateMangaStatus(sm.id, status, progress, null)
                 if (progress != null) viewModel.updateMangaProgress(sm.id, progress.toFloat())
                 showMangaStatusDialog = false
             },

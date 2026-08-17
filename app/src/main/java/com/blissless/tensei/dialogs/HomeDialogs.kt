@@ -66,11 +66,10 @@ fun HomeAnimeStatusDialog(
     isOled: Boolean,
     onDismiss: () -> Unit,
     onRemove: () -> Unit,
-    onUpdate: (String, Int?, Int?) -> Unit
+    onUpdate: (String, Int?) -> Unit
 ) {
     var selectedStatus by remember { mutableStateOf(anime.listStatus) }
     var selectedProgress by remember { mutableStateOf(if (anime.progress > 0) anime.progress.toString() else "") }
-    var selectedScore by remember { mutableStateOf("") }
     var markedForRemoval by remember { mutableStateOf(false) }
     var showAnimation by remember { mutableStateOf(false) }
 
@@ -233,40 +232,10 @@ fun HomeAnimeStatusDialog(
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
-                Text("Your Score", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
-                Spacer(modifier = Modifier.height(8.dp))
-
-                OutlinedTextField(
-                    value = selectedScore,
-                    onValueChange = { newValue ->
-                        val filtered = newValue.filter { c -> c.isDigit() }
-                        val clamped = filtered.toIntOrNull()?.coerceIn(0, 10)?.toString() ?: filtered
-                        selectedScore = clamped
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    placeholder = { Text(anime.userScore?.takeIf { it > 0 }?.let { "Your rating: ${userScoreToDisplay(it)}" } ?: "Rating (0-10)", color = Color.White.copy(alpha = 0.4f)) },
-                    trailingIcon = {
-                        if (selectedScore.isNotEmpty()) {
-                            Text("/10", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.5f), modifier = Modifier.padding(end = 12.dp))
-                        }
-                    },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = if (selectedScore.isEmpty() || selectedScore == "0") Color.Transparent else Color.White,
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
-                        cursorColor = MaterialTheme.colorScheme.primary
-                    ),
-                    shape = RoundedCornerShape(10.dp)
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
                 Button(
                     onClick = {
                         if (markedForRemoval) { onRemove() }
-                        else { val progress = selectedProgress.toIntOrNull(); val score = selectedScore.toIntOrNull(); onUpdate(selectedStatus, progress, score) }
+                        else { val progress = selectedProgress.toIntOrNull(); onUpdate(selectedStatus, progress) }
                     },
                     modifier = Modifier.fillMaxWidth().height(48.dp),
                     shape = RoundedCornerShape(12.dp),
@@ -274,4 +243,71 @@ fun HomeAnimeStatusDialog(
                 ) { Text(if (markedForRemoval) "Remove from List" else "Save Changes", fontWeight = FontWeight.Bold) }
             }
         }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AnimeRatingSheet(
+    anime: AnimeMedia,
+    isOled: Boolean,
+    onDismiss: () -> Unit,
+    onScoreSaved: (Int?) -> Unit
+) {
+    val initialScore = anime.userScore?.takeIf { it > 0 }?.let { userScoreToDisplay(it) }
+    var selectedScore by remember { mutableStateOf(initialScore?.toString() ?: "") }
+
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = if (isOled) Color.Black else Color(0xFF1A1A1A)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 32.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                AsyncImage(model = anime.cover, contentDescription = anime.title, contentScale = ContentScale.Crop, modifier = Modifier.width(60.dp).height(85.dp).clip(RoundedCornerShape(10.dp)))
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(anime.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Your Rating", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.7f))
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            OutlinedTextField(
+                value = selectedScore,
+                onValueChange = { newValue ->
+                    val filtered = newValue.filter { c -> c.isDigit() }
+                    val clamped = filtered.toIntOrNull()?.coerceIn(0, 10)?.toString() ?: filtered
+                    selectedScore = clamped
+                },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                placeholder = { Text(initialScore?.let { "Current: $it/10" } ?: "Rating (0-10)", color = Color.White.copy(alpha = 0.4f)) },
+                trailingIcon = {
+                    if (selectedScore.isNotEmpty()) {
+                        Text("/10", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.5f), modifier = Modifier.padding(end = 12.dp))
+                    }
+                },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = if (selectedScore.isEmpty()) Color.Transparent else Color.White,
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+                    cursorColor = MaterialTheme.colorScheme.primary
+                ),
+                shape = RoundedCornerShape(10.dp)
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = { onScoreSaved(selectedScore.toIntOrNull()); onDismiss() },
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary)
+            ) { Text("Save Rating", fontWeight = FontWeight.Bold) }
+        }
+    }
 }

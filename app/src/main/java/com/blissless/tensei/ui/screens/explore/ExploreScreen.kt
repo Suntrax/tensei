@@ -504,8 +504,8 @@ fun ExploreScreen(
                 viewModel.removeAnimeFromList(anime.id)
                 showStatusDialog = false
             },
-            onUpdate = { status, _, score ->
-                viewModel.addExploreAnimeToList(anime, status, score)
+            onUpdate = { status, _ ->
+                viewModel.addExploreAnimeToList(anime, status)
                 showStatusDialog = false
             }
         )
@@ -561,8 +561,8 @@ fun ExploreScreen(
                 viewModel.removeMangaTracking(manga.id)
                 showMangaStatusDialog = false
             },
-            onUpdate = { status, progress, score ->
-                viewModel.updateMangaStatus(manga.id, status, progress, score)
+            onUpdate = { status, progress ->
+                viewModel.updateMangaStatus(manga.id, status, progress, null)
                 if (progress != null) {
                     viewModel.updateMangaProgress(manga.id, progress.toFloat())
                 }
