@@ -44,9 +44,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Label
-import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
+import androidx.compose.material.icons.filled.AddTask
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Favorite
@@ -157,6 +158,7 @@ fun DetailedAnimeScreen(
     onDismiss: () -> Unit,
     onNavigateBack: () -> Unit = onDismiss,
     onSwipeToClose: () -> Unit = {},
+    stackDepth: Int = 1,
     onPlayEpisode: (Int, String?) -> Unit = { _, _ -> },
     onUpdateStatus: (String?) -> Unit = {},
     onUpdateProgress: (Int) -> Unit = {},
@@ -611,7 +613,7 @@ fun DetailedAnimeScreen(
             }
 
             IconButton(
-                onClick = onDismiss,
+                onClick = { if (stackDepth > 2) onDismiss() else onNavigateBack() },
                 modifier = Modifier
                     .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp, start = 16.dp)
                     .align(Alignment.TopStart)
@@ -619,7 +621,12 @@ fun DetailedAnimeScreen(
                     .background(Color.Black.copy(alpha = 0.6f), CircleShape)
                     .zIndex(10f)
             ) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White, modifier = Modifier.size(24.dp))
+                Icon(
+                    if (stackDepth > 2) Icons.Default.Close else Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = if (stackDepth > 2) "Close" else "Back",
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
             }
 
             Box(
@@ -842,7 +849,7 @@ fun DetailedAnimeScreen(
                             .padding(horizontal = 16.dp),
                         shape = RoundedCornerShape(20.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surface
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                         ),
                         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f))
@@ -863,7 +870,7 @@ fun DetailedAnimeScreen(
                                     ) {
                                         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                                             Icon(
-                                                Icons.AutoMirrored.Filled.PlaylistAdd,
+                                                Icons.Default.AddTask,
                                                 contentDescription = null,
                                                 tint = MaterialTheme.colorScheme.primary,
                                                 modifier = Modifier.size(20.dp)
@@ -951,7 +958,7 @@ fun DetailedAnimeScreen(
                                         shape = RoundedCornerShape(12.dp),
                                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                                     ) {
-                                        Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Icon(Icons.Default.AddTask, contentDescription = null, modifier = Modifier.size(18.dp))
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Text("Change", fontWeight = FontWeight.SemiBold)
                                     }
@@ -1029,7 +1036,7 @@ fun DetailedAnimeScreen(
                                         shape = RoundedCornerShape(12.dp),
                                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                                     ) {
-                                        Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Icon(Icons.Default.AddTask, contentDescription = null, modifier = Modifier.size(18.dp))
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Text("Add to List", fontWeight = FontWeight.SemiBold)
                                     }
@@ -1378,7 +1385,10 @@ fun DetailedAnimeScreen(
                                         Icon(Icons.Default.Star, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                                     }
                                     Spacer(modifier = Modifier.width(12.dp))
-                                    Text("Recommendations", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                    Column {
+                                        Text("Recommendations", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                        Text("You might also enjoy", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), letterSpacing = 0.5.sp)
+                                    }
                                     Spacer(modifier = Modifier.weight(1f))
                                     TextButton(onClick = { onViewAllRecommendations(displayData.id, displayData.title) }) {
                                         Text("View All", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)

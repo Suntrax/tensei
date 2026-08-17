@@ -28,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Work
@@ -197,7 +198,8 @@ fun CharacterScreen(
     onNavigateBack: () -> Unit = onDismiss,
     onMediaClick: (Int, String?) -> Unit,
     onCharacterClick: ((Int) -> Unit)? = null,
-    onStaffClick: ((Int) -> Unit)? = null
+    onStaffClick: ((Int) -> Unit)? = null,
+    stackDepth: Int = 1
 ) {
     var character by remember { mutableStateOf<CharacterData?>(null) }
     var isLoading by remember { mutableStateOf(true) }
@@ -252,7 +254,7 @@ fun CharacterScreen(
                                     )
                             )
                             IconButton(
-                                onClick = onDismiss,
+                                onClick = { if (stackDepth > 2) onDismiss() else onNavigateBack() },
                                 modifier = Modifier
                                     .padding(top = statusBarsPadding.calculateTopPadding() + 8.dp, start = 16.dp)
                                     .align(Alignment.TopStart)
@@ -261,8 +263,8 @@ fun CharacterScreen(
                                     .zIndex(10f)
                             ) {
                                 Icon(
-                                    Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = "Back",
+                                    if (stackDepth > 2) Icons.Default.Close else Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = if (stackDepth > 2) "Close" else "Back",
                                     tint = Color.White,
                                     modifier = Modifier.size(24.dp)
                                 )
@@ -469,7 +471,8 @@ fun StaffScreen(
     onNavigateBack: () -> Unit = onDismiss,
     onMediaClick: (Int, String?) -> Unit,
     onCharacterClick: ((Int) -> Unit)? = null,
-    onStaffClick: ((Int) -> Unit)? = null
+    onStaffClick: ((Int) -> Unit)? = null,
+    stackDepth: Int = 1
 ) {
     var staff by remember { mutableStateOf<StaffData?>(null) }
     var isLoading by remember { mutableStateOf(true) }
@@ -535,7 +538,7 @@ fun StaffScreen(
                                     )
                             )
                             IconButton(
-                                onClick = onDismiss,
+                                onClick = { if (stackDepth > 2) onDismiss() else onNavigateBack() },
                                 modifier = Modifier
                                     .padding(top = statusBarsPadding.calculateTopPadding() + 8.dp, start = 16.dp)
                                     .align(Alignment.TopStart)
@@ -544,8 +547,8 @@ fun StaffScreen(
                                     .zIndex(10f)
                             ) {
                                 Icon(
-                                    Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = "Back",
+                                    if (stackDepth > 2) Icons.Default.Close else Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = if (stackDepth > 2) "Close" else "Back",
                                     tint = Color.White,
                                     modifier = Modifier.size(24.dp)
                                 )

@@ -47,7 +47,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Label
-import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
+import androidx.compose.material.icons.filled.AddTask
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Check
@@ -192,7 +192,10 @@ fun DetailedMangaScreen(
     preferEnglishTitles: Boolean = true,
     autoShowChapters: Boolean = false,
     onDismiss: () -> Unit,
+    onNavigateBack: () -> Unit = onDismiss,
+    onCloseAll: () -> Unit = onDismiss,
     onSwipeToClose: () -> Unit = {},
+    stackDepth: Int = 1,
     onUpdateStatus: (String?, Int?) -> Unit = { _, _ -> },
     onUpdateProgress: (Int) -> Unit = {},
     onRemove: () -> Unit = {},
@@ -510,7 +513,7 @@ fun DetailedMangaScreen(
 
             // Close button
             IconButton(
-                onClick = { dismissWithAnimation() },
+                onClick = { if (stackDepth > 2) onCloseAll() else dismissWithAnimation() },
                 modifier = Modifier
                     .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp, start = 16.dp)
                     .align(Alignment.TopStart)
@@ -518,7 +521,12 @@ fun DetailedMangaScreen(
                     .background(Color.Black.copy(alpha = 0.6f), CircleShape)
                     .zIndex(10f)
             ) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White, modifier = Modifier.size(24.dp))
+                Icon(
+                    if (stackDepth > 2) Icons.Default.Close else Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = if (stackDepth > 2) "Close" else "Back",
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
             }
 
             // Top bar pill
@@ -724,8 +732,10 @@ fun DetailedMangaScreen(
                     Spacer(modifier = Modifier.height(24.dp))
                     Card(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                        shape = RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(20.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f))
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Row(
@@ -740,7 +750,7 @@ fun DetailedMangaScreen(
                                         modifier = Modifier.size(36.dp)
                                     ) {
                                         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                                            Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = null,
+                                            Icon(Icons.Default.AddTask, contentDescription = null,
                                                 tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                                         }
                                     }
@@ -805,7 +815,7 @@ fun DetailedMangaScreen(
                                         shape = RoundedCornerShape(12.dp),
                                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                                     ) {
-                                        Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Icon(Icons.Default.AddTask, contentDescription = null, modifier = Modifier.size(18.dp))
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Text("Change", fontWeight = FontWeight.SemiBold)
                                     }
@@ -863,7 +873,7 @@ fun DetailedMangaScreen(
                                         shape = RoundedCornerShape(12.dp),
                                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                                     ) {
-                                        Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Icon(Icons.Default.AddTask, contentDescription = null, modifier = Modifier.size(18.dp))
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Text("Add to List", fontWeight = FontWeight.SemiBold)
                                     }
@@ -1048,7 +1058,10 @@ fun DetailedMangaScreen(
                                         Icon(Icons.Default.Star, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                                     }
                                     Spacer(modifier = Modifier.width(12.dp))
-                                    Text("Recommendations", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                    Column {
+                                        Text("Recommendations", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                        Text("You might also enjoy", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), letterSpacing = 0.5.sp)
+                                    }
                                     Spacer(modifier = Modifier.weight(1f))
                                     TextButton(onClick = onViewAllRecommendations) {
                                         Text("View All", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
@@ -1319,7 +1332,10 @@ fun DetailedMangaScreen(
                                         Icon(Icons.AutoMirrored.Filled.TrendingUp, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                                     }
                                     Spacer(modifier = Modifier.width(12.dp))
-                                    Text("Rankings", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                    Column {
+                                        Text("Rankings", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                        Text("Community performance", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), letterSpacing = 0.5.sp)
+                                    }
                                 }
                                 Spacer(modifier = Modifier.height(12.dp))
                                 rankings.forEachIndexed { index, ranking ->
@@ -1523,7 +1539,7 @@ private fun MangaInfoCard(
     Card(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f))
     ) {

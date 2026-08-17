@@ -99,7 +99,7 @@ internal fun SettingsLandingPage(
             AsyncImage(
                 model = appIconDrawable(appIcon),
                 contentDescription = "App",
-                modifier = Modifier.size(54.dp).clip(CircleShape)
+                modifier = Modifier.size(40.dp).clip(CircleShape)
             )
             Column {
                 Text(
@@ -502,8 +502,8 @@ internal fun AppIconRadioItem(
     ) {
         Box(
             modifier = Modifier
-                .size(48.dp)
-                .clip(RoundedCornerShape(12.dp))
+                .size(38.dp)
+                .clip(CircleShape)
                 .background(
                     if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
                     else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
@@ -515,8 +515,8 @@ internal fun AppIconRadioItem(
                 contentDescription = null,
                 tint = Color.Unspecified,
                 modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(8.dp))
+                    .size(30.dp)
+                    .clip(CircleShape)
             )
         }
         Column(modifier = Modifier.weight(1f)) {

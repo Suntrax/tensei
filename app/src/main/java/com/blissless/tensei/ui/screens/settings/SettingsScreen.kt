@@ -1156,7 +1156,7 @@ private fun DownloadsSettingsPage(
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Battery Optimization", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
                     Text(
-                        if (isIgnoringBattery) "Disabled - downloads will work reliably" else "Download reliability may be reduced",
+                        if (isIgnoringBattery) "Disabled - downloads will work reliably" else "Disabling it allows background downloads to work reliably",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                     )

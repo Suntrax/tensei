@@ -1138,6 +1138,7 @@ fun MainScreen(
             currentProgress = animeProgressMap[exploreDialog.anime.id],
             isFavorite = isAnimeFavorite,
             initialCardBounds = viewModel.exploreAnimeCardBounds.collectAsState().value,
+            stackDepth = exploreDialog.previousStates.size + 1,
             onDismiss = {
                 overlayState = OverlayState.None
             },
@@ -1525,6 +1526,7 @@ fun MainScreen(
             currentProgress = manga.progress,
             isLoggedIn = isLoggedIn,
             isFavorite = viewModel.isMangaFavorited(manga.id),
+            stackDepth = mangaDetailStack.size,
             onRelationClick = { relation ->
                 // If the relation is an anime format, open the anime detail screen
                 if (relation.format != null && relation.format !in listOf("MANGA", "NOVEL", "ONE_SHOT", "DOUJIN", "MANHWA", "MANHUA")) {
@@ -1618,6 +1620,21 @@ fun MainScreen(
                     android.util.Log.d("MangaNav", "DETAIL onDismiss — popping detail (id=${manga.id})")
                     mangaAutoShowChapters = false
                     popMangaDetail()
+                }
+            },
+            onNavigateBack = {
+                if (showMangaReader) {
+                    android.util.Log.d("MangaNav", "DETAIL onNavigateBack suppressed (id=${manga.id}) — reader is open")
+                } else {
+                    mangaAutoShowChapters = false
+                    popMangaDetail()
+                }
+            },
+            onCloseAll = {
+                if (!showMangaReader) {
+                    mangaDetailStack = emptyList()
+                    showMangaDetailScreen = false
+                    mangaAutoShowChapters = false
                 }
             },
             onSwipeToClose = {
@@ -1844,6 +1861,7 @@ fun MainScreen(
         CharacterScreen(
             characterId = characterDialog.characterId,
             viewModel = viewModel,
+            stackDepth = characterDialog.previousStates.size + 1,
             onDismiss = {
                 overlayState = OverlayState.None
             },
@@ -1909,6 +1927,7 @@ fun MainScreen(
         StaffScreen(
             staffId = staffDialog.staffId,
             viewModel = viewModel,
+            stackDepth = staffDialog.previousStates.size + 1,
             onDismiss = {
                 overlayState = OverlayState.None
             },

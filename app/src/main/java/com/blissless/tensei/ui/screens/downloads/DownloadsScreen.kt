@@ -363,31 +363,39 @@ fun DownloadsScreen(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp),
                             colors = CardDefaults.cardColors(
-                                containerColor = if (isOled) Color(0xFF1A1A1A) else Color(0xFFFFF3E0)
+                                containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f)
                             )
                         ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth().padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Storage,
-                                    contentDescription = null,
-                                    tint = Color(0xFFF57C00),
-                                    modifier = Modifier.size(24.dp)
-                                )
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(MaterialTheme.colorScheme.error.copy(alpha = 0.1f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Storage,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
                                 Spacer(Modifier.width(12.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         "Battery Optimization",
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = FontWeight.SemiBold,
-                                        color = if (isOled) Color.White else Color(0xFFE65100)
+                                        color = MaterialTheme.colorScheme.onErrorContainer
                                     )
                                     Text(
-                                        "Disable battery optimization for better download reliability",
+                                        "Disable to allow reliable background downloads",
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = if (isOled) Color.White.copy(alpha = 0.7f) else Color(0xFFBF360C)
+                                        color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f)
                                     )
                                 }
                                 TextButton(onClick = {
@@ -398,13 +406,13 @@ fun DownloadsScreen(
                                         context.startActivity(intent)
                                     } catch (e: Exception) { ErrorHandler.ignore("DownloadsScreen", "best-effort operation failed", e) }
                                 }) {
-                                    Text("Fix", fontWeight = FontWeight.Bold)
+                                    Text("Fix", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
                                 }
                                 IconButton(onClick = { batteryOptDismissed.value = true }) {
                                     Icon(
                                         Icons.Default.Close,
                                         contentDescription = "Dismiss",
-                                        tint = if (isOled) Color.White.copy(alpha = 0.5f) else Color(0xFFBF360C).copy(alpha = 0.5f),
+                                        tint = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.5f),
                                         modifier = Modifier.size(18.dp)
                                     )
                                 }
