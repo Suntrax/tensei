@@ -771,35 +771,69 @@ private fun FavoritesContent(
             }
         }
     } else {
+        var animeExpanded by remember { mutableStateOf(true) }
+        var mangaExpanded by remember { mutableStateOf(true) }
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(vertical = 8.dp)
         ) {
             if (favorites.isNotEmpty()) {
                 item {
-                    Text("Anime", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 4.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { animeExpanded = !animeExpanded }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Anime", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Icon(
+                            imageVector = if (animeExpanded) Icons.Default.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = if (animeExpanded) "Collapse" else "Expand",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
-                itemsIndexed(favorites) { _, anime ->
-                    FavoriteItem(
-                        anime = anime,
-                        preferEnglishTitles = preferEnglishTitles,
-                        onClick = { onAnimeClick(anime) },
-                        onRemove = { onRemoveFavorite?.invoke(anime) }
-                    )
+                if (animeExpanded) {
+                    itemsIndexed(favorites) { _, anime ->
+                        FavoriteItem(
+                            anime = anime,
+                            preferEnglishTitles = preferEnglishTitles,
+                            onClick = { onAnimeClick(anime) },
+                            onRemove = { onRemoveFavorite?.invoke(anime) }
+                        )
+                    }
                 }
             }
             if (mangaFavorites.isNotEmpty()) {
                 item {
                     Spacer(Modifier.height(8.dp))
-                    Text("Manga", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 4.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { mangaExpanded = !mangaExpanded }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Manga", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Icon(
+                            imageVector = if (mangaExpanded) Icons.Default.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = if (mangaExpanded) "Collapse" else "Expand",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
-                itemsIndexed(mangaFavorites) { _, manga ->
-                    MangaFavoriteItem(
-                        manga = manga,
-                        preferEnglishTitles = preferEnglishTitles,
-                        onClick = { onMangaClick(manga) },
-                        onRemove = { onRemoveMangaFavorite?.invoke(manga) }
-                    )
+                if (mangaExpanded) {
+                    itemsIndexed(mangaFavorites) { _, manga ->
+                        MangaFavoriteItem(
+                            manga = manga,
+                            preferEnglishTitles = preferEnglishTitles,
+                            onClick = { onMangaClick(manga) },
+                            onRemove = { onRemoveMangaFavorite?.invoke(manga) }
+                        )
+                    }
                 }
             }
         }
