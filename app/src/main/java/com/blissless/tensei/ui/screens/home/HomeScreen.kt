@@ -160,6 +160,7 @@ fun HomeScreen(
     onMangaInfoClick: (MangaMedia) -> Unit = {},
     onMangaContinueReadingClick: (MangaMedia) -> Unit = {},
     onMangaDismissClick: (MangaMedia) -> Unit = {},
+    onAnimeDetailMangaClick: (MangaMedia) -> Unit = {},
     currentScreenIndex: Int = 0,
     playbackPositions: Map<String, Long> = emptyMap(),
     playbackDurations: Map<String, Long> = emptyMap(),
@@ -1140,34 +1141,94 @@ fun HomeScreen(
                 showDetailedAnimeScreen = false
             },
             onRelationClick = { relation ->
-                scope.launch {
-                    try {
-                        currentCardBounds = null
-                        viewModel.clearHomeAnimeCardBounds()
-                        val detailedData = viewModel.fetchDetailedAnimeData(relation.id)
-                        if (detailedData != null) {
-                            selectedAnime = AnimeMedia(
-                                id = detailedData.id,
-                                title = detailedData.title,
-                                titleEnglish = detailedData.titleEnglish,
-                                cover = detailedData.cover,
-                                banner = detailedData.banner,
-                                progress = 0,
-                                totalEpisodes = detailedData.episodes,
-                                latestEpisode = detailedData.latestEpisode,
-                                status = detailedData.status ?: "",
-                                averageScore = detailedData.averageScore,
-                                genres = detailedData.genres,
-                                listStatus = "",
-                                listEntryId = 0,
-                                year = detailedData.year,
-                                malId = detailedData.malId
-                            )
-                        } else {
+                val mangaFormats = listOf("MANGA", "NOVEL", "ONE_SHOT", "DOUJIN", "MANHWA", "MANHUA")
+                if (relation.format == null || relation.format in mangaFormats) {
+                    onAnimeDetailMangaClick(
+                        MangaMedia(
+                            id = relation.id,
+                            title = relation.title,
+                            cover = relation.cover,
+                            totalChapters = 0,
+                            averageScore = relation.averageScore,
+                            format = relation.format
+                        )
+                    )
+                } else {
+                    scope.launch {
+                        try {
+                            currentCardBounds = null
+                            viewModel.clearHomeAnimeCardBounds()
+                            val detailedData = viewModel.fetchDetailedAnimeData(relation.id)
+                            if (detailedData != null) {
+                                selectedAnime = AnimeMedia(
+                                    id = detailedData.id,
+                                    title = detailedData.title,
+                                    titleEnglish = detailedData.titleEnglish,
+                                    cover = detailedData.cover,
+                                    banner = detailedData.banner,
+                                    progress = 0,
+                                    totalEpisodes = detailedData.episodes,
+                                    latestEpisode = detailedData.latestEpisode,
+                                    status = detailedData.status ?: "",
+                                    averageScore = detailedData.averageScore,
+                                    genres = detailedData.genres,
+                                    listStatus = "",
+                                    listEntryId = 0,
+                                    year = detailedData.year,
+                                    malId = detailedData.malId
+                                )
+                            } else {
+                                context.toast("Anime not found")
+                            }
+                        } catch (_: Exception) {
                             context.toast("Anime not found")
                         }
-                    } catch (_: Exception) {
-                        context.toast("Anime not found")
+                    }
+                }
+            },
+            onRecommendationClick = { rec ->
+                val mangaFormats = listOf("MANGA", "NOVEL", "ONE_SHOT", "DOUJIN", "MANHWA", "MANHUA")
+                if (rec.format == null || rec.format in mangaFormats) {
+                    onAnimeDetailMangaClick(
+                        MangaMedia(
+                            id = rec.id,
+                            title = rec.title,
+                            cover = rec.cover,
+                            totalChapters = rec.episodes ?: 0,
+                            averageScore = rec.averageScore,
+                            format = rec.format
+                        )
+                    )
+                } else {
+                    scope.launch {
+                        try {
+                            currentCardBounds = null
+                            viewModel.clearHomeAnimeCardBounds()
+                            val detailedData = viewModel.fetchDetailedAnimeData(rec.id)
+                            if (detailedData != null) {
+                                selectedAnime = AnimeMedia(
+                                    id = detailedData.id,
+                                    title = detailedData.title,
+                                    titleEnglish = detailedData.titleEnglish,
+                                    cover = detailedData.cover,
+                                    banner = detailedData.banner,
+                                    progress = 0,
+                                    totalEpisodes = detailedData.episodes,
+                                    latestEpisode = detailedData.latestEpisode,
+                                    status = detailedData.status ?: "",
+                                    averageScore = detailedData.averageScore,
+                                    genres = detailedData.genres,
+                                    listStatus = "",
+                                    listEntryId = 0,
+                                    year = detailedData.year,
+                                    malId = detailedData.malId
+                                )
+                            } else {
+                                context.toast("Anime not found")
+                            }
+                        } catch (_: Exception) {
+                            context.toast("Anime not found")
+                        }
                     }
                 }
             },

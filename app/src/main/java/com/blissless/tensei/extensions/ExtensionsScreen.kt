@@ -33,8 +33,8 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Refresh
@@ -200,7 +200,7 @@ fun ExtensionsScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Icon(
-                            if (reposExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            if (reposExpanded) Icons.Default.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
                             contentDescription = if (reposExpanded) "Collapse" else "Expand",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -272,7 +272,7 @@ fun ExtensionsScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Icon(
-                            if (extensionsExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            if (extensionsExpanded) Icons.Default.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
                             contentDescription = if (extensionsExpanded) "Collapse" else "Expand",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -311,7 +311,7 @@ fun ExtensionsScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Icon(
-                            if (magnetExtensionsExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            if (magnetExtensionsExpanded) Icons.Default.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
                             contentDescription = if (magnetExtensionsExpanded) "Collapse" else "Expand",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -350,7 +350,7 @@ fun ExtensionsScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Icon(
-                            if (mangaExtensionsExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            if (mangaExtensionsExpanded) Icons.Default.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
                             contentDescription = if (mangaExtensionsExpanded) "Collapse" else "Expand",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )

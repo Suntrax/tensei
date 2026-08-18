@@ -1,6 +1,7 @@
 package com.blissless.tensei.ui.screens.explore
 
 import com.blissless.tensei.data.models.isAdultContent
+import com.blissless.tensei.data.models.MangaMedia
 import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -181,7 +182,8 @@ fun ExploreScreen(
     onNoExtension: () -> Unit = {},
     onMangaClick: (MangaExploreMedia) -> Unit = {},
     onMangaReadClick: (MangaExploreMedia) -> Unit = {},
-    onMangaNoExtension: () -> Unit = {}
+    onMangaNoExtension: () -> Unit = {},
+    onAnimeDetailMangaClick: (MangaMedia) -> Unit = {}
 ) {
     val context = LocalContext.current
     val featuredAnime by viewModel.featuredAnime.collectAsState()
@@ -389,36 +391,97 @@ fun ExploreScreen(
             },
             isLoggedIn = isLoggedIn,
             onRelationClick = { relation ->
-                try {
-                    scope.launch {
-                        try {
-                            delay(100.milliseconds)
-                            viewModel.clearExploreAnimeCardBounds()
-                            currentCardBounds = null
-                            val detailedData = viewModel.fetchDetailedAnimeData(relation.id)
-                            if (detailedData != null) {
-                                selectedAnime = ExploreAnime(
-                                    id = relation.id,
-                                    title = detailedData.title,
-                                    titleEnglish = detailedData.titleEnglish,
-                                    cover = detailedData.cover,
-                                    banner = detailedData.banner,
-                                    episodes = detailedData.episodes,
-                                    latestEpisode = detailedData.latestEpisode,
-                                    averageScore = detailedData.averageScore,
-                                    genres = detailedData.genres,
-                                    year = detailedData.year,
-                                    format = detailedData.format
-                                )
-                            } else {
-                                context.toast("Anime not found - ID: ${relation.id}")
+                val mangaFormats = listOf("MANGA", "NOVEL", "ONE_SHOT", "DOUJIN", "MANHWA", "MANHUA")
+                if (relation.format == null || relation.format in mangaFormats) {
+                    onAnimeDetailMangaClick(
+                        MangaMedia(
+                            id = relation.id,
+                            title = relation.title,
+                            cover = relation.cover,
+                            totalChapters = 0,
+                            averageScore = relation.averageScore,
+                            format = relation.format
+                        )
+                    )
+                } else {
+                    try {
+                        scope.launch {
+                            try {
+                                delay(100.milliseconds)
+                                viewModel.clearExploreAnimeCardBounds()
+                                currentCardBounds = null
+                                val detailedData = viewModel.fetchDetailedAnimeData(relation.id)
+                                if (detailedData != null) {
+                                    selectedAnime = ExploreAnime(
+                                        id = relation.id,
+                                        title = detailedData.title,
+                                        titleEnglish = detailedData.titleEnglish,
+                                        cover = detailedData.cover,
+                                        banner = detailedData.banner,
+                                        episodes = detailedData.episodes,
+                                        latestEpisode = detailedData.latestEpisode,
+                                        averageScore = detailedData.averageScore,
+                                        genres = detailedData.genres,
+                                        year = detailedData.year,
+                                        format = detailedData.format
+                                    )
+                                } else {
+                                    context.toast("Anime not found - ID: ${relation.id}")
+                                }
+                            } catch (e: Exception) {
+                                context.toast("Error: ${e.message}")
                             }
-                        } catch (e: Exception) {
-                            context.toast("Error: ${e.message}")
                         }
+                    } catch (e: Exception) {
+                        context.toast("Error: ${e.message}")
                     }
-                } catch (e: Exception) {
-                    context.toast("Error: ${e.message}")
+                }
+            },
+            onRecommendationClick = { rec ->
+                val mangaFormats = listOf("MANGA", "NOVEL", "ONE_SHOT", "DOUJIN", "MANHWA", "MANHUA")
+                if (rec.format == null || rec.format in mangaFormats) {
+                    onAnimeDetailMangaClick(
+                        MangaMedia(
+                            id = rec.id,
+                            title = rec.title,
+                            cover = rec.cover,
+                            totalChapters = rec.episodes ?: 0,
+                            averageScore = rec.averageScore,
+                            format = rec.format
+                        )
+                    )
+                } else {
+                    try {
+                        scope.launch {
+                            try {
+                                delay(100.milliseconds)
+                                viewModel.clearExploreAnimeCardBounds()
+                                currentCardBounds = null
+                                val detailedData = viewModel.fetchDetailedAnimeData(rec.id)
+                                if (detailedData != null) {
+                                    selectedAnime = ExploreAnime(
+                                        id = rec.id,
+                                        title = detailedData.title,
+                                        titleEnglish = detailedData.titleEnglish,
+                                        cover = detailedData.cover,
+                                        banner = detailedData.banner,
+                                        episodes = detailedData.episodes,
+                                        latestEpisode = detailedData.latestEpisode,
+                                        averageScore = detailedData.averageScore,
+                                        genres = detailedData.genres,
+                                        year = detailedData.year,
+                                        format = detailedData.format
+                                    )
+                                } else {
+                                    context.toast("Anime not found - ID: ${rec.id}")
+                                }
+                            } catch (e: Exception) {
+                                context.toast("Error: ${e.message}")
+                            }
+                        }
+                    } catch (e: Exception) {
+                        context.toast("Error: ${e.message}")
+                    }
                 }
             },
             onCharacterClick = onCharacterClick,

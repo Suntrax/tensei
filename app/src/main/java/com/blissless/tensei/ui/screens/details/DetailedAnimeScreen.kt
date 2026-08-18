@@ -122,6 +122,7 @@ import com.blissless.tensei.MainViewModel
 import com.blissless.tensei.data.models.AnimeMedia
 import com.blissless.tensei.data.models.AnimeRelation
 import com.blissless.tensei.data.models.DetailedAnimeData
+import com.blissless.tensei.data.models.ExploreAnime
 import com.blissless.tensei.data.models.LocalAnimeEntry
 import com.blissless.tensei.data.models.TagData
 import com.blissless.tensei.dialogs.AnimeRatingSheet
@@ -166,7 +167,7 @@ fun DetailedAnimeScreen(
     onUpdateLocalStatus: (String?) -> Unit = {},
     onRemoveLocalStatus: () -> Unit = {},
     onRelationClick: (AnimeRelation) -> Unit = {},
-    onRecommendationClick: (Int) -> Unit = {},
+    onRecommendationClick: (ExploreAnime) -> Unit = {},
     onCharacterClick: (Int) -> Unit = {},
     onStaffClick: (Int) -> Unit = {},
     onViewAllCast: () -> Unit = {},
@@ -1258,9 +1259,6 @@ fun DetailedAnimeScreen(
                                             modifier = Modifier
                                                 .width(110.dp)
                                                 .clip(RoundedCornerShape(12.dp))
-                                                .clickable {
-                                                    onRelationClick(relation)
-                                                }
                                                 .graphicsLayer {
                                                     scaleX = introScale * scrollScale
                                                     scaleY = introScale * scrollScale
@@ -1268,6 +1266,9 @@ fun DetailedAnimeScreen(
                                                     translationX = scrollTranslationX
                                                     rotationY = scrollRotationY
                                                     cameraDistance = cameraDistancePx
+                                                }
+                                                .clickable {
+                                                    onRelationClick(relation)
                                                 }
                                                 .padding(4.dp)
                                         ) {
@@ -1456,7 +1457,6 @@ fun DetailedAnimeScreen(
                                             modifier = Modifier
                                                 .width(110.dp)
                                                 .clip(RoundedCornerShape(12.dp))
-                                                .clickable { onRecommendationClick(rec.id) }
                                                 .graphicsLayer {
                                                     scaleX = recIntroScale * recScrollScale
                                                     scaleY = recIntroScale * recScrollScale
@@ -1464,6 +1464,10 @@ fun DetailedAnimeScreen(
                                                     translationX = recScrollTranslationX
                                                     rotationY = recScrollRotationY
                                                     cameraDistance = recCameraDistancePx
+                                                }
+                                                .clickable {
+                                                    android.util.Log.d("RecClick", "Clickable fired: id=${rec.id} title=${rec.title} format=${rec.format}")
+                                                    onRecommendationClick(rec)
                                                 }
                                                 .padding(4.dp)
                                         ) {
@@ -1641,10 +1645,6 @@ fun DetailedAnimeScreen(
                                             modifier = Modifier
                                                 .width(80.dp)
                                                 .clip(RoundedCornerShape(12.dp))
-                                                .clickable {
-                                                    val id = character.id
-                                                    onCharacterClick(id)
-                                                }
                                                 .graphicsLayer {
                                                     scaleX = introScale * scrollScale
                                                     scaleY = introScale * scrollScale
@@ -1652,6 +1652,10 @@ fun DetailedAnimeScreen(
                                                     translationX = scrollTranslationX
                                                     rotationY = scrollRotationY
                                                     cameraDistance = cameraDistancePx
+                                                }
+                                                .clickable {
+                                                    val id = character.id
+                                                    onCharacterClick(id)
                                                 }
                                                 .padding(4.dp)
                                         ) {

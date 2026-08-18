@@ -1209,8 +1209,10 @@ fun MainScreen(
                 pendingSettingsGroup = if (extUiState.extensions.isEmpty()) "extensions" else "stream"
             },
             onRelationClick = { relation ->
-                // If the relation is a manga/novel format, open the manga detail screen instead
-                if (relation.format == null || relation.format in listOf("MANGA", "NOVEL", "ONE_SHOT", "DOUJIN", "MANHWA", "MANHUA")) {
+                android.util.Log.d("RecClick", "OVERLAY relationClick: id=${relation.id} title=${relation.title} format=${relation.format} type=${relation.relationType}")
+                val mangaFormats = listOf("MANGA", "NOVEL", "ONE_SHOT", "DOUJIN", "MANHWA", "MANHUA")
+                if (relation.format == null || relation.format in mangaFormats) {
+                    android.util.Log.d("RecClick", "OVERLAY relation -> manga route (format=${relation.format})")
                     openMangaDetail(
                         com.blissless.tensei.data.models.MangaMedia(
                             id = relation.id,
@@ -1223,11 +1225,13 @@ fun MainScreen(
                     )
                     mangaAutoShowChapters = false
                 } else {
+                    android.util.Log.d("RecClick", "OVERLAY relation -> anime route (format=${relation.format})")
                     try {
                         scope.launch {
                             try {
                                 delay(100.milliseconds)
                                 val detailedData = viewModel.fetchDetailedAnimeData(relation.id)
+                                android.util.Log.d("RecClick", "OVERLAY relation fetch result: ${if (detailedData != null) "OK id=${detailedData.id}" else "NULL"}")
                                 if (detailedData != null) {
                                     viewModel.clearExploreAnimeCardBounds()
                                     val newAnime = ExploreAnime(
@@ -1253,6 +1257,7 @@ fun MainScreen(
                                     context.toast("Anime not found - ID: ${relation.id}")
                                 }
                             } catch (e: Exception) {
+                                android.util.Log.e("RecClick", "OVERLAY relation fetch error", e)
                                 context.toast("Error: ${e.message}")
                             }
                         }
@@ -1261,37 +1266,58 @@ fun MainScreen(
                     }
                 }
             },
-            onRecommendationClick = { recId ->
-                scope.launch {
-                    try {
-                        delay(100.milliseconds)
-                        val detailedData = viewModel.fetchDetailedAnimeData(recId)
-                        if (detailedData != null) {
-                            viewModel.clearExploreAnimeCardBounds()
-                            val newAnime = ExploreAnime(
-                                id = recId,
-                                title = detailedData.title,
-                                titleEnglish = detailedData.titleEnglish,
-                                cover = detailedData.cover,
-                                banner = detailedData.banner,
-                                episodes = detailedData.episodes,
-                                latestEpisode = detailedData.latestEpisode,
-                                averageScore = detailedData.averageScore,
-                                genres = detailedData.genres,
-                                year = detailedData.year,
-                                format = detailedData.format
-                            )
-                            overlayState = OverlayState.ExploreAnimeDialog(
-                                anime = newAnime,
-                                firstAnime = exploreDialog.firstAnime ?: exploreDialog.anime,
-                                isFirstOpen = false,
-                                previousStates = exploreDialog.previousStates + exploreDialog
-                            )
-                        } else {
-                            context.toast("Anime not found")
+            onRecommendationClick = { rec ->
+                android.util.Log.d("RecClick", "OVERLAY handler: id=${rec.id} title=${rec.title} format=${rec.format}")
+                val mangaFormats = listOf("MANGA", "NOVEL", "ONE_SHOT", "DOUJIN", "MANHWA", "MANHUA")
+                if (rec.format == null || rec.format in mangaFormats) {
+                    android.util.Log.d("RecClick", "OVERLAY -> manga route")
+                    openMangaDetail(
+                        com.blissless.tensei.data.models.MangaMedia(
+                            id = rec.id,
+                            title = rec.title,
+                            cover = rec.cover,
+                            totalChapters = rec.episodes ?: 0,
+                            averageScore = rec.averageScore,
+                            format = rec.format
+                        )
+                    )
+                    mangaAutoShowChapters = false
+                } else {
+                    android.util.Log.d("RecClick", "OVERLAY -> anime route, launching fetch")
+                    scope.launch {
+                        try {
+                            delay(100.milliseconds)
+                            val detailedData = viewModel.fetchDetailedAnimeData(rec.id)
+                            android.util.Log.d("RecClick", "OVERLAY fetch result: ${if (detailedData != null) "OK id=${detailedData.id}" else "NULL"}")
+                            if (detailedData != null) {
+                                viewModel.clearExploreAnimeCardBounds()
+                                val newAnime = ExploreAnime(
+                                    id = rec.id,
+                                    title = detailedData.title,
+                                    titleEnglish = detailedData.titleEnglish,
+                                    cover = detailedData.cover,
+                                    banner = detailedData.banner,
+                                    episodes = detailedData.episodes,
+                                    latestEpisode = detailedData.latestEpisode,
+                                    averageScore = detailedData.averageScore,
+                                    genres = detailedData.genres,
+                                    year = detailedData.year,
+                                    format = detailedData.format
+                                )
+                                android.util.Log.d("RecClick", "OVERLAY setting overlayState to new ExploreAnimeDialog id=${newAnime.id}")
+                                overlayState = OverlayState.ExploreAnimeDialog(
+                                    anime = newAnime,
+                                    firstAnime = exploreDialog.firstAnime ?: exploreDialog.anime,
+                                    isFirstOpen = false,
+                                    previousStates = exploreDialog.previousStates + exploreDialog
+                                )
+                            } else {
+                                context.toast("Anime not found")
+                            }
+                        } catch (e: Exception) {
+                            android.util.Log.e("RecClick", "OVERLAY fetch error", e)
+                            context.toast("Error: ${e.message}")
                         }
-                    } catch (e: Exception) {
-                        context.toast("Error: ${e.message}")
                     }
                 }
             },
@@ -1386,8 +1412,10 @@ fun MainScreen(
                 showDetailedAnimeScreen = false
             },
             onRelationClick = { relation ->
-                // If the relation is a manga/novel format, open the manga detail screen instead
-                if (relation.format == null || relation.format in listOf("MANGA", "NOVEL", "ONE_SHOT", "DOUJIN", "MANHWA", "MANHUA")) {
+                android.util.Log.d("RecClick", "SELECTED relationClick: id=${relation.id} title=${relation.title} format=${relation.format} type=${relation.relationType}")
+                val mangaFormats = listOf("MANGA", "NOVEL", "ONE_SHOT", "DOUJIN", "MANHWA", "MANHUA")
+                if (relation.format == null || relation.format in mangaFormats) {
+                    android.util.Log.d("RecClick", "SELECTED relation -> manga route (format=${relation.format})")
                     openMangaDetail(
                         com.blissless.tensei.data.models.MangaMedia(
                             id = relation.id,
@@ -1400,11 +1428,13 @@ fun MainScreen(
                     )
                     mangaAutoShowChapters = false
                 } else {
+                    android.util.Log.d("RecClick", "SELECTED relation -> anime route (format=${relation.format})")
                     try {
                         scope.launch {
                             try {
                                 delay(100.milliseconds)
                                 val detailedData = viewModel.fetchDetailedAnimeData(relation.id)
+                                android.util.Log.d("RecClick", "SELECTED relation fetch: ${if (detailedData != null) "OK" else "NULL"}")
                                 if (detailedData != null) {
                                     currentCardBounds = null
                                     selectedAnimeState = AnimeMedia(
@@ -1436,35 +1466,55 @@ fun MainScreen(
                     }
                 }
             },
-            onRecommendationClick = { recId ->
-                scope.launch {
-                    try {
-                        delay(100.milliseconds)
-                        val detailedData = viewModel.fetchDetailedAnimeData(recId)
-                        if (detailedData != null) {
-                            currentCardBounds = null
-                            selectedAnimeState = AnimeMedia(
-                                id = detailedData.id,
-                                title = detailedData.title,
-                                titleEnglish = detailedData.titleEnglish,
-                                cover = detailedData.cover,
-                                banner = detailedData.banner,
-                                progress = 0,
-                                totalEpisodes = detailedData.episodes,
-                                latestEpisode = detailedData.latestEpisode,
-                                status = detailedData.status ?: "",
-                                averageScore = detailedData.averageScore,
-                                genres = detailedData.genres,
-                                listStatus = "",
-                                listEntryId = 0,
-                                year = detailedData.year,
-                                malId = detailedData.malId
-                            )
-                        } else {
+            onRecommendationClick = { rec ->
+                android.util.Log.d("RecClick", "SELECTED handler: id=${rec.id} title=${rec.title} format=${rec.format}")
+                val mangaFormats = listOf("MANGA", "NOVEL", "ONE_SHOT", "DOUJIN", "MANHWA", "MANHUA")
+                if (rec.format == null || rec.format in mangaFormats) {
+                    android.util.Log.d("RecClick", "SELECTED -> manga route")
+                    openMangaDetail(
+                        com.blissless.tensei.data.models.MangaMedia(
+                            id = rec.id,
+                            title = rec.title,
+                            cover = rec.cover,
+                            totalChapters = rec.episodes ?: 0,
+                            averageScore = rec.averageScore,
+                            format = rec.format
+                        )
+                    )
+                    mangaAutoShowChapters = false
+                } else {
+                    android.util.Log.d("RecClick", "SELECTED -> anime route, launching fetch")
+                    scope.launch {
+                        try {
+                            delay(100.milliseconds)
+                            val detailedData = viewModel.fetchDetailedAnimeData(rec.id)
+                            android.util.Log.d("RecClick", "SELECTED fetch result: ${if (detailedData != null) "OK id=${detailedData.id}" else "NULL"}")
+                            if (detailedData != null) {
+                                currentCardBounds = null
+                                selectedAnimeState = AnimeMedia(
+                                    id = detailedData.id,
+                                    title = detailedData.title,
+                                    titleEnglish = detailedData.titleEnglish,
+                                    cover = detailedData.cover,
+                                    banner = detailedData.banner,
+                                    progress = 0,
+                                    totalEpisodes = detailedData.episodes,
+                                    latestEpisode = detailedData.latestEpisode,
+                                    status = detailedData.status ?: "",
+                                    averageScore = detailedData.averageScore,
+                                    genres = detailedData.genres,
+                                    listStatus = "",
+                                    listEntryId = 0,
+                                    year = detailedData.year,
+                                    malId = detailedData.malId
+                                )
+                                showDetailedAnimeScreen = true
+                            } else {
+                                context.toast("Anime not found")
+                            }
+                        } catch (_: Exception) {
                             context.toast("Anime not found")
                         }
-                    } catch (_: Exception) {
-                        context.toast("Anime not found")
                     }
                 }
             },
@@ -2119,30 +2169,46 @@ fun MainScreen(
             },
             onNavigateBack = onClearAnimeStack,
             onRecommendationClick = { rec ->
-                scope.launch {
-                    val detailedData = viewModel.fetchDetailedAnimeData(rec.id)
-                    if (detailedData != null) {
-                        val newAnime = ExploreAnime(
-                            id = detailedData.id,
-                            title = detailedData.title,
-                            titleEnglish = detailedData.titleEnglish,
-                            cover = detailedData.cover,
-                            banner = detailedData.banner,
-                            episodes = detailedData.episodes,
-                            latestEpisode = detailedData.latestEpisode,
-                            averageScore = detailedData.averageScore,
-                            genres = detailedData.genres,
-                            year = detailedData.year,
-                            format = detailedData.format
+                val mangaFormats = listOf("MANGA", "NOVEL", "ONE_SHOT", "DOUJIN", "MANHWA", "MANHUA")
+                if (rec.format == null || rec.format in mangaFormats) {
+                    overlayState = OverlayState.None
+                    openMangaDetail(
+                        com.blissless.tensei.data.models.MangaMedia(
+                            id = rec.id,
+                            title = rec.title,
+                            cover = rec.cover,
+                            totalChapters = rec.episodes ?: 0,
+                            averageScore = rec.averageScore,
+                            format = rec.format
                         )
-                        overlayState = OverlayState.ExploreAnimeDialog(
-                            anime = newAnime,
-                            firstAnime = newAnime,
-                            isFirstOpen = false,
-                            previousStates = allRecommendationsDialog.previousStates + allRecommendationsDialog
-                        )
-                    } else {
-                        context.toast("Anime not found")
+                    )
+                    mangaAutoShowChapters = false
+                } else {
+                    scope.launch {
+                        val detailedData = viewModel.fetchDetailedAnimeData(rec.id)
+                        if (detailedData != null) {
+                            val newAnime = ExploreAnime(
+                                id = detailedData.id,
+                                title = detailedData.title,
+                                titleEnglish = detailedData.titleEnglish,
+                                cover = detailedData.cover,
+                                banner = detailedData.banner,
+                                episodes = detailedData.episodes,
+                                latestEpisode = detailedData.latestEpisode,
+                                averageScore = detailedData.averageScore,
+                                genres = detailedData.genres,
+                                year = detailedData.year,
+                                format = detailedData.format
+                            )
+                            overlayState = OverlayState.ExploreAnimeDialog(
+                                anime = newAnime,
+                                firstAnime = newAnime,
+                                isFirstOpen = false,
+                                previousStates = allRecommendationsDialog.previousStates + allRecommendationsDialog
+                            )
+                        } else {
+                            context.toast("Anime not found")
+                        }
                     }
                 }
             }
@@ -2435,7 +2501,8 @@ fun MainScreen(
                             onNoExtension = {
                                 showSettings = true
                                 pendingSettingsGroup = if (extUiState.extensions.isEmpty()) "extensions" else "stream"
-                            }
+                            },
+                            onAnimeDetailMangaClick = openMangaDetail
                         )
                         1 -> ExploreScreen(
                             viewModel = viewModel,
@@ -2509,7 +2576,8 @@ fun MainScreen(
                             onMangaNoExtension = {
                                 showSettings = true
                                 pendingSettingsGroup = "reader"
-                            }
+                            },
+                            onAnimeDetailMangaClick = openMangaDetail
                         )
                         2 -> HomeScreen(
                             viewModel = viewModel,
@@ -2610,6 +2678,7 @@ fun MainScreen(
                                 android.util.Log.d("MangaNav", "HOME onMangaDismiss: clearing continue-reading state for id=${manga.id} title='${manga.title}'")
                                 viewModel.dismissMangaContinueReading(manga.id)
                             },
+                            onAnimeDetailMangaClick = openMangaDetail,
                             playbackDurations = playbackDurations,
                             startedAt = startedAt
                         )
@@ -2686,7 +2755,8 @@ fun MainScreen(
                                     averageScore = manga.averageScore
                                 )
                             )
-                            }
+                            },
+                            onAnimeDetailMangaClick = openMangaDetail
                         )
                     }
 
@@ -2806,8 +2876,8 @@ fun MainScreen(
                                 mangaReaderChapterIndex = -1
                                 showMangaReader = true
                             }
-                        }
-                    )
+                            },
+                        )
                 }
 
                 com.blissless.tensei.ui.components.BottomNavigationBar(

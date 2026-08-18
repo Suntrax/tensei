@@ -170,6 +170,9 @@ fun MangaReaderScreen(
     // True when the current chapter was opened via the next-chapter button — suppresses restoring
     // the saved (stale) scroll position so the new chapter always opens at the top.
     var suppressResumeRestore by remember { mutableStateOf(false) }
+    // Pending resume progress for horizontal reader modes: set in selectChapter() when resuming,
+    // consumed after images load to compute the correct initial page index.
+    var pendingResumeProgress by remember { mutableFloatStateOf(-1f) }
     // True after a chapter is tapped in the chapter list, while its images are still loading.
     // The list stays open with a loading overlay on top, then dismisses once the images arrive.
     var pendingChapterLoad by remember { mutableStateOf(false) }
@@ -268,6 +271,10 @@ fun MangaReaderScreen(
             displayedImages = chapterImages
             displayedImagesError = chapterImagesError
             displayedChapterIndex = currentChapterIndex
+            if (pendingResumeProgress < 0f && manga.scrollProgress > 0f && currentChapterIndex == manga.progress) {
+                pendingResumeProgress = manga.scrollProgress
+                android.util.Log.d("MangaReader", "Initial entry resume: set pendingResumeProgress=${manga.scrollProgress}")
+            }
         }
     }
 
@@ -402,26 +409,21 @@ fun MangaReaderScreen(
             return
         }
         android.util.Log.d("MangaReader", "selectChapter: opening chapterId='${chapter.chapterId}' title='${chapter.title}'")
-        // Opening a chapter must NOT create a track or mark it read — otherwise merely opening
-        // a chapter (then backing out) would add the manga to tracking / "Currently Reading".
-        // A local track is only created once the user actually reads (first scroll/page past 0%,
-        // see onMangaScrollProgress), and the chapter is marked read only past the sync threshold.
-        // Opening the Continue-Reading resume chapter (index == progress) preserves its saved
-        // scroll position so the resume flow restores where the user left off.
         val resuming = !startAtTop && index == manga.progress
         currentChapterIndex = index
         currentPageIndex = 0
         scrollProgress = 0f
         suppressResumeRestore = !resuming
         showNextChapterButton = false
-        // Opening a chapter that isn't the resume target clears the saved scroll position, so
-        // backing out of a merely-opened chapter never leaves a stale Continue Reading card
-        // (the page count is set on load, but with scrollProgress cleared the card won't show).
+        if (resuming && manga.scrollProgress > 0f) {
+            pendingResumeProgress = manga.scrollProgress
+            android.util.Log.d("MangaReader", "selectChapter: resuming with scrollProgress=${manga.scrollProgress}")
+        } else {
+            pendingResumeProgress = -1f
+        }
         if (!resuming) {
             viewModel.updateMangaScrollProgress(manga.id, 0f)
         }
-        // Keep the chapter list open while the chapter's images load, with a loading overlay on
-        // top. The list is dismissed once the images arrive (or fail) — see the effect below.
         pendingChapterLoad = true
         pendingChapterIndex = index
         showControls = false
@@ -598,6 +600,11 @@ fun MangaReaderScreen(
                         chapterImagesError = displayedImagesError,
                         mode = readerMode,
                         initialPage = currentPageIndex.coerceIn(0, (displayedImages?.size ?: 1) - 1),
+                        restorePage = if (pendingResumeProgress >= 0f && displayedImages != null && displayedImages!!.size > 1) {
+                            val page = (pendingResumeProgress * (displayedImages!!.size - 1)).toInt().coerceIn(0, displayedImages!!.size - 1)
+                            pendingResumeProgress = -1f
+                            page
+                        } else -1,
                         onToggleControls = { showControls = !showControls },
                         onPrevChapter = { if (!isFirstChapter) selectChapter(currentChapterIndex - 1) },
                         onNextChapter = { if (!isLastChapter) selectChapter(currentChapterIndex + 1) },
@@ -1184,6 +1191,7 @@ private fun PagedMangaReader(
     chapterImagesError: String?,
     mode: ReaderMode,
     initialPage: Int,
+    restorePage: Int = -1,
     onToggleControls: () -> Unit,
     onPrevChapter: () -> Unit,
     onNextChapter: () -> Unit,
@@ -1215,6 +1223,14 @@ private fun PagedMangaReader(
         pageCount = { chapterImages.size }
     )
     val scope = rememberCoroutineScope()
+
+    // Restore to a specific page after initial composition (for "Continue Reading" in horizontal modes).
+    // The pager is already created by the time this fires, so scrollToPage jumps to the correct position.
+    LaunchedEffect(restorePage, chapterImages.size) {
+        if (restorePage in 0 until chapterImages.size && restorePage != pagerState.currentPage) {
+            pagerState.scrollToPage(restorePage)
+        }
+    }
 
     // Report the current page upward so the reader can show a page indicator
     // and feed scroll progress back to the ViewModel for AniList sync. Fires

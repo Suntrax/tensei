@@ -38,12 +38,20 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.tween
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -319,7 +327,7 @@ fun UserProfileScreen(
                         }
                     },
                     onRemoveFavorite = {
-                        viewModel.toggleAniListFavorite(it.malId)
+                        viewModel.toggleAniListFavorite(it.id)
                     },
                     onMangaClick = { manga ->
                         onMangaClick(
@@ -805,6 +813,26 @@ private fun FavoriteItem(
     onClick: () -> Unit,
     onRemove: (() -> Unit)? = null
 ) {
+    var showRemoveDialog by remember { mutableStateOf(false) }
+
+    if (showRemoveDialog && onRemove != null) {
+        AlertDialog(
+            onDismissRequest = { showRemoveDialog = false },
+            title = { Text("Remove Favorite") },
+            text = { Text("Remove ${anime.title} from your favorites?") },
+            confirmButton = {
+                TextButton(onClick = { showRemoveDialog = false; onRemove() }) {
+                    Text("Remove")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRemoveDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick),
         shape = RoundedCornerShape(12.dp),
@@ -861,7 +889,7 @@ private fun FavoriteItem(
                 }
             }
             if (onRemove != null) {
-                IconButton(onClick = onRemove) {
+                IconButton(onClick = { showRemoveDialog = true }) {
                     Icon(
                         Icons.Filled.Favorite, "Remove from favorites",
                         tint = Color(0xFFFF1744), modifier = Modifier.size(24.dp)
@@ -894,31 +922,66 @@ private fun HistoryContent(
             }
         }
     } else {
+        var animeExpanded by remember { mutableStateOf(true) }
+        var mangaExpanded by remember { mutableStateOf(true) }
+
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(vertical = 8.dp)
         ) {
             if (history.isNotEmpty()) {
                 item {
-                    Text("Anime", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 4.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { animeExpanded = !animeExpanded }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Anime", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Icon(
+                            imageVector = if (animeExpanded) Icons.Default.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = if (animeExpanded) "Collapse" else "Expand",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
-                itemsIndexed(history) { index, entry ->
-                    HistoryItem(
-                        entry = entry,
-                        preferEnglishTitles = preferEnglishTitles,
-                        onClick = { onAnimeClick(entry) },
-                        status = statuses.getOrNull(index),
-                        progress = progressList.getOrNull(index)
-                    )
+                if (animeExpanded) {
+                    itemsIndexed(history) { index, entry ->
+                        HistoryItem(
+                            entry = entry,
+                            preferEnglishTitles = preferEnglishTitles,
+                            onClick = { onAnimeClick(entry) },
+                            status = statuses.getOrNull(index),
+                            progress = progressList.getOrNull(index)
+                        )
+                    }
                 }
             }
             if (mangaHistory.isNotEmpty()) {
                 item {
                     Spacer(Modifier.height(8.dp))
-                    Text("Manga", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 4.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { mangaExpanded = !mangaExpanded }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Manga", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Icon(
+                            imageVector = if (mangaExpanded) Icons.Default.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = if (mangaExpanded) "Collapse" else "Expand",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
-                itemsIndexed(mangaHistory) { _, node ->
-                    MangaActivityItem(node = node, preferEnglishTitles = preferEnglishTitles, onClick = { onMangaClick(node) })
+                if (mangaExpanded) {
+                    itemsIndexed(mangaHistory) { _, node ->
+                        MangaActivityItem(node = node, preferEnglishTitles = preferEnglishTitles, onClick = { onMangaClick(node) })
+                    }
                 }
             }
         }
@@ -989,6 +1052,31 @@ private fun MangaFavoriteItem(
     onClick: () -> Unit = {},
     onRemove: (() -> Unit)? = null
 ) {
+    var showRemoveDialog by remember { mutableStateOf(false) }
+
+    if (showRemoveDialog && onRemove != null) {
+        val title = if (preferEnglishTitles) {
+            manga.title?.english ?: manga.title?.romaji ?: "Unknown"
+        } else {
+            manga.title?.romaji ?: manga.title?.english ?: "Unknown"
+        }
+        AlertDialog(
+            onDismissRequest = { showRemoveDialog = false },
+            title = { Text("Remove Favorite") },
+            text = { Text("Remove $title from your favorites?") },
+            confirmButton = {
+                TextButton(onClick = { showRemoveDialog = false; onRemove() }) {
+                    Text("Remove")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRemoveDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     val displayTitle = if (preferEnglishTitles) {
         manga.title?.english ?: manga.title?.romaji ?: "Unknown"
     } else {
@@ -1048,7 +1136,7 @@ private fun MangaFavoriteItem(
                 }
             }
             if (onRemove != null) {
-                IconButton(onClick = onRemove) {
+                IconButton(onClick = { showRemoveDialog = true }) {
                     Icon(
                         Icons.Filled.Favorite, "Remove from favorites",
                         tint = Color(0xFFFF1744), modifier = Modifier.size(24.dp)

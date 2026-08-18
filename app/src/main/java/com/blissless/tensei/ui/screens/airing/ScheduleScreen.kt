@@ -2,6 +2,7 @@ package com.blissless.tensei.ui.screens.airing
 
 import android.annotation.SuppressLint
 import android.widget.Toast
+import com.blissless.tensei.data.models.MangaMedia
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
@@ -128,7 +129,8 @@ fun ScheduleScreen(
     onViewAllStaff: (Int, String) -> Unit = { _, _ -> },
     onViewAllRelations: (Int, String) -> Unit = { _, _ -> },
     onViewAllRecommendations: (Int, String) -> Unit = { _, _ -> },
-    onNoExtension: () -> Unit = {}
+    onNoExtension: () -> Unit = {},
+    onAnimeDetailMangaClick: (MangaMedia) -> Unit = {}
 ) {
     val airingList by viewModel.airingAnimeList.collectAsState()
     val scheduleByDay by viewModel.airingSchedule.collectAsState()
@@ -495,7 +497,56 @@ fun ScheduleScreen(
             onUpdateStatus = { if (it != null) viewModel.addExploreAnimeToList(selectedAnime!!, it) },
             onRemove = { viewModel.removeAnimeFromList(selectedAnime!!.id) },
             onRelationClick = { relation ->
-                try { scope.launch { try { delay(100.milliseconds); val d = viewModel.fetchDetailedAnimeData(relation.id); if (d != null) selectedAnime = ExploreAnime(id = relation.id, title = d.title, titleEnglish = d.titleEnglish, cover = d.cover, banner = d.banner, episodes = d.episodes, latestEpisode = d.latestEpisode, averageScore = d.averageScore, genres = d.genres, year = d.year, format = d.format) else context.toast("Anime not found - ID: ${relation.id}") } catch (e: Exception) { context.toast("Error: ${e.message}") } } } catch (e: Exception) { context.toast("Error: ${e.message}") }
+                val mangaFormats = listOf("MANGA", "NOVEL", "ONE_SHOT", "DOUJIN", "MANHWA", "MANHUA")
+                if (relation.format == null || relation.format in mangaFormats) {
+                    onAnimeDetailMangaClick(
+                        MangaMedia(
+                            id = relation.id,
+                            title = relation.title,
+                            cover = relation.cover,
+                            totalChapters = 0,
+                            averageScore = relation.averageScore,
+                            format = relation.format
+                        )
+                    )
+                } else {
+                    try {
+                        scope.launch {
+                            try {
+                                delay(100.milliseconds)
+                                val d = viewModel.fetchDetailedAnimeData(relation.id)
+                                if (d != null) selectedAnime = ExploreAnime(id = relation.id, title = d.title, titleEnglish = d.titleEnglish, cover = d.cover, banner = d.banner, episodes = d.episodes, latestEpisode = d.latestEpisode, averageScore = d.averageScore, genres = d.genres, year = d.year, format = d.format)
+                                else context.toast("Anime not found - ID: ${relation.id}")
+                            } catch (e: Exception) { context.toast("Error: ${e.message}") }
+                        }
+                    } catch (e: Exception) { context.toast("Error: ${e.message}") }
+                }
+            },
+            onRecommendationClick = { rec ->
+                val mangaFormats = listOf("MANGA", "NOVEL", "ONE_SHOT", "DOUJIN", "MANHWA", "MANHUA")
+                if (rec.format == null || rec.format in mangaFormats) {
+                    onAnimeDetailMangaClick(
+                        MangaMedia(
+                            id = rec.id,
+                            title = rec.title,
+                            cover = rec.cover,
+                            totalChapters = rec.episodes ?: 0,
+                            averageScore = rec.averageScore,
+                            format = rec.format
+                        )
+                    )
+                } else {
+                    try {
+                        scope.launch {
+                            try {
+                                delay(100.milliseconds)
+                                val d = viewModel.fetchDetailedAnimeData(rec.id)
+                                if (d != null) selectedAnime = ExploreAnime(id = rec.id, title = d.title, titleEnglish = d.titleEnglish, cover = d.cover, banner = d.banner, episodes = d.episodes, latestEpisode = d.latestEpisode, averageScore = d.averageScore, genres = d.genres, year = d.year, format = d.format)
+                                else context.toast("Anime not found - ID: ${rec.id}")
+                            } catch (e: Exception) { context.toast("Error: ${e.message}") }
+                        }
+                    } catch (e: Exception) { context.toast("Error: ${e.message}") }
+                }
             },
             onCharacterClick = onCharacterClick, onStaffClick = onStaffClick,
             onViewAllCast = { onViewAllCast(selectedAnime!!.id, selectedAnime!!.title) },

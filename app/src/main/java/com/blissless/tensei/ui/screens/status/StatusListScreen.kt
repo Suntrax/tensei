@@ -163,9 +163,23 @@ fun StatusListScreen(
         }
     }
 
-    val displayMangaList = remember(mangaList, searchQuery) {
-        if (searchQuery.isBlank()) mangaList
+    val displayMangaList = remember(mangaList, searchQuery, selectedSort) {
+        val filtered = if (searchQuery.isBlank()) mangaList
         else mangaList.filter { it.title.contains(searchQuery, ignoreCase = true) }
+        when (selectedSort) {
+            SortOption.ALPHABETICAL_A_Z -> filtered.sortedBy { it.title.lowercase() }
+            SortOption.ALPHABETICAL_Z_A -> filtered.sortedByDescending { it.title.lowercase() }
+            SortOption.YEAR_NEWEST -> filtered.sortedByDescending { it.year ?: Int.MIN_VALUE }
+            SortOption.YEAR_OLDEST -> filtered.sortedBy { it.year ?: Int.MAX_VALUE }
+            SortOption.EPISODES_MOST -> filtered.sortedByDescending {
+                if (it.totalChapters > 0) it.totalChapters else it.latestChapter?.toInt() ?: 0
+            }
+            SortOption.EPISODES_LEAST -> filtered.sortedBy {
+                if (it.totalChapters > 0) it.totalChapters else it.latestChapter?.toInt() ?: 0
+            }
+            SortOption.SCORE_HIGH -> filtered.sortedByDescending { it.averageScore ?: Int.MIN_VALUE }
+            SortOption.SCORE_LOW -> filtered.sortedBy { it.averageScore ?: Int.MAX_VALUE }
+        }
     }
 
     val gridState = rememberLazyGridState()
@@ -467,6 +481,13 @@ fun StatusListScreen(
                     HorizontalDivider()
                     SortOption.entries.forEach { option ->
                         val isSelected = option == selectedSort
+                        val displayLabel = if (isManga) {
+                            when (option) {
+                                SortOption.EPISODES_MOST -> "Chapters \u2193"
+                                SortOption.EPISODES_LEAST -> "Chapters \u2191"
+                                else -> option.label
+                            }
+                        } else option.label
                         Surface(
                             onClick = { focusManager.clearFocus(); selectedSort = option; showSortSheet = false; scrollToTop() },
                             color = if (isSelected) iconTint.copy(alpha = 0.12f) else Color.Transparent,
@@ -492,7 +513,7 @@ fun StatusListScreen(
                                     modifier = Modifier.size(22.dp)
                                 )
                                 Text(
-                                    option.label,
+                                    displayLabel,
                                     style = MaterialTheme.typography.bodyLarge,
                                     fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
                                     modifier = Modifier.weight(1f)
