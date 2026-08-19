@@ -24,6 +24,24 @@ data class Repo(
     }
 }
 
+enum class ExtensionType(val label: String) {
+    STREAM("Stream"),
+    TORRENT("Torrent"),
+    MANGA("Manga"),
+    ANIME("Anime"),
+    UNKNOWN("");
+
+    companion object {
+        fun fromString(s: String?): ExtensionType = when (s?.lowercase()) {
+            "stream" -> STREAM
+            "torrent" -> TORRENT
+            "manga" -> MANGA
+            "anime" -> ANIME
+            else -> UNKNOWN
+        }
+    }
+}
+
 data class RepoExtension(
     val name: String,
     val packageName: String,
@@ -33,20 +51,22 @@ data class RepoExtension(
     val version: String,
     val code: Long,
     val nsfw: Boolean,
-    val sources: List<RepoSources>
+    val sources: List<RepoSources>,
+    val type: ExtensionType = ExtensionType.UNKNOWN
 ) {
     companion object {
         fun fromJson(json: JsonObject): RepoExtension {
             return RepoExtension(
                 name = json["name"]?.jsonPrimitive?.content ?: "",
                 packageName = (json["pkg"] ?: json["packageName"])?.jsonPrimitive?.content ?: "",
-                apk = json["apk"]?.jsonPrimitive?.content ?: "",
+                apk = json["apk"]?.jsonPrimitive?.content ?: json["url"]?.jsonPrimitive?.content ?: "",
                 icon = (json["icon"] ?: json["icons"])?.jsonPrimitive?.content ?: "",
                 lang = json["lang"]?.jsonPrimitive?.content ?: "en",
                 version = json["version"]?.jsonPrimitive?.content ?: "",
                 code = (json["code"] as? JsonPrimitive)?.content?.toLongOrNull() ?: 0L,
                 nsfw = (json["nsfw"] as? JsonPrimitive)?.content?.toBooleanStrictOrNull() ?: false,
-                sources = (json["sources"] as? JsonArray)?.map { it.jsonObject.let(RepoSources::fromJson) } ?: emptyList()
+                sources = (json["sources"] as? JsonArray)?.map { it.jsonObject.let(RepoSources::fromJson) } ?: emptyList(),
+                type = ExtensionType.fromString(json["type"]?.jsonPrimitive?.content)
             )
         }
     }
@@ -120,5 +140,3 @@ private fun extractRepoName(repoUrl: String): String {
         repoUrl
     }
 }
-
-

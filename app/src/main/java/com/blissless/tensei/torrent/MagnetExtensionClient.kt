@@ -41,19 +41,49 @@ class MagnetExtensionClient(private val context: Context) {
     }
 
     fun detectExtensions(): List<DetectedMagnetExtension> {
+        val results = mutableListOf<DetectedMagnetExtension>()
+        val seenPackages = mutableSetOf<String>()
+        val pm = context.packageManager
+
+        // 1) Package-name-based detection for *.anime.torrent
+        val installedPkgs = try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                pm.getInstalledPackages(android.content.pm.PackageManager.PackageInfoFlags.of(
+                    (android.content.pm.PackageManager.GET_META_DATA or android.content.pm.PackageManager.GET_CONFIGURATIONS).toLong()
+                ))
+            } else {
+                @Suppress("DEPRECATION")
+                pm.getInstalledPackages(android.content.pm.PackageManager.GET_META_DATA or android.content.pm.PackageManager.GET_CONFIGURATIONS)
+            }
+        } catch (_: Exception) { emptyList() }
+        for (pkg in installedPkgs) {
+            val pkgName = pkg.packageName
+            if (com.blissless.tensei.extensions.ExtensionDetector.isBlisslessTorrentExtension(pkgName)) {
+                seenPackages.add(pkgName)
+                val name = com.blissless.tensei.extensions.ExtensionDetector.extensionDisplayName(pkgName)
+                results.add(DetectedMagnetExtension(pkgName, name, pkgName))
+            }
+        }
+
+        // 2) Beacon fallback (backward compat)
         val beaconIntent = Intent(BEACON_ACTION)
         val resolveInfoList = context.packageManager.queryBroadcastReceivers(beaconIntent, 0)
         Log.d(TAG, "detectExtensions: found ${resolveInfoList.size} receivers for action '$BEACON_ACTION'")
-        val result = resolveInfoList.mapNotNull { info ->
+        for (info in resolveInfoList) {
             val packageName = info.activityInfo.packageName
-            val label = info.loadLabel(context.packageManager).toString()
+            if (packageName in seenPackages) continue
+            val label = info.loadLabel(pm).toString()
             Log.d(TAG, "detectExtensions: candidate pkg=$packageName label='$label'")
             if (label.startsWith("Tensei: ", ignoreCase = true) || label.startsWith("Anime: ", ignoreCase = true)) {
-                DetectedMagnetExtension(packageName, label, "$packageName$PROVIDER_SUFFIX")
-            } else null
+                val authority = if (com.blissless.tensei.extensions.ExtensionDetector.isBlisslessTorrentExtension(packageName)
+                    || com.blissless.tensei.extensions.ExtensionDetector.isBlisslessStreamExtension(packageName)
+                    || com.blissless.tensei.extensions.ExtensionDetector.isBlisslessMangaExtension(packageName)
+                ) packageName else "$packageName$PROVIDER_SUFFIX"
+                results.add(DetectedMagnetExtension(packageName, label, authority))
+            }
         }
-        Log.i(TAG, "detectExtensions: ${result.size} magnet extension(s) accepted: ${result.map { it.authority }}")
-        return result
+        Log.i(TAG, "detectExtensions: ${results.size} magnet extension(s) accepted: ${results.map { it.authority }}")
+        return results
     }
 
     fun fetchMagnets(authority: String, anilistId: Int, animeName: String, animeRomaji: String = "", category: String = ""): MagnetData? {

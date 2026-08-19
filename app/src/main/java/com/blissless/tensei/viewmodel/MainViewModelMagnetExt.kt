@@ -44,6 +44,15 @@ fun MainViewModel.loadAvailableMagnetExtensions() {
     }
 }
 
+fun MainViewModel.loadAvailableStreamExtensions() {
+    val detector = com.blissless.tensei.extensions.ExtensionDetector(context)
+    viewModelScope.launch(Dispatchers.IO) {
+        val detected = detector.detectStreamExtensions()
+        Log.d(MainViewModel.TAG, "loadAvailableStreamExtensions: found ${detected.size} extensions: $detected")
+        _availableStreamExtensions.value = detected
+    }
+}
+
 internal fun MainViewModel.parseTitleForSearch(title: String): String {
     var cleaned = title
     cleaned = cleaned.replace(Regex("\\([^)]*\\)"), "").trim()

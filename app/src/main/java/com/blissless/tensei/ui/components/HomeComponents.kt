@@ -495,7 +495,7 @@ fun HomeAnimeCard(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .fillMaxWidth()
-                            .height(4.dp)
+                            .height(2.dp)
                             .background(Color.Black.copy(alpha = 0.3f))
                     ) {
                         Box(

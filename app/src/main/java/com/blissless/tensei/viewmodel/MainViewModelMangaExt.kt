@@ -36,7 +36,18 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
 data class InstalledExtension(val label: String, val packageName: String) {
-    val authority: String get() = "$packageName.provider"
+    val authority: String get() {
+        if (com.blissless.tensei.extensions.ExtensionDetector.isBlisslessMangaExtension(packageName)) {
+            return packageName.removeSuffix(".manga") + ".provider"
+        }
+        if (com.blissless.tensei.extensions.ExtensionDetector.isBlisslessStreamExtension(packageName)) {
+            return packageName.removeSuffix(".anime.stream") + ".provider"
+        }
+        if (com.blissless.tensei.extensions.ExtensionDetector.isBlisslessTorrentExtension(packageName)) {
+            return packageName.removeSuffix(".anime.torrent") + ".provider"
+        }
+        return "$packageName.provider"
+    }
 }
 
 data class ExtensionChapter(
@@ -77,26 +88,53 @@ private val _selectedExtensionAuthority = MutableStateFlow<String?>(null)
 val MainViewModel.selectedExtensionAuthority: StateFlow<String?> get() = _selectedExtensionAuthority.asStateFlow()
 
 /**
- * Discover installed manga extensions. Accepts labels starting with either "Oni: "
- * (backward compat with existing extension APKs) or "Tensei: " (forward-looking).
+ * Discover installed manga extensions. Detects by package name pattern
+ * (com.blissless.*.manga) and falls back to beacon labels for backward compat.
  * Safe to call repeatedly.
  */
 fun MainViewModel.discoverExtensions() {
-    val beaconIntent = Intent("com.blissless.mangaclient.EXTENSION_BEACON")
-    val resolveInfoList = context.packageManager.queryBroadcastReceivers(beaconIntent, 0)
-    val extensions = resolveInfoList
-        .filter { info ->
-            val label = info.loadLabel(context.packageManager).toString()
-            label.startsWith("Oni: ", ignoreCase = true) ||
-                label.startsWith("Tensei: ", ignoreCase = true)
+    val pm = context.packageManager
+    val extensions = mutableListOf<InstalledExtension>()
+    val seenPackages = mutableSetOf<String>()
+
+    // 1) Package-name-based detection for *.manga
+    val installedPkgs = try {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            pm.getInstalledPackages(android.content.pm.PackageManager.PackageInfoFlags.of(
+                (android.content.pm.PackageManager.GET_META_DATA or android.content.pm.PackageManager.GET_CONFIGURATIONS).toLong()
+            ))
+        } else {
+            @Suppress("DEPRECATION")
+            pm.getInstalledPackages(android.content.pm.PackageManager.GET_META_DATA or android.content.pm.PackageManager.GET_CONFIGURATIONS)
         }
-        .map { info ->
-            InstalledExtension(
-                label = info.loadLabel(context.packageManager).toString(),
-                packageName = info.activityInfo.packageName
+    } catch (_: Exception) { emptyList() }
+    for (pkg in installedPkgs) {
+        val pkgName = pkg.packageName
+        if (com.blissless.tensei.extensions.ExtensionDetector.isBlisslessMangaExtension(pkgName)) {
+            seenPackages.add(pkgName)
+            extensions.add(
+                InstalledExtension(
+                    label = com.blissless.tensei.extensions.ExtensionDetector.extensionDisplayName(pkgName),
+                    packageName = pkgName
+                )
             )
         }
-    _installedExtensions.value = extensions
+    }
+
+    // 2) Beacon fallback (backward compat)
+    val beaconIntent = Intent("com.blissless.mangaclient.EXTENSION_BEACON")
+    val resolveInfoList = context.packageManager.queryBroadcastReceivers(beaconIntent, 0)
+    for (info in resolveInfoList) {
+        val pkgName = info.activityInfo.packageName
+        if (pkgName in seenPackages) continue
+        val label = info.loadLabel(pm).toString()
+        if (label.startsWith("Oni: ", ignoreCase = true) ||
+            label.startsWith("Tensei: ", ignoreCase = true)) {
+            extensions.add(InstalledExtension(label = label, packageName = pkgName))
+        }
+    }
+
+    _installedExtensions.value = extensions.sortedBy { it.label }
 }
 
 /**
@@ -111,8 +149,22 @@ fun MainViewModel.selectExtension(authority: String?) {
 private fun MainViewModel.restoreExtensionSelection() {
     val saved = userPreferences.getSelectedMangaExtensionAuthority()
     if (saved != null) {
-        _selectedExtensionAuthority.value = saved
+        // Migrate stale authorities from old package names (e.g. "com.blissless.x.manga.provider" -> "com.blissless.x.provider")
+        val migrated = migratedAuthority(saved)
+        if (migrated != saved) {
+            userPreferences.setSelectedMangaExtensionAuthority(migrated)
+        }
+        _selectedExtensionAuthority.value = migrated
     }
+}
+
+private fun migratedAuthority(saved: String): String {
+    if (!saved.endsWith(".provider")) return saved
+    val withoutProvider = saved.removeSuffix(".provider")
+    if (withoutProvider.endsWith(".manga")) return withoutProvider.removeSuffix(".manga") + ".provider"
+    if (withoutProvider.endsWith(".anime.stream")) return withoutProvider.removeSuffix(".anime.stream") + ".provider"
+    if (withoutProvider.endsWith(".anime.torrent")) return withoutProvider.removeSuffix(".anime.torrent") + ".provider"
+    return saved
 }
 
 private suspend fun MainViewModel.fetchExtensionChapterList(mangaTitle: String): Pair<List<ExtensionChapter>?, Int>? {
@@ -125,30 +177,41 @@ private suspend fun MainViewModel.fetchExtensionChapterList(mangaTitle: String):
                 .appendQueryParameter("manga", mangaTitle)
                 .appendQueryParameter("anime", mangaTitle)
                 .build()
-            android.util.Log.d("MangaExt", "fetchExtensionChapterList: title='$mangaTitle' authority='$authority'")
+            android.util.Log.d("MangaDebug", "=== CHAPTER FETCH START ===")
+            android.util.Log.d("MangaDebug", "Authority: '$authority'")
+            android.util.Log.d("MangaDebug", "URI: $uri")
+            android.util.Log.d("MangaDebug", "Title: '$mangaTitle'")
             val cursor = context.contentResolver.query(uri, null, null, null, null)
             if (cursor == null) {
-                android.util.Log.w("MangaExt", "Extension returned null cursor")
+                android.util.Log.e("MangaDebug", "RESULT: cursor is NULL — content provider not found at authority='$authority'")
+                android.util.Log.e("MangaDebug", "Check manifest: android:authorities should be '$authority'")
                 return@withContext null
             }
             cursor.use { c ->
+                android.util.Log.d("MangaDebug", "Cursor column count: ${c.columnCount}, column names: ${c.columnNames?.joinToString()}")
                 if (!c.moveToFirst()) {
-                    android.util.Log.w("MangaExt", "Extension returned no rows")
+                    android.util.Log.e("MangaDebug", "RESULT: cursor has 0 rows")
                     return@withContext null
                 }
                 val col = c.getColumnIndex("data")
                 if (col < 0) {
-                    android.util.Log.w("MangaExt", "Missing 'data' column")
+                    android.util.Log.e("MangaDebug", "RESULT: 'data' column not found. Available columns: ${c.columnNames?.joinToString()}")
                     return@withContext null
                 }
                 val jsonData = c.getString(col)
+                android.util.Log.d("MangaDebug", "Raw JSON length: ${jsonData.length} chars")
+                android.util.Log.d("MangaDebug", "Raw JSON (first 500): ${jsonData.take(500)}")
                 val json = JSONObject(jsonData)
                 if (json.has("error")) {
-                    android.util.Log.w("MangaExt", "Extension error: ${json.getString("error")}")
+                    android.util.Log.e("MangaDebug", "Extension error: ${json.getString("error")}")
                     return@withContext null
                 }
+                android.util.Log.d("MangaDebug", "JSON keys: ${json.keys().asSequence().toList()}")
                 val totalChapters = json.optInt("totalChapters", 0)
                 val chaptersArr = json.optJSONArray("chapters")
+                android.util.Log.d("MangaDebug", "totalChapters from JSON: $totalChapters")
+                android.util.Log.d("MangaDebug", "chapters array is null: ${chaptersArr == null}")
+                android.util.Log.d("MangaDebug", "chapters array length: ${chaptersArr?.length() ?: 0}")
                 val chapters = mutableListOf<ExtensionChapter>()
                 if (chaptersArr != null) {
                     for (i in 0 until chaptersArr.length()) {
@@ -164,11 +227,16 @@ private suspend fun MainViewModel.fetchExtensionChapterList(mangaTitle: String):
                         )
                     }
                 }
-                android.util.Log.d("MangaExt", "Extension returned ${chapters.size} chapters (totalChapters=$totalChapters) for '$mangaTitle'")
+                android.util.Log.d("MangaDebug", "Parsed chapters count: ${chapters.size}")
+                if (chapters.isNotEmpty()) {
+                    android.util.Log.d("MangaDebug", "First chapter: number='${chapters.first().number}' title='${chapters.first().title}'")
+                    android.util.Log.d("MangaDebug", "Last chapter: number='${chapters.last().number}' title='${chapters.last().title}'")
+                }
+                android.util.Log.d("MangaDebug", "=== CHAPTER FETCH END ===")
                 Pair(chapters, totalChapters)
             }
         } catch (e: Exception) {
-            android.util.Log.w("MangaExt", "fetchExtensionChapterList failed for '$mangaTitle': ${e.message}")
+            android.util.Log.e("MangaDebug", "EXCEPTION: ${e.javaClass.simpleName}: ${e.message}")
             null
         }
     }
@@ -697,7 +765,7 @@ suspend fun MainViewModel.loadMangaChapters(mangaId: Int, title: String) {
     }
 
     if (extChapters != null && extChapters.isNotEmpty()) {
-        android.util.Log.d("MangaChapters", "loadMangaChapters: using extension chapters, matchedTitle='$matchedTitle'")
+        android.util.Log.d("MangaDebug", "PATH: extension chapters (count=${extChapters.size}, totalChapters=$extTotalChapters)")
         _mangaExtensionTitle.value = matchedTitle
         // Build ChapterInfo list with oni's URL scheme: anilist_${mediaId}_ch_${number}
         // Sort by extension's index (oldest-first, chapter 1 at index 0)
@@ -768,7 +836,7 @@ suspend fun MainViewModel.loadMangaChapters(mangaId: Int, title: String) {
         }
     }
 
-    android.util.Log.d("MangaChapters", "loadMangaChapters: final chapters.size=${chapters.size}")
+    android.util.Log.d("MangaDebug", "loadMangaChapters: final chapters.size=${chapters.size}")
     _mangaChapters.value = chapters
 
     // Display denominator for progress (e.g. 149/354). Prefer the extension's CURRENT release

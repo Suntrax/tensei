@@ -40,7 +40,8 @@ data class ExtensionsUiState(
     val error: String? = null,
     val repos: List<RepoState> = emptyList(),
     val refreshMessage: String? = null,
-    val updatablePackageNames: Set<String> = emptySet()
+    val updatablePackageNames: Set<String> = emptySet(),
+    val updatableNames: Set<String> = emptySet()
 )
 
 data class RepoState(
@@ -174,7 +175,11 @@ class ExtensionsViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             try {
                 _toastMessage.tryEmit("Downloading ${repoExtension.name}..." to Toast.LENGTH_SHORT)
-                val apkFile = downloadApk(repoExtension.apk, repoExtension.packageName)
+                val previousCount = _uiState.value.extensions.size
+                val pkgName = repoExtension.packageName.ifBlank {
+                    repoExtension.name.hashCode().toString(16)
+                }
+                val apkFile = downloadApk(repoExtension.apk, pkgName)
                 val uri = FileProvider.getUriForFile(
                     ctx,
                     "${ctx.packageName}.fileprovider",
@@ -187,7 +192,11 @@ class ExtensionsViewModel(application: Application) : AndroidViewModel(applicati
                     putExtra(Intent.EXTRA_RETURN_RESULT, true)
                 }
                 ctx.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                waitForInstallation(repoExtension.packageName, repoExtension.code)
+                if (repoExtension.packageName.isNotBlank()) {
+                    waitForInstallation(repoExtension.packageName, repoExtension.code)
+                } else {
+                    waitForNewExtensionDetected(previousCount, repoExtension.name)
+                }
                 loadExtensions()
                 refreshUpdatableState(findUpdatableExtensions())
             } catch (e: Exception) {
@@ -215,6 +224,23 @@ class ExtensionsViewModel(application: Application) : AndroidViewModel(applicati
         return false
     }
 
+    private suspend fun waitForNewExtensionDetected(previousCount: Int, expectedName: String): Boolean {
+        val pm = getApplication<Application>().packageManager
+        repeat(15) {
+            kotlinx.coroutines.delay(1000.milliseconds)
+            val extensions = detector.detectInstalledExtensions()
+            if (extensions.size > previousCount) {
+                _uiState.value = _uiState.value.copy(extensions = extensions)
+                return true
+            }
+            if (extensions.any { it.name.equals(expectedName, ignoreCase = true) }) {
+                _uiState.value = _uiState.value.copy(extensions = extensions)
+                return true
+            }
+        }
+        return false
+    }
+
     private suspend fun fetchRepo(repoUrl: String): Repo = withContext(Dispatchers.IO) {
         val request = Request.Builder().url(repoUrl).build()
         val response = httpClient.newCall(request).execute()
@@ -227,7 +253,9 @@ class ExtensionsViewModel(application: Application) : AndroidViewModel(applicati
         val repo = parseRepoJson(repoUrl, element)
         repo.copy(
             extensions = repo.extensions.map { ext ->
-                ext.copy(apk = resolveApkUrl(repoUrl, ext.apk))
+                val resolvedApk = resolveApkUrl(repoUrl, ext.apk)
+                val resolvedIcon = if (ext.icon.isNotBlank()) resolveIconUrl(repoUrl, ext.icon) else ext.icon
+                ext.copy(apk = resolvedApk, icon = resolvedIcon)
             }
         )
     }
@@ -310,13 +338,16 @@ class ExtensionsViewModel(application: Application) : AndroidViewModel(applicati
     private fun findUpdatableExtensions(): List<Pair<Extension, RepoExtension>> {
         val installed = _uiState.value.extensions
         if (installed.isEmpty()) return emptyList()
-        val repoExtensionsByPkg = _uiState.value.repos
+        val allRepoExtensions = _uiState.value.repos
             .mapNotNull { it.repo }
             .flatMap { it.extensions }
-            .groupBy { it.packageName }
+        val repoExtensionsByPkg = allRepoExtensions.filter { it.packageName.isNotBlank() }.groupBy { it.packageName }
+        val repoExtensionsByName = allRepoExtensions.filter { it.packageName.isBlank() }.associateBy { it.name }
         return installed.mapNotNull { ext ->
             val repoExt = repoExtensionsByPkg[ext.packageName]?.firstOrNull()
-            if (repoExt != null && repoExt.code > ext.versionCode) {
+                ?: repoExtensionsByName[ext.name]
+            val installedCode = ext.versionName.split(".").lastOrNull()?.toLongOrNull() ?: ext.versionCode
+            if (repoExt != null && repoExt.code > installedCode) {
                 ext to repoExt
             } else {
                 null
@@ -326,7 +357,8 @@ class ExtensionsViewModel(application: Application) : AndroidViewModel(applicati
 
     private fun refreshUpdatableState(updatable: List<Pair<Extension, RepoExtension>>) {
         val pkgNames = updatable.map { it.first.packageName }.toSet()
-        _uiState.value = _uiState.value.copy(updatablePackageNames = pkgNames)
+        val names = updatable.map { it.second.name }.toSet()
+        _uiState.value = _uiState.value.copy(updatablePackageNames = pkgNames, updatableNames = names)
     }
 
     private fun isAutoUpdateEnabled(): Boolean {

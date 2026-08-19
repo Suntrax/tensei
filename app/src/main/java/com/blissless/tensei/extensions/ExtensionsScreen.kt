@@ -5,16 +5,16 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.provider.Settings
-import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,27 +27,36 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Extension
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
@@ -63,11 +72,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
@@ -85,23 +95,19 @@ import com.blissless.tensei.viewmodel.InstalledExtension
 fun ExtensionsScreen(
     viewModel: ExtensionsViewModel = viewModel(),
     onBrowseChanged: ((Boolean) -> Unit)? = null,
-    magnetExtensions: List<Pair<String, String>> = emptyList(),
-    mangaExtensions: List<InstalledExtension> = emptyList(),
-    onDiscoverMangaExtensions: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var repoUrl by remember { mutableStateOf("") }
     var selectedRepoUrl by remember { mutableStateOf<String?>(null) }
-    var reposExpanded by remember { mutableStateOf(false) }
-    var extensionsExpanded by remember { mutableStateOf(false) }
-    var magnetExtensionsExpanded by remember { mutableStateOf(false) }
-    var mangaExtensionsExpanded by remember { mutableStateOf(false) }
+    var reposExpanded by remember { mutableStateOf(true) }
+    var extensionsExpanded by remember { mutableStateOf(true) }
+    var addRepoExpanded by remember { mutableStateOf(false) }
     val installedPackages = uiState.extensions.map { it.packageName }.toSet()
+    val installedNames = uiState.extensions.map { it.name }.toSet()
     val updatableCount = uiState.updatablePackageNames.size
 
     val context = LocalContext.current
 
-    // Collect toast messages from the ViewModel
     LaunchedEffect(Unit) {
         viewModel.toastMessage.collect { (message, duration) ->
             if (duration == android.widget.Toast.LENGTH_LONG) context.longToast(message)
@@ -143,7 +149,9 @@ fun ExtensionsScreen(
         ExtensionBrowserScreen(
             repoState = selectedRepoState,
             installedPackages = installedPackages,
+            installedNames = installedNames,
             updatablePackageNames = uiState.updatablePackageNames,
+            updatableNames = uiState.updatableNames,
             onInstall = { viewModel.installExtension(it) },
             onBack = { selectedRepoUrl = null },
             onRemoveRepo = { url -> viewModel.removeRepo(url) }
@@ -151,282 +159,411 @@ fun ExtensionsScreen(
         return
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        OutlinedTextField(
-            value = repoUrl,
-            onValueChange = { repoUrl = it },
-            label = { Text("Repo URL") },
-            placeholder = { Text("https://example.com/index.json") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f),
-                focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-            ),
-            trailingIcon = {
-                IconButton(
-                    onClick = {
-                        if (repoUrl.isNotBlank()) {
-                            viewModel.addRepo(repoUrl)
-                            repoUrl = ""
-                        }
-                    }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 36.dp, bottom = 100.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.padding(bottom = 4.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = "Add repo")
+                    Icon(
+                        Icons.Default.Extension,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+                Column {
+                    Text(
+                        "Extensions",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Text(
+                        "Manage repositories and installed sources",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
                 }
             }
-        )
+        }
 
-        LazyColumn(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            if (uiState.repos.isNotEmpty()) {
-                item {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { reposExpanded = !reposExpanded }
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = "My Repos (${uiState.repos.size})",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Icon(
-                            if (reposExpanded) Icons.Default.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                            contentDescription = if (reposExpanded) "Collapse" else "Expand",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+        item {
+            AddRepoCard(
+                url = repoUrl,
+                onUrlChange = { repoUrl = it },
+                onSubmit = {
+                    if (repoUrl.isNotBlank()) {
+                        viewModel.addRepo(repoUrl)
+                        repoUrl = ""
+                        addRepoExpanded = false
                     }
-                }
+                },
+                isExpanded = addRepoExpanded,
+                onToggle = { addRepoExpanded = !addRepoExpanded }
+            )
+        }
 
-                items(uiState.repos, key = { it.url }) { repoState ->
-                    AnimatedVisibility(
-                        visible = reposExpanded,
-                        enter = expandVertically(),
-                        exit = shrinkVertically()
-                    ) {
-                        RepoCard(
-                            repoState = repoState,
-                            onClick = { selectedRepoUrl = repoState.url },
-                            onRemoveRepo = { viewModel.removeRepo(repoState.url) }
-                        )
-                    }
-                }
+        if (uiState.repos.isNotEmpty()) {
+            item {
+                SectionHeader(
+                    title = "Repositories",
+                    count = uiState.repos.size,
+                    isExpanded = reposExpanded,
+                    onToggle = { reposExpanded = !reposExpanded }
+                )
             }
 
-            if (uiState.isLoading) {
-                item {
-                    Box(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator()
-                    }
+            items(uiState.repos, key = { it.url }) { repoState ->
+                AnimatedVisibility(
+                    visible = reposExpanded,
+                    enter = expandVertically(),
+                    exit = shrinkVertically()
+                ) {
+                    RepoCard(
+                        repoState = repoState,
+                        onClick = { selectedRepoUrl = repoState.url },
+                        onRemoveRepo = { viewModel.removeRepo(repoState.url) }
+                    )
                 }
             }
+        }
 
-            if (uiState.error != null) {
-                item {
+        if (uiState.isLoading) {
+            item {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(32.dp))
+                }
+            }
+        }
+
+        if (uiState.error != null) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
+                    ),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.15f))
+                ) {
                     Column(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                        modifier = Modifier.fillMaxWidth().padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Text(
                             text = uiState.error!!,
-                            color = MaterialTheme.colorScheme.error
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.bodyMedium
                         )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Button(onClick = { viewModel.loadExtensions() }) {
+                        FilledTonalButton(onClick = { viewModel.loadExtensions() }) {
+                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text("Retry")
                         }
                     }
                 }
             }
+        }
 
-            if (uiState.extensions.isNotEmpty()) {
-                item {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { extensionsExpanded = !extensionsExpanded }
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = buildString {
-                                append("Installed Extensions (${uiState.extensions.size})")
-                                if (updatableCount > 0) {
-                                    append("  ·  $updatableCount update(s)")
-                                }
-                            },
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Icon(
-                            if (extensionsExpanded) Icons.Default.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                            contentDescription = if (extensionsExpanded) "Collapse" else "Expand",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                items(uiState.extensions, key = { it.packageName }) { ext ->
-                    AnimatedVisibility(
-                        visible = extensionsExpanded,
-                        enter = expandVertically(),
-                        exit = shrinkVertically()
-                    ) {
-                        InstalledExtensionCard(
-                            extension = ext,
-                            hasUpdate = ext.packageName in uiState.updatablePackageNames,
-                            onUpdate = { viewModel.updateExtension(ext.packageName) },
-                            onSettings = { openAppSettings(context, ext.packageName) },
-                        )
-                    }
-                }
+        if (uiState.extensions.isNotEmpty()) {
+            item {
+                SectionHeader(
+                    title = "Installed",
+                    count = uiState.extensions.size,
+                    badge = if (updatableCount > 0) "$updatableCount update${if (updatableCount > 1) "s" else ""}" else null,
+                    isExpanded = extensionsExpanded,
+                    onToggle = { extensionsExpanded = !extensionsExpanded }
+                )
             }
 
-            if (magnetExtensions.isNotEmpty()) {
-                item {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { magnetExtensionsExpanded = !magnetExtensionsExpanded }
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = "Tensei Extensions (${magnetExtensions.size})",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Icon(
-                            if (magnetExtensionsExpanded) Icons.Default.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                            contentDescription = if (magnetExtensionsExpanded) "Collapse" else "Expand",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                items(magnetExtensions, key = { it.second }) { (name, authority) ->
-                    AnimatedVisibility(
-                        visible = magnetExtensionsExpanded,
-                        enter = expandVertically(),
-                        exit = shrinkVertically()
-                    ) {
-                        MagnetExtensionCard(
-                            name = name,
-                            authority = authority
-                        )
-                    }
-                }
-            }
-
-            if (mangaExtensions.isNotEmpty()) {
-                item {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                mangaExtensionsExpanded = !mangaExtensionsExpanded
-                                if (!mangaExtensionsExpanded) onDiscoverMangaExtensions()
-                            }
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = "Manga Extensions (${mangaExtensions.size})",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Icon(
-                            if (mangaExtensionsExpanded) Icons.Default.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                            contentDescription = if (mangaExtensionsExpanded) "Collapse" else "Expand",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                items(mangaExtensions, key = { it.packageName }) { ext ->
-                    AnimatedVisibility(
-                        visible = mangaExtensionsExpanded,
-                        enter = expandVertically(),
-                        exit = shrinkVertically()
-                    ) {
-                        OniExtensionCard(
-                            extension = ext
-                        )
-                    }
-                }
-            } else {
-                // Empty state — show a helpful message guiding the user
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                        )
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Icon(
-                                Icons.Default.MenuBook,
-                                contentDescription = null,
-                                modifier = Modifier.size(40.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                                text = "No Manga Extensions Installed",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                text = "Install a manga source extension (e.g. Atsumaru) to read chapters. " +
-                                    "Extensions are separate APKs that advertise themselves via the EXTENSION_BEACON intent. " +
-                                    "Once installed, they will appear here.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            TextButton(onClick = onDiscoverMangaExtensions) {
-                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text("Re-scan")
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (uiState.extensions.isEmpty() && uiState.repos.isEmpty() && mangaExtensions.isEmpty() && uiState.error == null && !uiState.isLoading) {
-                item {
-                    Text(
-                        text = "No extensions found",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(vertical = 48.dp).fillMaxWidth()
+            items(uiState.extensions, key = { it.packageName }) { ext ->
+                AnimatedVisibility(
+                    visible = extensionsExpanded,
+                    enter = expandVertically(),
+                    exit = shrinkVertically()
+                ) {
+                    InstalledExtensionCard(
+                        extension = ext,
+                        hasUpdate = ext.packageName in uiState.updatablePackageNames,
+                        onUpdate = { viewModel.updateExtension(ext.packageName) },
+                        onSettings = { openAppSettings(context, ext.packageName) },
                     )
                 }
             }
+        }
 
-            item { Spacer(modifier = Modifier.height(24.dp)) }
+        if (uiState.extensions.isEmpty() && uiState.repos.isEmpty() && uiState.error == null && !uiState.isLoading) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 48.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.FolderOpen,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
+                        Text(
+                            text = "No extensions found",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                        Text(
+                            text = "Add a repository to browse extensions",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        )
+                    }
+                }
+            }
+        }
+
+        if (uiState.repos.isNotEmpty() && uiState.extensions.isEmpty() && uiState.error == null && !uiState.isLoading) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "Tap a repository to browse extensions",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        )
+                    }
+                }
+            }
         }
     }
 }
+
+// ─── Section Header ──────────────────────────────────────────────────────
+
+@Composable
+private fun SectionHeader(
+    title: String,
+    count: Int,
+    badge: String? = null,
+    isExpanded: Boolean,
+    onToggle: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onToggle
+            )
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+            modifier = Modifier.weight(1f)
+        )
+
+        if (badge != null) {
+            Surface(
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text(
+                    text = badge,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+        } else {
+            Text(
+                text = "$count",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+        }
+
+        Icon(
+            if (isExpanded) Icons.Default.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+            modifier = Modifier.size(20.dp)
+        )
+    }
+}
+
+// ─── Add Repository Card ─────────────────────────────────────────────────
+
+@Composable
+private fun AddRepoCard(
+    url: String,
+    onUrlChange: (String) -> Unit,
+    onSubmit: () -> Unit,
+    isExpanded: Boolean,
+    onToggle: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+        ),
+        shape = RoundedCornerShape(20.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        if (isExpanded) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = onToggle
+                        )
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Add,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        "Add Repository",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Icon(
+                        Icons.Default.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                OutlinedTextField(
+                    value = url,
+                    onValueChange = onUrlChange,
+                    placeholder = { Text("https://example.com/index.json") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f),
+                        focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                        focusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f)
+                    ),
+                    trailingIcon = {
+                        if (url.isNotBlank()) {
+                            IconButton(onClick = onSubmit) {
+                                Icon(Icons.Default.Check, contentDescription = "Add repo")
+                            }
+                        }
+                    }
+                )
+            }
+        } else {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onToggle
+                    )
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Add,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    "Add Repository",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.weight(1f)
+                )
+                Icon(
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+    }
+}
+
+// ─── Repo Card ───────────────────────────────────────────────────────────
 
 @Composable
 private fun RepoCard(
@@ -466,151 +603,104 @@ private fun RepoCard(
             .fillMaxWidth()
             .clickable(enabled = repoState.repo != null) { onClick() },
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
         ),
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
+        val ctx = LocalContext.current
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+                .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(
+                        if (repoState.repo != null) MaterialTheme.colorScheme.tertiary.copy(alpha = 0.1f)
+                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                if (repoState.isLoading) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                } else {
+                    Icon(
+                        Icons.Default.FolderOpen,
+                        contentDescription = null,
+                        tint = if (repoState.repo != null) MaterialTheme.colorScheme.tertiary
+                               else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(14.dp))
+
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = repoState.repo?.name ?: repoState.url,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 if (!repoState.repo?.description.isNullOrBlank()) {
                     Text(
                         text = repoState.repo.description,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    if (repoState.repo != null) {
-                        Text(
-                            text = "${repoState.repo.extensions.size} extension(s)",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    repoState.error?.let { error ->
-                        Text(
-                            text = error,
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.labelSmall
-                        )
-                    }
-                }
-                if (repoState.isLoading) {
-                    LinearProgressIndicator(
-                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                if (repoState.error != null) {
+                    Text(
+                        text = repoState.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                } else if (repoState.repo != null) {
+                    Text(
+                        text = "${repoState.repo.extensions.size} extension${if (repoState.repo.extensions.size != 1) "s" else ""}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
                     )
                 }
             }
-            Spacer(modifier = Modifier.width(8.dp))
-            val ctx = LocalContext.current
+
             IconButton(onClick = {
                 val clipboard = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 clipboard.setPrimaryClip(ClipData.newPlainText("Repo URL", repoState.url))
                 ctx.toast("URL copied")
             }) {
-                Icon(Icons.Default.ContentCopy, contentDescription = "Copy URL", modifier = Modifier.size(18.dp))
-            }
-            IconButton(onClick = { showRemoveDialog = true }) {
-                Icon(Icons.Default.Delete, contentDescription = "Remove repo", modifier = Modifier.size(18.dp))
-            }
-        }
-    }
-}
-
-private fun openAppSettings(context: Context, packageName: String) {
-    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-        data = "package:$packageName".toUri()
-        flags = Intent.FLAG_ACTIVITY_NEW_TASK
-    }
-    context.toast("Opening app settings...")
-    context.startActivity(intent)
-}
-
-@Composable
-private fun MagnetExtensionCard(
-    name: String,
-    authority: String
-) {
-    val context = LocalContext.current
-    val packageName = authority.removeSuffix(".provider")
-    val appIcon = remember(packageName) {
-        try {
-            context.packageManager.getApplicationIcon(packageName)
-        } catch (_: Exception) {
-            null
-        }
-    }
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-        ),
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            if (appIcon != null) {
-                Image(
-                    painter = BitmapPainter(appIcon.toBitmap(64, 64).asImageBitmap()),
-                    contentDescription = name,
-                    modifier = Modifier.size(48.dp)
-                )
-            } else {
-                Box(
-                    modifier = Modifier.size(48.dp).background(
-                        MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f),
-                        RoundedCornerShape(12.dp)
-                    ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "M",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.tertiary
-                    )
-                }
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = name,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = authority,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            IconButton(onClick = { openAppSettings(context, packageName) }) {
                 Icon(
-                    Icons.Default.Info,
-                    contentDescription = "App info",
-                    modifier = Modifier.size(20.dp)
+                    Icons.Default.ContentCopy,
+                    contentDescription = "Copy URL",
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                )
+            }
+
+            IconButton(onClick = { showRemoveDialog = true }) {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = "Remove repo",
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
                 )
             }
         }
     }
 }
+
+// ─── Installed Extension Card ────────────────────────────────────────────
 
 @Composable
 private fun InstalledExtensionCard(
@@ -622,42 +712,96 @@ private fun InstalledExtensionCard(
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
         ),
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             val iconBitmap = extension.icon?.toBitmap(64, 64)
             if (iconBitmap != null) {
                 Image(
                     painter = BitmapPainter(iconBitmap.asImageBitmap()),
                     contentDescription = extension.name,
-                    modifier = Modifier.size(48.dp)
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(14.dp))
                 )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = extension.name.take(1).uppercase(),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
             }
+
+            Spacer(modifier = Modifier.width(14.dp))
 
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .clickable(onClick = onSettings),
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onSettings
+                    ),
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                Text(
-                    text = extension.name,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    text = extension.packageName,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = extension.name,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (extension.isNsfw) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.errorContainer,
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                text = "NSFW",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = extension.packageName,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -665,111 +809,44 @@ private fun InstalledExtensionCard(
                     Text(
                         text = "v${extension.versionName}",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
                     )
-                    if (extension.isNsfw) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.errorContainer,
-                            shape = MaterialTheme.shapes.small
-                        ) {
-                            Text(
-                                text = "NSFW",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onErrorContainer,
-                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
-                            )
-                        }
-                    }
                 }
             }
 
             if (hasUpdate) {
-                IconButton(onClick = onUpdate) {
-                    Icon(
-                        Icons.Default.Download,
-                        contentDescription = "Update",
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
-            IconButton(onClick = onSettings) {
-                Icon(
-                    Icons.Default.Info,
-                    contentDescription = "App info",
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun OniExtensionCard(
-    extension: InstalledExtension
-) {
-    val context = LocalContext.current
-    val appIcon = remember(extension.packageName) {
-        try {
-            context.packageManager.getApplicationIcon(extension.packageName)
-        } catch (_: Exception) {
-            null
-        }
-    }
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-        ),
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            if (appIcon != null) {
-                Image(
-                    painter = BitmapPainter(appIcon.toBitmap(64, 64).asImageBitmap()),
-                    contentDescription = extension.label,
-                    modifier = Modifier.size(48.dp)
-                )
-            } else {
-                Box(
-                    modifier = Modifier.size(48.dp).background(
-                        MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f),
-                        RoundedCornerShape(12.dp)
-                    ),
-                    contentAlignment = Alignment.Center
+                FilledTonalButton(
+                    onClick = onUpdate,
+                    shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text(
-                        text = "M",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.tertiary
+                    Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Update", style = MaterialTheme.typography.labelMedium)
+                }
+            } else {
+                IconButton(
+                    onClick = onSettings,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                ) {
+                    Icon(
+                        Icons.Default.Info,
+                        contentDescription = "App info",
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                     )
                 }
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = extension.label,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = extension.packageName,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            IconButton(onClick = { openAppSettings(context, extension.packageName) }) {
-                Icon(
-                    Icons.Default.Info,
-                    contentDescription = "App info",
-                    modifier = Modifier.size(20.dp)
-                )
             }
         }
     }
 }
 
-
+private fun openAppSettings(context: Context, packageName: String) {
+    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+        data = "package:$packageName".toUri()
+        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+    }
+    context.startActivity(intent)
+}

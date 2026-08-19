@@ -461,7 +461,6 @@ private fun AboutMeContent(
     mangaLibrary: List<LibraryStatus> = emptyList()
 ) {
     var showFullscreenAvatar by remember { mutableStateOf(false) }
-    val mangaStats = mangaUserProfile?.statistics?.manga
 
     Box(modifier = Modifier.fillMaxSize()) {
         userBanner?.let { bannerUrl ->
@@ -580,25 +579,9 @@ private fun AboutMeContent(
             }
 
             val mangaTotal = mangaLibrary.sumOf { it.count }
-            if (mangaTotal > 0 || mangaStats != null) {
+            if (mangaTotal > 0) {
                 Spacer(modifier = Modifier.height(20.dp))
 
-                Text(
-                    "Manga",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                StatCard(
-                    value = mangaStats?.meanScore?.let { "%.1f".format(it) } ?: "-",
-                    label = "Mean", color = MaterialTheme.colorScheme.secondary
-                )
-
-                Spacer(modifier = Modifier.height(20.dp))
                 LibrarySection(title = "Manga Library", statuses = mangaLibrary, labels = MangaStatusLabels, colors = StatusColors)
             }
 

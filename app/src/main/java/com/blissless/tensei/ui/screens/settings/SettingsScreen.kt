@@ -152,6 +152,7 @@ import com.blissless.tensei.viewmodel.setSwipeSwap
 import com.blissless.tensei.viewmodel.setCheckUpdatesOnStart
 import com.blissless.tensei.viewmodel.setAutoUpdateExtensions
 import com.blissless.tensei.viewmodel.loadAvailableMagnetExtensions
+import com.blissless.tensei.viewmodel.loadAvailableStreamExtensions
 import com.blissless.tensei.viewmodel.getVideoCacheSize
 import com.blissless.tensei.viewmodel.getDownloadCacheSize
 import com.blissless.tensei.viewmodel.clearNonEssentialCaches
@@ -699,6 +700,7 @@ private fun StreamSettingsPage(
     val extViewModel: ExtensionsViewModel = viewModel()
     val extUiState by extViewModel.uiState.collectAsState()
     val magnetExtensions by viewModel.availableMagnetExtensions.collectAsState()
+    val streamExtensions by viewModel.availableStreamExtensions.collectAsState()
     val defaultMagnetExtension by viewModel.defaultMagnetExtension.collectAsState()
     var showExtPicker by remember { mutableStateOf(false) }
     var showSubtitleLangPicker by remember { mutableStateOf(false) }
@@ -720,6 +722,7 @@ private fun StreamSettingsPage(
 
     LaunchedEffect(Unit) {
         viewModel.loadAvailableMagnetExtensions()
+        viewModel.loadAvailableStreamExtensions()
     }
 
     SettingsPageScaffold(title = "Stream Settings", onBack = onBack) {
@@ -729,12 +732,12 @@ private fun StreamSettingsPage(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                SettingsChoiceChip(label = "Direct", isSelected = streamMethod == "direct", onClick = { viewModel.setStreamMethod("direct") })
-                SettingsChoiceChip(label = "Tensei", isSelected = streamMethod == "magnet", onClick = { viewModel.setStreamMethod("magnet") })
+                SettingsChoiceChip(label = "Stream", isSelected = streamMethod == "direct", onClick = { viewModel.setStreamMethod("direct") })
+                SettingsChoiceChip(label = "Torrent", isSelected = streamMethod == "magnet", onClick = { viewModel.setStreamMethod("magnet") })
             }
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                "Stream via direct HTTP extensions or Tensei",
+                "Stream via HTTP extensions or torrent clients",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
             )
@@ -937,6 +940,15 @@ private fun StreamSettingsPage(
             text = {
                 Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                     if (streamMethod == "direct") {
+                        if (extUiState.extensions.isNotEmpty()) {
+                            Text(
+                                "HTTP Extensions",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(bottom = 4.dp)
+                            )
+                        }
                         extUiState.extensions.forEach { ext ->
                             val isSelected = ext.packageName == defaultExtPackage
                             TextButton(
@@ -963,6 +975,51 @@ private fun StreamSettingsPage(
                                         )
                                         Text(
                                             ext.packageName,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        if (streamExtensions.isNotEmpty()) {
+                            if (extUiState.extensions.isNotEmpty()) {
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                            }
+                            Text(
+                                "Stream Extensions",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(bottom = 4.dp)
+                            )
+                        }
+                        streamExtensions.forEach { (name, authority) ->
+                            val isSelected = authority == defaultExtPackage
+                            TextButton(
+                                onClick = { viewModel.setDefaultExtensionPackage(authority); showExtPicker = false },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    RadioButton(
+                                        selected = isSelected,
+                                        onClick = null,
+                                        colors = RadioButtonDefaults.colors(
+                                            selectedColor = MaterialTheme.colorScheme.primary
+                                        )
+                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            name,
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                                        )
+                                        Text(
+                                            authority,
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                                         )
@@ -1736,17 +1793,6 @@ private fun ExtensionsSettingsPage(
     onBack: () -> Unit
 ) {
     val extViewModel: ExtensionsViewModel = viewModel()
-    val magnetExtensions by viewModel.availableMagnetExtensions.collectAsState()
-
-    LaunchedEffect(Unit) {
-        viewModel.loadAvailableMagnetExtensions()
-    }
-
-    val installedMangaExtensions by viewModel.installedExtensions.collectAsState()
-
-    LaunchedEffect(Unit) {
-        viewModel.discoverExtensions()
-    }
 
     SettingsPageScaffold(title = "Extensions", onBack = onBack, scrollable = false, actions = {
         IconButton(onClick = { extViewModel.loadExtensions(true) }) {
@@ -1754,10 +1800,7 @@ private fun ExtensionsSettingsPage(
         }
     }) {
         ExtensionsScreen(
-            viewModel = extViewModel,
-            magnetExtensions = magnetExtensions,
-            mangaExtensions = installedMangaExtensions,
-            onDiscoverMangaExtensions = { viewModel.discoverExtensions() }
+            viewModel = extViewModel
         )
     }
 }

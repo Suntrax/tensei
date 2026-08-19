@@ -83,6 +83,7 @@ import com.blissless.tensei.viewmodel.refreshReleasingAnimeProgress
 import com.blissless.tensei.viewmodel.playEpisodeWithExtension
 import com.blissless.tensei.viewmodel.fetchExtensionHosterVideos
 import com.blissless.tensei.viewmodel.loadAvailableMagnetExtensions
+import com.blissless.tensei.viewmodel.loadAvailableStreamExtensions
 import com.blissless.tensei.viewmodel.fetchMagnetEpisodes
 import com.blissless.tensei.viewmodel.fetchMagnetForEpisode
 import com.blissless.tensei.viewmodel.fetchStreamUrlForEpisode
@@ -217,6 +218,9 @@ class MainViewModel : ViewModel() {
 
     internal val _availableMagnetExtensions = MutableStateFlow<List<Pair<String, String>>>(emptyList())
     val availableMagnetExtensions: StateFlow<List<Pair<String, String>>> = _availableMagnetExtensions.asStateFlow()
+
+    internal val _availableStreamExtensions = MutableStateFlow<List<Pair<String, String>>>(emptyList())
+    val availableStreamExtensions: StateFlow<List<Pair<String, String>>> = _availableStreamExtensions.asStateFlow()
 
     val defaultMagnetExtension: StateFlow<String?> get() = userPreferences.defaultMagnetExtension
 

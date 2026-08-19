@@ -1466,7 +1466,6 @@ fun DetailedAnimeScreen(
                                                     cameraDistance = recCameraDistancePx
                                                 }
                                                 .clickable {
-                                                    android.util.Log.d("RecClick", "Clickable fired: id=${rec.id} title=${rec.title} format=${rec.format}")
                                                     onRecommendationClick(rec)
                                                 }
                                                 .padding(4.dp)

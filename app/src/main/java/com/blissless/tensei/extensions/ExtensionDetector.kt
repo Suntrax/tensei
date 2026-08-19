@@ -11,24 +11,89 @@ class ExtensionDetector(private val context: Context) {
 
     companion object {
         const val MAGNET_BEACON_ACTION = "com.blissless.animeclient.EXTENSION_BEACON"
+        const val MANGA_BEACON_ACTION = "com.blissless.mangaclient.EXTENSION_BEACON"
         const val MAGNET_PROVIDER_SUFFIX = ".provider"
+        private const val BLISSLESS_PKG = "com.blissless."
+
+        fun extensionDisplayName(packageName: String): String {
+            val name = extractExtensionName(packageName)
+            return if (name.isNotEmpty()) "Tensei: ${name.replaceFirstChar { it.uppercase() }}" else packageName
+        }
+
+        fun extractExtensionName(packageName: String): String {
+            val parts = packageName.split(".")
+            val blisslessIdx = parts.indexOfFirst { it == "blissless" }
+            if (blisslessIdx < 0 || blisslessIdx + 1 >= parts.size) return ""
+            return parts[blisslessIdx + 1]
+        }
+
+        fun isBlisslessStreamExtension(packageName: String): Boolean =
+            packageName.startsWith(BLISSLESS_PKG) && packageName.endsWith(".anime.stream")
+
+        fun isBlisslessTorrentExtension(packageName: String): Boolean =
+            packageName.startsWith(BLISSLESS_PKG) && packageName.endsWith(".anime.torrent")
+
+        fun isBlisslessMangaExtension(packageName: String): Boolean =
+            packageName.startsWith(BLISSLESS_PKG) && packageName.endsWith(".manga")
     }
 
     fun detectMagnetExtensions(): List<Pair<String, String>> {
+        val results = mutableListOf<Pair<String, String>>()
+        val seenPackages = mutableSetOf<String>()
+
+        // 1) Package-name-based detection for *.anime.torrent
+        val pm = context.packageManager
+        val installedPkgs = try {
+            getInstalledPackages(pm)
+        } catch (_: Exception) { emptyList() }
+        for (pkg in installedPkgs) {
+            val pkgName = pkg.packageName
+            if (isBlisslessTorrentExtension(pkgName)) {
+                seenPackages.add(pkgName)
+                results.add(extensionDisplayName(pkgName) to pkgName)
+            }
+        }
+
+        // 2) Beacon fallback (backward compat)
         val beaconIntent = Intent(MAGNET_BEACON_ACTION)
         val resolveInfoList = try {
             context.packageManager.queryBroadcastReceivers(beaconIntent, 0)
         } catch (_: Exception) { emptyList() }
-        return resolveInfoList.mapNotNull { info ->
+        for (info in resolveInfoList) {
             val pkg = info.activityInfo.packageName
-            val label = try { info.loadLabel(context.packageManager).toString() } catch (_: Exception) { pkg }
-            if (label.startsWith("Tensei: ", ignoreCase = true)) {
-                pkg to label
-            } else null
+            if (pkg in seenPackages) continue
+            val label = try { info.loadLabel(pm).toString() } catch (_: Exception) { pkg }
+            if (label.startsWith("Tensei: ", ignoreCase = true) || label.startsWith("Anime: ", ignoreCase = true)) {
+                results.add(label to pkg)
+            }
         }
+
+        return results.sortedBy { it.first }
     }
 
-    fun getMagnetAuthority(packageName: String): String = "$packageName$MAGNET_PROVIDER_SUFFIX"
+    fun detectStreamExtensions(): List<Pair<String, String>> {
+        val results = mutableListOf<Pair<String, String>>()
+        val seenPackages = mutableSetOf<String>()
+        val pm = context.packageManager
+        val installedPkgs = try {
+            getInstalledPackages(pm)
+        } catch (_: Exception) { emptyList() }
+        for (pkg in installedPkgs) {
+            val pkgName = pkg.packageName
+            if (isBlisslessStreamExtension(pkgName)) {
+                seenPackages.add(pkgName)
+                results.add(extensionDisplayName(pkgName) to pkgName)
+            }
+        }
+        return results.sortedBy { it.first }
+    }
+
+    fun getMagnetAuthority(packageName: String): String {
+        if (isBlisslessTorrentExtension(packageName) || isBlisslessStreamExtension(packageName) || isBlisslessMangaExtension(packageName)) {
+            return packageName
+        }
+        return "$packageName$MAGNET_PROVIDER_SUFFIX"
+    }
 
     @Suppress("DEPRECATION")
     private val packageFlags = PackageManager.GET_CONFIGURATIONS or
@@ -69,11 +134,27 @@ class ExtensionDetector(private val context: Context) {
     }
 
     private fun isExtension(pkgInfo: PackageInfo): Boolean {
+        val pkgName = pkgInfo.packageName
+        if (isBlisslessStreamExtension(pkgName) || isBlisslessTorrentExtension(pkgName) || isBlisslessMangaExtension(pkgName)) {
+            return true
+        }
         val features = pkgInfo.reqFeatures.orEmpty().map { it.name }.toSet()
         val metaData = pkgInfo.applicationInfo?.metaData
-        return ANIME_EXTENSION_FEATURE in features ||
+        if (ANIME_EXTENSION_FEATURE in features ||
                 metaData?.containsKey(METADATA_ANIME_SOURCE_CLASS) == true ||
-                metaData?.containsKey(METADATA_SOURCE_FACTORY) == true
+                metaData?.containsKey(METADATA_SOURCE_FACTORY) == true) {
+            return true
+        }
+        val pm = context.packageManager
+        try {
+            val beaconIntents = listOf(MAGNET_BEACON_ACTION, MANGA_BEACON_ACTION)
+            for (action in beaconIntents) {
+                val intent = Intent(action).setPackage(pkgName)
+                val receivers = pm.queryBroadcastReceivers(intent, 0)
+                if (receivers.any { it.activityInfo.packageName == pkgName }) return true
+            }
+        } catch (_: Exception) {}
+        return false
     }
 
     private fun toExtension(pkgInfo: PackageInfo, pm: PackageManager): Extension {
@@ -139,5 +220,3 @@ class ExtensionDetector(private val context: Context) {
         }
     }
 }
-
-
