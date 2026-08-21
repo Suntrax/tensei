@@ -48,6 +48,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ClosedCaption
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -1249,7 +1251,7 @@ fun PlayerScreen(
             modifier = Modifier
                 .fillMaxHeight()
                 .fillMaxWidth(0.3f)
-                .padding(start = 40.dp)
+                .padding(start = if (isCompact) 0.dp else 40.dp)
                 .align(Alignment.CenterStart)
                 .pointerInput(swipeVolume, swipeBrightness, swipeSwap) {
                     val leftEnabled = if (swipeSwap) swipeBrightness else swipeVolume
@@ -1320,7 +1322,7 @@ fun PlayerScreen(
             modifier = Modifier
                 .fillMaxHeight()
                 .fillMaxWidth(0.3f)
-                .padding(end = 40.dp)
+                .padding(end = if (isCompact) 0.dp else 40.dp)
                 .align(Alignment.CenterEnd)
                 .pointerInput(swipeVolume, swipeBrightness, swipeSwap) {
                     val rightEnabled = if (swipeSwap) swipeVolume else swipeBrightness
@@ -1378,42 +1380,35 @@ fun PlayerScreen(
         // 3. Padding Zones (Top Layer over Active Zones, Under UI Controls)
         // These consume touches to prevent UI toggling in safe areas.
         // Defined after active zones so they take precedence in overlap areas.
+        // Only in fullscreen — compact player uses minimal chrome.
+        if (!isCompact) {
+            // Left Padding
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .width(40.dp)
+                    .align(Alignment.CenterStart)
+                    .pointerInput(Unit) { detectTapGestures(onTap = {}) }
+            )
 
-        // Left Padding
-        Box(
-            modifier = Modifier
-                .fillMaxHeight()
-                .width(40.dp)
-                .align(Alignment.CenterStart)
-                .pointerInput(Unit) { detectTapGestures(onTap = {}) }
-        )
+            // Right Padding
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .width(40.dp)
+                    .align(Alignment.CenterEnd)
+                    .pointerInput(Unit) { detectTapGestures(onTap = {}) }
+            )
 
-        // Right Padding
-        Box(
-            modifier = Modifier
-                .fillMaxHeight()
-                .width(40.dp)
-                .align(Alignment.CenterEnd)
-                .pointerInput(Unit) { detectTapGestures(onTap = {}) }
-        )
-
-        // Top Padding (Matches side padding logic)
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(40.dp)
-                .align(Alignment.TopCenter)
-                .pointerInput(Unit) { detectTapGestures(onTap = {}) }
-        )
-
-        // Bottom Padding (Matches side padding logic)
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(40.dp)
-                .align(Alignment.BottomCenter)
-                .pointerInput(Unit) { detectTapGestures(onTap = {}) }
-        )
+            // Top Padding (Matches side padding logic)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(40.dp)
+                    .align(Alignment.TopCenter)
+                    .pointerInput(Unit) { detectTapGestures(onTap = {}) }
+            )
+        }
 
         // Controls UI with darkening overlay (drawn first)
         AnimatedVisibility(
@@ -1440,9 +1435,8 @@ fun PlayerScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(Brush.verticalGradient(colors = listOf(Color.Black.copy(alpha = 0.7f), Color.Transparent)))
-                            .statusBarsPadding()
-                            .padding(if (isCompact) 6.dp else 16.dp)
+                            .background(Brush.verticalGradient(colors = listOf(Color.Black.copy(alpha = 0.8f), Color.Transparent)))
+                            .padding(if (isCompact) 4.dp else 16.dp)
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -1451,14 +1445,14 @@ fun PlayerScreen(
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.weight(1f)
+                                modifier = if (isCompact) Modifier else Modifier.weight(1f)
                             ) {
                                 IconButton(
                                     onClick = {
                                         exitFullscreen()
                                         onBackClick?.invoke()
                                     },
-                                    modifier = Modifier.size(if (isCompact) 28.dp else 40.dp).background(Color.Black.copy(alpha = 0.5f), shape = MaterialTheme.shapes.small)
+                                    modifier = Modifier.size(if (isCompact) 32.dp else 40.dp)
                                 ) {
                                     Icon(
                                         Icons.AutoMirrored.Filled.ArrowBack,
@@ -1467,53 +1461,49 @@ fun PlayerScreen(
                                         modifier = Modifier.size(if (isCompact) 20.dp else 24.dp)
                                     )
                                 }
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Column {
-                                    if (!isCompact && animeName.isNotEmpty()) {
-                                        Text(
-                                            text = animeName,
-                                            color = Color.White,
-                                            style = MaterialTheme.typography.titleMedium,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                    }
-                                    if (!isCompact && !episodeTitle.isNullOrEmpty()) {
-                                        Text(
-                                            text = episodeTitle,
-                                            color = Color.White.copy(alpha = 0.7f),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                    }
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Text(
-                                            text = "Episode $currentEpisode${if (totalEpisodes > 0) " / $totalEpisodes" else ""}",
-                                            color = Color.White.copy(alpha = 0.8f),
-                                            style = MaterialTheme.typography.bodyMedium
-                                        )
-                                        if (isFetchingTimestamps) {
-                                            CircularProgressIndicator(
-                                                modifier = Modifier.size(14.dp),
-                                                strokeWidth = 1.5.dp,
-                                                color = MaterialTheme.colorScheme.primary
+                                Spacer(modifier = Modifier.width(4.dp))
+                                if (!isCompact) {
+                                    Column(modifier = Modifier.weight(1f, fill = false)) {
+                                        if (animeName.isNotEmpty()) {
+                                            Text(
+                                                text = animeName,
+                                                color = Color.White,
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.SemiBold,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
                                             )
                                         }
-                                        if (isChangingServer) {
-                                            CircularProgressIndicator(
-                                                modifier = Modifier.size(14.dp),
-                                                strokeWidth = 1.5.dp,
-                                                color = if (disableMaterialColors) Color.White else MaterialTheme.colorScheme.primary
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            if (!episodeTitle.isNullOrEmpty()) {
+                                                Text(
+                                                    text = episodeTitle,
+                                                    color = Color.White.copy(alpha = 0.7f),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                                Text("·", color = Color.White.copy(alpha = 0.4f), style = MaterialTheme.typography.labelSmall)
+                                            }
+                                            Text(
+                                                text = "Ep $currentEpisode${if (totalEpisodes > 0) "/$totalEpisodes" else ""}",
+                                                color = Color.White.copy(alpha = 0.7f),
+                                                style = MaterialTheme.typography.labelSmall
                                             )
+                                            if (isFetchingTimestamps || isChangingServer) {
+                                                CircularProgressIndicator(
+                                                    modifier = Modifier.size(12.dp),
+                                                    strokeWidth = 1.5.dp,
+                                                    color = if (disableMaterialColors) Color.White else MaterialTheme.colorScheme.primary
+                                                )
+                                            }
                                         }
                                     }
                                 }
 
-                                // Closing Column for text content
                             }
 
                             fun catFromName(name: String): String = when {
@@ -1522,19 +1512,19 @@ fun PlayerScreen(
                                 extensionServers.isNotEmpty() -> extensionName.ifEmpty { "EXT" }
                                 else -> "EXT"
                             }
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.width(IntrinsicSize.Max)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(if (isCompact) 4.dp else 8.dp), modifier = Modifier.width(IntrinsicSize.Max)) {
                                 // Server selector
-                                if ((onServerChange != null && (subServers.isNotEmpty() || dubServers.isNotEmpty())) || extensionServers.isNotEmpty()) {
+                                if (!isCompact && ((onServerChange != null && (subServers.isNotEmpty() || dubServers.isNotEmpty())) || extensionServers.isNotEmpty())) {
                                     Box {
                                         Surface(
-                                            shape = RoundedCornerShape(14.dp),
-                                            color = Color.Black.copy(alpha = 0.5f),
+                                            shape = RoundedCornerShape(if (isCompact) 10.dp else 14.dp),
+                                            color = if (isCompact) Color.Transparent else Color.Black.copy(alpha = 0.5f),
                                             onClick = { showServerMenu = true }
                                         ) {
                                         Row(
                                             modifier = Modifier
-                                                .defaultMinSize(minWidth = 44.dp)
-                                                .padding(horizontal = if (isCompact) 8.dp else 12.dp, vertical = if (isCompact) 4.dp else 16.dp),
+                                                .defaultMinSize(minWidth = if (isCompact) 28.dp else 44.dp)
+                                                .padding(horizontal = if (isCompact) 6.dp else 12.dp, vertical = if (isCompact) 2.dp else 16.dp),
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                                             ) {
@@ -1659,15 +1649,15 @@ fun PlayerScreen(
                                 // CC/Subtitles button
                                 val hasExternalSubs = subtitleTracks.isNotEmpty() || subtitleUrl != null
                                 val hasEmbeddedSubs = embeddedSubtitleTracks.isNotEmpty()
-                                if (hasExternalSubs || hasEmbeddedSubs) {
+                                if (!isCompact && (hasExternalSubs || hasEmbeddedSubs)) {
                                     Box {
                                         Surface(
-                                            shape = RoundedCornerShape(14.dp),
-                                            color = Color.Black.copy(alpha = 0.5f),
+                                            shape = RoundedCornerShape(if (isCompact) 10.dp else 14.dp),
+                                            color = if (isCompact) Color.Transparent else Color.Black.copy(alpha = 0.5f),
                                             onClick = { showSubtitleMenu = true }
                                         ) {
                                             Row(
-                                                modifier = Modifier.padding(horizontal = if (isCompact) 8.dp else 12.dp, vertical = if (isCompact) 4.dp else 10.dp),
+                                                modifier = Modifier.padding(horizontal = if (isCompact) 6.dp else 12.dp, vertical = if (isCompact) 2.dp else 10.dp),
                                                 verticalAlignment = Alignment.CenterVertically,
                                                 horizontalArrangement = Arrangement.Center
                                             ) {
@@ -1791,10 +1781,11 @@ fun PlayerScreen(
                                 }
 
                                 // Resize button
-                                ResizeButton(
-                                    onClick = { resizeModeIndex = (resizeModeIndex + 1) % resizeModes.size },
-                                    isCompact = isCompact,
-                                )
+                                if (!isCompact) {
+                                    ResizeButton(
+                                        onClick = { resizeModeIndex = (resizeModeIndex + 1) % resizeModes.size },
+                                    )
+                                }
 
                                 // Player settings button
                                 PlayerSettingsButton(
@@ -1807,6 +1798,8 @@ fun PlayerScreen(
                                     onSwipeBrightnessChange = { onSwipeBrightnessChange?.invoke(it) },
                                     onSwipeSwapChange = { onSwipeSwapChange?.invoke(it) },
                                     isCompact = isCompact,
+                                    autoPlayNextEpisode = autoPlayNextEpisode,
+                                    onAutoPlayChange = { onAutoPlayNextEpisodeChanged?.invoke(it) },
                                 )
 
                             }
@@ -1823,15 +1816,15 @@ fun PlayerScreen(
                     ) {
                         Row(
                             modifier = Modifier.align(Alignment.Center),
-                            horizontalArrangement = Arrangement.spacedBy(if (isCompact) 24.dp else 32.dp),
+                            horizontalArrangement = Arrangement.spacedBy(if (isCompact) 32.dp else 40.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             IconButton(
                                 onClick = { onPreviousEpisode?.invoke() },
-                                modifier = Modifier.size(if (isCompact) 36.dp else 56.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape).alpha(if (onPreviousEpisode != null && !isLoadingStream && !isChangingServer) 1f else 0.3f),
+                                modifier = Modifier.size(if (isCompact) 40.dp else 56.dp).then(if (!isCompact) Modifier.background(Color.Black.copy(alpha = 0.5f), CircleShape) else Modifier).alpha(if (onPreviousEpisode != null && !isLoadingStream && !isChangingServer) 1f else 0.3f),
                                 enabled = onPreviousEpisode != null && !isLoadingStream && !isChangingServer
                             ) {
-                                Icon(Icons.Default.SkipPrevious, "Previous Episode", tint = Color.White, modifier = Modifier.size(if (isCompact) 18.dp else 32.dp))
+                                Icon(Icons.Default.SkipPrevious, "Previous Episode", tint = Color.White, modifier = Modifier.size(if (isCompact) 24.dp else 32.dp))
                             }
 
                             IconButton(
@@ -1844,12 +1837,12 @@ fun PlayerScreen(
                                         if (isPlaying) exoPlayer.pause() else exoPlayer.play()
                                     }
                                 },
-                                modifier = Modifier.size(if (isCompact) 48.dp else 72.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                                modifier = Modifier.size(if (isCompact) 52.dp else 72.dp).then(if (!isCompact) Modifier.background(Color.Black.copy(alpha = 0.5f), CircleShape) else Modifier)
                             ) {
                                 if (isBuffering || isOffline) {
                                     CircularProgressIndicator(
                                         color = Color.White,
-                                        modifier = Modifier.size(if (isCompact) 26.dp else 42.dp),
+                                        modifier = Modifier.size(if (isCompact) 28.dp else 42.dp),
                                         strokeWidth = 3.dp
                                     )
                                 } else {
@@ -1857,7 +1850,7 @@ fun PlayerScreen(
                                         imageVector = if (hasError) Icons.Default.Refresh else if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                                         contentDescription = if (hasError) "Retry" else if (isPlaying) "Pause" else "Play",
                                         tint = Color.White,
-                                        modifier = Modifier.size(if (isCompact) 26.dp else 42.dp)
+                                        modifier = Modifier.size(if (isCompact) 30.dp else 42.dp)
                                     )
                                 }
                             }
@@ -1866,10 +1859,10 @@ fun PlayerScreen(
                                 onClick = {
                                     onNextEpisode?.invoke()
                                 },
-                                modifier = Modifier.size(if (isCompact) 36.dp else 56.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape).alpha(if (onNextEpisode != null && !isLatestEpisode && !isLoadingStream && !isChangingServer) 1f else 0.3f),
+                                modifier = Modifier.size(if (isCompact) 40.dp else 56.dp).then(if (!isCompact) Modifier.background(Color.Black.copy(alpha = 0.5f), CircleShape) else Modifier).alpha(if (onNextEpisode != null && !isLatestEpisode && !isLoadingStream && !isChangingServer) 1f else 0.3f),
                                 enabled = onNextEpisode != null && !isLatestEpisode && !isLoadingStream && !isChangingServer
                             ) {
-                                Icon(Icons.Default.SkipNext, "Next Episode", tint = Color.White, modifier = Modifier.size(if (isCompact) 18.dp else 32.dp))
+                                Icon(Icons.Default.SkipNext, "Next Episode", tint = Color.White, modifier = Modifier.size(if (isCompact) 24.dp else 32.dp))
                             }
                         }
                     }
@@ -1945,17 +1938,19 @@ fun PlayerScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f))))
-                            .navigationBarsPadding()
-                            .padding(if (isCompact) 6.dp else 16.dp)
+                            .background(Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))))
+                            .then(if (isCompact) Modifier else Modifier.navigationBarsPadding())
+                            .pointerInput(Unit) { detectTapGestures(onTap = { showControls = !showControls }) }
+                            .padding(horizontal = if (isCompact) 10.dp else 16.dp)
+                            .padding(bottom = if (isCompact) 2.dp else 12.dp, top = if (isCompact) 12.dp else 12.dp)
                     ) {
                         // Timer above progress bar
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text(formatTime(currentPosition), color = Color.White, style = MaterialTheme.typography.labelMedium)
-                            Text(if (duration > 0) formatTime(duration) else "--:--", color = Color.White, style = MaterialTheme.typography.labelMedium)
+                            Text(formatTime(currentPosition), color = Color.White, style = if (isCompact) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelMedium)
+                            Text(if (duration > 0) formatTime(duration) else "--:--", color = Color.White, style = if (isCompact) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelMedium)
                         }
 
                         Spacer(modifier = Modifier.height(if (isCompact) 2.dp else 4.dp))
@@ -2007,10 +2002,10 @@ fun PlayerScreen(
                         ) {
                             Canvas(modifier = Modifier.fillMaxSize()) {
                                 val sliderWidth = size.width
-                                val trackHeight = 8.dp.toPx()
+                                val trackHeight = if (isCompact) 3.dp.toPx() else 5.dp.toPx()
                                 val trackTop = (size.height - trackHeight) / 2f
-                                val cornerRadius = 4.dp.toPx()
-                                val thumbRadiusPx = 8.dp.toPx()
+                                val cornerRadius = if (isCompact) 1.5.dp.toPx() else 2.5.dp.toPx()
+                                val thumbRadiusPx = if (isCompact) 5.dp.toPx() else 7.dp.toPx()
 
                                 if (duration > 0) {
                                     val progressRatio = currentPosition.toFloat() / duration
@@ -2144,7 +2139,7 @@ fun PlayerScreen(
                         val speedOptions = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f)
 
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().padding(bottom = if (isCompact) 2.dp else 0.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -2161,13 +2156,37 @@ fun PlayerScreen(
                             )
 
                             // Autoplay + Fullscreen (linked)
-                            AutoplayFullscreenRow(
-                                autoPlayNextEpisode = autoPlayNextEpisode,
-                                isFullscreen = isFullscreen,
-                                onAutoPlayChange = { onAutoPlayNextEpisodeChanged?.invoke(it) },
-                                onFullscreenToggle = { toggleFullscreen() },
-                                isCompact = isCompact,
-                            )
+                            if (isCompact) {
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = Color.Transparent,
+                                    onClick = { toggleFullscreen() }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.Center
+                                    ) {
+                                        Icon(
+                                            if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                                            contentDescription = if (isFullscreen) "Exit Fullscreen" else "Fullscreen",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                }
+                            } else {
+                                AutoplayFullscreenRow(
+                                    autoPlayNextEpisode = autoPlayNextEpisode,
+                                    isFullscreen = isFullscreen,
+                                    onAutoPlayChange = { onAutoPlayNextEpisodeChanged?.invoke(it) },
+                                    onFullscreenToggle = { toggleFullscreen() },
+                                    isCompact = isCompact,
+                                )
+                            }
+                        }
+                        if (isCompact) {
+                            Spacer(modifier = Modifier.height(2.dp))
                         }
                     }
                 }
@@ -2200,7 +2219,8 @@ fun PlayerScreen(
                     onNextEpisode?.invoke()
                 }
             },
-            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 16.dp),
+            isCompact = isCompact,
+            modifier = Modifier.align(Alignment.CenterEnd).padding(end = if (isCompact) 8.dp else 16.dp),
         )
 
         // Volume Overlay Indicator (on top of controls)

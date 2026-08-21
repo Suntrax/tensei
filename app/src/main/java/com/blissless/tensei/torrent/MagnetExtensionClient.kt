@@ -61,7 +61,8 @@ class MagnetExtensionClient(private val context: Context) {
             if (com.blissless.tensei.extensions.ExtensionDetector.isBlisslessTorrentExtension(pkgName)) {
                 seenPackages.add(pkgName)
                 val name = com.blissless.tensei.extensions.ExtensionDetector.extensionDisplayName(pkgName)
-                results.add(DetectedMagnetExtension(pkgName, name, pkgName))
+                val authority = pkgName.removeSuffix(".anime.torrent") + ".provider"
+                results.add(DetectedMagnetExtension(pkgName, name, authority))
             }
         }
 
@@ -72,13 +73,19 @@ class MagnetExtensionClient(private val context: Context) {
         for (info in resolveInfoList) {
             val packageName = info.activityInfo.packageName
             if (packageName in seenPackages) continue
+            if (com.blissless.tensei.extensions.ExtensionDetector.isBlisslessStreamExtension(packageName)) continue
             val label = info.loadLabel(pm).toString()
             Log.d(TAG, "detectExtensions: candidate pkg=$packageName label='$label'")
             if (label.startsWith("Tensei: ", ignoreCase = true) || label.startsWith("Anime: ", ignoreCase = true)) {
-                val authority = if (com.blissless.tensei.extensions.ExtensionDetector.isBlisslessTorrentExtension(packageName)
-                    || com.blissless.tensei.extensions.ExtensionDetector.isBlisslessStreamExtension(packageName)
-                    || com.blissless.tensei.extensions.ExtensionDetector.isBlisslessMangaExtension(packageName)
-                ) packageName else "$packageName$PROVIDER_SUFFIX"
+                val authority = if (com.blissless.tensei.extensions.ExtensionDetector.isBlisslessTorrentExtension(packageName)) {
+                    packageName.removeSuffix(".anime.torrent") + ".provider"
+                } else if (com.blissless.tensei.extensions.ExtensionDetector.isBlisslessStreamExtension(packageName)) {
+                    packageName.removeSuffix(".anime.stream") + ".provider"
+                } else if (com.blissless.tensei.extensions.ExtensionDetector.isBlisslessMangaExtension(packageName)) {
+                    packageName.removeSuffix(".manga") + ".provider"
+                } else {
+                    "$packageName$PROVIDER_SUFFIX"
+                }
                 results.add(DetectedMagnetExtension(packageName, label, authority))
             }
         }

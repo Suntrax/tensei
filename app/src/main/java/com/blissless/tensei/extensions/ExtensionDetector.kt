@@ -62,6 +62,7 @@ class ExtensionDetector(private val context: Context) {
         for (info in resolveInfoList) {
             val pkg = info.activityInfo.packageName
             if (pkg in seenPackages) continue
+            if (isBlisslessStreamExtension(pkg)) continue
             val label = try { info.loadLabel(pm).toString() } catch (_: Exception) { pkg }
             if (label.startsWith("Tensei: ", ignoreCase = true) || label.startsWith("Anime: ", ignoreCase = true)) {
                 results.add(label to pkg)
@@ -82,15 +83,22 @@ class ExtensionDetector(private val context: Context) {
             val pkgName = pkg.packageName
             if (isBlisslessStreamExtension(pkgName)) {
                 seenPackages.add(pkgName)
-                results.add(extensionDisplayName(pkgName) to pkgName)
+                val authority = pkgName.removeSuffix(".anime.stream") + ".provider"
+                results.add(extensionDisplayName(pkgName) to authority)
             }
         }
         return results.sortedBy { it.first }
     }
 
     fun getMagnetAuthority(packageName: String): String {
-        if (isBlisslessTorrentExtension(packageName) || isBlisslessStreamExtension(packageName) || isBlisslessMangaExtension(packageName)) {
-            return packageName
+        if (isBlisslessMangaExtension(packageName)) {
+            return packageName.removeSuffix(".manga") + ".provider"
+        }
+        if (isBlisslessStreamExtension(packageName)) {
+            return packageName.removeSuffix(".anime.stream") + ".provider"
+        }
+        if (isBlisslessTorrentExtension(packageName)) {
+            return packageName.removeSuffix(".anime.torrent") + ".provider"
         }
         return "$packageName$MAGNET_PROVIDER_SUFFIX"
     }

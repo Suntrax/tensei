@@ -1255,15 +1255,10 @@ fun MainViewModel.setMangaSyncThreshold(percent: Int) {
 fun MainViewModel.updateMangaScrollProgress(mangaId: Int, scrollProgress: Float, mangaTitle: String = "", mangaCover: String = "") {
     // Guard against NaN/Infinity — same defensive pattern as oni's TrackingManager
     val safe = if (scrollProgress.isNaN() || scrollProgress.isInfinite()) 0f else scrollProgress
-    // Lazily create a local track on the first real reading progress (scroll > 0%) so the manga
-    // appears in "Continue Reading" once actually read — but NEVER from merely opening a chapter
-    // (scrollProgress == 0), which would add it to tracking without the user reading anything.
-    // The in-memory set avoids a full SharedPreferences decode of every track on each frame.
-    val manager = mangaTrackManager
-    if (safe > 0f && manager != null && mangaTrackEnsured.add(mangaId)) {
-        manager.ensureTrack(mangaId, mangaTitle, mangaCover)
-        loadLocalMangaTracking()
-    }
+    // NOTE: Track creation is intentionally NOT done here — it was previously called on first
+    // scroll progress (safe > 0f) which caused every opened chapter to appear in "Continue
+    // Reading" immediately, even without the user reading enough. Track creation is now handled
+    // exclusively by markMangaChapterRead, which fires only when the sync threshold is crossed.
     // Persist scroll progress — throttled, because writing SharedPreferences (full JSON encode of
     // all tracks) on every scroll frame is the jank source once the reader is at/over the sync
     // threshold. Resets to 0 (opening a non-resume chapter) are rare and must land immediately so

@@ -69,6 +69,7 @@ class UserPreferences(context: Context) {
         private const val KEY_DEFAULT_MAGNET_EXTENSION = "default_magnet_extension"
         private const val KEY_DOWNLOAD_DIRECTORY_URI = "download_directory_uri"
         private const val KEY_MANGA_DOWNLOAD_DIRECTORY_URI = "manga_download_directory_uri"
+        private const val KEY_DEFAULT_STREAM_EXTENSION = "default_stream_extension"
         private const val KEY_KEEP_DOWNLOADED_FILES = "keep_downloaded_files"
         private const val KEY_MANGA_READER_MODE = "manga_reader_mode"
         private const val KEY_MANGA_DATA_SAVER = "manga_data_saver"
@@ -192,6 +193,10 @@ class UserPreferences(context: Context) {
     // Default Magnet Extension
     private val _defaultMagnetExtension = MutableStateFlow<String?>(null)
     val defaultMagnetExtension: StateFlow<String?> = _defaultMagnetExtension.asStateFlow()
+
+    // Default Stream Extension (tensei stream — ContentProvider-based)
+    private val _defaultStreamExtension = MutableStateFlow<String?>(null)
+    val defaultStreamExtension: StateFlow<String?> = _defaultStreamExtension.asStateFlow()
 
     // Download Directory URI (SAF tree URI for custom download location)
     private val _downloadDirectoryUri = MutableStateFlow<String?>(null)
@@ -344,7 +349,17 @@ class UserPreferences(context: Context) {
         _streamProvider.value = sharedPreferences.getInt(KEY_STREAM_PROVIDER, 1)
         _streamMethod.value = sharedPreferences.getString(KEY_STREAM_METHOD, "direct") ?: "direct"
         val savedMagnetExt = sharedPreferences.getString(KEY_DEFAULT_MAGNET_EXTENSION, null)
-        _defaultMagnetExtension.value = savedMagnetExt
+        val migratedMagnetExt = migrateStreamAuthority(savedMagnetExt)
+        if (migratedMagnetExt != savedMagnetExt && savedMagnetExt != null) {
+            sharedPreferences.edit { putString(KEY_DEFAULT_MAGNET_EXTENSION, migratedMagnetExt) }
+        }
+        _defaultMagnetExtension.value = migratedMagnetExt
+        val savedStreamExt = sharedPreferences.getString(KEY_DEFAULT_STREAM_EXTENSION, null)
+        val migratedStreamExt = migrateStreamAuthority(savedStreamExt)
+        if (migratedStreamExt != savedStreamExt && savedStreamExt != null) {
+            sharedPreferences.edit { putString(KEY_DEFAULT_STREAM_EXTENSION, migratedStreamExt) }
+        }
+        _defaultStreamExtension.value = migratedStreamExt
         _startupScreen.value = sharedPreferences.getInt(KEY_STARTUP_SCREEN, 2)
         _bufferAheadSeconds.value = sharedPreferences.getInt(KEY_BUFFER_AHEAD_SECONDS, 30)
         _bufferSizeMb.value = sharedPreferences.getInt(KEY_BUFFER_SIZE_MB, 200)
@@ -554,6 +569,11 @@ class UserPreferences(context: Context) {
     fun setDefaultMagnetExtension(authority: String?) {
         _defaultMagnetExtension.value = authority
         sharedPreferences.edit { putString(KEY_DEFAULT_MAGNET_EXTENSION, authority) }
+    }
+
+    fun setDefaultStreamExtension(authority: String?) {
+        _defaultStreamExtension.value = authority
+        sharedPreferences.edit { putString(KEY_DEFAULT_STREAM_EXTENSION, authority) }
     }
 
     fun setDownloadDirectoryUri(uri: String?) {
@@ -957,6 +977,17 @@ class UserPreferences(context: Context) {
         val clamped = percent.coerceIn(75, 100)
         _mangaSyncThreshold.value = clamped
         sharedPreferences.edit { putInt(KEY_MANGA_SYNC_THRESHOLD, clamped) }
+    }
+
+    private fun migrateStreamAuthority(authority: String?): String? {
+        if (authority == null) return null
+        if (authority.endsWith(".provider")) return authority
+        if (authority.endsWith(".anime.stream")) return authority.removeSuffix(".anime.stream") + ".provider"
+        if (authority.endsWith(".anime.torrent")) return authority.removeSuffix(".anime.torrent") + ".provider"
+        if (authority.endsWith(".manga")) return authority.removeSuffix(".manga") + ".provider"
+        if (authority.endsWith(".stream")) return authority.removeSuffix(".stream") + ".provider"
+        if (authority.endsWith(".torrent")) return authority.removeSuffix(".torrent") + ".provider"
+        return authority
     }
 }
 

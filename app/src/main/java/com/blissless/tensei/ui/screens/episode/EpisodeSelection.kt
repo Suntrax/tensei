@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -51,9 +52,11 @@ import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -113,7 +116,10 @@ import kotlin.time.Duration.Companion.milliseconds
 import com.blissless.tensei.viewmodel.clearMagnetEpisodes
 import com.blissless.tensei.viewmodel.fetchMagnetEpisodes
 import com.blissless.tensei.viewmodel.loadAvailableMagnetExtensions
+import com.blissless.tensei.viewmodel.loadAvailableStreamExtensions
+import com.blissless.tensei.viewmodel.setDefaultExtensionPackage
 import com.blissless.tensei.viewmodel.setDefaultMagnetExtension
+import com.blissless.tensei.viewmodel.setDefaultStreamExtension
 import com.blissless.tensei.viewmodel.setStreamMethod
 import com.blissless.tensei.util.toast
 import com.blissless.tensei.util.longToast
@@ -198,7 +204,7 @@ fun EpisodeSelectionDialog(
 }
 
 @Composable
-private fun EpisodeButton(
+internal fun EpisodeButton(
     episodeNumber: Int,
     isWatched: Boolean,
     isCurrent: Boolean,
@@ -207,18 +213,16 @@ private fun EpisodeButton(
     disableMaterialColors: Boolean = false,
     onClick: () -> Unit
 ) {
-    // Current episode now has same badge styling as other aired episodes, but keeps outline indicator
     val backgroundColor = when {
         isWatched -> MaterialTheme.colorScheme.primary
         hasAired -> if (isOled) Color(0xFF1A1A1A) else Color(0xFF2A2A2A)
-        else -> if (isOled) Color(0xFF333333) else Color(0xFFD0D0D0) // More visible unaired background
+        else -> if (isOled) Color(0xFF333333) else Color(0xFFD0D0D0)
     }
     val contentColor = when {
         isWatched -> if (disableMaterialColors) Color.Black else Color.White
         hasAired -> Color.White
         else -> if (isOled) Color.White.copy(alpha = 0.6f) else Color.Black.copy(alpha = 0.6f)
     }
-    // Keep outline indicator for current episode
     val borderColor = when {
         isWatched -> MaterialTheme.colorScheme.primary
         isCurrent -> MaterialTheme.colorScheme.secondary
@@ -239,8 +243,94 @@ private fun EpisodeButton(
             if (isWatched) {
                 Icon(imageVector = Icons.Default.Check, contentDescription = null, modifier = Modifier.align(Alignment.BottomEnd).size(12.dp).padding(2.dp), tint = contentColor)
             } else if (isCurrent) {
-                // Play icon uses primary color to indicate it's the current episode
                 Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.align(Alignment.BottomEnd).size(12.dp).padding(2.dp), tint = MaterialTheme.colorScheme.primary)
+            }
+        }
+    }
+}
+
+@Composable
+fun SimpleEpisodeGrid(
+    episodeCount: Int,
+    releasedCount: Int,
+    currentEpisode: Int,
+    currentProgress: Int = 0,
+    isOled: Boolean = false,
+    animeTitle: String = "",
+    episodeTitle: String? = null,
+    onEpisodeSelect: (Int) -> Unit,
+    onClose: (() -> Unit)? = null,
+    onEnterFullscreen: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
+) {
+    val gridState = rememberLazyGridState()
+
+    LaunchedEffect(currentEpisode) {
+        val target = (currentEpisode - 6).coerceAtLeast(0)
+        gridState.animateScrollToItem(target)
+    }
+
+    Column(modifier.fillMaxWidth().background(if (isOled) Color.Black else MaterialTheme.colorScheme.background)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (onClose != null) {
+                IconButton(onClick = onClose) {
+                    Icon(Icons.Default.Close, contentDescription = "Close player", tint = Color.White)
+                }
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                if (animeTitle.isNotEmpty()) {
+                    Text(
+                        animeTitle,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                if (!episodeTitle.isNullOrEmpty()) {
+                    Text(
+                        episodeTitle,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(alpha = 0.6f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            if (onEnterFullscreen != null) {
+                IconButton(onClick = onEnterFullscreen) {
+                    Icon(Icons.Default.Fullscreen, contentDescription = "Enter fullscreen", tint = Color.White)
+                }
+            }
+        }
+        LazyVerticalGrid(
+            state = gridState,
+            columns = GridCells.Fixed(6),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.weight(1f).padding(horizontal = 12.dp, vertical = 8.dp)
+        ) {
+            items(episodeCount) { index ->
+                val ep = index + 1
+                val isWatched = ep <= currentProgress
+                val isCurrent = ep == currentEpisode
+                val hasAired = ep <= releasedCount
+                EpisodeButton(
+                    episodeNumber = ep,
+                    isWatched = isWatched,
+                    isCurrent = isCurrent,
+                    hasAired = hasAired,
+                    isOled = isOled,
+                    onClick = {
+                        if (hasAired) {
+                            onEpisodeSelect(ep)
+                        }
+                    }
+                )
             }
         }
     }
@@ -295,6 +385,12 @@ fun RichEpisodeScreen(
     var magnetError by remember { mutableStateOf<String?>(null) }
     var isMagnetReady by remember { mutableStateOf(false) }
 
+    // Tensei stream extension state
+    val availableStreamExtensions by viewModel.availableStreamExtensions.collectAsState()
+    val defaultStreamExt by viewModel.defaultStreamExtension.collectAsState()
+    var selectedStreamAuthority by remember { mutableStateOf<String?>(null) }
+    var isStreamActive by remember { mutableStateOf(false) }
+
     val sortedExtensions = remember(availableExtensions, selectedExtensionPkg) {
         val selected = selectedExtensionPkg
         availableExtensions.sortedWith(compareBy<Pair<String, String>> { if (it.second == selected) 0 else 1 }.thenBy { it.first })
@@ -305,23 +401,41 @@ fun RichEpisodeScreen(
         availableMagnetExtensions.sortedWith(compareBy<Pair<String, String>> { if (it.second == selected) 0 else 1 }.thenBy { it.first })
     }
 
+    val sortedStreamExtensions = remember(availableStreamExtensions, selectedStreamAuthority) {
+        val selected = selectedStreamAuthority
+        availableStreamExtensions.sortedWith(compareBy<Pair<String, String>> { if (it.second == selected) 0 else 1 }.thenBy { it.first })
+    }
+
+    // Auto-select state flags (declared before LaunchedEffects that reference them)
+    var hasAutoSelectedMagnet by remember { mutableStateOf(false) }
+    var hasAutoSelectedStream by remember { mutableStateOf(false) }
+
     // Sync selectedExtensionPkg with default when it becomes available
-    // Also re-evaluate when stream method changes (e.g., magnet→direct)
-    LaunchedEffect(defaultPkg, currentStreamMethod) {
+    // Also re-evaluate when stream method changes
+    LaunchedEffect(defaultPkg, currentStreamMethod, defaultStreamExt) {
         if (currentStreamMethod == "direct") {
-            if (defaultPkg.isNotEmpty() && selectedExtensionPkg == null) {
+            if (defaultPkg.isNotEmpty() && selectedExtensionPkg == null && selectedStreamAuthority == null) {
                 selectedExtensionPkg = defaultPkg
+            }
+        } else {
+            // magnet / tensei mode: auto-select stream extension if saved
+            if (defaultStreamExt != null && selectedStreamAuthority == null && !hasAutoSelectedStream && !hasAutoSelectedMagnet) {
+                hasAutoSelectedStream = true
+                selectedStreamAuthority = defaultStreamExt
+                isStreamActive = true
+                selectedExtensionPkg = null
+                isMagnetActive = false
             }
         }
     }
 
     // Auto-select magnet extension when stream method is magnet
-    var hasAutoSelectedMagnet by remember { mutableStateOf(false) }
     LaunchedEffect(defaultMagnetExtension, currentStreamMethod) {
         val ext = defaultMagnetExtension
         if (currentStreamMethod != "magnet") {
             hasAutoSelectedMagnet = false
-        } else if (!hasAutoSelectedMagnet && ext != null) {
+            hasAutoSelectedStream = false
+        } else if (!hasAutoSelectedMagnet && !hasAutoSelectedStream && ext != null) {
             hasAutoSelectedMagnet = true
             selectedMagnetAuthority = ext
             isMagnetActive = true
@@ -400,21 +514,23 @@ fun RichEpisodeScreen(
     }
 
     // Filter episodes based on active source
-    val displayEpisodes = remember(tmdbEpisodes, episodeCount, isMagnetActive, isMagnetReady, isExtensionReady, selectedExtensionPkg) {
+    val displayEpisodes = remember(tmdbEpisodes, episodeCount, isMagnetActive, isMagnetReady, isExtensionReady, selectedExtensionPkg, isStreamActive) {
         val base = tmdbEpisodes.filter { it.episode <= episodeCount }
         when {
             isMagnetActive && isMagnetReady -> base
+            isStreamActive -> base
             isExtensionReady -> base
-            selectedExtensionPkg == null && !isMagnetActive -> base
+            selectedExtensionPkg == null && !isMagnetActive && !isStreamActive -> base
             else -> emptyList()
         }
     }
 
-    val availableEpisodeNumbers = remember(episodeCount, isMagnetActive, isMagnetReady, isExtensionReady, selectedExtensionPkg) {
+    val availableEpisodeNumbers = remember(episodeCount, isMagnetActive, isMagnetReady, isExtensionReady, selectedExtensionPkg, isStreamActive) {
         when {
             isMagnetActive && isMagnetReady -> (1..episodeCount).toList()
+            isStreamActive -> (1..episodeCount).toList()
             isExtensionReady -> (1..episodeCount).toList()
-            selectedExtensionPkg == null && !isMagnetActive -> (1..episodeCount).toList()
+            selectedExtensionPkg == null && !isMagnetActive && !isStreamActive -> (1..episodeCount).toList()
             else -> emptyList()
         }
     }
@@ -524,10 +640,11 @@ fun RichEpisodeScreen(
         }
     }
 
-    // Load available extensions and magnet extensions
+    // Load available extensions, magnet extensions, and stream extensions
     LaunchedEffect(anime.id) {
         viewModel.loadAvailableExtensions()
         viewModel.loadAvailableMagnetExtensions()
+        viewModel.loadAvailableStreamExtensions()
     }
 
     // Scroll to current episode (next to watch or last watched) with smooth animation
@@ -695,15 +812,17 @@ fun RichEpisodeScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                Text("Direct:", style = MaterialTheme.typography.labelSmall, color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("Standard:", style = MaterialTheme.typography.labelSmall, color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant)
                                 sortedExtensions.forEach { (extName, extPkg) ->
                                     FilterChip(
-                                        selected = extPkg == selectedExtensionPkg && !isMagnetActive,
+                                        selected = extPkg == selectedExtensionPkg && !isMagnetActive && !isStreamActive,
                                         onClick = {
                                             if (extPkg != selectedExtensionPkg) {
                                                 selectedExtensionPkg = extPkg
                                                 isMagnetActive = false
+                                                isStreamActive = false
                                                 selectedMagnetAuthority = null
+                                                selectedStreamAuthority = null
                                                 extensionError = null
                                                 isExtensionReady = false
                                             }
@@ -720,13 +839,46 @@ fun RichEpisodeScreen(
                             }
                             Spacer(modifier = Modifier.height(4.dp))
                         }
+                        if (currentStreamMethod == "magnet" && sortedStreamExtensions.isNotEmpty()) {
+                            Row(
+                                modifier = Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text("Tensei Stream:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
+                                sortedStreamExtensions.forEach { (extName, authority) ->
+                                    FilterChip(
+                                        selected = authority == selectedStreamAuthority && isStreamActive,
+                                        onClick = {
+                                            if (authority != selectedStreamAuthority || !isStreamActive) {
+                                                selectedStreamAuthority = authority
+                                                isStreamActive = true
+                                                selectedExtensionPkg = null
+                                                isMagnetActive = false
+                                                selectedMagnetAuthority = null
+                                                viewModel.setDefaultStreamExtension(authority)
+                                                viewModel.setDefaultExtensionPackage("")
+                                            }
+                                        },
+                                        label = { Text(extName, maxLines = 1, style = MaterialTheme.typography.labelSmall) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                            selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                                            containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surface,
+                                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                        }
                         if (currentStreamMethod == "magnet" && availableMagnetExtensions.isNotEmpty()) {
                             Row(
                                 modifier = Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                Text("Magnet:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.tertiary)
+                                Text("Torrent:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.tertiary)
                                 sortedMagnetExtensions.forEach { (extName, authority) ->
                                     FilterChip(
                                         selected = authority == selectedMagnetAuthority && isMagnetActive,
@@ -734,7 +886,9 @@ fun RichEpisodeScreen(
                                             if (authority != selectedMagnetAuthority || !isMagnetActive) {
                                                 selectedMagnetAuthority = authority
                                                 isMagnetActive = true
+                                                isStreamActive = false
                                                 selectedExtensionPkg = null
+                                                selectedStreamAuthority = null
                                                 isLoadingMagnetEpisodes = true
                                                 magnetError = null
                                                 isMagnetReady = false
@@ -829,6 +983,9 @@ fun RichEpisodeScreen(
                                     if (isMagnetActive && selectedMagnetAuthority != null) {
                                         viewModel.setStreamMethod("magnet")
                                         viewModel.setDefaultMagnetExtension(selectedMagnetAuthority!!)
+                                    }
+                                    if (isStreamActive && selectedStreamAuthority != null) {
+                                        viewModel.setDefaultStreamExtension(selectedStreamAuthority!!)
                                     }
                                     onEpisodeSelect(episodeNum, title)
                                 } else {
@@ -944,6 +1101,8 @@ fun RichEpisodeList(
     playbackPositions: Map<String, Long> = emptyMap(),
     playbackDurations: Map<String, Long> = emptyMap(),
     animeId: Int = 0,
+    animeTitle: String = "",
+    episodeTitle: String? = null,
     onEpisodeSelect: (Int) -> Unit,
     onClose: (() -> Unit)? = null,
     onEnterFullscreen: (() -> Unit)? = null,
@@ -964,13 +1123,33 @@ fun RichEpisodeList(
         ) {
             if (onClose != null) {
                 IconButton(onClick = onClose) {
-                    Icon(Icons.Default.Close, contentDescription = "Close player")
+                    Icon(Icons.Default.Close, contentDescription = "Close player", tint = Color.White)
                 }
             }
-            Spacer(modifier = Modifier.weight(1f))
+            Column(modifier = Modifier.weight(1f)) {
+                if (animeTitle.isNotEmpty()) {
+                    Text(
+                        animeTitle,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                if (!episodeTitle.isNullOrEmpty()) {
+                    Text(
+                        episodeTitle,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(alpha = 0.6f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
             if (onEnterFullscreen != null) {
                 IconButton(onClick = onEnterFullscreen) {
-                    Icon(Icons.Default.Fullscreen, contentDescription = "Enter fullscreen")
+                    Icon(Icons.Default.Fullscreen, contentDescription = "Enter fullscreen", tint = Color.White)
                 }
             }
         }

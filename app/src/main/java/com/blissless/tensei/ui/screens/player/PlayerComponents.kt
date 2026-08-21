@@ -272,6 +272,7 @@ internal fun SkipButtonsOverlay(
     isChangingServer: Boolean,
     onSkipOpening: () -> Unit,
     onSkipEnding: () -> Unit,
+    isCompact: Boolean = false,
     modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier,
 ) {
     androidx.compose.animation.AnimatedVisibility(
@@ -280,13 +281,14 @@ internal fun SkipButtonsOverlay(
         exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.scaleOut(targetScale = 0.8f),
         modifier = modifier
     ) {
-        androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp)) {
+        androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(if (isCompact) 8.dp else 16.dp)) {
             if (showSkipOpening) {
                 SkipIconButton(
                     icon = Icons.Default.FastForward,
                     label = "Skip\nOpening",
                     backgroundColor = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.6f),
                     iconTint = androidx.compose.ui.graphics.Color.White,
+                    isCompact = isCompact,
                     onClick = onSkipOpening
                 )
             }
@@ -296,6 +298,7 @@ internal fun SkipButtonsOverlay(
                     label = if (isLatestEpisode || !creditsAtEnd) "Skip\nEnding" else "Next\nEpisode",
                     backgroundColor = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.6f),
                     iconTint = androidx.compose.ui.graphics.Color.White,
+                    isCompact = isCompact,
                     onClick = onSkipEnding
                 )
             }
@@ -324,7 +327,7 @@ internal fun AutoplayFullscreenRow(
 ) {
     Row(
         modifier = Modifier
-            .background(Color.Black.copy(alpha = 0.5f), shape = RoundedCornerShape(if (isCompact) 8.dp else 14.dp)),
+            .background(if (isCompact) Color.Transparent else Color.Black.copy(alpha = 0.5f), shape = RoundedCornerShape(if (isCompact) 6.dp else 14.dp)),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Surface(
@@ -333,8 +336,8 @@ internal fun AutoplayFullscreenRow(
         ) {
             Row(
                 modifier = Modifier.padding(
-                    start = if (isCompact) 6.dp else 12.dp,
-                    end = if (isCompact) 2.dp else 6.dp,
+                    start = if (isCompact) 4.dp else 12.dp,
+                    end = if (isCompact) 1.dp else 6.dp,
                     top = if (isCompact) 3.dp else 8.dp,
                     bottom = if (isCompact) 3.dp else 8.dp
                 ),
@@ -367,10 +370,10 @@ internal fun AutoplayFullscreenRow(
         ) {
             Row(
                 modifier = Modifier.padding(
-                    start = if (isCompact) 2.dp else 6.dp,
-                    end = if (isCompact) 6.dp else 12.dp,
-                    top = if (isCompact) 3.dp else 8.dp,
-                    bottom = if (isCompact) 3.dp else 8.dp
+                    start = if (isCompact) 1.dp else 6.dp,
+                    end = if (isCompact) 4.dp else 12.dp,
+                    top = if (isCompact) 2.dp else 8.dp,
+                    bottom = if (isCompact) 2.dp else 8.dp
                 ),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -378,7 +381,7 @@ internal fun AutoplayFullscreenRow(
                     imageVector = if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
                     contentDescription = if (isFullscreen) "Exit fullscreen" else "Enter fullscreen",
                     tint = Color.White,
-                    modifier = Modifier.size(if (isCompact) 12.dp else 18.dp)
+                    modifier = Modifier.size(if (isCompact) 10.dp else 18.dp)
                 )
             }
         }
@@ -408,7 +411,7 @@ internal fun PlaybackSpeedSelector(
     Box {
         Surface(
             shape = RoundedCornerShape(if (isCompact) 10.dp else 14.dp),
-            color = Color.Black.copy(alpha = 0.5f),
+            color = if (isCompact) Color.Transparent else Color.Black.copy(alpha = 0.5f),
             onClick = { onShowMenuChange(true) }
         ) {
             Row(
@@ -469,7 +472,7 @@ internal fun ResizeButton(
 ) {
     Surface(
         shape = RoundedCornerShape(if (isCompact) 10.dp else 14.dp),
-        color = Color.Black.copy(alpha = 0.5f),
+        color = if (isCompact) Color.Transparent else Color.Black.copy(alpha = 0.5f),
         onClick = onClick
     ) {
         Row(
@@ -515,11 +518,13 @@ internal fun PlayerSettingsButton(
     onSwipeBrightnessChange: (Boolean) -> Unit,
     onSwipeSwapChange: (Boolean) -> Unit,
     isCompact: Boolean = false,
+    autoPlayNextEpisode: Boolean = false,
+    onAutoPlayChange: ((Boolean) -> Unit)? = null,
 ) {
     Box {
         Surface(
             shape = RoundedCornerShape(if (isCompact) 10.dp else 14.dp),
-            color = Color.Black.copy(alpha = 0.5f),
+            color = if (isCompact) Color.Transparent else Color.Black.copy(alpha = 0.5f),
             onClick = { onShowMenuChange(true) }
         ) {
             Row(
@@ -591,6 +596,25 @@ internal fun PlayerSettingsButton(
                 },
                 onClick = { onSwipeSwapChange(!swipeSwap) }
             )
+            if (onAutoPlayChange != null) {
+                androidx.compose.material3.DropdownMenuItem(
+                    text = {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Autoplay Next", color = Color.White)
+                            Switch(
+                                checked = autoPlayNextEpisode,
+                                onCheckedChange = onAutoPlayChange,
+                                colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary)
+                            )
+                        }
+                    },
+                    onClick = { onAutoPlayChange(!autoPlayNextEpisode) }
+                )
+            }
         }
     }
 }

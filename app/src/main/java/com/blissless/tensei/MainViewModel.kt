@@ -435,6 +435,7 @@ class MainViewModel : ViewModel() {
     val checkUpdatesOnStart: StateFlow<Boolean> get() = userPreferences.checkUpdatesOnStart
     val autoUpdateExtensions: StateFlow<Boolean> get() = userPreferences.autoUpdateExtensions
     val streamMethod: StateFlow<String> get() = userPreferences.streamMethod
+    val defaultStreamExtension: StateFlow<String?> get() = userPreferences.defaultStreamExtension
     val downloadDirectoryUri: StateFlow<String?> get() = userPreferences.downloadDirectoryUri
     val keepDownloadedFiles: StateFlow<Boolean> get() = userPreferences.keepDownloadedFiles
     val mangaReaderMode: StateFlow<String> get() = userPreferences.mangaReaderMode

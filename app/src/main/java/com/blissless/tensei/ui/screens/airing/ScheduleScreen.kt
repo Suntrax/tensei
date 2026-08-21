@@ -6,12 +6,19 @@ import com.blissless.tensei.data.models.MangaMedia
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,12 +26,13 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -397,43 +405,110 @@ fun ScheduleScreen(
         val orderedDaysForSelector = if (viewMode == 0) orderedDays else orderedDays
         val currentDayForSelector = if (viewMode == 0) visibleDayByScroll else selectedDay
 
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        // Day selector: weekday names (top) + timeline nodes (middle) + anime count (bottom)
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp)
         ) {
-            orderedDaysForSelector.forEach { dayIndex ->
-                val isSelected = currentDayForSelector == dayIndex
-                val isToday = currentDayOfWeek == dayIndex
-                val dayAnimeCount = filteredScheduleByDay[dayIndex]?.size ?: 0
-                FilterChip(
-                    selected = isSelected,
-                    onClick = {
-                        if (viewMode == 0) {
-                            visibleDayByScroll = dayIndex
-                            val targetIndex = if (isToday && nowIndicatorIndexAll >= 0) nowIndicatorIndexAll else dayToItemIndexMapAll[dayIndex] ?: 0
-                            scope.launch { listStateAllUpcoming.scrollToItem(targetIndex, scrollOffset = if (isToday) -100 else 0) }
-                        } else {
-                            selectedDay = dayIndex
-                            if (isToday && nowIndicatorIndexByDay >= 0) scope.launch { listStateByDay.scrollToItem(nowIndicatorIndexByDay, scrollOffset = -100) }
-                            else scope.launch { listStateByDay.scrollToItem(0) }
-                        }
-                    },
-                    label = {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                            Text(DayAbbreviations[dayIndex], fontSize = 11.sp, fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
-                                color = if (isSelected) MaterialTheme.colorScheme.onPrimary else Color.Unspecified)
-                            if (dayAnimeCount > 0) Text("$dayAnimeCount", fontSize = 9.sp,
-                                color = if (isSelected) MaterialTheme.colorScheme.onPrimary else Color.Unspecified)
-                        }
-                    },
-                    modifier = Modifier.weight(1f),
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primary,
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                    ),
-                    shape = RoundedCornerShape(8.dp),
-                    border = null
+            // Day name labels (top)
+            Row(modifier = Modifier.fillMaxWidth()) {
+                orderedDaysForSelector.forEach { dayIndex ->
+                    val isSelected = currentDayForSelector == dayIndex
+                    val isToday = currentDayOfWeek == dayIndex
+                    Box(
+                        modifier = Modifier.weight(1f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            DayAbbreviations[dayIndex],
+                            fontSize = 10.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            color = when {
+                                isSelected -> MaterialTheme.colorScheme.primary
+                                isToday -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
+                            }
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(6.dp))
+
+            // Timeline nodes (middle)
+            Box(modifier = Modifier.fillMaxWidth().height(24.dp)) {
+                // Connecting line
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(0.85f)
+                        .align(Alignment.Center)
+                        .height(1.5.dp)
+                        .clip(RoundedCornerShape(1.dp))
+                        .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
                 )
+
+                // Nodes
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    orderedDaysForSelector.forEach { dayIndex ->
+                        val isSelected = currentDayForSelector == dayIndex
+                        val isToday = currentDayOfWeek == dayIndex
+                        val nodeSize by animateDpAsState(
+                            targetValue = if (isSelected) 14.dp else 8.dp,
+                            spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMedium),
+                            label = "nodeSize"
+                        )
+
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clickable {
+                                    if (viewMode == 0) {
+                                        visibleDayByScroll = dayIndex
+                                        val targetIndex = if (isToday && nowIndicatorIndexAll >= 0) nowIndicatorIndexAll else dayToItemIndexMapAll[dayIndex] ?: 0
+                                        scope.launch { listStateAllUpcoming.scrollToItem(targetIndex, scrollOffset = if (isToday) -100 else 0) }
+                                    } else {
+                                        selectedDay = dayIndex
+                                    }
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(nodeSize)
+                                    .clip(CircleShape)
+                                    .then(
+                                        if (isSelected) Modifier.background(MaterialTheme.colorScheme.primary)
+                                        else if (isToday) Modifier.background(MaterialTheme.colorScheme.background).border(1.5.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                                        else Modifier.background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                                    )
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(4.dp))
+
+            // Anime count (bottom)
+            Row(modifier = Modifier.fillMaxWidth()) {
+                orderedDaysForSelector.forEach { dayIndex ->
+                    val isSelected = currentDayForSelector == dayIndex
+                    val dayCount = filteredScheduleByDay[dayIndex]?.size ?: 0
+                    Box(
+                        modifier = Modifier.weight(1f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (dayCount > 0) {
+                            Text(
+                                "$dayCount",
+                                fontSize = 9.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isSelected) MaterialTheme.colorScheme.primary
+                                       else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                            )
+                        }
+                    }
+                }
             }
         }
 
@@ -458,6 +533,29 @@ fun ScheduleScreen(
                             Spacer(Modifier.height(16.dp))
                             Text("Swipe down to refresh", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f))
                         }
+                    }
+                } else if (viewMode == 1) {
+                    AnimatedContent(
+                        targetState = selectedDay,
+                        transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(150)) },
+                        label = "dayCrossfade"
+                    ) {
+                        TimelineScheduleList(
+                            timelineItems = byDayTimelineItems,
+                            currentDayOfWeek = currentDayOfWeek,
+                            preferEnglishTitles = preferEnglishTitles,
+                            animeStatusMap = animeStatusMap,
+                            listState = listStateByDay,
+                            isVisible = isVisible,
+                            onAnimeClick = { anime ->
+                                val exploreAnime = ExploreAnime(
+                                    id = anime.id, title = anime.title, titleEnglish = anime.titleEnglish, cover = anime.cover,
+                                    banner = null, episodes = anime.episodes, latestEpisode = anime.airingEpisode,
+                                    averageScore = anime.averageScore, genres = anime.genres, year = anime.year, format = null, malId = anime.malId
+                                )
+                                firstOpenedAnime = exploreAnime; selectedAnime = exploreAnime; showAnimeDialog = true; onAnimeDialogOpen(true)
+                            }
+                        )
                     }
                 } else {
                     TimelineScheduleList(

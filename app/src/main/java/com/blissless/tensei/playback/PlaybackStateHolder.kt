@@ -700,9 +700,14 @@ class PlaybackStateHolder(
         }
 
         val streamMethod = viewModel.streamMethod.value
-        android.util.Log.d("Playback", "loadAndPlayEpisode: anime='${anime.title}' ep=$episode streamMethod='$streamMethod'")
+        val streamExtAuthority = viewModel.defaultStreamExtension.value
+        android.util.Log.d("Playback", "loadAndPlayEpisode: anime='${anime.title}' ep=$episode streamMethod='$streamMethod' streamExt=$streamExtAuthority")
         if (streamMethod == "magnet") {
-            loadAndPlayEpisodeTensei(anime, episode, isAutoRefresh)
+            if (streamExtAuthority != null) {
+                loadAndPlayEpisodeStream(anime, episode, isAutoRefresh, streamExtAuthority)
+            } else {
+                loadAndPlayEpisodeTensei(anime, episode, isAutoRefresh)
+            }
             return
         }
         loadAndPlayEpisodeAniyomi(anime, episode, isAutoRefresh)
@@ -799,6 +804,70 @@ class PlaybackStateHolder(
                 streamError = "No magnet link found for Ep $episode"
                 isLoadingStream = false
                 context.toast("No magnet available for Ep $episode")
+            }
+            if (isAutoRefresh) isAutoRefreshing = false
+        }
+    }
+
+    /**
+     * Tensei stream extension playback path.
+     *
+     * For ContentProvider-based stream extensions (*.anime.stream) that do not
+     * provide magnet URIs — they only serve direct stream URLs.
+     */
+    fun loadAndPlayEpisodeStream(anime: com.blissless.tensei.data.models.AnimeMedia, episode: Int, isAutoRefresh: Boolean, streamAuthority: String) {
+        if (isAutoRefresh && isAutoRefreshing) return
+        if (isAutoRefresh) isAutoRefreshing = true
+        android.util.Log.i("Playback", "loadAndPlayEpisodeStream: anime=${anime.id} ep=$episode authority=$streamAuthority")
+        isExtensionFlow = false
+        isLoadingStream = true
+        scope.launch {
+            yield()
+            val streamResult = withContext(Dispatchers.IO) {
+                try {
+                    viewModel.fetchStreamUrlForEpisode(anime, episode, viewModel.preferredCategory.value, overrideAuthority = streamAuthority)
+                } catch (e: Exception) {
+                    android.util.Log.w("Playback", "loadAndPlayEpisodeStream: fetchStreamUrlForEpisode failed", e)
+                    null
+                }
+            }
+            android.util.Log.i("Playback", "loadAndPlayEpisodeStream: result url=${streamResult?.url?.take(60)} subtitles=${streamResult?.subtitles?.size ?: 0} streams=${streamResult?.streams?.size}")
+            if (streamResult != null) {
+                val preferredLang = viewModel.preferredCategory.value
+                val preferredStream = selectPreferredTenseiStream(streamResult.streams, preferredLang)
+                val playUrl = preferredStream?.url ?: streamResult.url
+                val playHeaders = preferredStream?.headers ?: streamResult.headers
+                val playSubs = preferredStream?.subtitles ?: streamResult.subtitles
+
+                currentVideoUrl = playUrl
+                currentReferer = playHeaders["Referer"] ?: ""
+                currentEpisodeTitle = sanitizeEpisodeTitle(anime.title) ?: "Episode $episode"
+                currentSubtitleTracks = playSubs
+                currentSubtitleUrl = pickTenseiSubtitleUrl(playSubs)
+                currentQualityOptions = emptyList()
+                currentQuality = "Auto"
+                currentServerName = preferredStream?.lang?.uppercase() ?: "Tensei"
+                currentServerIndex = 0
+                currentCategory = preferredStream?.lang ?: preferredLang
+                isExtensionFlow = false
+                extensionVideoHeaders = playHeaders
+                extensionOkHttpClient = null
+                extensionHosters = streamResult.streams.map { s ->
+                    eu.kanade.tachiyomi.animesource.model.Hoster(
+                        hosterUrl = s.url,
+                        hosterName = s.lang.uppercase()
+                    )
+                }
+                extensionServers = buildTenseiServerList(streamResult.streams)
+                extensionStreamEntries = streamResult.streams
+                extensionServers.find { it.url == playUrl }?.let { currentServerName = it.name }
+                com.blissless.tensei.stream.PlayerData.allHosters = extensionHosters ?: emptyList()
+                showPlayer = true
+                isLoadingStream = false
+            } else {
+                streamError = "No stream available for Ep $episode"
+                isLoadingStream = false
+                context.toast("No stream available for Ep $episode")
             }
             if (isAutoRefresh) isAutoRefreshing = false
         }

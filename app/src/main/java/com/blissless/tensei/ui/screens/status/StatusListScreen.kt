@@ -19,7 +19,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
@@ -212,7 +214,7 @@ fun StatusListScreen(
                 detectTapGestures { focusManager.clearFocus() }
             }
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
             TopAppBar(
                 title = {
                     Row(
@@ -261,7 +263,8 @@ fun StatusListScreen(
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface
-                )
+                ),
+                windowInsets = WindowInsets(0, 0, 0, 0)
             )
 
             OutlinedTextField(
@@ -589,7 +592,7 @@ private fun StatusListAnimeCard(
             .build()
     }
 
-    Column(modifier = Modifier.width(160.dp)) {
+    Column(modifier = Modifier.fillMaxWidth()) {
         Card(
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier
@@ -633,7 +636,7 @@ private fun StatusListAnimeCard(
                         )
                 )
 
-                // Top Row: Episode Counter (left) + Info Button (right)
+                // Top Row: Episode Counter (left) + Rating (right)
                 Row(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
@@ -655,21 +658,19 @@ private fun StatusListAnimeCard(
                         )
                     }
 
-                    // Info Button
-                    FilledTonalIconButton(
-                        onClick = { onInfoClick(cardBounds?.let { HomeAnimeCardBounds(anime.id, anime.cover, it) }) },
-                        modifier = Modifier.size(32.dp),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = IconButtonDefaults.filledTonalIconButtonColors(
-                            containerColor = Color.Black.copy(alpha = 0.6f),
-                            contentColor = Color.White
-                        )
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Info,
-                            contentDescription = "Info",
-                            modifier = Modifier.size(18.dp)
-                        )
+                    if (anime.averageScore != null && anime.averageScore > 0) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color.Black.copy(alpha = 0.65f)
+                        ) {
+                            Text(
+                                text = "★ ${String.format(java.util.Locale.US, "%.1f", anime.averageScore / 10.0)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFFFFD700),
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                            )
+                        }
                     }
                 }
 
@@ -684,7 +685,7 @@ private fun StatusListAnimeCard(
                     )
                 }
 
-                // Bottom Row: Edit Status Button (left) + Play Button (right)
+                // Bottom Row: Edit Status Button (left) + Info Button (right)
                 Row(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
@@ -711,13 +712,7 @@ private fun StatusListAnimeCard(
                     Spacer(modifier = Modifier.weight(1f))
 
                     FilledTonalIconButton(
-                        onClick = {
-                            if (listType == "CURRENT" || listType == "PAUSED") {
-                                onPlayClick()
-                            } else {
-                                onClick(cardBounds?.let { HomeAnimeCardBounds(anime.id, anime.cover, it) })
-                            }
-                        },
+                        onClick = { onInfoClick(cardBounds?.let { HomeAnimeCardBounds(anime.id, anime.cover, it) }) },
                         modifier = Modifier.size(32.dp),
                         shape = RoundedCornerShape(10.dp),
                         colors = IconButtonDefaults.filledTonalIconButtonColors(
@@ -726,8 +721,8 @@ private fun StatusListAnimeCard(
                         )
                     ) {
                         Icon(
-                            imageVector = Icons.Default.PlayArrow,
-                            contentDescription = if (listType == "CURRENT" || listType == "PAUSED") "Play" else "Episodes",
+                            imageVector = Icons.Outlined.Info,
+                            contentDescription = "Info",
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -738,7 +733,7 @@ private fun StatusListAnimeCard(
         val displayTitle = if (preferEnglishTitles && !anime.titleEnglish.isNullOrEmpty()) anime.titleEnglish else anime.title
         Box(
             modifier = Modifier
-                .width(160.dp)
+                .fillMaxWidth()
                 .height(40.dp)
                 .padding(top = 6.dp)
         ) {
@@ -770,7 +765,7 @@ private fun StatusListMangaCard(
         "COMPLETED" -> if (manga.totalChapters > 0) "${manga.totalChapters} ch." else "Ch. ${manga.progress}"
         else -> if (manga.totalChapters > 0) "${manga.totalChapters} ch." else null
     }
-    Column(modifier = Modifier.width(160.dp)) {
+    Column(modifier = Modifier.fillMaxWidth()) {
         Card(
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier
@@ -793,7 +788,7 @@ private fun StatusListMangaCard(
                         .background(Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.9f))))
                 )
 
-                // Top Row: Chapter Counter (left) + Info Button (right)
+                // Top Row: Chapter Counter (left) + Rating (right)
                 Row(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
@@ -817,21 +812,19 @@ private fun StatusListMangaCard(
                         }
                     }
 
-                    // Info Button
-                    FilledTonalIconButton(
-                        onClick = onInfoClick,
-                        modifier = Modifier.size(32.dp),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = IconButtonDefaults.filledTonalIconButtonColors(
-                            containerColor = Color.Black.copy(alpha = 0.6f),
-                            contentColor = Color.White
-                        )
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Info,
-                            contentDescription = "Info",
-                            modifier = Modifier.size(18.dp)
-                        )
+                    if (manga.averageScore != null && manga.averageScore > 0) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color.Black.copy(alpha = 0.65f)
+                        ) {
+                            Text(
+                                text = "★ ${String.format(java.util.Locale.US, "%.1f", manga.averageScore / 10.0)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFFFFD700),
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                            )
+                        }
                     }
                 }
 
@@ -846,7 +839,7 @@ private fun StatusListMangaCard(
                     )
                 }
 
-                // Bottom Row: Edit Status Button (left) + Continue Reading Button (right)
+                // Bottom Row: Edit Status Button (left) + Info Button (right)
                 Row(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
@@ -873,13 +866,7 @@ private fun StatusListMangaCard(
                     Spacer(modifier = Modifier.weight(1f))
 
                     FilledTonalIconButton(
-                        onClick = {
-                            if (listType == "CURRENT" || listType == "PAUSED") {
-                                onContinueReadingClick()
-                            } else {
-                                onClick()
-                            }
-                        },
+                        onClick = onInfoClick,
                         modifier = Modifier.size(32.dp),
                         shape = RoundedCornerShape(10.dp),
                         colors = IconButtonDefaults.filledTonalIconButtonColors(
@@ -888,8 +875,8 @@ private fun StatusListMangaCard(
                         )
                     ) {
                         Icon(
-                            imageVector = Icons.Default.PlayArrow,
-                            contentDescription = if (listType == "CURRENT" || listType == "PAUSED") "Continue Reading" else "Read",
+                            imageVector = Icons.Outlined.Info,
+                            contentDescription = "Info",
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -897,7 +884,7 @@ private fun StatusListMangaCard(
             }
         }
         Box(
-            modifier = Modifier.width(160.dp).height(40.dp).padding(top = 6.dp)
+            modifier = Modifier.fillMaxWidth().height(40.dp).padding(top = 6.dp)
         ) {
             Text(
                 text = manga.title,

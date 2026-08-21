@@ -13,6 +13,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -1576,7 +1577,8 @@ private fun MangaChapterListHeader(
     onBack: (() -> Unit)? = null,
     onDeleteAll: (() -> Unit)? = null
 ) {
-    Column {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        // Title row
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -1595,98 +1597,98 @@ private fun MangaChapterListHeader(
                 Column {
                     Text(
                         text = "Chapters",
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.headlineSmall,
                         color = MaterialTheme.colorScheme.onBackground,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.5.sp
+                        fontWeight = FontWeight.Bold
                     )
                     Text(
                         text = "$readCount of $totalCount read",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        letterSpacing = 0.2.sp
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-            }
-
-            if (progress > 0f) {
-                Text(
-                    text = "${(progress * 100).toInt()}%",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.SemiBold
-                )
             }
 
             if (onDeleteAll != null) {
-                Spacer(modifier = Modifier.width(4.dp))
-                IconButton(onClick = onDeleteAll) {
+                IconButton(onClick = onDeleteAll, modifier = Modifier.size(36.dp)) {
                     Icon(
                         Icons.Default.Delete,
                         contentDescription = "Delete all",
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(20.dp)
+                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(4.dp)
-                .clip(RoundedCornerShape(2.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant)
+        // Progress section — ring + bar + continue button in a card-like surface
+        Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(progress.coerceIn(0f, 1f))
-                    .fillMaxHeight()
-                    .background(
-                        Brush.horizontalGradient(
-                            listOf(
-                                MaterialTheme.colorScheme.primary,
-                                MaterialTheme.colorScheme.tertiary
-                            )
-                        ),
-                        RoundedCornerShape(2.dp)
-                    )
-            )
-        }
-
-        if (nextChapterToRead < totalCount) {
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Button(
-                onClick = onContinueReading,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    Icons.Default.PlayArrow,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = "Continue Reading",
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.3.sp
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                val nextChapterDisplay = chapters.getOrNull(nextChapterToRead)?.let { extractChapterNum(it.title) }
-                    ?: "${nextChapterToRead + 1}"
-                Text(
-                    text = "\u00B7 Ch. $nextChapterDisplay",
-                    fontWeight = FontWeight.Medium,
-                    color = Color.White.copy(alpha = 0.8f)
-                )
+                // Circular progress ring
+                Box(contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(
+                        progress = { progress.coerceIn(0f, 1f) },
+                        modifier = Modifier.size(44.dp),
+                        strokeWidth = 3.dp,
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
+                    )
+                    Text(
+                        text = "${(progress * 100).toInt()}%",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp
+                    )
+                }
+
+                Spacer(Modifier.width(14.dp))
+
+                // Linear progress bar
+                Column(modifier = Modifier.weight(1f)) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().height(3.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(progress.coerceIn(0f, 1f))
+                                .fillMaxHeight()
+                                .background(
+                                    Brush.horizontalGradient(listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.tertiary)),
+                                    RoundedCornerShape(2.dp)
+                                )
+                        )
+                    }
+                }
+
+                if (nextChapterToRead < totalCount) {
+                    Spacer(Modifier.width(14.dp))
+                    FilledTonalButton(
+                        onClick = onContinueReading,
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    ) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        val nextChapterDisplay = chapters.getOrNull(nextChapterToRead)?.let { extractChapterNum(it.title) }
+                            ?: "${nextChapterToRead + 1}"
+                        Text("Ch. $nextChapterDisplay", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                    }
+                }
             }
         }
     }
@@ -1697,21 +1699,20 @@ private fun MangaChapterSearchBar(
     query: String,
     onQueryChange: (String) -> Unit
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(44.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-            .then(
-                if (query.isNotEmpty()) Modifier.border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
-                else Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
-            )
+    val borderColor by animateColorAsState(
+        targetValue = if (query.isNotEmpty()) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+        tween(200),
+        label = "searchBorder"
+    )
+
+    Surface(
+        modifier = Modifier.fillMaxWidth().height(44.dp),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+        border = BorderStroke(if (query.isNotEmpty()) 1.dp else 0.5.dp, borderColor)
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 14.dp),
+            modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
@@ -1736,7 +1737,7 @@ private fun MangaChapterSearchBar(
                         if (query.isEmpty()) {
                             Text(
                                 "Search chapters...",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                 fontSize = 14.sp
                             )
                         }
@@ -1748,7 +1749,7 @@ private fun MangaChapterSearchBar(
             if (query.isNotEmpty()) {
                 IconButton(
                     onClick = { onQueryChange("") },
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(24.dp)
                 ) {
                     Icon(
                         Icons.Default.Close,
@@ -1785,67 +1786,64 @@ private fun MangaChapterGroup(
     )
 
     val readInGroup = groupChapters.count { (index, _) -> index in readIndices }
+    val readRatio = if (groupChapters.isNotEmpty()) readInGroup.toFloat() / groupChapters.size else 0f
 
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null
-            ) { expanded = !expanded },
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column {
+            // Group header
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { expanded = !expanded }
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // Compact circular progress ring
+                Box(contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(
+                        progress = { readRatio },
+                        modifier = Modifier.size(36.dp),
+                        strokeWidth = 2.5.dp,
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)
+                    )
+                    Text(
+                        text = "${(readRatio * 100).toInt()}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 10.sp
+                    )
+                }
+
+                Spacer(Modifier.width(14.dp))
+
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = groupKey,
                         style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.onBackground,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.3.sp
+                        fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.height(2.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "${groupChapters.size} chapters",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        if (readInGroup > 0) {
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "\u00B7 $readInGroup read",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF34D399).copy(alpha = 0.8f)
-                            )
-                        }
-                    }
-                }
-
-                Box(
-                    modifier = Modifier
-                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
-                        .padding(horizontal = 10.dp, vertical = 4.dp)
-                ) {
                     Text(
-                        text = "${groupChapters.size}",
+                        text = if (readInGroup > 0) "${groupChapters.size} chapters \u00B7 $readInGroup read"
+                               else "${groupChapters.size} chapters",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontWeight = FontWeight.SemiBold
+                        color = if (readInGroup > 0) MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)
+                               else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-
-                Spacer(modifier = Modifier.width(8.dp))
 
                 Icon(
                     imageVector = Icons.Default.KeyboardArrowDown,
@@ -1860,13 +1858,14 @@ private fun MangaChapterGroup(
                 enter = expandVertically(animationSpec = tween(250)) + fadeIn(animationSpec = tween(250)),
                 exit = shrinkVertically(animationSpec = tween(200)) + fadeOut(animationSpec = tween(150))
             ) {
-                Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                    groupChapters.forEach { (absoluteIndex, chapter) ->
+                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+                    groupChapters.forEachIndexed { localIndex, (absoluteIndex, chapter) ->
                         MangaChapterRow(
                             chapter = chapter,
                             isRead = absoluteIndex in readIndices,
                             isNextToRead = absoluteIndex == nextChapterToRead,
                             isDownloaded = chapter.chapterNumber in downloadedChapterNumbers,
+                            isLast = localIndex == groupChapters.lastIndex,
                             onClick = { onChapterClick(absoluteIndex) },
                             onDelete = onDeleteChapter?.let { delete -> { delete(absoluteIndex) } }
                         )
@@ -1883,83 +1882,110 @@ private fun MangaChapterRow(
     isRead: Boolean,
     isNextToRead: Boolean,
     isDownloaded: Boolean = false,
+    isLast: Boolean = false,
     onClick: () -> Unit,
     onDelete: (() -> Unit)? = null
 ) {
-    val accentColor = when {
-        isNextToRead && !isRead -> MaterialTheme.colorScheme.primaryContainer
-        isRead -> Color(0xFF34D399)
-        else -> Color.Transparent
-    }
+    val chNum = extractChapterNum(chapter.title)
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick
-            )
-            .padding(start = 0.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(10.dp),
+        color = when {
+            isNextToRead && !isRead -> MaterialTheme.colorScheme.primary.copy(alpha = 0.07f)
+            else -> Color.Transparent
+        }
     ) {
-        Box(
-            modifier = Modifier
-                .width(3.dp)
-                .height(32.dp)
-                .background(accentColor, RoundedCornerShape(2.dp))
-        )
-
-        Spacer(modifier = Modifier.width(14.dp))
-
-        val chNum = extractChapterNum(chapter.title)
-        Text(
-            text = "Ch. $chNum",
-            style = MaterialTheme.typography.bodyMedium,
-            color = if (isRead) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onBackground,
-            fontWeight = if (isRead) FontWeight.Normal else FontWeight.Medium
-        )
-
-        Spacer(modifier = Modifier.weight(1f))
-
-        if (isDownloaded) {
-            Icon(
-                Icons.Default.Download,
-                contentDescription = "Downloaded",
-                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
-                modifier = Modifier.size(16.dp)
-            )
-            Spacer(modifier = Modifier.width(10.dp))
-        }
-
-        if (isRead) {
-            Icon(
-                Icons.Default.CheckCircle,
-                contentDescription = "Read",
-                tint = Color(0xFF34D399),
-                modifier = Modifier.size(18.dp)
-            )
-        } else if (isNextToRead) {
-            Icon(
-                Icons.Default.PlayArrow,
-                contentDescription = "Next",
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(18.dp)
-            )
-        }
-
-        if (onDelete != null) {
-            Spacer(modifier = Modifier.width(10.dp))
-            IconButton(
-                onClick = onDelete,
-                modifier = Modifier.size(28.dp)
-            ) {
-                Icon(
-                    Icons.Default.Delete,
-                    contentDescription = "Delete chapter",
-                    tint = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.size(16.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Inline status indicator
+            Box(
+                modifier = Modifier.size(8.dp).clip(CircleShape).then(
+                    when {
+                        isRead -> Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
+                        isNextToRead -> Modifier.background(MaterialTheme.colorScheme.primary)
+                        else -> Modifier.border(1.2.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), CircleShape)
+                    }
                 )
+            )
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            // Chapter number badge
+            Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = when {
+                    isNextToRead -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                    isRead -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                    else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                },
+                modifier = Modifier.size(width = 38.dp, height = 24.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        text = chNum,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 11.sp,
+                        color = when {
+                            isNextToRead -> MaterialTheme.colorScheme.primary
+                            isRead -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                            else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(10.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = if (chapter.title.length > 10 && !chapter.title.startsWith("Chapter")) chapter.title else "Chapter $chNum",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = when {
+                        isNextToRead -> MaterialTheme.colorScheme.onBackground
+                        isRead -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        else -> MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f)
+                    },
+                    fontWeight = if (isNextToRead) FontWeight.SemiBold else FontWeight.Normal,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            if (isDownloaded) {
+                Icon(
+                    Icons.Default.Download,
+                    contentDescription = "Downloaded",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
+                    modifier = Modifier.size(14.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+            }
+
+            if (isNextToRead && !isRead) {
+                Icon(
+                    Icons.Default.PlayArrow,
+                    contentDescription = "Next",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+
+            if (onDelete != null) {
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Delete",
+                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.55f),
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
             }
         }
     }

@@ -181,15 +181,18 @@ suspend fun MainViewModel.fetchMagnetForEpisode(anime: AnimeMedia, episode: Int)
     return magnet
 }
 
-suspend fun MainViewModel.fetchStreamUrlForEpisode(anime: AnimeMedia, episode: Int, lang: String): StreamUrlResult? {
+suspend fun MainViewModel.fetchStreamUrlForEpisode(anime: AnimeMedia, episode: Int, lang: String, overrideAuthority: String? = null): StreamUrlResult? {
     val engName = anime.titleEnglish ?: ""
     val romajiName = anime.title ?: ""
-    Log.d(MainViewModel.TAG, "fetchStreamUrlForEpisode: anime=${anime.id} ep=$episode lang=$lang eng='$engName' romaji='$romajiName'")
+    Log.d(MainViewModel.TAG, "fetchStreamUrlForEpisode: anime=${anime.id} ep=$episode lang=$lang eng='$engName' romaji='$romajiName' override=$overrideAuthority")
     ensureMagnetClient()
-    val authority = defaultMagnetExtension.value
+    val authority = overrideAuthority
+        ?: defaultMagnetExtension.value
         ?: _availableMagnetExtensions.value.firstOrNull()?.second
+        ?: defaultStreamExtension.value
+        ?: _availableStreamExtensions.value.firstOrNull()?.second
     if (authority.isNullOrBlank()) {
-        Log.w(MainViewModel.TAG, "fetchStreamUrlForEpisode: no magnet extension authority")
+        Log.w(MainViewModel.TAG, "fetchStreamUrlForEpisode: no extension authority")
         return null
     }
     return withContext(Dispatchers.IO) {

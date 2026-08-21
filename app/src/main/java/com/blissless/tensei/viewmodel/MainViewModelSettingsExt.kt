@@ -152,6 +152,9 @@ fun MainViewModel.setMangaAutoAdvance(enabled: Boolean) =
 fun MainViewModel.setDefaultMagnetExtension(authority: String) =
     userPreferences.setDefaultMagnetExtension(authority)
 
+fun MainViewModel.setDefaultStreamExtension(authority: String?) =
+    userPreferences.setDefaultStreamExtension(authority)
+
 // ─── Settings with side effects ────────────────────────────────────────────
 
 fun MainViewModel.setThemeMode(mode: String) {

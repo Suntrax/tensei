@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
@@ -89,6 +90,7 @@ import com.blissless.tensei.ui.screens.downloads.EpisodeDownloadDialog
 import com.blissless.tensei.ui.screens.explore.ExploreScreen
 import com.blissless.tensei.ui.screens.home.HomeScreen
 import com.blissless.tensei.ui.screens.episode.RichEpisodeList
+import com.blissless.tensei.ui.screens.episode.SimpleEpisodeGrid
 import com.blissless.tensei.ui.screens.player.PlayerScreen
 import com.blissless.tensei.ui.screens.profile.UserProfileScreen
 import com.blissless.tensei.ui.screens.relations.AllRecommendationsScreen
@@ -897,6 +899,71 @@ fun MainScreen(
     }
 
     /**
+     * Tensei stream extension playback path.
+     *
+     * For ContentProvider-based stream extensions (*.anime.stream) that do not
+     * provide magnet URIs — they only serve direct stream URLs via the same
+     * [MagnetExtensionClient.fetchStreamUrl] ContentProvider contract.
+     */
+    fun loadAndPlayEpisodeStream(anime: AnimeMedia, episode: Int, isAutoRefresh: Boolean, streamAuthority: String) {
+        if (isAutoRefresh && isAutoRefreshing) return
+        if (isAutoRefresh) isAutoRefreshing = true
+        isExtensionFlow = false
+        isLoadingStream = true
+        scope.launch {
+            yield()
+            android.util.Log.i("Playback", "loadAndPlayEpisodeStream: anime=${anime.id} ep=$episode authority=$streamAuthority")
+            val streamResult = withContext(Dispatchers.IO) {
+                try {
+                    viewModel.fetchStreamUrlForEpisode(anime, episode, viewModel.preferredCategory.value, overrideAuthority = streamAuthority)
+                } catch (e: Exception) {
+                    android.util.Log.w("Playback", "loadAndPlayEpisodeStream: fetchStreamUrlForEpisode failed", e)
+                    null
+                }
+            }
+            android.util.Log.i("Playback", "loadAndPlayEpisodeStream: streamResult url=${streamResult?.url?.take(60)} subtitles=${streamResult?.subtitles?.size ?: 0} streams=${streamResult?.streams?.size}")
+            if (streamResult != null) {
+                val preferredLang = viewModel.preferredCategory.value
+                val preferredStream = selectPreferredTenseiStream(streamResult.streams, preferredLang)
+                val playUrl = preferredStream?.url ?: streamResult.url
+                val playHeaders = preferredStream?.headers ?: streamResult.headers
+                val playSubs = preferredStream?.subtitles ?: streamResult.subtitles
+
+                currentVideoUrl = playUrl
+                currentReferer = playHeaders["Referer"] ?: ""
+                currentEpisodeTitle = sanitizeEpisodeTitle(anime.title) ?: "Episode $episode"
+                currentSubtitleTracks = playSubs
+                currentSubtitleUrl = pickTenseiSubtitleUrl(playSubs)
+                currentQualityOptions = emptyList()
+                currentQuality = "Auto"
+                currentServerName = preferredStream?.lang?.uppercase() ?: "Tensei"
+                currentServerIndex = 0
+                currentCategory = preferredStream?.lang ?: preferredLang
+                isExtensionFlow = false
+                extensionVideoHeaders = playHeaders
+                extensionOkHttpClient = null
+                extensionHosters = streamResult.streams.map { s ->
+                    eu.kanade.tachiyomi.animesource.model.Hoster(
+                        hosterUrl = s.url,
+                        hosterName = s.lang.uppercase()
+                    )
+                }
+                extensionServers = buildTenseiServerList(streamResult.streams)
+                extensionStreamEntries = streamResult.streams
+                extensionServers.find { it.url == playUrl }?.let { currentServerName = it.name }
+                com.blissless.tensei.stream.PlayerData.allHosters = extensionHosters ?: emptyList()
+                showPlayer = true
+                isLoadingStream = false
+            } else {
+                streamError = "No stream available for Ep $episode"
+                isLoadingStream = false
+                context.toast("No stream available for Ep $episode")
+            }
+            if (isAutoRefresh) isAutoRefreshing = false
+        }
+    }
+
+    /**
      * Aniyomi (DexClassLoader / AnimeCatalogueSource) extension playback path.
      *
      * This is the original code path — unchanged apart from being extracted
@@ -952,7 +1019,8 @@ fun MainScreen(
      */
     fun loadAndPlayEpisode(anime: AnimeMedia, episode: Int, isAutoRefresh: Boolean = false) {
         val streamMethod = viewModel.streamMethod.value
-        android.util.Log.d("Playback", "loadAndPlayEpisode: anime=${anime.id} ep=$episode method=$streamMethod autoRefresh=$isAutoRefresh")
+        val streamExtAuthority = viewModel.defaultStreamExtension.value
+        android.util.Log.d("Playback", "loadAndPlayEpisode: anime=${anime.id} ep=$episode method=$streamMethod streamExt=$streamExtAuthority autoRefresh=$isAutoRefresh")
         if (!isAutoRefresh) { isAutoRefreshing = false; pendingSeekPosition = null }
         currentAnime = anime
         currentEpisode = episode
@@ -962,7 +1030,11 @@ fun MainScreen(
         if (!isAutoRefresh) showPlayer = false
 
         if (streamMethod == "magnet") {
-            loadAndPlayEpisodeTensei(anime, episode, isAutoRefresh)
+            if (streamExtAuthority != null) {
+                loadAndPlayEpisodeStream(anime, episode, isAutoRefresh, streamExtAuthority)
+            } else {
+                loadAndPlayEpisodeTensei(anime, episode, isAutoRefresh)
+            }
             return
         }
         loadAndPlayEpisodeAniyomi(anime, episode, isAutoRefresh)
@@ -983,9 +1055,8 @@ fun MainScreen(
 
     fun fetchAndCacheEpisode(ep: Int) {
         if (currentAnime == null) return
-        // Tensei (magnet) path does not use the aniyomi episode cache —
-        // magnet URIs are resolved on demand by loadAndPlayEpisodeTensei.
-        if (viewModel.streamMethod.value == "magnet") return
+        val streamMethod = viewModel.streamMethod.value
+        if (streamMethod == "magnet") return
         val pkg = extensionSourcePackage.ifEmpty { viewModel.defaultExtensionPackage.value }
         if (pkg.isEmpty()) return
         scope.launch {
@@ -997,8 +1068,8 @@ fun MainScreen(
 
     fun prefetchExtensionNextEpisode() {
         if (currentAnime == null) return
-        // Tensei (magnet) path does not use the aniyomi prefetch cache.
-        if (viewModel.streamMethod.value == "magnet") return
+        val streamMethod = viewModel.streamMethod.value
+        if (streamMethod == "magnet") return
         scope.launch {
             val nextEp = currentEpisode + 1
             val pkg = extensionSourcePackage.ifEmpty { viewModel.defaultExtensionPackage.value }
@@ -2225,6 +2296,7 @@ fun MainScreen(
         currentAnime?.let { anime ->
             val released = anime.latestEpisode ?: anime.totalEpisodes
             val tmdbEpisodes by viewModel.tmdbEpisodeCache.collectAsState()
+            val playerDisplayTitle = if (preferEnglishTitles && !anime.titleEnglish.isNullOrEmpty()) anime.titleEnglish else anime.title
             @Composable
             fun PlayerUi() {
             PlayerScreen(
@@ -2234,7 +2306,7 @@ fun MainScreen(
                 subtitleTracks = currentSubtitleTracks,
                 currentEpisode = currentEpisode,
                 totalEpisodes = totalEpisodes,
-                animeName = anime.title,
+                animeName = playerDisplayTitle,
                 episodeTitle = currentEpisodeTitle,
                 animeId = anime.id,
                 malId = anime.malId ?: 0,
@@ -2359,6 +2431,7 @@ fun MainScreen(
                     } else {
                         Modifier
                             .fillMaxWidth()
+                            .statusBarsPadding()
                             .aspectRatio(16f / 9f)
                             .background(Color.Black)
                     }
@@ -2366,33 +2439,63 @@ fun MainScreen(
                     PlayerUi()
                 }
                 if (!playerFullscreen) {
-                    RichEpisodeList(
-                        episodeCount = maxOf(totalEpisodes, currentEpisode, released),
-                        releasedCount = released,
-                        currentEpisode = currentEpisode,
-                        currentProgress = maxOf(animeProgressMap[anime.id] ?: 0, currentEpisode - 1),
-                        isOled = isOled,
-                        tmdbEpisodes = tmdbEpisodes[anime.id] ?: emptyList(),
-                        playbackPositions = playbackPositions,
-                        playbackDurations = playbackDurations,
-                        animeId = anime.id,
-                        onEpisodeSelect = { ep -> loadAndPlayEpisode(anime, ep) },
-                        onClose = {
-                            showPlayer = false
-                            currentVideoUrl = null
-                            pendingSeekPosition = null
-                            extensionOkHttpClient = null
-                            extensionVideoHeaders = emptyMap()
-                            extensionHosters = null
-                            extensionServers = emptyList()
-                            extensionStreamEntries = emptyList()
-                            cachedExtensionNext = null
-                            PlayerData.extensionSource = null
-                            PlayerData.extensionEpisode = null
-                            PlayerData.allHosters = emptyList()
-                        },
-                        onEnterFullscreen = { playerFullscreen = true },
-                    )
+                    if (simplifyEpisodeMenu) {
+                        SimpleEpisodeGrid(
+                            episodeCount = maxOf(totalEpisodes, currentEpisode, released),
+                            releasedCount = released,
+                            currentEpisode = currentEpisode,
+                            currentProgress = maxOf(animeProgressMap[anime.id] ?: 0, currentEpisode - 1),
+                            isOled = isOled,
+                            animeTitle = playerDisplayTitle,
+                            episodeTitle = currentEpisodeTitle,
+                            onEpisodeSelect = { ep -> loadAndPlayEpisode(anime, ep) },
+                            onClose = {
+                                showPlayer = false
+                                currentVideoUrl = null
+                                pendingSeekPosition = null
+                                extensionOkHttpClient = null
+                                extensionVideoHeaders = emptyMap()
+                                extensionHosters = null
+                                extensionServers = emptyList()
+                                extensionStreamEntries = emptyList()
+                                cachedExtensionNext = null
+                                PlayerData.extensionSource = null
+                                PlayerData.extensionEpisode = null
+                                PlayerData.allHosters = emptyList()
+                            },
+                            onEnterFullscreen = { playerFullscreen = true },
+                        )
+                    } else {
+                        RichEpisodeList(
+                            episodeCount = maxOf(totalEpisodes, currentEpisode, released),
+                            releasedCount = released,
+                            currentEpisode = currentEpisode,
+                            currentProgress = maxOf(animeProgressMap[anime.id] ?: 0, currentEpisode - 1),
+                            isOled = isOled,
+                            tmdbEpisodes = tmdbEpisodes[anime.id] ?: emptyList(),
+                            playbackPositions = playbackPositions,
+                            playbackDurations = playbackDurations,
+                            animeId = anime.id,
+                            animeTitle = playerDisplayTitle,
+                            episodeTitle = currentEpisodeTitle,
+                            onEpisodeSelect = { ep -> loadAndPlayEpisode(anime, ep) },
+                            onClose = {
+                                showPlayer = false
+                                currentVideoUrl = null
+                                pendingSeekPosition = null
+                                extensionOkHttpClient = null
+                                extensionVideoHeaders = emptyMap()
+                                extensionHosters = null
+                                extensionServers = emptyList()
+                                extensionStreamEntries = emptyList()
+                                cachedExtensionNext = null
+                                PlayerData.extensionSource = null
+                                PlayerData.extensionEpisode = null
+                                PlayerData.allHosters = emptyList()
+                            },
+                            onEnterFullscreen = { playerFullscreen = true },
+                        )
+                    }
                 }
             }
         }

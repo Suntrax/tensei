@@ -21,19 +21,20 @@ fun SkipIconButton(
     label: String,
     backgroundColor: Color,
     iconTint: Color,
+    isCompact: Boolean = false,
     onClick: () -> Unit
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        verticalArrangement = Arrangement.spacedBy(if (isCompact) 2.dp else 4.dp)
     ) {
         IconButton(
             onClick = onClick,
-            modifier = Modifier.size(48.dp).background(backgroundColor, shape = MaterialTheme.shapes.small)
+            modifier = Modifier.size(if (isCompact) 36.dp else 48.dp).background(backgroundColor, shape = MaterialTheme.shapes.small)
         ) {
-            Icon(imageVector = icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(28.dp))
+            Icon(imageVector = icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(if (isCompact) 20.dp else 28.dp))
         }
-        Text(text = label, style = MaterialTheme.typography.labelSmall, color = Color.White, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        Text(text = label, style = if (isCompact) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelSmall.copy(fontSize = MaterialTheme.typography.labelSmall.fontSize), color = Color.White, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
     }
 }
 

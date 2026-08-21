@@ -1414,10 +1414,10 @@ fun OfflinePlayerScreen(
                         ) {
                             Canvas(modifier = Modifier.fillMaxSize()) {
                                 val sliderWidth = size.width
-                                val trackHeight = 8.dp.toPx()
+                                val trackHeight = 5.dp.toPx()
                                 val trackTop = (size.height - trackHeight) / 2f
-                                val cornerRadius = 4.dp.toPx()
-                                val thumbRadiusPx = 8.dp.toPx()
+                                val cornerRadius = 2.5.dp.toPx()
+                                val thumbRadiusPx = 7.dp.toPx()
 
                                 if (duration > 0) {
                                     val progressRatio =

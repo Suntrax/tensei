@@ -762,6 +762,7 @@ fun SearchScreen(
                             mangaCover = coverUrl,
                             mangaFormat = manga.format,
                             mangaScore = manga.averageScore,
+                            mangaYear = manga.seasonYear ?: manga.startDate?.year,
                             listStatus = mangaTrackMap[manga.id],
                             onClick = { onMangaClick(manga) }
                         )
@@ -1008,6 +1009,7 @@ private fun SearchResultCard(
     mangaCover: String? = null,
     mangaFormat: String? = null,
     mangaScore: Int? = null,
+    mangaYear: Int? = null,
     listStatus: String? = null,
     preferEnglishTitles: Boolean = true,
     onClick: () -> Unit
@@ -1021,7 +1023,7 @@ private fun SearchResultCard(
     val displayScore = anime?.averageScore?.let { it / 10.0 } ?: mangaScore?.let { it / 10.0 }
     val cover = anime?.cover ?: mangaCover ?: ""
     val format = anime?.format ?: mangaFormat
-    val year = anime?.year
+    val year = anime?.year ?: mangaYear
 
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
@@ -1130,7 +1132,7 @@ private fun MediaSearchResultCard(
     }
 
     val format = if (isAnime) anime?.format else manga?.format
-    val year = anime?.year
+    val year = anime?.year ?: manga?.seasonYear ?: manga?.startDate?.year
 
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
