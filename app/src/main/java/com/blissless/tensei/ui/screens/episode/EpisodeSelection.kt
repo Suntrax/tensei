@@ -569,7 +569,7 @@ fun RichEpisodeScreen(
                     }
                 }
 
-                if (isAtTop && currentOffset == 0f && available.y > 0) {
+                if (isAtTop && currentOffset <= 10f && available.y > 0) {
                     scope.launch { offsetY.snapTo(available.y) }
                     return available
                 }
@@ -582,7 +582,7 @@ fun RichEpisodeScreen(
 
                 if (currentOffset == 0f) return Velocity.Zero
 
-                val shouldDismiss = currentOffset > dismissThreshold || available.y > 2000f
+                val shouldDismiss = currentOffset > dismissThreshold || available.y > 300f
 
                 if (shouldDismiss) {
                     dismissWithAnimation()
