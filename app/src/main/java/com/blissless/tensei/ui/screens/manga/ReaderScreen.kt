@@ -1776,7 +1776,7 @@ private fun MangaChapterGroup(
 ) {
     var expanded by remember { mutableStateOf(initiallyExpanded) }
     LaunchedEffect(initiallyExpanded) {
-        if (initiallyExpanded) expanded = true
+        expanded = initiallyExpanded
     }
 
     val rotationAngle by animateFloatAsState(

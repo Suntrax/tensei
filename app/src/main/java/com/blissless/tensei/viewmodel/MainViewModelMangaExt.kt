@@ -439,7 +439,8 @@ private fun toMangaMedia(track: MangaTrack): MangaMedia {
         listStatus = track.status,
         scrollProgress = track.scrollProgress,
         currentChapterPages = track.currentChapterPages,
-        userScore = track.score
+        userScore = track.score,
+        averageScore = track.averageScore
     )
 }
 
@@ -523,7 +524,7 @@ suspend fun MainViewModel.fetchMangaLists(): Boolean {
     if (localTracker != null) {
         // Sync AniList entries into local tracking
         anilistCurrent?.forEach { m ->
-            localTracker.ensureTrack(m.id, m.title, m.cover, m.totalChapters)
+            localTracker.ensureTrack(m.id, m.title, m.cover, m.totalChapters, m.averageScore)
             localTracker.updateTrackingStatus(m.id, "CURRENT")
             // Never downgrade local progress: a stale AniList response (push still in
             // flight, or a network hiccup) must not roll back chapters the user just read.
@@ -531,22 +532,22 @@ suspend fun MainViewModel.fetchMangaLists(): Boolean {
             if (m.userScore != null) localTracker.updateScore(m.id, m.userScore)
         }
         anilistPlanning?.forEach { m ->
-            localTracker.ensureTrack(m.id, m.title, m.cover, m.totalChapters)
+            localTracker.ensureTrack(m.id, m.title, m.cover, m.totalChapters, m.averageScore)
             localTracker.updateTrackingStatus(m.id, "PLANNING")
             if (m.userScore != null) localTracker.updateScore(m.id, m.userScore)
         }
         anilistCompleted?.forEach { m ->
-            localTracker.ensureTrack(m.id, m.title, m.cover, m.totalChapters)
+            localTracker.ensureTrack(m.id, m.title, m.cover, m.totalChapters, m.averageScore)
             localTracker.updateTrackingStatus(m.id, "COMPLETED")
             if (m.userScore != null) localTracker.updateScore(m.id, m.userScore)
         }
         anilistPaused?.forEach { m ->
-            localTracker.ensureTrack(m.id, m.title, m.cover, m.totalChapters)
+            localTracker.ensureTrack(m.id, m.title, m.cover, m.totalChapters, m.averageScore)
             localTracker.updateTrackingStatus(m.id, "PAUSED")
             if (m.userScore != null) localTracker.updateScore(m.id, m.userScore)
         }
         anilistDropped?.forEach { m ->
-            localTracker.ensureTrack(m.id, m.title, m.cover, m.totalChapters)
+            localTracker.ensureTrack(m.id, m.title, m.cover, m.totalChapters, m.averageScore)
             localTracker.updateTrackingStatus(m.id, "DROPPED")
             if (m.userScore != null) localTracker.updateScore(m.id, m.userScore)
         }

@@ -1428,11 +1428,11 @@ private fun MangaHorizontalRow(
                                 }
                             }
                             FilledTonalIconButton(
-                                onClick = { onMangaInfoClick(manga) },
-                                modifier = Modifier.size(30.dp),
-                                shape = RoundedCornerShape(10.dp),
-                                colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = Color.Black.copy(alpha = 0.5f), contentColor = Color.White)
-                            ) { Icon(imageVector = Icons.Outlined.Info, contentDescription = "Info", modifier = Modifier.size(16.dp)) }
+                            onClick = { onMangaInfoClick(manga) },
+                            modifier = Modifier.size(30.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = Color.Black.copy(alpha = 0.5f), contentColor = Color.White)
+                        ) { Icon(imageVector = Icons.Outlined.Info, contentDescription = "Info", modifier = Modifier.size(16.dp)) }
                         }
                     }
                 }

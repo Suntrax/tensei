@@ -2,10 +2,15 @@ package com.blissless.tensei
 
 // Extension functions on MainViewModel (defined in com.blissless.tensei.viewmodel)
 import android.Manifest
+import android.app.PictureInPictureParams
+import android.app.RemoteAction
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
+import android.graphics.drawable.Icon
 import android.os.Build
 import android.os.Bundle
+import android.util.Rational
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -131,6 +136,7 @@ import com.blissless.tensei.viewmodel.dismissMangaContinueReading
 import com.blissless.tensei.viewmodel.isMangaFavorited
 import com.blissless.tensei.viewmodel.clearMangaDetail
 import com.blissless.tensei.viewmodel.selectedExtensionAuthority
+import com.blissless.tensei.viewmodel.setSupportsPiP
 import com.blissless.tensei.data.models.MangaExploreMedia
 import com.blissless.tensei.data.models.MangaMedia
 import eu.kanade.tachiyomi.animesource.model.Video
@@ -150,10 +156,176 @@ class MainActivity : ComponentActivity() {
     private val _widgetClicks = kotlinx.coroutines.flow.MutableSharedFlow<Int>(replay = 1, extraBufferCapacity = 1)
     val widgetClicks: kotlinx.coroutines.flow.SharedFlow<Int> = _widgetClicks
 
+    var isInPiPMode = mutableStateOf(false)
+        private set
+
+    var shouldAutoEnterPiP = false
+    var wasFullscreenBeforePiP = false
+    var playerViewBounds = android.graphics.Rect()
+    private var pipReceiver: android.content.BroadcastReceiver? = null
+    private var pipActionCounter = 0
+    private var pipMediaSession: android.media.session.MediaSession? = null
+
     companion object {
         const val PREFS_NAME = "anilist_prefs"
         const val TOKEN_KEY = "auth_token"
         private const val TAG_TORRENT = "MainActivity.Torrent"
+        const val ACTION_PIP_PLAY_PAUSE = "com.blissless.tensei.PIP_PLAY_PAUSE"
+    }
+
+    private fun getPipPlayPauseIcon(isPlaying: Boolean): Icon {
+        val sizePx = (256 * resources.displayMetrics.density).toInt()
+        val bitmap = android.graphics.Bitmap.createBitmap(sizePx, sizePx, android.graphics.Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bitmap)
+        val paint = android.graphics.Paint().apply {
+            color = android.graphics.Color.WHITE
+            isAntiAlias = true
+        }
+        val cx = sizePx / 2f
+        val cy = sizePx / 2f
+        if (isPlaying) {
+            val barWidth = sizePx * 0.16f
+            val gap = sizePx * 0.08f
+            val barHeight = sizePx * 0.48f
+            val top = cy - barHeight / 2f
+            val radius = barWidth / 2.5f
+            canvas.drawRoundRect(cx - gap / 2f - barWidth, top, cx - gap / 2f, top + barHeight, radius, radius, paint)
+            canvas.drawRoundRect(cx + gap / 2f, top, cx + gap / 2f + barWidth, top + barHeight, radius, radius, paint)
+        } else {
+            val triSize = sizePx * 0.52f
+            val path = android.graphics.Path()
+            path.moveTo(cx - triSize * 0.42f, cy - triSize / 2f)
+            path.lineTo(cx + triSize * 0.42f, cy)
+            path.lineTo(cx - triSize * 0.42f, cy + triSize / 2f)
+            path.close()
+            canvas.drawPath(path, paint)
+        }
+        return Icon.createWithBitmap(bitmap)
+    }
+
+    private fun togglePlayPause() {
+        com.blissless.tensei.stream.PlayerData.exoPlayer?.let { player ->
+            val willBePlaying = !player.isPlaying
+            if (willBePlaying) player.play() else player.pause()
+            updatePiPPlayPauseIcon(willBePlaying)
+        }
+    }
+
+    private fun buildPiPParams(autoEnter: Boolean = false): PictureInPictureParams {
+        val isPlaying = com.blissless.tensei.stream.PlayerData.exoPlayer?.isPlaying == true
+        val icon = getPipPlayPauseIcon(isPlaying)
+        val intent = Intent(ACTION_PIP_PLAY_PAUSE).setPackage(packageName)
+        val pendingIntent = android.app.PendingIntent.getBroadcast(
+            this, pipActionCounter++, intent,
+            android.app.PendingIntent.FLAG_CANCEL_CURRENT or android.app.PendingIntent.FLAG_MUTABLE
+        )
+        val action = RemoteAction(icon, "Play/Pause", "Play or Pause", pendingIntent)
+        val builder = PictureInPictureParams.Builder()
+            .setAspectRatio(Rational(16, 9))
+            .setAutoEnterEnabled(autoEnter)
+            .setActions(listOf(action))
+        if (!playerViewBounds.isEmpty) {
+            builder.setSourceRectHint(playerViewBounds)
+        }
+        return builder.build()
+    }
+
+    private fun ensurePiPMediaSession() {
+        if (pipMediaSession == null) {
+            pipMediaSession = android.media.session.MediaSession(this, "TenseiPlayer").apply {
+                setMetadata(
+                    android.media.MediaMetadata.Builder()
+                        .putString(android.media.MediaMetadata.METADATA_KEY_TITLE, "Tensei")
+                        .putString(android.media.MediaMetadata.METADATA_KEY_ARTIST, "Playing")
+                        .build()
+                )
+                setPlaybackState(
+                    android.media.session.PlaybackState.Builder()
+                        .setState(
+                            android.media.session.PlaybackState.STATE_PLAYING,
+                            0, 1f
+                        )
+                        .build()
+                )
+                isActive = true
+            }
+        }
+    }
+
+    fun updatePiPParams(autoEnter: Boolean) {
+        ensurePiPMediaSession()
+        setPictureInPictureParams(buildPiPParams(autoEnter))
+    }
+
+    fun enterPiPMode() {
+        registerPiPReceiver()
+        ensurePiPMediaSession()
+        enterPictureInPictureMode(buildPiPParams())
+    }
+
+    fun releasePiPMediaSession() {
+        pipMediaSession?.release()
+        pipMediaSession = null
+    }
+
+    fun saveFullscreenState(fullscreen: Boolean) {
+        wasFullscreenBeforePiP = fullscreen
+    }
+
+    private fun registerPiPReceiver() {
+        if (pipReceiver != null) return
+        pipReceiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(context: android.content.Context, intent: Intent) {
+                if (intent.action == ACTION_PIP_PLAY_PAUSE) {
+                    togglePlayPause()
+                }
+            }
+        }
+        val filter = android.content.IntentFilter(ACTION_PIP_PLAY_PAUSE)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(pipReceiver, filter, android.content.Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(pipReceiver, filter)
+        }
+    }
+
+    private fun unregisterPiPReceiver() {
+        pipReceiver?.let {
+            try { unregisterReceiver(it) } catch (_: Exception) {}
+        }
+        pipReceiver = null
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (shouldAutoEnterPiP) {
+            enterPiPMode()
+        }
+    }
+
+    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        isInPiPMode.value = isInPictureInPictureMode
+        if (isInPictureInPictureMode) {
+            registerPiPReceiver()
+        } else {
+            unregisterPiPReceiver()
+        }
+    }
+
+    fun updatePiPPlayPauseIcon(isPlaying: Boolean = com.blissless.tensei.stream.PlayerData.exoPlayer?.isPlaying == true) {
+        val icon = getPipPlayPauseIcon(isPlaying)
+        val intent = Intent(ACTION_PIP_PLAY_PAUSE).setPackage(packageName)
+        val pendingIntent = android.app.PendingIntent.getBroadcast(
+            this, pipActionCounter++, intent,
+            android.app.PendingIntent.FLAG_CANCEL_CURRENT or android.app.PendingIntent.FLAG_MUTABLE
+        )
+        val action = RemoteAction(icon, "Play/Pause", "Play or Pause", pendingIntent)
+        val params = PictureInPictureParams.Builder()
+            .setAspectRatio(Rational(16, 9))
+            .setActions(listOf(action))
+            .build()
+        setPictureInPictureParams(params)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -391,6 +563,7 @@ fun MainScreen(
 
     val hideNavbar by viewModel.hideNavbar.collectAsState()
     val context = LocalContext.current
+    val activity = context as MainActivity
     val scope = rememberCoroutineScope()
     val extViewModel: ExtensionsViewModel = viewModel()
     val extUiState by extViewModel.uiState.collectAsState()
@@ -429,6 +602,7 @@ fun MainScreen(
     val autoSkipOpening by viewModel.autoSkipOpening.collectAsState(initial = false)
     val autoSkipEnding by viewModel.autoSkipEnding.collectAsState(initial = false)
     val autoPlayNextEpisode by viewModel.autoPlayNextEpisode.collectAsState(initial = false)
+    val supportsPiP by viewModel.supportsPiP.collectAsState(initial = false)
 
     val disableMaterialColors by viewModel.disableMaterialColors.collectAsState(initial = false)
     val preferredCategory by viewModel.preferredCategory.collectAsState(initial = "sub")
@@ -450,6 +624,18 @@ fun MainScreen(
     var playerFullscreen by remember { mutableStateOf(true) }
     var isAutoRefreshing by remember { mutableStateOf(false) }
     var pendingSeekPosition by remember { mutableStateOf<Long?>(null) }
+
+    val isInPiPMode by activity.isInPiPMode
+    LaunchedEffect(isInPiPMode) {
+        if (!isInPiPMode && showPlayer) {
+            playerFullscreen = activity.wasFullscreenBeforePiP
+        }
+    }
+    LaunchedEffect(showPlayer, supportsPiP, playerFullscreen) {
+        activity.shouldAutoEnterPiP = showPlayer && supportsPiP
+        activity.wasFullscreenBeforePiP = playerFullscreen
+        activity.updatePiPParams(showPlayer && supportsPiP)
+    }
     var currentVideoUrl by remember { mutableStateOf<String?>(null) }
     var currentReferer by remember { mutableStateOf(com.blissless.tensei.network.Endpoints.DEFAULT_REFERER) }
     var currentSubtitleUrl by remember { mutableStateOf<String?>(null) }
@@ -2378,7 +2564,7 @@ fun MainScreen(
                 showBufferIndicator = showBufferIndicator,
                 bufferAheadSeconds = bufferAheadSeconds,
                 onGetCacheDataSourceFactory = { referer -> viewModel.getCacheDataSourceFactory(referer, extensionOkHttpClient, extensionVideoHeaders) },
-                onBackClick = { 
+                onBackClick = {
                     playerFullscreen = true
                     showPlayer = false
                     currentVideoUrl = null
@@ -2406,6 +2592,10 @@ fun MainScreen(
                     val fileSize = currentTorrentFileSize
                     if (fileSize > 0) torrentEngine.prioritizeForSeek(posMs, fileSize, durMs)
                 } else null,
+                supportsPiP = supportsPiP,
+                onPiPToggle = { viewModel.setSupportsPiP(it) },
+                isInPiPMode = isInPiPMode,
+                onPlayerBoundsChanged = { l, t, r, b -> activity.playerViewBounds = android.graphics.Rect(l, t, r, b) },
             )
             }
 
@@ -2509,18 +2699,20 @@ fun MainScreen(
                     onClearAnimeStack()
                 }
                 else -> {
-                    playerFullscreen = true
-                    showPlayer = false
-                    currentVideoUrl = null
-                    extensionOkHttpClient = null
-                    extensionVideoHeaders = emptyMap()
-                    extensionHosters = null
-                    extensionServers = emptyList()
-                    extensionStreamEntries = emptyList()
-                    cachedExtensionNext = null
-                    PlayerData.extensionSource = null
-                    PlayerData.extensionEpisode = null
-                    PlayerData.allHosters = emptyList()
+                    if (showPlayer && currentVideoUrl != null) {
+                        playerFullscreen = true
+                        showPlayer = false
+                        currentVideoUrl = null
+                        extensionOkHttpClient = null
+                        extensionVideoHeaders = emptyMap()
+                        extensionHosters = null
+                        extensionServers = emptyList()
+                        extensionStreamEntries = emptyList()
+                        cachedExtensionNext = null
+                        PlayerData.extensionSource = null
+                        PlayerData.extensionEpisode = null
+                        PlayerData.allHosters = emptyList()
+                    }
                 }
             }
         }

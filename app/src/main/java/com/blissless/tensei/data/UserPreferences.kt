@@ -83,6 +83,7 @@ class UserPreferences(context: Context) {
         private const val KEY_MANGA_AUTO_ADVANCE = "manga_auto_advance"
         private const val KEY_APP_ICON = "app_icon"
         private const val KEY_MAX_PERFORMANCE = "max_performance"
+        private const val KEY_SUPPORTS_PIP = "supports_pip"
     }
 
     private val sharedPreferences: SharedPreferences =
@@ -155,6 +156,9 @@ class UserPreferences(context: Context) {
 
     private val _autoPlayNextEpisode = MutableStateFlow(false)
     val autoPlayNextEpisode: StateFlow<Boolean> = _autoPlayNextEpisode.asStateFlow()
+
+    private val _supportsPiP = MutableStateFlow(false)
+    val supportsPiP: StateFlow<Boolean> = _supportsPiP.asStateFlow()
 
     // Thumbnail extraction for seekbar preview
     private val _enableThumbnailPreview = MutableStateFlow(false)
@@ -339,6 +343,7 @@ class UserPreferences(context: Context) {
         _autoSkipOpening.value = sharedPreferences.getBoolean(KEY_AUTO_SKIP_OPENING, false)
         _autoSkipEnding.value = sharedPreferences.getBoolean(KEY_AUTO_SKIP_ENDING, false)
         _autoPlayNextEpisode.value = sharedPreferences.getBoolean(KEY_AUTO_PLAY_NEXT_EPISODE, true)
+        _supportsPiP.value = sharedPreferences.getBoolean(KEY_SUPPORTS_PIP, true)
         _enableThumbnailPreview.value = sharedPreferences.getBoolean(KEY_ENABLE_THUMBNAIL_PREVIEW, false)
         _preferredScraper.value = sharedPreferences.getString(KEY_PREFERRED_SCRAPER, "Animekai") ?: "Animekai"
         _defaultExtensionPackage.value = sharedPreferences.getString(KEY_DEFAULT_EXTENSION, "") ?: ""
@@ -515,6 +520,11 @@ class UserPreferences(context: Context) {
     fun setAutoPlayNextEpisode(enabled: Boolean) {
         _autoPlayNextEpisode.value = enabled
         sharedPreferences.edit {putBoolean(KEY_AUTO_PLAY_NEXT_EPISODE, enabled) }
+    }
+
+    fun setSupportsPiP(enabled: Boolean) {
+        _supportsPiP.value = enabled
+        sharedPreferences.edit { putBoolean(KEY_SUPPORTS_PIP, enabled) }
     }
 
     /**

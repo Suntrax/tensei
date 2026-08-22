@@ -1237,7 +1237,8 @@ data class MangaTrack(
     val mangaDexId: String? = null,
     val lastReadChapter: MangaChapter? = null,
     val currentChapterPages: Int = 0,
-    val score: Int? = null
+    val score: Int? = null,
+    val averageScore: Int? = null
 )
 
 @Serializable

@@ -150,6 +150,7 @@ import com.blissless.tensei.viewmodel.setAutoPlayNextEpisode
 import com.blissless.tensei.viewmodel.setSwipeVolume
 import com.blissless.tensei.viewmodel.setSwipeBrightness
 import com.blissless.tensei.viewmodel.setSwipeSwap
+import com.blissless.tensei.viewmodel.setSupportsPiP
 import com.blissless.tensei.viewmodel.setCheckUpdatesOnStart
 import com.blissless.tensei.viewmodel.setAutoUpdateExtensions
 import com.blissless.tensei.viewmodel.loadAvailableMagnetExtensions
@@ -1466,6 +1467,7 @@ private fun PlayerSettingsPage(
     val swipeVolume by viewModel.swipeVolume.collectAsState(initial = false)
     val swipeBrightness by viewModel.swipeBrightness.collectAsState(initial = false)
     val swipeSwap by viewModel.swipeSwap.collectAsState(initial = false)
+    val supportsPiP by viewModel.supportsPiP.collectAsState(initial = false)
 
     SettingsPageScaffold(title = "Player Settings", onBack = onBack) {
         SectionHeader("SKIP CONTROLS")
@@ -1515,6 +1517,12 @@ private fun PlayerSettingsPage(
                 description = "Automatically play the next episode when current ends",
                 checked = autoPlayNextEpisode,
                 onCheckedChange = { viewModel.setAutoPlayNextEpisode(it) }
+            )
+            SettingsToggle(
+                title = "Picture-in-Picture",
+                description = "Enter mini player when leaving the app",
+                checked = supportsPiP,
+                onCheckedChange = { viewModel.setSupportsPiP(it) }
             )
         }
 

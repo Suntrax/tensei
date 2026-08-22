@@ -100,7 +100,7 @@ class MangaTrackManager(context: Context) {
      * Ensure a track exists for the given manga. If none exists, a new CURRENT track is created
      * with the provided metadata. Returns the (possibly newly-created) track.
      */
-    fun ensureTrack(mangaId: Int, title: String = "", cover: String = "", totalChapters: Int = 0): MangaTrack {
+    fun ensureTrack(mangaId: Int, title: String = "", cover: String = "", totalChapters: Int = 0, averageScore: Int? = null): MangaTrack {
         val tracks = getTracks().toMutableList()
         val index = tracks.indexOfFirst { it.mangaId == mangaId }
         if (index >= 0) {
@@ -109,7 +109,8 @@ class MangaTrackManager(context: Context) {
             val patched = existing.copy(
                 title = existing.title.ifBlank { title },
                 cover = existing.cover.ifBlank { cover },
-                totalChapters = if (existing.totalChapters == 0) totalChapters else existing.totalChapters
+                totalChapters = if (existing.totalChapters == 0) totalChapters else existing.totalChapters,
+                averageScore = averageScore ?: existing.averageScore
             )
             if (patched != existing) {
                 tracks[index] = patched
@@ -122,7 +123,8 @@ class MangaTrackManager(context: Context) {
             title = title,
             cover = cover,
             totalChapters = totalChapters,
-            status = "CURRENT"
+            status = "CURRENT",
+            averageScore = averageScore
         )
         tracks.add(newTrack)
         saveTracks(tracks)

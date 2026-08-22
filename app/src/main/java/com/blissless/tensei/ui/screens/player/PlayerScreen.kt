@@ -84,6 +84,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -219,6 +222,10 @@ fun PlayerScreen(
     onAutoPlayNextEpisodeChanged: ((Boolean) -> Unit)? = null,
     isTorrentStream: Boolean = false,
     onTorrentSeek: ((positionMs: Long, durationMs: Long) -> Unit)? = null,
+    supportsPiP: Boolean = false,
+    onPiPToggle: ((Boolean) -> Unit)? = null,
+    isInPiPMode: Boolean = false,
+    onPlayerBoundsChanged: ((left: Int, top: Int, right: Int, bottom: Int) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
@@ -323,8 +330,13 @@ fun PlayerScreen(
     var showVolumeOverlay by remember { mutableStateOf(false) }
     var showBrightnessOverlay by remember { mutableStateOf(false) }
 
-    LaunchedEffect(showControls, hasError, showSkipIndicator) {
-        controlsVisible = showControls || hasError || showSkipIndicator
+    LaunchedEffect(showControls, hasError, showSkipIndicator, isInPiPMode) {
+        if (isInPiPMode) {
+            delay(300)
+            controlsVisible = false
+        } else {
+            controlsVisible = showControls || hasError || showSkipIndicator
+        }
     }
 
     // Helper to check if device has internet connection
@@ -456,6 +468,10 @@ fun PlayerScreen(
                         isPlaying = playing
                         if (playing) {
                             hasPlaybackStarted = true
+                        }
+                        val act = context as? android.app.Activity
+                        if (act is com.blissless.tensei.MainActivity && act.isInPiPMode.value) {
+                            act.updatePiPPlayPauseIcon(playing)
                         }
                     }
 
@@ -636,14 +652,17 @@ fun PlayerScreen(
     }
 
     DisposableEffect(exoPlayer) {
+        com.blissless.tensei.stream.PlayerData.exoPlayer = exoPlayer
         onDispose {
             exoPlayer.stop()
             exoPlayer.release()
+            com.blissless.tensei.stream.PlayerData.exoPlayer = null
         }
     }
 
     DisposableEffect(Unit) {
         onDispose {
+            (activity as? com.blissless.tensei.MainActivity)?.releasePiPMediaSession()
             onSavePosition?.invoke(currentPosition, duration)
             activity?.window?.let { window ->
                 window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -1039,7 +1058,12 @@ fun PlayerScreen(
     DisposableEffect(lifecycleOwner, exoPlayer) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP) {
-                exoPlayer.pause()
+                val mainAct = activity as? com.blissless.tensei.MainActivity
+                val inPiP = mainAct?.isInPiPMode?.value == true
+                val autoEnterPiP = mainAct?.shouldAutoEnterPiP == true
+                if (!inPiP && !autoEnterPiP) {
+                    exoPlayer.pause()
+                }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -1192,6 +1216,13 @@ fun PlayerScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
+            .onGloballyPositioned { coords: LayoutCoordinates ->
+                val bounds = coords.boundsInWindow()
+                onPlayerBoundsChanged?.invoke(
+                    bounds.left.toInt(), bounds.top.toInt(),
+                    bounds.right.toInt(), bounds.bottom.toInt()
+                )
+            }
     ) {
         // Compact layout (video shown in a 16:9 box with the episode list below):
         // shrink paddings, hide secondary text and use smaller buttons so the
@@ -1800,6 +1831,8 @@ fun PlayerScreen(
                                     isCompact = isCompact,
                                     autoPlayNextEpisode = autoPlayNextEpisode,
                                     onAutoPlayChange = { onAutoPlayNextEpisodeChanged?.invoke(it) },
+                                    supportsPiP = supportsPiP,
+                                    onPiPToggle = { onPiPToggle?.invoke(it) },
                                 )
 
                             }

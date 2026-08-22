@@ -73,6 +73,9 @@ fun MainViewModel.setAutoSkipEnding(enabled: Boolean) =
 fun MainViewModel.setAutoPlayNextEpisode(enabled: Boolean) =
     userPreferences.setAutoPlayNextEpisode(enabled)
 
+fun MainViewModel.setSupportsPiP(enabled: Boolean) =
+    userPreferences.setSupportsPiP(enabled)
+
 fun MainViewModel.setDefaultSubtitleLang(lang: String) =
     userPreferences.setDefaultSubtitleLang(lang)
 

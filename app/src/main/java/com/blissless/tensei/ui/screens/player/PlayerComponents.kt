@@ -520,6 +520,8 @@ internal fun PlayerSettingsButton(
     isCompact: Boolean = false,
     autoPlayNextEpisode: Boolean = false,
     onAutoPlayChange: ((Boolean) -> Unit)? = null,
+    supportsPiP: Boolean = false,
+    onPiPToggle: ((Boolean) -> Unit)? = null,
 ) {
     Box {
         Surface(
@@ -613,6 +615,25 @@ internal fun PlayerSettingsButton(
                         }
                     },
                     onClick = { onAutoPlayChange(!autoPlayNextEpisode) }
+                )
+            }
+            if (onPiPToggle != null) {
+                androidx.compose.material3.DropdownMenuItem(
+                    text = {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Picture-in-Picture", color = Color.White)
+                            Switch(
+                                checked = supportsPiP,
+                                onCheckedChange = onPiPToggle,
+                                colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary)
+                            )
+                        }
+                    },
+                    onClick = { onPiPToggle(!supportsPiP) }
                 )
             }
         }

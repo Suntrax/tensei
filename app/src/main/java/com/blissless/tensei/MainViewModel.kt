@@ -419,6 +419,7 @@ class MainViewModel : ViewModel() {
     val autoSkipOpening: StateFlow<Boolean> get() = userPreferences.autoSkipOpening
     val autoSkipEnding: StateFlow<Boolean> get() = userPreferences.autoSkipEnding
     val autoPlayNextEpisode: StateFlow<Boolean> get() = userPreferences.autoPlayNextEpisode
+    val supportsPiP: StateFlow<Boolean> get() = userPreferences.supportsPiP
     val localFavorites: StateFlow<Map<Int, StoredFavorite>> get() = userPreferences.localFavorites
     val localAnimeStatus: StateFlow<Map<Int, LocalAnimeEntry>> get() = userPreferences.localAnimeStatus
     val defaultExtensionPackage: StateFlow<String> get() = userPreferences.defaultExtensionPackage
