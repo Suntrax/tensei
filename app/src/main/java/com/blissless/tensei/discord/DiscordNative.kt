@@ -31,6 +31,7 @@ object DiscordNative {
         smallImage: String?,
         smallText: String?,
         largeUrl: String?,
+        smallUrl: String?,
     )
     external fun nativeClearPresence()
     external fun nativeRunCallbacks()

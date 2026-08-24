@@ -38,7 +38,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -82,13 +81,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.boundsInWindow
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -314,7 +313,7 @@ fun PlayerScreen(
 
     LaunchedEffect(showControls, hasError, showSkipIndicator, isInPiPMode) {
         if (isInPiPMode) {
-            delay(300)
+            delay(300.milliseconds)
             controlsVisible = false
         } else {
             controlsVisible = showControls || hasError || showSkipIndicator
@@ -390,7 +389,7 @@ fun PlayerScreen(
         selectedQuality = currentQuality
     }
 
-    val engine = remember(context, bufferAheadSeconds, referer, serverChangeTrigger, videoUrl, extensionOkHttpClient, extensionVideoHeaders, playerEngine) {
+    val engine = remember(context, bufferAheadSeconds, playerEngine) {
         when (playerEngine) {
             "mpv" -> MpvEngine(context)
             else -> ExoPlayerEngine(context, bufferAheadSeconds) { ref -> onGetCacheDataSourceFactory(ref) }
@@ -404,7 +403,7 @@ fun PlayerScreen(
                 if (playing) {
                     hasPlaybackStarted = true
                 }
-                val act = context as? android.app.Activity
+                val act = context as? Activity
                 if (act is com.blissless.tensei.MainActivity && act.isInPiPMode.value) {
                     act.updatePiPPlayPauseIcon(playing)
                 }
@@ -593,7 +592,7 @@ fun PlayerScreen(
             com.blissless.tensei.discord.DiscordRichPresence.connect()
             // Wait for duration to become available before sending presence
             while (engine.duration <= 0) {
-                kotlinx.coroutines.delay(250L)
+                delay(250L.milliseconds)
             }
             com.blissless.tensei.discord.DiscordRichPresence.setAnimePresence(
                 animeName = animeName,
@@ -603,7 +602,7 @@ fun PlayerScreen(
                 currentPositionMs = engine.currentPosition,
             )
             while (true) {
-                kotlinx.coroutines.delay(30_000L)
+                delay(30_000L.milliseconds)
                 com.blissless.tensei.discord.DiscordRichPresence.setAnimePresence(
                     animeName = animeName,
                     episode = currentEpisode,

@@ -32,7 +32,7 @@ Java_com_blissless_tensei_discord_DiscordNative_nativeInitialize(
 
     g_client->AddLogCallback([](const std::string& message, discordpp::LoggingSeverity severity) {
         LOGI("SDK: [%d] %s", static_cast<int>(severity), message.c_str());
-    }, discordpp::LoggingSeverity::Info);
+    }, discordpp::LoggingSeverity::Verbose);
 
     g_client->SetApplicationId(app_id);
 
@@ -47,7 +47,7 @@ Java_com_blissless_tensei_discord_DiscordNative_nativeSetPresence(
         jint type, jlong startTimestamp, jlong endTimestamp,
         jstring largeImage, jstring largeText,
         jstring smallImage, jstring smallText,
-        jstring largeUrl) {
+        jstring largeUrl, jstring smallUrl) {
 
     if (!g_client) {
         LOGE("nativeSetPresence: client not initialized");
@@ -61,9 +61,12 @@ Java_com_blissless_tensei_discord_DiscordNative_nativeSetPresence(
     const char *c_smallImage = smallImage ? env->GetStringUTFChars(smallImage, nullptr) : nullptr;
     const char *c_smallText = smallText ? env->GetStringUTFChars(smallText, nullptr) : nullptr;
     const char *c_largeUrl = largeUrl ? env->GetStringUTFChars(largeUrl, nullptr) : nullptr;
+    const char *c_smallUrl = smallUrl ? env->GetStringUTFChars(smallUrl, nullptr) : nullptr;
 
-    LOGI("nativeSetPresence: details=%s state=%s type=%d startTs=%lld endTs=%lld",
-         c_details ?: "", c_state ?: "", type, (long long)startTimestamp, (long long)endTimestamp);
+    LOGI("nativeSetPresence: details=%s state=%s type=%d startTs=%lld endTs=%lld largeImg=%s largeTxt=%s largeUrl=%s smallImg=%s smallTxt=%s smallUrl=%s",
+         c_details ?: "", c_state ?: "", type, (long long)startTimestamp, (long long)endTimestamp,
+         c_largeImage ?: "(null)", c_largeText ?: "(null)", c_largeUrl ?: "(null)",
+         c_smallImage ?: "(null)", c_smallText ?: "(null)", c_smallUrl ?: "(null)");
 
     discordpp::Activity activity;
 
@@ -91,7 +94,24 @@ Java_com_blissless_tensei_discord_DiscordNative_nativeSetPresence(
     if (c_smallImage) assets.SetSmallImage(c_smallImage);
     if (c_smallText) assets.SetSmallText(c_smallText);
     if (c_largeUrl) assets.SetLargeUrl(c_largeUrl);
-    activity.SetAssets(assets);
+    if (c_smallUrl) assets.SetSmallUrl(c_smallUrl);
+
+    LOGI("Assets pre-set: valid=%d img=%s txt=%s",
+         (int)(bool)assets,
+         assets.LargeImage() ? assets.LargeImage()->c_str() : "(empty)",
+         assets.LargeText() ? assets.LargeText()->c_str() : "(empty)");
+
+    activity.SetAssets(std::move(assets));
+
+    auto stored = activity.Assets();
+    if (stored) {
+        LOGI("Assets post-set: valid=%d img=%s txt=%s",
+             (int)(bool)*stored,
+             stored->LargeImage() ? stored->LargeImage()->c_str() : "(empty)",
+             stored->LargeText() ? stored->LargeText()->c_str() : "(empty)");
+    } else {
+        LOGE("Assets post-set: activity.Assets() returned nullopt!");
+    }
 
     g_client->UpdateRichPresence(activity, [](discordpp::ClientResult result) {
         if (result.Successful()) {
@@ -109,6 +129,7 @@ Java_com_blissless_tensei_discord_DiscordNative_nativeSetPresence(
     if (c_smallImage) env->ReleaseStringUTFChars(smallImage, c_smallImage);
     if (c_smallText) env->ReleaseStringUTFChars(smallText, c_smallText);
     if (c_largeUrl) env->ReleaseStringUTFChars(largeUrl, c_largeUrl);
+    if (c_smallUrl) env->ReleaseStringUTFChars(smallUrl, c_smallUrl);
 }
 
 JNIEXPORT void JNICALL
