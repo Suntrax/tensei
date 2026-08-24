@@ -204,15 +204,15 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun togglePlayPause() {
-        com.blissless.tensei.stream.PlayerData.exoPlayer?.let { player ->
-            val willBePlaying = !player.isPlaying
-            if (willBePlaying) player.play() else player.pause()
+        com.blissless.tensei.stream.PlayerData.playerEngine?.let { engine ->
+            val willBePlaying = !engine.isPlaying
+            if (willBePlaying) engine.play() else engine.pause()
             updatePiPPlayPauseIcon(willBePlaying)
         }
     }
 
     private fun buildPiPParams(autoEnter: Boolean = false): PictureInPictureParams {
-        val isPlaying = com.blissless.tensei.stream.PlayerData.exoPlayer?.isPlaying == true
+        val isPlaying = com.blissless.tensei.stream.PlayerData.playerEngine?.isPlaying == true
         val icon = getPipPlayPauseIcon(isPlaying)
         val intent = Intent(ACTION_PIP_PLAY_PAUSE).setPackage(packageName)
         val pendingIntent = android.app.PendingIntent.getBroadcast(
@@ -313,7 +313,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    fun updatePiPPlayPauseIcon(isPlaying: Boolean = com.blissless.tensei.stream.PlayerData.exoPlayer?.isPlaying == true) {
+    fun updatePiPPlayPauseIcon(isPlaying: Boolean = com.blissless.tensei.stream.PlayerData.playerEngine?.isPlaying == true) {
         val icon = getPipPlayPauseIcon(isPlaying)
         val intent = Intent(ACTION_PIP_PLAY_PAUSE).setPackage(packageName)
         val pendingIntent = android.app.PendingIntent.getBroadcast(
@@ -338,6 +338,8 @@ class MainActivity : ComponentActivity() {
         }
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
+        com.discord.socialsdk.DiscordSocialSdkInit.setEngineActivity(this)
+
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         val hasToken = prefs.getString(TOKEN_KEY, null) != null
         val savedToken = prefs.getString(TOKEN_KEY, null)
@@ -350,6 +352,11 @@ class MainActivity : ComponentActivity() {
             mainViewModel.requestOpenExtensions()
         }
         handleAuthCallback(intent)
+
+        // Auto-connect Discord Rich Presence if previously enabled
+        if (mainViewModel.discordRichPresence.value) {
+            com.blissless.tensei.discord.DiscordRichPresence.connect()
+        }
 
         setContent {
             val themeModeStr by mainViewModel.themeMode.collectAsState()
@@ -2596,6 +2603,8 @@ fun MainScreen(
                 onPiPToggle = { viewModel.setSupportsPiP(it) },
                 isInPiPMode = isInPiPMode,
                 onPlayerBoundsChanged = { l, t, r, b -> activity.playerViewBounds = android.graphics.Rect(l, t, r, b) },
+                playerEngine = viewModel.playerEngine.collectAsState().value,
+                discordRichPresence = viewModel.discordRichPresence.collectAsState().value,
             )
             }
 

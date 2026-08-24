@@ -7,9 +7,7 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
 import android.util.Log
-import android.view.ViewGroup
 import android.view.WindowManager
-import android.widget.FrameLayout
 import androidx.annotation.OptIn
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.AnimatedVisibility
@@ -97,27 +95,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.edit
-import androidx.core.net.toUri
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.media3.common.C
-import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
-import androidx.media3.common.PlaybackException
-import androidx.media3.common.Player
-import androidx.media3.common.TrackGroup
-import androidx.media3.common.TrackSelectionOverride
-import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.cache.CacheDataSource
-import androidx.media3.exoplayer.DefaultLoadControl
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import androidx.media3.ui.SubtitleView
@@ -147,12 +133,6 @@ private fun subtitleMimeType(url: String): String {
         else -> MimeTypes.TEXT_VTT
     }
 }
-
-private data class EmbeddedSubtitleTrack(
-    val trackGroup: TrackGroup,
-    val trackIndex: Int,
-    val label: String,
-)
 
 @RequiresApi(Build.VERSION_CODES.R)
 @OptIn(UnstableApi::class)
@@ -188,6 +168,7 @@ fun PlayerScreen(
     disableMaterialColors: Boolean = false,
     showBufferIndicator: Boolean = true,
     bufferAheadSeconds: Int = 30,
+    playerEngine: String = "exo",
     swipeVolume: Boolean = false,
     swipeBrightness: Boolean = false,
     swipeSwap: Boolean = false,
@@ -226,6 +207,7 @@ fun PlayerScreen(
     onPiPToggle: ((Boolean) -> Unit)? = null,
     isInPiPMode: Boolean = false,
     onPlayerBoundsChanged: ((left: Int, top: Int, right: Int, bottom: Int) -> Unit)? = null,
+    discordRichPresence: Boolean = false,
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
@@ -408,255 +390,179 @@ fun PlayerScreen(
         selectedQuality = currentQuality
     }
 
-    val exoPlayer = remember(context, bufferAheadSeconds, referer, serverChangeTrigger, videoUrl, extensionOkHttpClient, extensionVideoHeaders) {
-        val bufferAheadMs = bufferAheadSeconds * 1000
-        val maxBufferMs = maxOf(bufferAheadMs + 60000, 180000)
-        val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(bufferAheadMs, maxBufferMs, 1500, 3000)
-            .build()
-
-        val cacheDataSourceFactory = onGetCacheDataSourceFactory(referer)
-
-        val upstreamFactory = if (extensionOkHttpClient != null && extensionVideoHeaders.isNotEmpty()) {
-            Log.d("PlayerScreen", "Using extension OkHttpClient with headers: $extensionVideoHeaders")
-            val okHttpFactory = androidx.media3.datasource.okhttp.OkHttpDataSource.Factory(extensionOkHttpClient)
-            okHttpFactory.setDefaultRequestProperties(extensionVideoHeaders)
-            okHttpFactory
-        } else if (extensionOkHttpClient != null) {
-            Log.d("PlayerScreen", "Using extension OkHttpClient with Referer: $referer")
-            androidx.media3.datasource.okhttp.OkHttpDataSource.Factory(extensionOkHttpClient)
-                .setDefaultRequestProperties(mapOf("Referer" to referer))
-        } else if (extensionVideoHeaders.isNotEmpty()) {
-            val trustClient = try { eu.kanade.tachiyomi.network.NetworkHelper.getInstance().trustAllClient } catch (_: Exception) { null }
-            if (trustClient != null) {
-                Log.d("PlayerScreen", "Using trustAllClient (HTTP/1.1) with headers: $extensionVideoHeaders")
-                androidx.media3.datasource.okhttp.OkHttpDataSource.Factory(trustClient)
-                    .setDefaultRequestProperties(extensionVideoHeaders)
-            } else {
-                Log.d("PlayerScreen", "Using DefaultHttpDataSource with headers: $extensionVideoHeaders")
-                DefaultHttpDataSource.Factory()
-                    .setConnectTimeoutMs(20000)
-                    .setReadTimeoutMs(20000)
-                    .setDefaultRequestProperties(extensionVideoHeaders)
-            }
-        } else {
-            val trustClient = try { eu.kanade.tachiyomi.network.NetworkHelper.getInstance().trustAllClient } catch (_: Exception) { null }
-            if (trustClient != null) {
-                Log.d("PlayerScreen", "Using trustAllClient (HTTP/1.1) with Referer: $referer")
-                androidx.media3.datasource.okhttp.OkHttpDataSource.Factory(trustClient)
-                    .setDefaultRequestProperties(mapOf("Referer" to referer))
-            } else {
-                Log.d("PlayerScreen", "Using DefaultHttpDataSource with Referer: $referer")
-                DefaultHttpDataSource.Factory()
-                    .setConnectTimeoutMs(20000)
-                    .setReadTimeoutMs(20000)
-                    .setDefaultRequestProperties(mapOf("Referer" to referer))
-            }
+    val engine = remember(context, bufferAheadSeconds, referer, serverChangeTrigger, videoUrl, extensionOkHttpClient, extensionVideoHeaders, playerEngine) {
+        when (playerEngine) {
+            "mpv" -> MpvEngine(context)
+            else -> ExoPlayerEngine(context, bufferAheadSeconds) { ref -> onGetCacheDataSourceFactory(ref) }
         }
-
-        val dataSourceFactory = cacheDataSourceFactory ?: upstreamFactory
-
-        ExoPlayer.Builder(context)
-            .setMediaSourceFactory(
-                DefaultMediaSourceFactory(context).setDataSourceFactory(dataSourceFactory)
-            )
-            .setLoadControl(loadControl)
-            .build()
-            .apply {
-                addListener(object : Player.Listener {
-                    override fun onIsPlayingChanged(playing: Boolean) {
-                        isPlaying = playing
-                        if (playing) {
-                            hasPlaybackStarted = true
-                        }
-                        val act = context as? android.app.Activity
-                        if (act is com.blissless.tensei.MainActivity && act.isInPiPMode.value) {
-                            act.updatePiPPlayPauseIcon(playing)
-                        }
-                    }
-
-                    override fun onPlaybackSuppressionReasonChanged(reason: Int) {
-                        isBuffering = isPlaying && reason != Player.PLAYBACK_SUPPRESSION_REASON_NONE
-                    }
-
-                    override fun onTracksChanged(tracks: Tracks) {
-                        val discovered = mutableListOf<EmbeddedSubtitleTrack>()
-                        for (groupIndex in 0 until tracks.groups.size) {
-                            val group = tracks.groups[groupIndex]
-                            if (group.type == C.TRACK_TYPE_TEXT) {
-                                for (trackIndex in 0 until group.length) {
-                                    val format = group.getTrackFormat(trackIndex)
-                                    val label = format.label
-                                        ?: format.language
-                                        ?: "Track ${discovered.size + 1}"
-                                    discovered.add(
-                                        EmbeddedSubtitleTrack(
-                                            trackGroup = group.mediaTrackGroup,
-                                            trackIndex = trackIndex,
-                                            label = label,
-                                        )
-                                    )
-                                }
-                            }
-                        }
-                        embeddedSubtitleTracks = discovered
-                        Log.d("PlayerScreen", "onTracksChanged: discovered ${discovered.size} embedded subtitle tracks: ${discovered.map { it.label }}")
-                    }
-
-                    override fun onPlayerError(error: PlaybackException) {
-                        Log.e("PlayerScreen", "onPlayerError: code=${error.errorCode} isChangingServer=$isChangingServer isInitialLoading=$isInitialLoading url=${videoUrl.take(80)}")
-                        if (isChangingServer) {
-                            return
-                        }
-
-                        if (!isNetworkAvailable()) {
-                            isOffline = true
-                            isBuffering = true
-                            hasError = false
-                            playbackError = null
-                            return
-                        }
-
-                        if ((isManuallySeeking || seekRetryCount > 0) && seekRetryCount < 3) {
-                            seekRetryCount++
-                            hasError = false
-                            playbackError = null
-                            isBuffering = true
-                            val seekPos = currentPosition
-                            Log.w("PlayerScreen", "onPlayerError: retry #$seekRetryCount seekPos=$seekPos isTorrentStream=$isTorrentStream error=${error.errorCode}: ${error.message?.take(100)}")
-                            if (isTorrentStream && seekPos > 0) {
-                                Log.d("PlayerScreen", "onPlayerError: retry#$seekRetryCount torrent seekTo=$seekPos (TorrentStreamServer handles Range)")
-                                onTorrentSeek?.invoke(seekPos, this@apply.duration)
-                                seekTo(seekPos)
-                            } else {
-                                val item = currentMediaItem
-                                val isHls = item?.localConfiguration?.mimeType == MimeTypes.APPLICATION_M3U8
-                                if (isHls && seekPos > 0) {
-                                    Log.d("PlayerScreen", "onPlayerError: retry#$seekRetryCount HLS seekTo=$seekPos")
-                                    seekTo(seekPos)
-                                } else if (seekPos > 0 && item != null) {
-                                    val itemUri = item.localConfiguration?.uri?.toString()?.take(100) ?: "unknown"
-                                    Log.d("PlayerScreen", "onPlayerError: retry#$seekRetryCount clipped uri=$itemUri seekPos=$seekPos")
-                                    val clippedItem = item.buildUpon()
-                                        .setClipStartPositionMs(seekPos)
-                                        .build()
-                                    setMediaItem(clippedItem)
-                                    prepare()
-                                } else {
-                                    Log.d("PlayerScreen", "onPlayerError: retry#$seekRetryCount prepare() only")
-                                    prepare()
-                                }
-                            }
-                            return
-                        }
-
-                        // For torrent streams (local server), don't auto-refresh — that
-                        // restarts the entire torrent download. Instead, retry the seek
-                        // so ExoPlayer reconnects to the TorrentStreamServer after more
-                        // data has downloaded.
-                        if (isInitialLoading && isTorrentStream) {
-                            Log.d("PlayerScreen", "onPlayerError: torrent stream initial-load error, re-prepare (error=${error.errorCode})")
-                            seekRetryCount = 1
-                            hasError = false
-                            playbackError = null
-                            isBuffering = true
-                            onTorrentSeek?.invoke(currentPosition, this@apply.duration)
-                            prepare()
-                            return
-                        }
-
-                        // Auto-retry: try next untried server before anything else
-                        if (onExtensionServerChange != null && extensionServers.isNotEmpty()) {
-                            autoRetryServers.add(currentServerName)
-                            extensionServers.find { it.url == videoUrl }?.let { autoRetryServers.add(it.name) }
-                            fun srvCat(name: String): String = when {
-                                name.contains("dub", ignoreCase = true) -> "dub"
-                                name.contains("sub", ignoreCase = true) -> "sub"
-                                else -> "other"
-                            }
-                            val curCat = srvCat(currentServerName)
-                            val remaining = extensionServers.filter {
-                                it.name !in autoRetryServers && it.url != videoUrl
-                            }
-                            val sameCat = remaining.filter { srvCat(it.name) == curCat }
-                            val otherCat = remaining.filter { srvCat(it.name) != curCat }
-                            val nextServer = (sameCat + otherCat).firstOrNull()
-                            if (nextServer != null) {
-                                Log.d("PlayerScreen", "Auto-retrying server: ${nextServer.name} (tried: $autoRetryServers)")
-                                pendingAutoRetry = nextServer.name
-                                return
-                            }
-                            Log.w("PlayerScreen", "All extension servers exhausted")
-                        }
-
-                        // Auto-refresh for initial load / re-entry failure (stale cached URL).
-                        // isAutoRefreshing in MainActivity prevents infinite refreshes.
-                        if (isInitialLoading && onRefreshStream != null) {
-                            onInvalidateStreamCache?.invoke()
-                            onRefreshStream.invoke()
-                            return
-                        }
-
-                        Log.e("PlayerScreen", "SURFACING ERROR TO USER: code=${error.errorCode} msg=${error.message} isManuallySeeking=$isManuallySeeking seekRetryCount=$seekRetryCount isInitialLoading=$isInitialLoading")
-                        hasError = true
-                        playbackError = "${error.errorCode}: ${error.message ?: "Unknown"}"
-                        showControls = true
-                        Log.e("PlayerScreen", "Playback error details: code=${error.errorCode} msg=${error.message} videoUrl=${videoUrl.take(120)}")
-                        Log.e("PlayerScreen", "  cause=${error.cause?.message}")
-                        error.cause?.let { cause ->
-                            Log.e("PlayerScreen", "  cause type=${cause::class.simpleName}")
-                            cause.stackTrace.take(5).forEach { frame ->
-                                Log.e("PlayerScreen", "    at $frame")
-                            }
-                        }
-                    }
-
-                    override fun onPlaybackStateChanged(playbackState: Int) {
-                        val stateName = when (playbackState) { Player.STATE_IDLE -> "IDLE"; Player.STATE_BUFFERING -> "BUFFERING"; Player.STATE_READY -> "READY"; Player.STATE_ENDED -> "ENDED"; else -> "${playbackState}" }
-                        Log.d("PlayerScreen", "onPlaybackStateChanged: $stateName isManuallySeeking=$isManuallySeeking seekRetryCount=$seekRetryCount")
-                        isBuffering = playbackState == Player.STATE_BUFFERING
-                        if (playbackState == Player.STATE_READY) {
-                            hasError = false
-                            playbackError = null
-                            isChangingServer = false
-                            isBuffering = false
-                            hasPlaybackStarted = true
-                            isInitialLoading = false
-                            autoRetryServers.clear()
-                            if (pendingQualityChange != null && savedPositionForQuality > 0) {
-                                val wasPlaying = playWhenReady
-                                val currentItem = currentMediaItem
-                                if (currentItem != null) {
-                                    stop()
-                                    setMediaItem(currentItem, savedPositionForQuality)
-                                    prepare()
-                                    playWhenReady = wasPlaying
-                                }
-                                pendingQualityChange = null
-                                savedPositionForQuality = 0L
-                            }
-                        }
-                        if (playbackState == Player.STATE_ENDED) {
-                            onClearPlaybackPosition?.invoke(animeId, currentEpisode)
-                            if (autoPlayNextEpisode && onNextEpisode != null && !isChangingServer) {
-                                if (isLatestEpisode) {
-                                    context.toast("Latest episode watched")
-                                } else {
-                                    onNextEpisode.invoke()
-                                }
-                            }
-                        }
-                    }
-                })
-            }
     }
 
-    DisposableEffect(exoPlayer) {
-        com.blissless.tensei.stream.PlayerData.exoPlayer = exoPlayer
+    LaunchedEffect(engine) {
+        engine.setListener(object : PlayerEngine.Listener {
+            override fun onIsPlayingChanged(playing: Boolean) {
+                isPlaying = playing
+                if (playing) {
+                    hasPlaybackStarted = true
+                }
+                val act = context as? android.app.Activity
+                if (act is com.blissless.tensei.MainActivity && act.isInPiPMode.value) {
+                    act.updatePiPPlayPauseIcon(playing)
+                }
+            }
+
+            override fun onTracksChanged(tracks: List<EmbeddedSubtitleTrack>) {
+                embeddedSubtitleTracks = tracks
+                Log.d("PlayerScreen", "onTracksChanged: discovered ${tracks.size} embedded subtitle tracks: ${tracks.map { it.label }}")
+            }
+
+            override fun onError(error: String) {
+                Log.e("PlayerScreen", "onError: msg=$error isChangingServer=$isChangingServer isInitialLoading=$isInitialLoading url=${videoUrl.take(80)}")
+                if (isChangingServer) {
+                    return
+                }
+
+                if (!isNetworkAvailable()) {
+                    isOffline = true
+                    isBuffering = true
+                    hasError = false
+                    playbackError = null
+                    return
+                }
+
+                if ((isManuallySeeking || seekRetryCount > 0) && seekRetryCount < 3) {
+                    seekRetryCount++
+                    hasError = false
+                    playbackError = null
+                    isBuffering = true
+                    val seekPos = currentPosition
+                    Log.w("PlayerScreen", "onError: retry #$seekRetryCount seekPos=$seekPos isTorrentStream=$isTorrentStream error=$error")
+                    if (isTorrentStream && seekPos > 0) {
+                        Log.d("PlayerScreen", "onError: retry#$seekRetryCount torrent seekTo=$seekPos (TorrentStreamServer handles Range)")
+                        onTorrentSeek?.invoke(seekPos, engine.duration)
+                        engine.seekTo(seekPos)
+                    } else if (seekPos > 0) {
+                        Log.d("PlayerScreen", "onError: retry#$seekRetryCount seekOutsideBuffer(seekPos=$seekPos)")
+                        engine.seekOutsideBuffer(seekPos)
+                    } else {
+                        Log.d("PlayerScreen", "onError: retry#$seekRetryCount prepare() only")
+                        engine.prepare()
+                    }
+                    return
+                }
+
+                // For torrent streams (local server), don't auto-refresh — that
+                // restarts the entire torrent download. Instead, retry the seek
+                // so the engine reconnects to the TorrentStreamServer after more
+                // data has downloaded.
+                if (isInitialLoading && isTorrentStream) {
+                    Log.d("PlayerScreen", "onError: torrent stream initial-load error, re-prepare")
+                    seekRetryCount = 1
+                    hasError = false
+                    playbackError = null
+                    isBuffering = true
+                    onTorrentSeek?.invoke(currentPosition, engine.duration)
+                    engine.prepare()
+                    return
+                }
+
+                // Auto-retry: try next untried server before anything else
+                if (onExtensionServerChange != null && extensionServers.isNotEmpty()) {
+                    autoRetryServers.add(currentServerName)
+                    extensionServers.find { it.url == videoUrl }?.let { autoRetryServers.add(it.name) }
+                    fun srvCat(name: String): String = when {
+                        name.contains("dub", ignoreCase = true) -> "dub"
+                        name.contains("sub", ignoreCase = true) -> "sub"
+                        else -> "other"
+                    }
+                    val curCat = srvCat(currentServerName)
+                    val remaining = extensionServers.filter {
+                        it.name !in autoRetryServers && it.url != videoUrl
+                    }
+                    val sameCat = remaining.filter { srvCat(it.name) == curCat }
+                    val otherCat = remaining.filter { srvCat(it.name) != curCat }
+                    val nextServer = (sameCat + otherCat).firstOrNull()
+                    if (nextServer != null) {
+                        Log.d("PlayerScreen", "Auto-retrying server: ${nextServer.name} (tried: $autoRetryServers)")
+                        pendingAutoRetry = nextServer.name
+                        return
+                    }
+                    Log.w("PlayerScreen", "All extension servers exhausted")
+                }
+
+                // Auto-refresh for initial load / re-entry failure (stale cached URL).
+                // isAutoRefreshing in MainActivity prevents infinite refreshes.
+                if (isInitialLoading && onRefreshStream != null) {
+                    onInvalidateStreamCache?.invoke()
+                    onRefreshStream.invoke()
+                    return
+                }
+
+                Log.e("PlayerScreen", "SURFACING ERROR TO USER: msg=$error isManuallySeeking=$isManuallySeeking seekRetryCount=$seekRetryCount isInitialLoading=$isInitialLoading")
+                hasError = true
+                playbackError = error
+                showControls = true
+                Log.e("PlayerScreen", "Playback error details: msg=$error videoUrl=${videoUrl.take(120)}")
+            }
+
+            override fun onPlaybackStateChanged(state: Int) {
+                val stateName = when (state) { PlayerEngine.STATE_IDLE -> "IDLE"; PlayerEngine.STATE_BUFFERING -> "BUFFERING"; PlayerEngine.STATE_READY -> "READY"; PlayerEngine.STATE_ENDED -> "ENDED"; else -> "$state" }
+                Log.d("PlayerScreen", "onPlaybackStateChanged: $stateName isManuallySeeking=$isManuallySeeking seekRetryCount=$seekRetryCount")
+                isBuffering = state == PlayerEngine.STATE_BUFFERING
+                if (state == PlayerEngine.STATE_READY) {
+                    hasError = false
+                    playbackError = null
+                    isChangingServer = false
+                    isBuffering = false
+                    hasPlaybackStarted = true
+                    isInitialLoading = false
+                    autoRetryServers.clear()
+                    if (pendingQualityChange != null && savedPositionForQuality > 0) {
+                        val wasPlaying = engine.playWhenReady
+                        val restorePos = savedPositionForQuality
+                        engine.stop()
+                        engine.clearMediaItems()
+                        engine.loadMedia(
+                            url = videoUrl,
+                            mimeType = null,
+                            startPositionMs = restorePos,
+                            subtitleConfigs = emptyList(),
+                            headers = extensionVideoHeaders,
+                            referer = referer,
+                            httpClient = extensionOkHttpClient,
+                        )
+                        engine.prepare()
+                        engine.playWhenReady = wasPlaying
+                        if (engine is ExoPlayerEngine) {
+                            com.blissless.tensei.stream.PlayerData.exoPlayer = engine.getExoPlayer()
+                        }
+                        pendingQualityChange = null
+                        savedPositionForQuality = 0L
+                    }
+                }
+                if (state == PlayerEngine.STATE_ENDED) {
+                    onClearPlaybackPosition?.invoke(animeId, currentEpisode)
+                    if (autoPlayNextEpisode && onNextEpisode != null && !isChangingServer) {
+                        if (isLatestEpisode) {
+                            context.toast("Latest episode watched")
+                        } else {
+                            onNextEpisode.invoke()
+                        }
+                    }
+                }
+            }
+        })
+    }
+
+    DisposableEffect(engine) {
+        com.blissless.tensei.stream.PlayerData.playerEngine = engine
+        if (engine is ExoPlayerEngine) {
+            com.blissless.tensei.stream.PlayerData.exoPlayer = engine.getExoPlayer()
+        }
         onDispose {
-            exoPlayer.stop()
-            exoPlayer.release()
+            engine.stop()
+            engine.release()
             com.blissless.tensei.stream.PlayerData.exoPlayer = null
+            com.blissless.tensei.stream.PlayerData.playerEngine = null
         }
     }
 
@@ -675,6 +581,37 @@ fun PlayerScreen(
                 }
             }
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            if (discordRichPresence) {
+                com.blissless.tensei.discord.DiscordRichPresence.clearPresence()
+            }
+        }
+    }
+
+    // Discord Rich Presence — set when playback starts, update countdown periodically
+    LaunchedEffect(hasPlaybackStarted, discordRichPresence, animeName, currentEpisode, totalEpisodes) {
+        if (hasPlaybackStarted && discordRichPresence && animeName.isNotEmpty()) {
+            com.blissless.tensei.discord.DiscordRichPresence.connect()
+            // Wait for duration to become available before sending presence
+            while (engine.duration <= 0) {
+                kotlinx.coroutines.delay(250L)
+            }
+            com.blissless.tensei.discord.DiscordRichPresence.setAnimePresence(
+                animeName = animeName,
+                episode = currentEpisode,
+                totalEpisodes = totalEpisodes,
+                durationMs = engine.duration,
+                currentPositionMs = engine.currentPosition,
+            )
+            while (true) {
+                kotlinx.coroutines.delay(30_000L)
+                com.blissless.tensei.discord.DiscordRichPresence.setAnimePresence(
+                    animeName = animeName,
+                    episode = currentEpisode,
+                    totalEpisodes = totalEpisodes,
+                    durationMs = engine.duration,
+                    currentPositionMs = engine.currentPosition,
+                )
+            }
         }
     }
 
@@ -695,9 +632,9 @@ fun PlayerScreen(
         seekRetryCount = 0
         isInitialLoading = true
 
-        exoPlayer.stop()
+        engine.stop()
         delay(100.milliseconds)
-        exoPlayer.clearMediaItems()
+        engine.clearMediaItems()
 
         // Use pendingSeekPosition for refresh-based seeks, otherwise restore savedPosition.
         // pendingSeekPosition is cleared externally (onBackClick / new episode load) to
@@ -707,47 +644,42 @@ fun PlayerScreen(
 
         val subtitleConfigs = if (subtitlesEnabled && subtitleTracks.isNotEmpty()) {
             subtitleTracks.mapIndexed { index, track ->
-                val flags = if (index == selectedSubtitleIndex) C.SELECTION_FLAG_DEFAULT else 0
-                MediaItem.SubtitleConfiguration.Builder(track.url.toUri())
-                    .setMimeType(subtitleMimeType(track.url))
-                    .setLanguage(track.lang)
-                    .setSelectionFlags(flags)
-                    .build()
+                SubtitleConfig(
+                    url = track.url,
+                    mimeType = subtitleMimeType(track.url),
+                    language = track.lang,
+                    selected = index == selectedSubtitleIndex,
+                )
             }
         } else if (subtitleUrl != null) {
-            listOf(MediaItem.SubtitleConfiguration.Builder(subtitleUrl.toUri())
-                .setMimeType(subtitleMimeType(subtitleUrl))
-                .setLanguage("en")
-                .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
-                .build())
+            listOf(SubtitleConfig(
+                url = subtitleUrl,
+                mimeType = subtitleMimeType(subtitleUrl),
+                language = "en",
+                selected = true,
+            ))
         } else {
             emptyList()
         }
 
         Log.d("PlayerScreen", "Preparing playback: videoUrl=${videoUrl.take(120)} referer=$referer subtitleUrl=${subtitleUrl?.take(80)} extensionOkHttpClient=${extensionOkHttpClient != null} videoHeaders=$extensionVideoHeaders")
-        val mimeType = if (videoUrl.contains(".m3u8") || videoUrl.contains("/m3u8")) MimeTypes.APPLICATION_M3U8
-        else if (videoUrl.contains(".mp4")) MimeTypes.VIDEO_MP4
-        else if (videoUrl.contains(".webm")) MimeTypes.VIDEO_WEBM
-        else if (videoUrl.contains(".mkv")) "video/x-matroska"
-        else if (videoUrl.contains(".avi")) "video/x-msvideo"
-        else if (videoUrl.contains(".mov")) "video/quicktime"
-        else {
-            Log.d("PlayerScreen", "Unknown mime type for URL: ${videoUrl.take(100)}, defaulting to MP4")
-            MimeTypes.VIDEO_MP4
-        }
 
-        val mediaItem = MediaItem.Builder()
-            .setUri(videoUrl)
-            .setMimeType(mimeType)
-            .setSubtitleConfigurations(subtitleConfigs)
-            .build()
+        engine.loadMedia(
+            url = videoUrl,
+            mimeType = null, // engine auto-detects
+            startPositionMs = startPositionMs,
+            subtitleConfigs = subtitleConfigs,
+            headers = extensionVideoHeaders,
+            referer = referer,
+            httpClient = extensionOkHttpClient,
+        )
+        engine.prepare()
 
-        if (startPositionMs > 0) {
-            exoPlayer.setMediaItem(mediaItem, startPositionMs)
-        } else {
-            exoPlayer.setMediaItem(mediaItem)
+        // The engine creates its backing ExoPlayer during loadMedia(); keep
+        // PlayerData in sync for PiP compatibility.
+        if (engine is ExoPlayerEngine) {
+            com.blissless.tensei.stream.PlayerData.exoPlayer = engine.getExoPlayer()
         }
-        exoPlayer.prepare()
 
         hasPlaybackStarted = true
 
@@ -756,11 +688,11 @@ fun PlayerScreen(
         sliderValue = startPositionMs.toFloat()
     }
 
-    LaunchedEffect(exoPlayer.playbackState, hasRestoredPosition, videoUrl) {
-        if (exoPlayer.playbackState == Player.STATE_READY && hasPlaybackStarted && !hasRestoredPosition) {
+    LaunchedEffect(engine.playbackState, hasRestoredPosition, videoUrl) {
+        if (engine.playbackState == PlayerEngine.STATE_READY && hasPlaybackStarted && !hasRestoredPosition) {
             hasRestoredPosition = true
             // Start playback after seek
-            exoPlayer.playWhenReady = true
+            engine.playWhenReady = true
         }
     }
 
@@ -790,7 +722,7 @@ fun PlayerScreen(
     }
 
     fun seekToPosition(position: Long) {
-        Log.d("PlayerScreen", "seekToPosition: pos=$position bufferedPos=$bufferedPosition maxBufferedPos=$maxBufferedPosition duration=${exoPlayer.duration} isManuallySeeking=$isManuallySeeking isTorrentStream=$isTorrentStream")
+        Log.d("PlayerScreen", "seekToPosition: pos=$position bufferedPos=$bufferedPosition maxBufferedPos=$maxBufferedPosition duration=${engine.duration} isManuallySeeking=$isManuallySeeking isTorrentStream=$isTorrentStream")
         hasError = false
         playbackError = null
         isBuffering = true
@@ -798,38 +730,13 @@ fun PlayerScreen(
         bufferedPosition = position
         if (isTorrentStream) {
             Log.d("PlayerScreen", "seekToPosition: torrent stream — calling onTorrentSeek then seekTo($position), TorrentStreamServer handles Range requests")
-            onTorrentSeek?.invoke(position, exoPlayer.duration)
-            exoPlayer.seekTo(position)
+            onTorrentSeek?.invoke(position, engine.duration)
+            engine.seekTo(position)
             return
         }
-        val item = exoPlayer.currentMediaItem
-        val isHls = item?.localConfiguration?.mimeType == MimeTypes.APPLICATION_M3U8
-        Log.d("PlayerScreen", "seekToPosition: isHls=$isHls mime=${item?.localConfiguration?.mimeType}")
-        if (isHls) {
-            Log.d("PlayerScreen", "seekToPosition: HLS stream, using seekTo (segments load natively)")
-            exoPlayer.seekTo(position)
-        } else if (position > bufferedPosition) {
-            Log.d("PlayerScreen", "seekToPosition: outside buffer, using clip-based re-prepare (no stop)")
-            val wasPlaying = exoPlayer.playWhenReady
-            if (item != null) {
-                val itemUri = item.localConfiguration?.uri?.toString()?.take(100) ?: "unknown"
-                val itemMime = item.localConfiguration?.mimeType ?: "unknown"
-                Log.d("PlayerScreen", "seekToPosition: uri=$itemUri mime=$itemMime clipStartMs=$position wasPlaying=$wasPlaying")
-                val clippedItem = item.buildUpon()
-                    .setClipStartPositionMs(position)
-                    .build()
-                exoPlayer.setMediaItem(clippedItem)
-                exoPlayer.prepare()
-                exoPlayer.playWhenReady = wasPlaying
-                Log.d("PlayerScreen", "seekToPosition: clip-based re-prepare done, wasPlaying=$wasPlaying")
-            } else {
-                Log.d("PlayerScreen", "seekToPosition: currentMediaItem was null")
-                exoPlayer.seekTo(position)
-            }
-        } else {
-            Log.d("PlayerScreen", "seekToPosition: inside buffer, using seekTo(pos=$position)")
-            exoPlayer.seekTo(position)
-        }
+        // For non-torrent streams, seekOutsideBuffer handles HLS natively,
+        // inside-buffer seeks and clip-based re-prepare for out-of-buffer seeks.
+        engine.seekOutsideBuffer(position)
     }
 
     fun seekBy(milliseconds: Long) {
@@ -852,9 +759,9 @@ fun PlayerScreen(
         lastTapTime = now
 
         // Always seek by single skip amount, not accumulated
-        // Use currentPosition (displayed position) instead of exoPlayer.currentPosition
-        // because exoPlayer may still be seeking from a previous scrub and return stale value
-        val duration = exoPlayer.duration
+        // Use currentPosition (displayed position) instead of engine.currentPosition
+        // because the engine may still be seeking from a previous scrub and return a stale value
+        val duration = engine.duration
         val newPosition = if (duration > 0) {
             (currentPosition + milliseconds).coerceIn(0, duration)
         } else {
@@ -892,18 +799,17 @@ fun PlayerScreen(
         }
     }
 
-    LaunchedEffect(exoPlayer, videoUrl) {
+    LaunchedEffect(engine, videoUrl) {
         while (true) {
             delay(500.milliseconds)
             if (!isDragging && !isManuallySeeking) {
-                currentPosition = exoPlayer.currentPosition
-                duration = exoPlayer.duration
-                // Get buffered position from ExoPlayer
-                bufferedPosition = exoPlayer.bufferedPosition
+                currentPosition = engine.currentPosition
+                duration = engine.duration
+                bufferedPosition = engine.bufferedPosition
                 maxBufferedPosition = bufferedPosition
                 if (duration > 0) {
                     sliderValue = currentPosition.toFloat()
-                    if (actualEpisodeLength == null && duration > 60000 && exoPlayer.playbackState == Player.STATE_READY) {
+                    if (actualEpisodeLength == null && duration > 60000 && engine.playbackState == PlayerEngine.STATE_READY) {
                         actualEpisodeLength = (duration / 1000).toInt()
                     }
                 }
@@ -971,7 +877,7 @@ fun PlayerScreen(
             val isInIntro = posSeconds >= ts.introStart && posSeconds < ts.introEnd
             if (isInIntro) {
                 if (autoSkipOpening && !hasSkippedIntro && !isManuallySeeking) {
-                    exoPlayer.seekTo(ts.introEnd * 1000L)
+                    engine.seekTo(ts.introEnd * 1000L)
                     hasSkippedIntro = true
                 }
                 if (!autoSkipOpening) {
@@ -1028,11 +934,11 @@ fun PlayerScreen(
         }
     }
 
-    LaunchedEffect(exoPlayer, hasTriggeredProgressUpdate) {
+    LaunchedEffect(engine, hasTriggeredProgressUpdate) {
         while (!hasTriggeredProgressUpdate) {
             delay(1000.milliseconds)
-            if (exoPlayer.playbackState == Player.STATE_READY && exoPlayer.duration > 0) {
-                val percentage = ((exoPlayer.currentPosition.toFloat() / exoPlayer.duration) * 100).toInt()
+            if (engine.playbackState == PlayerEngine.STATE_READY && engine.duration > 0) {
+                val percentage = ((engine.currentPosition.toFloat() / engine.duration) * 100).toInt()
                 onProgressUpdate(percentage)
             }
         }
@@ -1048,21 +954,21 @@ fun PlayerScreen(
 
     DisposableEffect(Unit) {
         onDispose {
-            exoPlayer.stop()
-            exoPlayer.clearMediaItems()
-            exoPlayer.release()
+            engine.stop()
+            engine.clearMediaItems()
+            engine.release()
         }
     }
 
     val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner, exoPlayer) {
+    DisposableEffect(lifecycleOwner, engine) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP) {
                 val mainAct = activity as? com.blissless.tensei.MainActivity
                 val inPiP = mainAct?.isInPiPMode?.value == true
                 val autoEnterPiP = mainAct?.shouldAutoEnterPiP == true
                 if (!inPiP && !autoEnterPiP) {
-                    exoPlayer.pause()
+                    engine.pause()
                 }
             }
         }
@@ -1108,13 +1014,13 @@ fun PlayerScreen(
         playbackError = null
 
         // Save current position BEFORE stopping
-        val currentDur = exoPlayer.duration
-        onSavePosition?.invoke(exoPlayer.currentPosition, if (currentDur > 0) currentDur else 0L)
-        onPositionSaved?.invoke(exoPlayer.currentPosition)
+        val currentDur = engine.duration
+        onSavePosition?.invoke(engine.currentPosition, if (currentDur > 0) currentDur else 0L)
+        onPositionSaved?.invoke(engine.currentPosition)
 
         // Stop and clear the current playback to prevent audio overlap
-        exoPlayer.stop()
-        exoPlayer.clearMediaItems()
+        engine.stop()
+        engine.clearMediaItems()
 
         // Small delay before triggering server change to ensure error popup disappears
         scope.launch {
@@ -1132,8 +1038,8 @@ fun PlayerScreen(
         hasPlaybackStarted = false
         hasError = false
         playbackError = null
-        exoPlayer.stop()
-        exoPlayer.clearMediaItems()
+        engine.stop()
+        engine.clearMediaItems()
         if (extensionServers.isNotEmpty()) {
             onExtensionServerChange?.invoke(target)
         } else {
@@ -1148,50 +1054,33 @@ fun PlayerScreen(
 
     fun rebuildWithSubtitles(enable: Boolean) {
         subtitlesEnabled = enable
-        val position = exoPlayer.currentPosition
-        val playWhenReady = exoPlayer.playWhenReady
-        val currentItem = exoPlayer.currentMediaItem ?: return
+        val position = engine.currentPosition
+        val playWhenReady = engine.playWhenReady
         val subtitleConfigs = if (subtitlesEnabled && subtitleTracks.isNotEmpty()) {
             subtitleTracks.mapIndexed { index, track ->
-                val flags = if (index == selectedSubtitleIndex) C.SELECTION_FLAG_DEFAULT else 0
-                MediaItem.SubtitleConfiguration.Builder(track.url.toUri())
-                    .setMimeType(subtitleMimeType(track.url))
-                    .setLanguage(track.lang)
-                    .setSelectionFlags(flags)
-                    .build()
+                SubtitleConfig(
+                    url = track.url,
+                    mimeType = subtitleMimeType(track.url),
+                    language = track.lang,
+                    selected = index == selectedSubtitleIndex,
+                )
             }
         } else if (subtitlesEnabled && subtitleUrl != null) {
-            listOf(MediaItem.SubtitleConfiguration.Builder(subtitleUrl.toUri())
-                .setMimeType(subtitleMimeType(subtitleUrl))
-                .setLanguage("en")
-                .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
-                .build())
+            listOf(SubtitleConfig(
+                url = subtitleUrl,
+                mimeType = subtitleMimeType(subtitleUrl),
+                language = "en",
+                selected = true,
+            ))
         } else {
             emptyList()
         }
-        val newItem = currentItem.buildUpon()
-            .setSubtitleConfigurations(subtitleConfigs)
-            .build()
         if (!enable) {
-            exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters.buildUpon()
-                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
-                .build()
+            engine.disableSubtitles()
         } else {
             selectedEmbeddedTrackIndex = -1
         }
-        exoPlayer.stop()
-        exoPlayer.setMediaItem(newItem, position)
-        exoPlayer.prepare()
-        exoPlayer.playWhenReady = playWhenReady
-    }
-
-    fun selectEmbeddedSubtitle(player: ExoPlayer, track: EmbeddedSubtitleTrack) {
-        val override = TrackSelectionOverride(track.trackGroup, listOf(track.trackIndex))
-        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
-            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-            .setOverrideForType(override)
-            .build()
-        Log.d("PlayerScreen", "selectEmbeddedSubtitle: selected '${track.label}' group=${track.trackGroup} idx=${track.trackIndex}")
+        engine.rebuildWithSubtitles(videoUrl, subtitleConfigs, position, playWhenReady)
     }
 
     fun getActiveSubtitleSettings(): SubtitleSettings {
@@ -1228,39 +1117,33 @@ fun PlayerScreen(
         // shrink paddings, hide secondary text and use smaller buttons so the
         // controls fit the reduced-height video area.
         val isCompact = !isFullscreen
-        // PlayerView - recreate when server changes
-            key(serverChangeTrigger) {
+        // Player view - recreate when server or engine changes
+        key(serverChangeTrigger, playerEngine) {
             AndroidView(
-                factory = { ctx ->
-                    PlayerView(ctx).apply {
-                        player = exoPlayer
-                        layoutParams = FrameLayout.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.MATCH_PARENT
-                        )
-                        resizeMode = resizeModes[resizeModeIndex].first
-                        useController = false
-                        setShowNextButton(false)
-                        setShowPreviousButton(false)
-                        setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
-                        controllerShowTimeoutMs = 3000
-                        controllerAutoShow = false
-
+                factory = { _ ->
+                    // Apply initial settings; the engine owns and configures its own view
+                    val v = engine.view
+                    if (v is PlayerView) {
+                        v.useController = false
+                        v.setShowNextButton(false)
+                        v.setShowPreviousButton(false)
+                        v.setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
+                        v.controllerShowTimeoutMs = 3000
+                        v.controllerAutoShow = false
+                        v.resizeMode = resizeModes[resizeModeIndex].first
                         val activeSubSettings = getActiveSubtitleSettings()
-                        subtitleView?.apply {
-                            applySubtitleStyle(this, activeSubSettings)
-                        }
+                        v.subtitleView?.apply { applySubtitleStyle(this, activeSubSettings) }
                     }
+                    v
                 },
                 modifier = Modifier
                     .fillMaxSize(),
                 update = { view ->
-                    view.resizeMode = resizeModes[resizeModeIndex].first
-                    view.player = exoPlayer
-                    subtitleViewRef = view.subtitleView
-                    val activeSubSettings = getActiveSubtitleSettings()
-                    view.subtitleView?.apply {
-                        applySubtitleStyle(this, activeSubSettings)
+                    if (view is PlayerView) {
+                        view.resizeMode = resizeModes[resizeModeIndex].first
+                        subtitleViewRef = view.subtitleView
+                        val activeSubSettings = getActiveSubtitleSettings()
+                        view.subtitleView?.apply { applySubtitleStyle(this, activeSubSettings) }
                     }
                 }
             )
@@ -1306,7 +1189,7 @@ fun PlayerScreen(
                                     } else {
                                         val volumeChange = -(dragAmount / 500f)
                                         playerVolume = (playerVolume + volumeChange).coerceIn(0f, 1f)
-                                        exoPlayer.volume = playerVolume
+                                        engine.setVolume(playerVolume)
                                         showVolumeOverlay = true
                                         scope.launch {
                                             delay(1500.milliseconds)
@@ -1364,7 +1247,7 @@ fun PlayerScreen(
                                     if (swipeSwap) {
                                         val volumeChange = -(dragAmount / 500f)
                                         playerVolume = (playerVolume + volumeChange).coerceIn(0f, 1f)
-                                        exoPlayer.volume = playerVolume
+                                        engine.setVolume(playerVolume)
                                         showVolumeOverlay = true
                                         scope.launch {
                                             delay(1500.milliseconds)
@@ -1601,8 +1484,8 @@ fun PlayerScreen(
                                                                 showServerMenu = false
                                                                 autoRetryServers.clear()
                                                                 pendingAutoRetry = null
-                                                                exoPlayer.stop()
-                                                                exoPlayer.clearMediaItems()
+                                                                engine.stop()
+                                                                engine.clearMediaItems()
                                                                 onExtensionServerChange?.invoke(server.name)
                                                             }
                                                         )
@@ -1619,8 +1502,8 @@ fun PlayerScreen(
                                                                 showServerMenu = false
                                                                 autoRetryServers.clear()
                                                                 pendingAutoRetry = null
-                                                                exoPlayer.stop()
-                                                                exoPlayer.clearMediaItems()
+                                                                engine.stop()
+                                                                engine.clearMediaItems()
                                                                 onExtensionServerChange?.invoke(server.name)
                                                             }
                                                         )
@@ -1637,8 +1520,8 @@ fun PlayerScreen(
                                                                 showServerMenu = false
                                                                 autoRetryServers.clear()
                                                                 pendingAutoRetry = null
-                                                                exoPlayer.stop()
-                                                                exoPlayer.clearMediaItems()
+                                                                engine.stop()
+                                                                engine.clearMediaItems()
                                                                 onExtensionServerChange?.invoke(server.name)
                                                             }
                                                         )
@@ -1749,9 +1632,7 @@ fun PlayerScreen(
                                                     onClick = {
                                                         if (subtitlesEnabled) rebuildWithSubtitles(false)
                                                         selectedEmbeddedTrackIndex = -1
-                                                        exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters.buildUpon()
-                                                            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
-                                                            .build()
+                                                        engine.disableSubtitles()
                                                         showSubtitleMenu = false
                                                     },
                                                     leadingIcon = if (!subtitlesEnabled) { { Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary) } } else null
@@ -1786,7 +1667,8 @@ fun PlayerScreen(
                                                         DropdownMenuItem(
                                                             text = { Text(track.label, color = if (isSelected) MaterialTheme.colorScheme.primary else Color.White) },
                                                             onClick = {
-                                                                selectEmbeddedSubtitle(exoPlayer, track)
+                                                                engine.overrideSubtitleTrack(track.trackIndex, 0)
+                                                                Log.d("PlayerScreen", "selectEmbeddedSubtitle: selected '${track.label}' idx=${track.trackIndex}")
                                                                 selectedEmbeddedTrackIndex = index
                                                                 subtitlesEnabled = true
                                                                 showSubtitleMenu = false
@@ -1864,10 +1746,10 @@ fun PlayerScreen(
                                 onClick = {
                                     if (hasError) {
                                         handlePlaybackError()
-                                        exoPlayer.prepare()
-                                        exoPlayer.playWhenReady = true
+                                        engine.prepare()
+                                        engine.playWhenReady = true
                                     } else {
-                                        if (isPlaying) exoPlayer.pause() else exoPlayer.play()
+                                        if (isPlaying) engine.pause() else engine.play()
                                     }
                                 },
                                 modifier = Modifier.size(if (isCompact) 52.dp else 72.dp).then(if (!isCompact) Modifier.background(Color.Black.copy(alpha = 0.5f), CircleShape) else Modifier)
@@ -2183,7 +2065,7 @@ fun PlayerScreen(
                                 onShowMenuChange = { showSpeedMenu = it },
                                 onSpeedChange = { speed ->
                                     currentSpeed = speed
-                                    exoPlayer.setPlaybackSpeed(speed)
+                                    engine.setPlaybackSpeed(speed)
                                 },
                                 isCompact = isCompact,
                             )
@@ -2236,17 +2118,17 @@ fun PlayerScreen(
             onSkipOpening = {
                 val ts = effectiveTimestamps
                 if (ts.introEnd != null) {
-                    exoPlayer.seekTo(ts.introEnd * 1000L)
-                    if (exoPlayer.isPlaying) {
-                        exoPlayer.play()
+                    engine.seekTo(ts.introEnd * 1000L)
+                    if (engine.isPlaying) {
+                        engine.play()
                     }
                     hasSkippedIntro = true
                 }
             },
             onSkipEnding = {
                 if (isLatestEpisode || !creditsAtEnd) {
-                    if (exoPlayer.duration > 0) {
-                        exoPlayer.seekTo(exoPlayer.duration)
+                    if (engine.duration > 0) {
+                        engine.seekTo(engine.duration)
                     }
                 } else if (!isChangingServer) {
                     onNextEpisode?.invoke()

@@ -1,6 +1,7 @@
 package com.blissless.tensei.stream
 
 import androidx.media3.exoplayer.ExoPlayer
+import com.blissless.tensei.ui.screens.player.PlayerEngine
 import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
 import eu.kanade.tachiyomi.animesource.model.Hoster
 import eu.kanade.tachiyomi.animesource.model.SEpisode
@@ -29,6 +30,8 @@ object PlayerData {
     var allHosters: List<Hoster> = emptyList()
     @Volatile
     var exoPlayer: ExoPlayer? = null
+    @Volatile
+    var playerEngine: PlayerEngine? = null
 }
 
 

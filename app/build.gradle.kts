@@ -25,6 +25,13 @@ android {
         versionCode = 17
         versionName = "1.2.4"
 
+        externalNativeBuild {
+            cmake {
+                cppFlags += "-std=c++20"
+                arguments += "-DANDROID_STL=c++_shared"
+            }
+        }
+
         val anilistApiKey = localProperties.getProperty("CLIENT_ID_ANILIST")
         val tmdbApiKey = localProperties.getProperty("TMDB_API_KEY")
         val malClientId = localProperties.getProperty("MAL_CLIENT_ID") ?: ""
@@ -34,6 +41,10 @@ android {
         buildConfigField("String", "MAL_CLIENT_ID", "\"$malClientId\"")
         val malClientSecret = localProperties.getProperty("MAL_CLIENT_SECRET") ?: ""
         buildConfigField("String", "MAL_CLIENT_SECRET", "\"$malClientSecret\"")
+        val discordAppId = localProperties.getProperty("DISCORD_APP_ID") ?: ""
+        buildConfigField("String", "DISCORD_APP_ID", "\"$discordAppId\"")
+        val discordPublicKey = localProperties.getProperty("DISCORD_PUBLIC_KEY") ?: ""
+        buildConfigField("String", "DISCORD_PUBLIC_KEY", "\"$discordPublicKey\"")
     }
 
     // 1. ADD THIS: Configure your signing keys here
@@ -75,6 +86,14 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+        prefab = true
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
     }
 
     testOptions {
@@ -128,6 +147,7 @@ tasks.matching { it.name == "assembleRelease" }.configureEach {
 }
 
 dependencies {
+    implementation(files("libs/discord_partner_sdk.aar"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.core.splashscreen)
     implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -148,6 +168,7 @@ dependencies {
     implementation(libs.androidx.media3.exoplayer.hls)
     implementation(libs.androidx.media3.datasource)
     implementation(libs.androidx.media3.datasource.okhttp)
+    implementation(libs.mpv.android)
     implementation(libs.retrofit)
     implementation(libs.converter.gson)
     implementation(libs.kotlinx.coroutines.android)

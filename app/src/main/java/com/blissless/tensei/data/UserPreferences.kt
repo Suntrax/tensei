@@ -84,6 +84,8 @@ class UserPreferences(context: Context) {
         private const val KEY_APP_ICON = "app_icon"
         private const val KEY_MAX_PERFORMANCE = "max_performance"
         private const val KEY_SUPPORTS_PIP = "supports_pip"
+        private const val KEY_PLAYER_ENGINE = "player_engine"
+        private const val KEY_DISCORD_RICH_PRESENCE = "discord_rich_presence"
     }
 
     private val sharedPreferences: SharedPreferences =
@@ -159,6 +161,12 @@ class UserPreferences(context: Context) {
 
     private val _supportsPiP = MutableStateFlow(false)
     val supportsPiP: StateFlow<Boolean> = _supportsPiP.asStateFlow()
+
+    private val _playerEngine = MutableStateFlow("exo")
+    val playerEngine: StateFlow<String> = _playerEngine.asStateFlow()
+
+    private val _discordRichPresence = MutableStateFlow(false)
+    val discordRichPresence: StateFlow<Boolean> = _discordRichPresence.asStateFlow()
 
     // Thumbnail extraction for seekbar preview
     private val _enableThumbnailPreview = MutableStateFlow(false)
@@ -344,6 +352,8 @@ class UserPreferences(context: Context) {
         _autoSkipEnding.value = sharedPreferences.getBoolean(KEY_AUTO_SKIP_ENDING, false)
         _autoPlayNextEpisode.value = sharedPreferences.getBoolean(KEY_AUTO_PLAY_NEXT_EPISODE, true)
         _supportsPiP.value = sharedPreferences.getBoolean(KEY_SUPPORTS_PIP, true)
+        _playerEngine.value = sharedPreferences.getString(KEY_PLAYER_ENGINE, "exo") ?: "exo"
+        _discordRichPresence.value = sharedPreferences.getBoolean(KEY_DISCORD_RICH_PRESENCE, false)
         _enableThumbnailPreview.value = sharedPreferences.getBoolean(KEY_ENABLE_THUMBNAIL_PREVIEW, false)
         _preferredScraper.value = sharedPreferences.getString(KEY_PREFERRED_SCRAPER, "Animekai") ?: "Animekai"
         _defaultExtensionPackage.value = sharedPreferences.getString(KEY_DEFAULT_EXTENSION, "") ?: ""
@@ -525,6 +535,16 @@ class UserPreferences(context: Context) {
     fun setSupportsPiP(enabled: Boolean) {
         _supportsPiP.value = enabled
         sharedPreferences.edit { putBoolean(KEY_SUPPORTS_PIP, enabled) }
+    }
+
+    fun setPlayerEngine(engine: String) {
+        _playerEngine.value = engine
+        sharedPreferences.edit { putString(KEY_PLAYER_ENGINE, engine) }
+    }
+
+    fun setDiscordRichPresence(enabled: Boolean) {
+        _discordRichPresence.value = enabled
+        sharedPreferences.edit { putBoolean(KEY_DISCORD_RICH_PRESENCE, enabled) }
     }
 
     /**

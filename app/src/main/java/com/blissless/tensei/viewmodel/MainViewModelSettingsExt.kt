@@ -76,6 +76,19 @@ fun MainViewModel.setAutoPlayNextEpisode(enabled: Boolean) =
 fun MainViewModel.setSupportsPiP(enabled: Boolean) =
     userPreferences.setSupportsPiP(enabled)
 
+fun MainViewModel.setPlayerEngine(engine: String) =
+    userPreferences.setPlayerEngine(engine)
+
+fun MainViewModel.setDiscordRichPresence(enabled: Boolean) {
+    userPreferences.setDiscordRichPresence(enabled)
+    if (enabled) {
+        com.blissless.tensei.discord.DiscordRichPresence.connect()
+    } else {
+        com.blissless.tensei.discord.DiscordRichPresence.clearPresence()
+        com.blissless.tensei.discord.DiscordRichPresence.disconnect()
+    }
+}
+
 fun MainViewModel.setDefaultSubtitleLang(lang: String) =
     userPreferences.setDefaultSubtitleLang(lang)
 

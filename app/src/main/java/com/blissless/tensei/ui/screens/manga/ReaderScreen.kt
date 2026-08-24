@@ -142,6 +142,8 @@ fun MangaReaderScreen(
             // Refresh the home Continue Reading card with the latest scroll progress
             // when leaving the reader mid-chapter.
             viewModel.refreshMangaTracking()
+            // Clear Discord Rich Presence when leaving the reader.
+            com.blissless.tensei.discord.DiscordRichPresence.clearPresence()
         }
     }
     val chapters by viewModel.mangaChapters.collectAsState()
@@ -275,6 +277,18 @@ fun MangaReaderScreen(
             if (pendingResumeProgress < 0f && manga.scrollProgress > 0f && currentChapterIndex == manga.progress) {
                 pendingResumeProgress = manga.scrollProgress
                 android.util.Log.d("MangaReader", "Initial entry resume: set pendingResumeProgress=${manga.scrollProgress}")
+            }
+            // Update Discord Rich Presence with current manga/chapter info
+            val chapter = currentChapter
+            if (chapterImages != null && chapter != null) {
+                val drm = viewModel.discordRichPresence.value
+                if (drm) {
+                    com.blissless.tensei.discord.DiscordRichPresence.connect()
+                    com.blissless.tensei.discord.DiscordRichPresence.setMangaPresence(
+                        mangaTitle = manga.title,
+                        chapterLabel = chapter.title.ifEmpty { chapter.chapterId },
+                    )
+                }
             }
         }
     }

@@ -33,6 +33,7 @@ kotlinxSerializationJsonOkio = "1.11.0"
 truth = "1.4.5"
 workRuntimeKtxVersion = "2.11.2"
 libtorrent4j = "2.1.0-39"
+mpvAndroid = "0.1.12"
 
 [libraries]
 junit = { module = "junit:junit", version.ref = "junit" }
@@ -83,6 +84,7 @@ kotlinx-serialization-json-okio = { module = "org.jetbrains.kotlinx:kotlinx-seri
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }
 androidx-compose-foundation = { group = "androidx.compose.foundation", name = "foundation", version.ref = "foundation" }
 truth = { module = "com.google.truth:truth", version.ref = "truth" }
+mpv-android = { module = "io.github.abdallahmehiz:mpv-android-lib", version.ref = "mpvAndroid" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

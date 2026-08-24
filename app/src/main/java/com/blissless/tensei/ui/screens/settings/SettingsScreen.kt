@@ -151,6 +151,8 @@ import com.blissless.tensei.viewmodel.setSwipeVolume
 import com.blissless.tensei.viewmodel.setSwipeBrightness
 import com.blissless.tensei.viewmodel.setSwipeSwap
 import com.blissless.tensei.viewmodel.setSupportsPiP
+import com.blissless.tensei.viewmodel.setPlayerEngine
+import com.blissless.tensei.viewmodel.setDiscordRichPresence
 import com.blissless.tensei.viewmodel.setCheckUpdatesOnStart
 import com.blissless.tensei.viewmodel.setAutoUpdateExtensions
 import com.blissless.tensei.viewmodel.loadAvailableMagnetExtensions
@@ -259,6 +261,7 @@ private fun AccountSettingsPage(
     val trackingPercentage by viewModel.trackingPercentage.collectAsState(initial = 85)
     val preventScheduleSync by viewModel.preventScheduleSync.collectAsState()
     val mangaSyncThreshold by viewModel.mangaSyncThreshold.collectAsState()
+    val discordRichPresence by viewModel.discordRichPresence.collectAsState(initial = false)
 
     SettingsPageScaffold(title = "Account & Sync", onBack = onBack) {
         if (loginProvider != LoginProvider.NONE) {
@@ -385,6 +388,17 @@ private fun AccountSettingsPage(
                 onValueChange = { viewModel.setMangaSyncThreshold(it.toInt()) },
                 minLabel = "75%",
                 maxLabel = "100%"
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+        SectionHeader("DISCORD")
+        SettingsCard {
+            SettingsToggle(
+                title = "Rich Presence",
+                description = "Show what you're watching/reading on Discord",
+                checked = discordRichPresence,
+                onCheckedChange = { viewModel.setDiscordRichPresence(it) }
             )
         }
     }
@@ -1468,8 +1482,26 @@ private fun PlayerSettingsPage(
     val swipeBrightness by viewModel.swipeBrightness.collectAsState(initial = false)
     val swipeSwap by viewModel.swipeSwap.collectAsState(initial = false)
     val supportsPiP by viewModel.supportsPiP.collectAsState(initial = false)
+    val playerEngine by viewModel.playerEngine.collectAsState(initial = "exo")
 
     SettingsPageScaffold(title = "Player Settings", onBack = onBack) {
+        SectionHeader("PLAYER ENGINE")
+        SettingsCard {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                SettingsChoiceChip(label = "ExoPlayer", isSelected = playerEngine == "exo", onClick = { viewModel.setPlayerEngine("exo") })
+                SettingsChoiceChip(label = "MPV", isSelected = playerEngine == "mpv", onClick = { viewModel.setPlayerEngine("mpv") })
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                "ExoPlayer is the default. MPV offers better codec support.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
         SectionHeader("SKIP CONTROLS")
         SettingsCard {
             SettingsSliderRow(
