@@ -456,8 +456,8 @@ internal fun InfoCard(
 
             val heroStats = listOfNotNull<Pair<String, String>>(
                 epDisplay?.let { "Episodes" to it },
+                scoreValue?.let { "Score" to String.format(java.util.Locale.US, "%.1f", it / 10.0) },
                 durationMin?.let { "Duration" to "${it}m" },
-                scoreValue?.let { "Score" to String.format(java.util.Locale.US, "%.1f", it / 10.0) }
             )
 
             if (heroStats.isNotEmpty()) {

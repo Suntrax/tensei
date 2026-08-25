@@ -1642,6 +1642,15 @@ private fun MangaFeaturedCarousel(
                             Text(text = year.toString(), color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodyMedium)
                             Text(text = " • ", color = Color.White.copy(alpha = 0.4f), style = MaterialTheme.typography.bodyMedium)
                         }
+                        currentManga.averageScore?.let { score ->
+                            Text(
+                                text = "★ ${"%.1f".format(score / 10.0)}",
+                                color = Color(0xFFFFD700),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(text = " • ", color = Color.White.copy(alpha = 0.4f), style = MaterialTheme.typography.bodyMedium)
+                        }
                         val formatText = when (currentManga.format?.uppercase()) {
                             "MANGA" -> "Manga"
                             "NOVEL" -> "Novel"
@@ -1649,15 +1658,6 @@ private fun MangaFeaturedCarousel(
                             else -> "Manga"
                         }
                         Text(text = formatText, color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodyMedium)
-                        currentManga.averageScore?.let { score ->
-                            Text(text = " • ", color = Color.White.copy(alpha = 0.4f), style = MaterialTheme.typography.bodyMedium)
-                            Text(
-                                text = "★ ${"%.1f".format(score / 10.0)}",
-                                color = Color(0xFFFFD700),
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
                     }
 
                     Spacer(modifier = Modifier.height(20.dp))

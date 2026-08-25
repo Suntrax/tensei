@@ -1305,6 +1305,7 @@ data class MangaDetailMedia(
     val genres: List<String>? = null,
     val tags: List<TagData>? = null,
     val seasonYear: Int? = null,
+    val startDate: StartDate? = null,
     val format: String? = null,
     val source: String? = null,
     val isAdult: Boolean = false,
@@ -1322,6 +1323,13 @@ data class MangaDetailTitle(
     val romaji: String? = null,
     val english: String? = null,
     val native: String? = null
+)
+
+@Serializable
+data class StartDate(
+    val year: Int? = null,
+    val month: Int? = null,
+    val day: Int? = null
 )
 
 @Serializable
@@ -1412,6 +1420,7 @@ data class MangaEntryMedia(
     val averageScore: Int?,
     val genres: List<String>?,
     val seasonYear: Int? = null,
+    val startDate: StartDate? = null,
     val format: String? = null
 )
 

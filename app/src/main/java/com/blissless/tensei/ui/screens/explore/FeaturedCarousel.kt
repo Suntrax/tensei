@@ -311,14 +311,7 @@ fun FeaturedCarousel(
                             Text(text = year.toString(), color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodyMedium)
                             Text(text = " • ", color = Color.White.copy(alpha = 0.4f), style = MaterialTheme.typography.bodyMedium)
                         }
-                        val formatText = when (format?.uppercase()) {
-                            "MOVIE" -> "Movie"
-                            "ONA", "OVA", "TV" -> "Series"
-                            else -> "Series"
-                        }
-                        Text(text = formatText, color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodyMedium)
                         if (avgScore != null) {
-                            Text(text = " • ", color = Color.White.copy(alpha = 0.4f), style = MaterialTheme.typography.bodyMedium)
                             val scoreValue = avgScore / 10.0
                             Text(
                                 text = "★ ${"%.1f".format(scoreValue)}",
@@ -326,7 +319,14 @@ fun FeaturedCarousel(
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Bold
                             )
+                            Text(text = " • ", color = Color.White.copy(alpha = 0.4f), style = MaterialTheme.typography.bodyMedium)
                         }
+                        val formatText = when (format?.uppercase()) {
+                            "MOVIE" -> "Movie"
+                            "ONA", "OVA", "TV" -> "Series"
+                            else -> "Series"
+                        }
+                        Text(text = formatText, color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodyMedium)
                     }
                     
                     Spacer(modifier = Modifier.height(20.dp))

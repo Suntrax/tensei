@@ -229,7 +229,7 @@ class MangaRepository {
                     coverImage { extraLarge large } bannerImage description
                     chapters volumes status averageScore meanScore popularity favourites
                     genres tags { name rank isMediaSpoiler description isAdult }
-                    seasonYear format source isAdult
+                    seasonYear startDate { year } format source isAdult
                     relations { edges { relationType node { id title { romaji english } coverImage { extraLarge } chapters averageScore format } } }
                     characters { nodes { id name { full native } image { large } } }
                     staff { edges { node { id name { full native } image { large } } role } }
@@ -278,7 +278,7 @@ class MangaRepository {
             favourites = media.favourites,
             genres = media.genres ?: emptyList(),
             tags = media.tags ?: emptyList(),
-            year = media.seasonYear,
+            year = media.seasonYear ?: media.startDate?.year,
             format = media.format,
             source = media.source,
             isAdult = media.isAdult,
@@ -471,7 +471,7 @@ class MangaRepository {
             listStatus = entry.status ?: "",
             listEntryId = entry.id,
             userScore = entry.score,
-            year = media.seasonYear,
+            year = media.seasonYear ?: media.startDate?.year,
             malId = media.idMal,
             format = media.format
         )

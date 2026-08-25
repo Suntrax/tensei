@@ -759,8 +759,10 @@ fun DetailedAnimeScreen(
                             Spacer(modifier = Modifier.height(12.dp))
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                modifier = Modifier.fillMaxWidth()
                             ) {
+                                Spacer(modifier = Modifier.weight(1f))
                                 displayData.averageScore?.let { score ->
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
@@ -797,6 +799,7 @@ fun DetailedAnimeScreen(
                                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                                     )
                                 }
+                                Spacer(modifier = Modifier.weight(1f))
                             }
                             Spacer(modifier = Modifier.height(8.dp))
                             Row(

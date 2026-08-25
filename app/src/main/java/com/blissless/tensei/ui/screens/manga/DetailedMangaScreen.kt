@@ -631,8 +631,10 @@ fun DetailedMangaScreen(
                             Spacer(modifier = Modifier.height(12.dp))
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                modifier = Modifier.fillMaxWidth()
                             ) {
+                                Spacer(modifier = Modifier.weight(1f))
                                 displayData.averageScore?.let { score ->
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
@@ -669,6 +671,7 @@ fun DetailedMangaScreen(
                                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                                     )
                                 }
+                                Spacer(modifier = Modifier.weight(1f))
                             }
                             Spacer(modifier = Modifier.height(8.dp))
                             Row(
@@ -710,7 +713,6 @@ fun DetailedMangaScreen(
                                 },
                                 modifier = Modifier.fillMaxWidth().height(48.dp),
                                 shape = RoundedCornerShape(12.dp),
-                                enabled = chapters.isNotEmpty() && !isLoadingChapters,
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = MaterialTheme.colorScheme.primary,
                                     disabledContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
@@ -1216,10 +1218,67 @@ fun DetailedMangaScreen(
                                     }
                                 }
                                 Spacer(modifier = Modifier.height(12.dp))
-                                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    itemsIndexed(characters, key = { _, c -> c.id }) { _, character ->
+                                val charListState = rememberLazyListState()
+                                val isCharScrolling by remember {
+                                    derivedStateOf { charListState.isScrollInProgress }
+                                }
+                                val charCameraDistancePx = with(density) { 12.dp.toPx() }
+                                val charIntro = ((1000f - slideOffset.value) / 1000f).coerceIn(0f, 1f)
+
+                                LazyRow(
+                                    state = charListState,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    itemsIndexed(characters, key = { _, c -> c.id }) { index, character ->
+                                        val charLayoutInfo by remember { derivedStateOf { charListState.layoutInfo } }
+                                        val charVisibleItems = charLayoutInfo.visibleItemsInfo
+                                        val charItemInfo = charVisibleItems.find { it.index == index }
+
+                                        val charCenterOffset = if (charItemInfo != null) {
+                                            val itemCenter = charItemInfo.offset + charItemInfo.size / 2
+                                            val screenCenter = (charLayoutInfo.viewportSize.width / 2).toFloat()
+                                            (itemCenter - screenCenter) / screenCenter
+                                        } else {
+                                            0f
+                                        }
+
+                                        val charAnimatedOffset by animateFloatAsState(
+                                            targetValue = if (isCharScrolling) charCenterOffset.coerceIn(-1.5f, 1.5f) else 0f,
+                                            animationSpec = if (isCharScrolling) {
+                                                spring(
+                                                    dampingRatio = Spring.DampingRatioNoBouncy,
+                                                    stiffness = Spring.StiffnessMedium
+                                                )
+                                            } else {
+                                                spring(
+                                                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                                                    stiffness = Spring.StiffnessLow
+                                                )
+                                            },
+                                            label = "charCenterOffset"
+                                        )
+
+                                        val charScrollScale = 1f - (charAnimatedOffset.absoluteValue * 0.25f).coerceAtMost(0.25f)
+                                        val charScrollAlpha = 1f - (charAnimatedOffset.absoluteValue * 0.4f).coerceAtMost(0.6f)
+                                        val charScrollTranslationX = charAnimatedOffset * -20f
+                                        val charScrollRotationY = (charAnimatedOffset * 15f).coerceIn(-15f, 15f)
+
+                                        val charIndexFloat = index.toFloat()
+                                        val charStaggeredProgress = ((charIntro * 1000f - (charIndexFloat * 40f)) / 1000f).coerceIn(0f, 1f)
+                                        val charEasedProgress = easeOut(charStaggeredProgress)
+                                        val charIntroScale = if (charIntro >= 1f) 1f else 0.85f + charEasedProgress * 0.15f
+                                        val charIntroAlpha = if (charIntro >= 1f) 1f else charEasedProgress
+
                                         Column(
                                             modifier = Modifier.width(80.dp).clip(RoundedCornerShape(12.dp))
+                                                .graphicsLayer {
+                                                    scaleX = charIntroScale * charScrollScale
+                                                    scaleY = charIntroScale * charScrollScale
+                                                    this.alpha = charIntroAlpha * charScrollAlpha
+                                                    translationX = charScrollTranslationX
+                                                    rotationY = charScrollRotationY
+                                                    cameraDistance = charCameraDistancePx
+                                                }
                                                 .clickable { character.id.let(onCharacterClick) }.padding(4.dp)
                                         ) {
                                             Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
@@ -1274,12 +1333,70 @@ fun DetailedMangaScreen(
                                     }
                                 }
                                 Spacer(modifier = Modifier.height(12.dp))
-                                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    itemsIndexed(staff, key = { index, _ -> "staff_$index" }) { _, staffEdge ->
+                                val staffListState = rememberLazyListState()
+                                val isStaffScrolling by remember {
+                                    derivedStateOf { staffListState.isScrollInProgress }
+                                }
+                                val staffCameraDistancePx = with(density) { 12.dp.toPx() }
+                                val staffIntro = ((1000f - slideOffset.value) / 1000f).coerceIn(0f, 1f)
+
+                                LazyRow(
+                                    state = staffListState,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    itemsIndexed(staff, key = { index, _ -> "staff_$index" }) { index, staffEdge ->
                                         staffEdge.node?.let { staffNode ->
+                                            val staffLayoutInfo by remember { derivedStateOf { staffListState.layoutInfo } }
+                                            val staffVisibleItems = staffLayoutInfo.visibleItemsInfo
+                                            val staffItemInfo = staffVisibleItems.find { it.index == index }
+
+                                            val staffCenterOffset = if (staffItemInfo != null) {
+                                                val itemCenter = staffItemInfo.offset + staffItemInfo.size / 2
+                                                val screenCenter = (staffLayoutInfo.viewportSize.width / 2).toFloat()
+                                                (itemCenter - screenCenter) / screenCenter
+                                            } else {
+                                                0f
+                                            }
+
+                                            val staffAnimatedOffset by animateFloatAsState(
+                                                targetValue = if (isStaffScrolling) staffCenterOffset.coerceIn(-1.5f, 1.5f) else 0f,
+                                                animationSpec = if (isStaffScrolling) {
+                                                    spring(
+                                                        dampingRatio = Spring.DampingRatioNoBouncy,
+                                                        stiffness = Spring.StiffnessMedium
+                                                    )
+                                                } else {
+                                                    spring(
+                                                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                                                        stiffness = Spring.StiffnessLow
+                                                    )
+                                                },
+                                                label = "mangaStaffCenterOffset"
+                                            )
+
+                                            val staffScrollScale = 1f - (staffAnimatedOffset.absoluteValue * 0.25f).coerceAtMost(0.25f)
+                                            val staffScrollAlpha = 1f - (staffAnimatedOffset.absoluteValue * 0.4f).coerceAtMost(0.6f)
+                                            val staffScrollTranslationX = staffAnimatedOffset * -20f
+                                            val staffScrollRotationY = (staffAnimatedOffset * 15f).coerceIn(-15f, 15f)
+
+                                            val staffIndexFloat = index.toFloat()
+                                            val staffStaggeredProgress = ((staffIntro * 1000f - (staffIndexFloat * 40f)) / 1000f).coerceIn(0f, 1f)
+                                            val staffEasedProgress = easeOut(staffStaggeredProgress)
+                                            val staffIntroScale = if (staffIntro >= 1f) 1f else 0.85f + staffEasedProgress * 0.15f
+                                            val staffIntroAlpha = if (staffIntro >= 1f) 1f else staffEasedProgress
+
                                             Column(
                                                 modifier = Modifier.width(80.dp).clip(RoundedCornerShape(12.dp))
-                                                    .clickable { staffNode.id.let(onStaffClick) }.padding(4.dp)
+                                                    .clickable { staffNode.id.let(onStaffClick) }
+                                                    .graphicsLayer {
+                                                        scaleX = staffIntroScale * staffScrollScale
+                                                        scaleY = staffIntroScale * staffScrollScale
+                                                        this.alpha = staffIntroAlpha * staffScrollAlpha
+                                                        translationX = staffScrollTranslationX
+                                                        rotationY = staffScrollRotationY
+                                                        cameraDistance = staffCameraDistancePx
+                                                    }
+                                                    .padding(4.dp)
                                             ) {
                                                 Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
                                                     Card(shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxSize(),
@@ -1560,11 +1677,10 @@ private fun MangaInfoCard(
             }
             Spacer(modifier = Modifier.height(18.dp))
 
-            // Hero stats: Score / Volumes / Popularity / Favorites
+            // Hero stats: Popularity / Score / Favorites
             val heroStats = buildList {
-                displayData.averageScore?.takeIf { it > 0 }?.let { add("Score" to String.format(Locale.US, "%.1f", it / 10.0)) }
-                displayData.volumes?.takeIf { it > 0 }?.let { add("Volumes" to it.toString()) }
                 displayData.popularity?.takeIf { it > 0 }?.let { add("Popularity" to formatNumber(it)) }
+                displayData.averageScore?.takeIf { it > 0 }?.let { add("Score" to String.format(Locale.US, "%.1f", it / 10.0)) }
                 displayData.favourites?.takeIf { it > 0 }?.let { add("Favorites" to formatNumber(it)) }
             }
 
