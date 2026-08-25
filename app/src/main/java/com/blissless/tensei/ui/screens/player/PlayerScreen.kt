@@ -168,6 +168,7 @@ fun PlayerScreen(
     showBufferIndicator: Boolean = true,
     bufferAheadSeconds: Int = 30,
     playerEngine: String = "exo",
+    anime4kShader: String = "none",
     swipeVolume: Boolean = false,
     swipeBrightness: Boolean = false,
     swipeSwap: Boolean = false,
@@ -393,6 +394,12 @@ fun PlayerScreen(
         when (playerEngine) {
             "mpv" -> MpvEngine(context)
             else -> ExoPlayerEngine(context, bufferAheadSeconds) { ref -> onGetCacheDataSourceFactory(ref) }
+        }
+    }
+
+    LaunchedEffect(engine, anime4kShader) {
+        if (engine is MpvEngine) {
+            engine.anime4kShader = anime4kShader
         }
     }
 

@@ -9,6 +9,47 @@ import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.View
 import `is`.xyz.mpv.MPV
+import `is`.xyz.mpv.MPVNode
+import java.io.File
+
+object Anime4KShaders {
+    private val SHADER_CHAINS = mapOf(
+        "mode_a" to listOf(
+            "Anime4K_Clamp_Highlights.glsl",
+            "Anime4K_Restore_CNN_S.glsl",
+            "Anime4K_Upscale_CNN_x2_S.glsl",
+        ),
+        "mode_b" to listOf(
+            "Anime4K_Clamp_Highlights.glsl",
+            "Anime4K_Restore_CNN_M.glsl",
+            "Anime4K_Upscale_CNN_x2_M.glsl",
+        ),
+        "mode_c" to listOf(
+            "Anime4K_Clamp_Highlights.glsl",
+            "Anime4K_Restore_CNN_VL.glsl",
+            "Anime4K_Upscale_CNN_x2_VL.glsl",
+        ),
+        "deblur" to listOf("Anime4K_Deblur_DoG.glsl"),
+        "denoise" to listOf("Anime4K_Denoise_Bilateral_Mode.glsl"),
+    )
+
+    fun getChain(shaderKey: String): List<String> = SHADER_CHAINS[shaderKey].orEmpty()
+
+    fun copyShadersToInternal(context: Context): File {
+        val destDir = File(context.filesDir, "shaders")
+        if (!destDir.exists()) destDir.mkdirs()
+        val allShaders = SHADER_CHAINS.values.flatten().distinct()
+        for (name in allShaders) {
+            val dest = File(destDir, name)
+            if (!dest.exists() || dest.length() == 0L) {
+                context.assets.open("shaders/$name").use { input ->
+                    dest.outputStream().use { output -> input.copyTo(output) }
+                }
+            }
+        }
+        return destDir
+    }
+}
 
 class MpvEngine(private val context: Context) : PlayerEngine {
 
@@ -29,10 +70,14 @@ class MpvEngine(private val context: Context) : PlayerEngine {
     private var _isPaused = true
 
     private var pendingUrl: String? = null
-    private var pendingHeaders: Map<String, String> = emptyMap()
-    private var pendingReferer: String = ""
     private var surfaceReady = false
     private var currentSurface: Surface? = null
+    var anime4kShader: String = "none"
+
+    private var initHeaders: Map<String, String> = emptyMap()
+    private var initReferer: String = ""
+    private var initShaderKey: String = "none"
+
     private val positionPoller = Handler(Looper.getMainLooper())
     private val positionPollRunnable = object : Runnable {
         override fun run() {
@@ -81,7 +126,7 @@ class MpvEngine(private val context: Context) : PlayerEngine {
                     mpv?.attachSurface(holder.surface)
                     pendingUrl?.let { url ->
                         Log.d(TAG, "Loading pending URL: ${url.take(100)}")
-                        loadFileWithHeaders(url)
+                        loadFileDirect(url)
                         pendingUrl = null
                     }
                     startPositionPolling()
@@ -174,58 +219,87 @@ class MpvEngine(private val context: Context) : PlayerEngine {
 
     private var mpvInitFailed = false
 
-    private fun ensureInit(): Boolean {
-        if (mpvInitFailed) return false
-        if (mpv != null) return true
-        Log.d(TAG, "Initializing MPV")
+    private fun destroyMpv() {
+        try { mpv?.removeObserver(eventObserver) } catch (_: Exception) {}
+        try { mpv?.destroySession() } catch (_: Exception) {}
+        try { mpv?.destroy() } catch (_: Exception) {}
+        mpv = null
+    }
+
+    private fun initMpv(headers: Map<String, String>, referer: String, shaderKey: String): Boolean {
+        Log.d(TAG, "initMpv: headers=${headers.size} referer=${referer.take(40)} shader=$shaderKey")
         try {
-            mpv = MPV().apply {
-                create(context)
+            val player = MPV()
+            player.create(context)
 
-                setOptionString("config", "no")
-                setOptionString("vo", "gpu")
-                setOptionString("hwdec", "mediacodec")
-                setOptionString("hwdec-codecs", "h264,hevc,mpeg4,mpeg2video,vp8,vp9,av1")
-                setOptionString("ao", "audiotrack")
-                setOptionString("input-default-bindings", "no")
-                setOptionString("input-vo-keyboard", "no")
-                setOptionString("idle", "once")
-                setOptionString("demuxer-max-bytes", "67108864")
-                setOptionString("demuxer-max-back-bytes", "67108864")
-                setOptionString("save-position-on-quit", "no")
-                setOptionString("gpu-context", "android")
-                setOptionString("opengl-es", "yes")
-                setOptionString("keep-open", "no")
+            player.setOptionString("config", "no")
+            player.setOptionString("vo", "gpu")
+            player.setOptionString("hwdec", "mediacodec")
+            player.setOptionString("hwdec-codecs", "h264,hevc,mpeg4,mpeg2video,vp8,vp9,av1")
+            player.setOptionString("ao", "audiotrack")
+            player.setOptionString("input-default-bindings", "no")
+            player.setOptionString("input-vo-keyboard", "no")
+            player.setOptionString("idle", "once")
+            player.setOptionString("demuxer-max-bytes", "67108864")
+            player.setOptionString("demuxer-max-back-bytes", "67108864")
+            player.setOptionString("save-position-on-quit", "no")
+            player.setOptionString("gpu-context", "android")
+            player.setOptionString("opengl-es", "yes")
+            player.setOptionString("keep-open", "no")
+            player.setOptionString("ytdl", "no")
 
-                init()
-
-                addObserver(eventObserver)
-                observeProperty("time-pos", MPV.mpvFormat.MPV_FORMAT_INT64)
-                observeProperty("duration", MPV.mpvFormat.MPV_FORMAT_DOUBLE)
-                observeProperty("pause", MPV.mpvFormat.MPV_FORMAT_FLAG)
-                observeProperty("paused-for-cache", MPV.mpvFormat.MPV_FORMAT_FLAG)
-                observeProperty("track-list", MPV.mpvFormat.MPV_FORMAT_NONE)
+            val userAgent = headers["User-Agent"]
+            if (userAgent != null) {
+                val r = player.setOptionString("user-agent", userAgent)
+                Log.d(TAG, "setOptionString user-agent: result=$r")
             }
+            if (referer.isNotEmpty()) {
+                val r = player.setOptionString("http-header-fields", "\nReferer: $referer")
+                Log.d(TAG, "setOptionString http-header-fields (before init): result=$r")
+            }
+
+            val chain = Anime4KShaders.getChain(shaderKey)
+            if (chain.isNotEmpty()) {
+                val shaderDir = Anime4KShaders.copyShadersToInternal(context)
+                val shaderPaths = chain.joinToString("\n") { File(shaderDir, it).absolutePath }
+                val r = player.setOptionString("glsl-shaders", "\n$shaderPaths")
+                Log.d(TAG, "setOptionString glsl-shaders: result=$r chain=$shaderKey")
+            }
+
+            player.init()
+            player.addObserver(eventObserver)
+            player.observeProperty("time-pos", MPV.mpvFormat.MPV_FORMAT_INT64)
+            player.observeProperty("duration", MPV.mpvFormat.MPV_FORMAT_DOUBLE)
+            player.observeProperty("pause", MPV.mpvFormat.MPV_FORMAT_FLAG)
+            player.observeProperty("paused-for-cache", MPV.mpvFormat.MPV_FORMAT_FLAG)
+            player.observeProperty("track-list", MPV.mpvFormat.MPV_FORMAT_NONE)
+
+            if (referer.isNotEmpty()) {
+                val headerNode = MPVNode.ArrayNode(arrayOf(MPVNode.StringNode("Referer: $referer")))
+                player.setPropertyNode("http-header-fields", headerNode)
+                Log.d(TAG, "setPropertyNode http-header-fields (after init): Referer=$referer")
+            }
+
+            mpv = player
+            initHeaders = headers
+            initReferer = referer
+            initShaderKey = shaderKey
+
+            Log.d(TAG, "MPV initialized successfully")
+            return true
+        } catch (e: UnsatisfiedLinkError) {
+            Log.e(TAG, "MPV native library not available: ${e.message}", e)
+            mpvInitFailed = true
+            return false
         } catch (e: Error) {
             Log.e(TAG, "MPV native library failed to load: ${e.message}", e)
             mpvInitFailed = true
-            mpv = null
             return false
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize MPV", e)
             mpvInitFailed = true
-            mpv = null
             return false
         }
-        Log.d(TAG, "MPV initialized, surfaceReady=$surfaceReady")
-
-        if (surfaceReady) {
-            currentSurface?.let { surface ->
-                Log.d(TAG, "Attaching surface to newly created mpv")
-                mpv?.attachSurface(surface)
-            }
-        }
-        return true
     }
 
     override val view: View get() = mpvView
@@ -251,14 +325,30 @@ class MpvEngine(private val context: Context) : PlayerEngine {
         httpClient: Any?,
     ) {
         Log.d(TAG, "loadMedia: ${url.take(120)} startMs=$startPositionMs headers=${headers.size} subs=${subtitleConfigs.size}")
-        if (!ensureInit()) {
-            listener?.onError("MPV native library is not compatible with this device")
-            return
-        }
         _isHls = url.contains(".m3u8") || url.contains("/m3u8")
 
-        pendingHeaders = headers
-        pendingReferer = referer
+        val needsReinit = mpv != null && (
+            headers != initHeaders || referer != initReferer || anime4kShader != initShaderKey
+        )
+        if (needsReinit) {
+            Log.d(TAG, "Headers or shader changed, recreating MPV")
+            destroyMpv()
+        }
+
+        if (mpv == null) {
+            if (mpvInitFailed) {
+                listener?.onError("MPV native library is not compatible with this device")
+                return
+            }
+            if (!initMpv(headers, referer, anime4kShader)) {
+                listener?.onError("MPV native library is not compatible with this device")
+                return
+            }
+        }
+
+        if (surfaceReady) {
+            currentSurface?.let { mpv?.attachSurface(it) }
+        }
 
         for (config in subtitleConfigs) {
             Log.d(TAG, "Adding subtitle: ${config.url.take(80)}")
@@ -267,7 +357,7 @@ class MpvEngine(private val context: Context) : PlayerEngine {
 
         if (surfaceReady) {
             Log.d(TAG, "Surface ready, loading file now")
-            loadFileWithHeaders(url)
+            loadFileDirect(url)
         } else {
             Log.d(TAG, "Surface not ready, storing pending URL")
             pendingUrl = url
@@ -276,26 +366,13 @@ class MpvEngine(private val context: Context) : PlayerEngine {
         if (startPositionMs > 0) {
             Handler(Looper.getMainLooper()).postDelayed({
                 Log.d(TAG, "Restoring position: ${startPositionMs}ms")
-                mpv?.command("seek", startPositionMs.toString(), "absolute=exact")
+                mpv?.command("seek", startPositionMs.toString(), "absolute+exact")
             }, 500)
         }
     }
 
-    private fun loadFileWithHeaders(url: String) {
+    private fun loadFileDirect(url: String) {
         val player = mpv ?: return
-        val allHeaders = pendingHeaders.toMutableMap()
-        if (pendingReferer.isNotEmpty()) allHeaders["Referer"] = pendingReferer
-
-        if (allHeaders.isNotEmpty()) {
-            val headerString = allHeaders.entries.joinToString(",") { "${it.key}: ${it.value}" }
-            Log.d(TAG, "Setting http-header-fields: $headerString")
-            try {
-                player.setPropertyString("http-header-fields", headerString)
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to set http-header-fields", e)
-            }
-        }
-
         Log.d(TAG, "loadfile $url")
         player.command("loadfile", url)
     }
@@ -319,10 +396,7 @@ class MpvEngine(private val context: Context) : PlayerEngine {
         stopPositionPolling()
         surfaceReady = false
         currentSurface = null
-        try { mpv?.removeObserver(eventObserver) } catch (_: Exception) {}
-        try { mpv?.destroySession() } catch (_: Exception) {}
-        try { mpv?.destroy() } catch (_: Exception) {}
-        mpv = null
+        destroyMpv()
     }
 
     override fun play() {
@@ -344,12 +418,12 @@ class MpvEngine(private val context: Context) : PlayerEngine {
 
     override fun seekTo(positionMs: Long) {
         Log.d(TAG, "seekTo($positionMs)")
-        mpv?.command("seek", positionMs.toString(), "absolute=exact")
+        mpv?.command("seek", positionMs.toString(), "absolute+exact")
     }
 
     override fun seekOutsideBuffer(positionMs: Long) {
         Log.d(TAG, "seekOutsideBuffer($positionMs)")
-        mpv?.command("seek", positionMs.toString(), "absolute=exact")
+        mpv?.command("seek", positionMs.toString(), "absolute+exact")
     }
 
     override fun setPlaybackSpeed(speed: Float) {
@@ -378,7 +452,7 @@ class MpvEngine(private val context: Context) : PlayerEngine {
         }
         if (startPositionMs > 0) {
             Handler(Looper.getMainLooper()).postDelayed({
-                mpv?.command("seek", startPositionMs.toString(), "absolute=exact")
+                mpv?.command("seek", startPositionMs.toString(), "absolute+exact")
             }, 200)
         }
     }

@@ -544,14 +544,14 @@ fun MangaReaderScreen(
                     isLoadingChapters = isLoadingChapters,
                     hasLoadedChapters = hasLoadedChapters,
                     readIndices = readIndices.value,
-                    nextChapterToRead = manga.progress.coerceAtLeast(0),
+                    nextChapterToRead = (0 until chapters.size).firstOrNull { it !in readIndices.value } ?: chapters.size,
                     // The online chapter list never shows download badges — the manga may have
                     // downloaded chapters, but this is the online source list (the Downloads
                     // screen's own list is the place for download UI).
                     downloadedChapterNumbers = emptySet(),
                     onChapterClick = { selectChapter(it) },
                     onContinueReading = {
-                        val next = manga.progress.coerceAtLeast(0)
+                        val next = (0 until chapters.size).firstOrNull { it !in readIndices.value } ?: chapters.size
                         if (next in chapters.indices) selectChapter(next)
                     },
                     onRetryLoadChapters = {

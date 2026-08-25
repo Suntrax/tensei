@@ -2604,6 +2604,7 @@ fun MainScreen(
                 isInPiPMode = isInPiPMode,
                 onPlayerBoundsChanged = { l, t, r, b -> activity.playerViewBounds = android.graphics.Rect(l, t, r, b) },
                 playerEngine = viewModel.playerEngine.collectAsState().value,
+                anime4kShader = viewModel.anime4kShader.collectAsState().value,
                 discordRichPresence = viewModel.discordRichPresence.collectAsState().value,
             )
             }

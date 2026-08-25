@@ -89,6 +89,9 @@ fun MainViewModel.setDiscordRichPresence(enabled: Boolean) {
     }
 }
 
+fun MainViewModel.setAnime4kShader(shader: String) =
+    userPreferences.setAnime4kShader(shader)
+
 fun MainViewModel.setDefaultSubtitleLang(lang: String) =
     userPreferences.setDefaultSubtitleLang(lang)
 
