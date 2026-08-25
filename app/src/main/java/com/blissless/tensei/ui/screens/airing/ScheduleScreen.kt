@@ -355,29 +355,22 @@ fun ScheduleScreen(
             }
         }
 
-        Box(
-            modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 4.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .width(3.dp)
-                        .height(24.dp)
-                        .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp))
-                )
-                Spacer(Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Airing Schedule", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                    Text(if (viewMode == 0) "$todayPastCount aired · $totalUpcomingThisWeek upcoming" else if (selectedDayPastCount > 0) "$selectedDayPastCount aired · $selectedDayFutureCount upcoming" else "$selectedDayFutureCount upcoming",
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-        }
-
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .height(24.dp)
+                    .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp))
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Airing Schedule", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                Text(if (viewMode == 0) "$todayPastCount aired · $totalUpcomingThisWeek upcoming" else if (selectedDayPastCount > 0) "$selectedDayPastCount aired · $selectedDayFutureCount upcoming" else "$selectedDayFutureCount upcoming",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             FilterChip(
                 selected = viewMode == 0,
                 onClick = { viewMode = 0; if (nowIndicatorIndexAll >= 0) scope.launch { listStateAllUpcoming.scrollToItem(nowIndicatorIndexAll, scrollOffset = -100) } },
@@ -388,6 +381,7 @@ fun ScheduleScreen(
                 ),
                 shape = RoundedCornerShape(10.dp)
             )
+            Spacer(Modifier.width(8.dp))
             FilterChip(
                 selected = viewMode == 1,
                 onClick = { viewMode = 1; selectedDay = currentDayOfWeek; if (nowIndicatorIndexByDay >= 0) scope.launch { listStateByDay.scrollToItem(nowIndicatorIndexByDay, scrollOffset = -100) } },

@@ -64,6 +64,10 @@ android {
         release {
             isMinifyEnabled = false
             isShrinkResources = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
             // 2. ADD THIS: Tell the release build to use the signing config above
             signingConfig = signingConfigs.getByName("release")
         }

@@ -5,14 +5,9 @@
 # For more details, see
 #   http://developer.android.com/guide/developing/tools/proguard.html
 
-# Disable optimization and obfuscation. R8's bytecode restructuring (even with -keep)
-# creates type inconsistencies that ART's verifier rejects across classloader
-# boundaries (extensions loaded via DexClassLoader).
-# Shrinking still removes unused code/resources.
 -dontoptimize
 -dontobfuscate
 
-# Keep Kotlin Serialization
 -keepattributes *Annotation*, InnerClasses
 -dontnote kotlinx.serialization.AnnotationsKt
 
@@ -119,24 +114,18 @@
 -keep class kotlin.** { *; }
 -keep class kotlinx.coroutines.** { *; }
 
+# Keep libtorrent4j (JNI — native code references Java methods by exact name)
+-keep class org.libtorrent4j.swig.** { *; }
+-dontwarn org.libtorrent4j.swig.**
+
 # Keep Jsoup (used by Tachiyomi framework and extension APKs for HTML parsing)
 -keep class org.jsoup.** { *; }
 -dontwarn org.jsoup.**
 
-# Keep Tachiyomi anime source framework (loaded dynamically via DexClassLoader)
--keep class eu.kanade.tachiyomi.animesource.** { *; }
--keep class eu.kanade.tachiyomi.network.** { *; }
--keep class eu.kanade.tachiyomi.util.** { *; }
--keep class eu.kanade.tachiyomi.AppInfo { *; }
+# Keep all tachiyomi/animeextension classes (loaded dynamically via DexClassLoader/reflection)
+-keep class eu.kanade.tachiyomi.** { *; }
+-keep class eu.kanade.tachiyomi.animeextension.** { *; }
 -dontwarn eu.kanade.tachiyomi.**
-
-# Keep all interfaces and models used by extension sources
--keep class * extends eu.kanade.tachiyomi.animesource.AnimeCatalogueSource { *; }
--keep class * implements eu.kanade.tachiyomi.animesource.AnimeSourceFactory { *; }
--keep class * extends eu.kanade.tachiyomi.animesource.online.AnimeHttpSource { *; }
-
-# Keep model classes accessed reflectively by extensions
--keep class eu.kanade.tachiyomi.animesource.model.** { *; }
 
 # Keep Kotlin serializers for all serializable classes
 -keep,includedescriptorclasses class com.blissless.anime.widget.**$$serializer { *; }
