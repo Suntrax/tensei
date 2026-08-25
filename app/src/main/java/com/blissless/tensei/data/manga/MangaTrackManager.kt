@@ -194,13 +194,34 @@ class MangaTrackManager(context: Context) {
      * back to downloaded chapters, or AniList's outdated count for releasing manga) must never
      * regress the display total that home/tracking screens show.
      */
+    fun resetTotalChapters(mangaId: Int) {
+        val tracks = getTracks().toMutableList()
+        val index = tracks.indexOfFirst { it.mangaId == mangaId }
+        if (index >= 0) {
+            tracks[index] = tracks[index].copy(totalChapters = 0)
+            saveTracks(tracks)
+        }
+    }
+
+    fun resetTotalChaptersForReleasing() {
+        val tracks = getTracks().toMutableList()
+        var changed = false
+        for (i in tracks.indices) {
+            if (tracks[i].status == "CURRENT" && tracks[i].totalChapters > 0) {
+                tracks[i] = tracks[i].copy(totalChapters = 0)
+                changed = true
+            }
+        }
+        if (changed) saveTracks(tracks)
+    }
+
     fun updateTotalChapters(mangaId: Int, totalChapters: Int, totalVolumes: Int?) {
         val tracks = getTracks().toMutableList()
         val index = tracks.indexOfFirst { it.mangaId == mangaId }
         if (index >= 0) {
             val existing = tracks[index]
             tracks[index] = existing.copy(
-                totalChapters = maxOf(existing.totalChapters, totalChapters),
+                totalChapters = totalChapters,
                 totalVolumes = totalVolumes?.let { maxOf(existing.totalVolumes ?: 0, it) } ?: existing.totalVolumes
             )
         }

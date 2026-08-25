@@ -144,6 +144,9 @@ fun MainViewModel.discoverExtensions() {
 fun MainViewModel.selectExtension(authority: String?) {
     _selectedExtensionAuthority.value = authority
     userPreferences.setSelectedMangaExtensionAuthority(authority)
+    _mangaTotalChapters.value = 0
+    mangaTrackManager?.resetTotalChaptersForReleasing()
+    loadLocalMangaTracking()
 }
 
 private fun MainViewModel.restoreExtensionSelection() {
@@ -674,6 +677,8 @@ suspend fun MainViewModel.loadMangaChapters(mangaId: Int, title: String) {
     android.util.Log.d("MangaChapters", "loadMangaChapters: mangaId=$mangaId title='$title'")
     _isLoadingMangaChapters.value = true
     _hasLoadedMangaChapters.value = false
+    _mangaTotalChapters.value = 0
+    mangaTrackManager?.resetTotalChapters(mangaId)
 
     // Without a manga extension there is no real chapter source. If the manga has downloaded
     // chapters, fall back to them so the reader still works fully offline. Otherwise the
