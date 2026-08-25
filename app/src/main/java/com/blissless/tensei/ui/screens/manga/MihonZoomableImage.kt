@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.toSize
 import coil.compose.AsyncImage
 import coil.request.CachePolicy
 import coil.request.ImageRequest
+import okhttp3.Headers
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
@@ -133,10 +134,19 @@ fun MihonZoomableImage(
     // pages to appear instantly when scrolled into view, and a crossfade on
     // every load would make scrolling feel laggy.
     val imageRequest = remember(imageUrl) {
+        val referer = try {
+            val url = java.net.URL(imageUrl)
+            "${url.protocol}://${url.host}/"
+        } catch (_: Exception) { null }
         ImageRequest.Builder(context)
             .data(imageUrl)
             .memoryCachePolicy(CachePolicy.DISABLED)
             .diskCachePolicy(CachePolicy.DISABLED)
+            .apply {
+                if (referer != null) {
+                    headers(Headers.headersOf("Referer", referer))
+                }
+            }
             .build()
     }
 

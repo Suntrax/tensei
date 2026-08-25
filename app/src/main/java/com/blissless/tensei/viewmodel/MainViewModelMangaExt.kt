@@ -845,17 +845,33 @@ suspend fun MainViewModel.loadMangaChapters(mangaId: Int, title: String) {
     android.util.Log.d("MangaDebug", "loadMangaChapters: final chapters.size=${chapters.size}")
     _mangaChapters.value = chapters
 
+    // Count only integer chapters for the display total — semi-chapters (e.g. 238.5) should
+    // not inflate the denominator or count as full chapters toward AniList progress.
+    // Use tolerance-based check to handle float imprecision (e.g. 238.00002f).
+    val integerChapterCount = chapters.count { ch ->
+        ch.chapterNumber > 0f && (ch.chapterNumber - ch.chapterNumber.toInt()) < 0.001f
+    }
+    android.util.Log.d("MangaChapters", "loadMangaChapters: chapters.size=${chapters.size} integerChapterCount=$integerChapterCount extTotalChapters=$extTotalChapters")
+    chapters.filter { ch ->
+        ch.chapterNumber > 0f && (ch.chapterNumber - ch.chapterNumber.toInt()) >= 0.001f
+    }.forEach { ch ->
+        android.util.Log.d("MangaChapters", "  EXCLUDED chapter: title='${ch.title}' chapterNumber=${ch.chapterNumber} diff=${ch.chapterNumber - ch.chapterNumber.toInt()}")
+    }
+
     // Display denominator for progress (e.g. 149/354). Prefer the extension's CURRENT release
     // count: AniList's chapters field is stale for releasing manga (e.g. Blue Lock stuck at 352
     // while the extension already has 354), so it must not override the extension total.
     // extTotalChapters covers the case where the extension returns only a partial list (e.g.
     // just the latest few chapters), which would otherwise make progress look like 149/3.
+    // When the extension provides only a total (no chapter entries), that total includes
+    // semi-chapters, so fall back to the integer-only count from the actual chapter list.
     val displayTotalChapters = when {
-        extTotalChapters > 0 -> extTotalChapters
-        extChapters != null && extChapters.isNotEmpty() -> chapters.size
+        extTotalChapters > 0 && extChapters != null && extChapters.isNotEmpty() -> integerChapterCount
+        extChapters != null && extChapters.isNotEmpty() -> integerChapterCount
         detail?.chapters != null && detail.chapters > 0 -> detail.chapters
-        else -> chapters.size
+        else -> integerChapterCount
     }
+    android.util.Log.d("MangaChapters", "loadMangaChapters: displayTotalChapters=$displayTotalChapters")
     _mangaTotalChapters.value = displayTotalChapters
     mangaTrackManager?.updateTotalChapters(
         mangaId,
@@ -956,6 +972,8 @@ fun MainViewModel.loadChapterImages(chapterId: String, useDataSaver: Boolean = f
         }
 
         android.util.Log.d("MangaReader", "loadChapterImages: extension returned ${images?.size ?: 0} images")
+        images?.take(3)?.forEachIndexed { i, url -> android.util.Log.d("MangaReader", "  image[$i]: ${url.take(200)}") }
+        images?.lastOrNull()?.let { android.util.Log.d("MangaReader", "  image[last]: ${it.take(200)}") }
 
         if (images == null) {
             _mangaChapterImages.value = emptyList()

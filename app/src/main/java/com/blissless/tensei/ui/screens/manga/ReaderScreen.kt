@@ -188,7 +188,13 @@ fun MangaReaderScreen(
     var displayedImages by remember { mutableStateOf<List<String>?>(null) }
     var displayedImagesError by remember { mutableStateOf<String?>(null) }
     var displayedChapterIndex by remember { mutableIntStateOf(-1) }
-    val readIndices = remember { mutableStateOf((0 until manga.progress.coerceAtLeast(0)).toSet()) }
+    val readIndices = remember(chapters, manga.progress) {
+        mutableStateOf(
+            chapters.mapIndexedNotNull { index, ch ->
+                if (ch.chapterNumber > 0f && ch.chapterNumber <= manga.progress) index else null
+            }.toSet()
+        )
+    }
     val scope = rememberCoroutineScope()
 
     val currentChapter = chapters.getOrNull(currentChapterIndex)
@@ -544,14 +550,20 @@ fun MangaReaderScreen(
                     isLoadingChapters = isLoadingChapters,
                     hasLoadedChapters = hasLoadedChapters,
                     readIndices = readIndices.value,
-                    nextChapterToRead = (0 until chapters.size).firstOrNull { it !in readIndices.value } ?: chapters.size,
+                    nextChapterToRead = (0 until chapters.size).firstOrNull {
+                        it !in readIndices.value &&
+                        chapters[it].chapterNumber.let { n -> n > 0f && (n - n.toInt()) < 0.001f }
+                    } ?: chapters.size,
                     // The online chapter list never shows download badges — the manga may have
                     // downloaded chapters, but this is the online source list (the Downloads
                     // screen's own list is the place for download UI).
                     downloadedChapterNumbers = emptySet(),
                     onChapterClick = { selectChapter(it) },
                     onContinueReading = {
-                        val next = (0 until chapters.size).firstOrNull { it !in readIndices.value } ?: chapters.size
+                        val next = (0 until chapters.size).firstOrNull {
+                            it !in readIndices.value &&
+                            chapters[it].chapterNumber.let { n -> n > 0f && (n - n.toInt()) < 0.001f }
+                        } ?: chapters.size
                         if (next in chapters.indices) selectChapter(next)
                     },
                     onRetryLoadChapters = {
@@ -1444,11 +1456,12 @@ fun MangaChapterListWithGroups(
 
         val listState = rememberLazyListState()
         val integerChapterCount = chapters.count { ch ->
-            val num = ch.title.removePrefix("Chapter ").trim().toFloatOrNull()
-            num != null && num == num.toInt().toFloat()
+            ch.chapterNumber > 0f && (ch.chapterNumber - ch.chapterNumber.toInt()) < 0.001f
         }
-        val readCount = readIndices.size
-        val totalCount = integerChapterCount.coerceAtLeast(chapters.size)
+        val readCount = readIndices.count { idx ->
+            idx in chapters.indices && chapters[idx].chapterNumber.let { n -> n > 0f && (n - n.toInt()) < 0.001f }
+        }
+        val totalCount = integerChapterCount
         val progress = if (totalCount > 0) readCount.toFloat() / totalCount else 0f
         val statusBarPadding = WindowInsets.statusBars.asPaddingValues()
         val listDensity = LocalDensity.current
@@ -1799,8 +1812,11 @@ private fun MangaChapterGroup(
         label = "rotation"
     )
 
-    val readInGroup = groupChapters.count { (index, _) -> index in readIndices }
-    val readRatio = if (groupChapters.isNotEmpty()) readInGroup.toFloat() / groupChapters.size else 0f
+    val integerGroupChapters = groupChapters.filter { (_, ch) ->
+        ch.chapterNumber > 0f && (ch.chapterNumber - ch.chapterNumber.toInt()) < 0.001f
+    }
+    val readInGroup = integerGroupChapters.count { (index, _) -> index in readIndices }
+    val readRatio = if (integerGroupChapters.isNotEmpty()) readInGroup.toFloat() / integerGroupChapters.size else 0f
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -1851,8 +1867,8 @@ private fun MangaChapterGroup(
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = if (readInGroup > 0) "${groupChapters.size} chapters \u00B7 $readInGroup read"
-                               else "${groupChapters.size} chapters",
+                        text = if (readInGroup > 0) "${integerGroupChapters.size} chapters \u00B7 $readInGroup read"
+                               else "${integerGroupChapters.size} chapters",
                         style = MaterialTheme.typography.labelSmall,
                         color = if (readInGroup > 0) MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)
                                else MaterialTheme.colorScheme.onSurfaceVariant
