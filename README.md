@@ -18,7 +18,7 @@
 
 ## Installation
 
-Download the APK from [Releases](https://github.com/Suntrax/tensei/releases) and install.
+Download the APK from [Releases](https://github.com/TheBlissless/tensei/releases) and install.
 
 ## Tech Stack
 

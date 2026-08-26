@@ -144,11 +144,11 @@ object Endpoints {
             "https://api.github.com/repos/$owner/$repo/releases/latest"
 
         /** GitHub web URL for the Tensei repo. */
-        const val TENSEI_REPO = "https://github.com/Suntrax/tensei"
+        const val TENSEI_REPO = "https://github.com/TheBlissless/tensei"
 
         /** Latest release URL for the Tensei repo specifically. */
         const val TENSEI_LATEST_RELEASE =
-            "https://api.github.com/repos/Suntrax/tensei/releases/latest"
+            "https://api.github.com/repos/TheBlissless/tensei/releases/latest"
     }
 
     /**

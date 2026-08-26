@@ -54,7 +54,7 @@ class UpdateViewModel(application: Application) : AndroidViewModel(application) 
     private val _toastMessage = MutableSharedFlow<String>(extraBufferCapacity = 4)
     val toastMessage: SharedFlow<String> = _toastMessage.asSharedFlow()
 
-    private val owner = "Suntrax"
+    private val owner = "TheBlissless"
     private val repo = "tensei"
 
     private val notificationManager = getApplication<Application>().getSystemService(NotificationManager::class.java)

@@ -136,19 +136,19 @@ class EndpointsTest {
 
     @Test
     fun `GitHub latestRelease constructs correctly`() {
-        val url = Endpoints.GitHub.latestRelease("Suntrax", "tensei")
-        assertThat(url).isEqualTo("https://api.github.com/repos/Suntrax/tensei/releases/latest")
+        val url = Endpoints.GitHub.latestRelease("TheBlissless", "tensei")
+        assertThat(url).isEqualTo("https://api.github.com/repos/TheBlissless/tensei/releases/latest")
     }
 
     @Test
     fun `GitHub TENSEI_REPO is correct`() {
-        assertThat(Endpoints.GitHub.TENSEI_REPO).isEqualTo("https://github.com/Suntrax/tensei")
+        assertThat(Endpoints.GitHub.TENSEI_REPO).isEqualTo("https://github.com/TheBlissless/tensei")
     }
 
     @Test
     fun `GitHub TENSEI_LATEST_RELEASE is correct`() {
         assertThat(Endpoints.GitHub.TENSEI_LATEST_RELEASE)
-            .isEqualTo("https://api.github.com/repos/Suntrax/tensei/releases/latest")
+            .isEqualTo("https://api.github.com/repos/TheBlissless/tensei/releases/latest")
     }
 
     // ─── YouTube ──────────────────────────────────────────────────────────

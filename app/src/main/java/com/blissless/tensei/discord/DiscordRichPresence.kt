@@ -6,7 +6,7 @@ import android.util.Log
 import com.blissless.tensei.BuildConfig
 
 object DiscordRichPresence {
-    private const val ICON_URL = "https://github.com/Suntrax/tensei/blob/main/assets/app_icon/icon.png?raw=true"
+    private const val ICON_URL = "https://github.com/TheBlissless/tensei/blob/main/assets/app_icon/icon.png?raw=true"
     private const val PROFILE_URL = "https://avatars.githubusercontent.com/u/89277156?v=4&size=64"
     private const val TAG = "DiscordRPC"
     private var initialized = false
@@ -83,9 +83,9 @@ object DiscordRichPresence {
             largeImage = ICON_URL,
             largeText = "Tensei",
             smallImage = PROFILE_URL,
-            smallText = "Suntrax",
-            largeUrl = "https://github.com/Suntrax/tensei",
-            smallUrl = "https://github.com/Suntrax",
+            smallText = "TheBlissless",
+            largeUrl = "https://github.com/TheBlissless/tensei",
+            smallUrl = "https://github.com/TheBlissless",
         )
     }
 
@@ -105,9 +105,9 @@ object DiscordRichPresence {
             largeImage = ICON_URL,
             largeText = "Tensei",
             smallImage = PROFILE_URL,
-            smallText = "Suntrax",
-            largeUrl = "https://github.com/Suntrax/tensei",
-            smallUrl = "https://github.com/Suntrax",
+            smallText = "TheBlissless",
+            largeUrl = "https://github.com/TheBlissless/tensei",
+            smallUrl = "https://github.com/TheBlissless",
         )
     }
 
@@ -123,9 +123,9 @@ object DiscordRichPresence {
             largeImage = ICON_URL,
             largeText = "Tensei",
             smallImage = PROFILE_URL,
-            smallText = "Suntrax",
-            largeUrl = "https://github.com/Suntrax/tensei",
-            smallUrl = "https://github.com/Suntrax",
+            smallText = "TheBlissless",
+            largeUrl = "https://github.com/TheBlissless/tensei",
+            smallUrl = "https://github.com/TheBlissless",
         )
     }
 

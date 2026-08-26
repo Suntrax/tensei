@@ -22,7 +22,7 @@ class MangaDexManager(private val client: OkHttpClient = DEFAULT_CLIENT) {
             .readTimeout(30, TimeUnit.SECONDS)
             .addInterceptor { chain ->
                 val request = chain.request().newBuilder()
-                    .header("User-Agent", "Tensei/1.0 (https://github.com/Suntrax/tensei)")
+                    .header("User-Agent", "Tensei/1.0 (https://github.com/TheBlissless/tensei)")
                     .build()
                 chain.proceed(request)
             }
