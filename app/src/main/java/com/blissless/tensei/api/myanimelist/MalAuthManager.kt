@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.Serializable
 
 enum class LoginProvider {
-    NONE, ANILIST, MAL
+    NONE, ANILIST, MAL, BOTH
 }
 
 @Serializable
@@ -51,6 +51,31 @@ data class MalListStatus(
     val status: String? = null,
     val score: Int = 0,
     val num_episodes_watched: Int = 0,
+    val updated_at: String? = null
+)
+
+@Serializable
+data class MalMangaListEntry(
+    val node: MalMangaNode = MalMangaNode(),
+    val list_status: MalMangaListStatus? = null
+)
+
+@Serializable
+data class MalMangaNode(
+    val id: Int = 0,
+    val title: String = "",
+    val main_picture: MalPicture? = null,
+    val num_chapters: Int = 0,
+    val num_volumes: Int = 0,
+    val alternative_titles: MalAlternativeTitles? = null
+)
+
+@Serializable
+data class MalMangaListStatus(
+    val status: String? = null,
+    val score: Int = 0,
+    val num_chapters_read: Int = 0,
+    val num_volumes_read: Int = 0,
     val updated_at: String? = null
 )
 

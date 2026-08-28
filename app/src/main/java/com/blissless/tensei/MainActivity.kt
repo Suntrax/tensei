@@ -32,10 +32,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -137,6 +142,9 @@ import com.blissless.tensei.viewmodel.isMangaFavorited
 import com.blissless.tensei.viewmodel.clearMangaDetail
 import com.blissless.tensei.viewmodel.selectedExtensionAuthority
 import com.blissless.tensei.viewmodel.setSupportsPiP
+import com.blissless.tensei.viewmodel.crossProviderCopyPrompt
+import com.blissless.tensei.viewmodel.applyCrossProviderCopy
+import com.blissless.tensei.viewmodel.dismissCrossProviderCopyPrompt
 import com.blissless.tensei.data.models.MangaExploreMedia
 import com.blissless.tensei.data.models.MangaMedia
 import eu.kanade.tachiyomi.animesource.model.Video
@@ -374,6 +382,9 @@ class MainActivity : ComponentActivity() {
             val loginProvider by mainViewModel.loginProvider.collectAsState()
             var showLocalSyncDialog by remember { mutableStateOf(false) }
             val localAnimeStatus by mainViewModel.localAnimeStatus.collectAsState()
+            val crossCopyPrompt by mainViewModel.crossProviderCopyPrompt.collectAsState()
+            var confirmCopyAniListToMal by remember { mutableStateOf(false) }
+            var confirmCopyMalToAniList by remember { mutableStateOf(false) }
             
             LaunchedEffect(token, loginProvider) {
                 val isAnyLoggedIn = token != null || loginProvider != LoginProvider.NONE
@@ -434,6 +445,81 @@ class MainActivity : ComponentActivity() {
                     },
                 )
             }
+
+            val dialogThemeMode = remember(themeModeStr) { ThemeMode.fromValue(themeModeStr) }
+            AppTheme(themeMode = dialogThemeMode, useMonochrome = disableMaterialColors) {
+            crossCopyPrompt?.takeIf { it.visible }?.let { prompt ->
+                AlertDialog(
+                    onDismissRequest = { mainViewModel.dismissCrossProviderCopyPrompt() },
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    title = { Text("Sync Across Providers", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
+                    text = { Text("You're logged into both AniList and MyAnimeList. " +
+                        "Choose which list to copy across so they match. This copies status, score and progress. " +
+                        "You can also skip and let ongoing changes sync automatically.") },
+                    confirmButton = {
+                        Button(
+                            onClick = { confirmCopyAniListToMal = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                        ) { Text("Copy AniList → MAL") }
+                    },
+                    dismissButton = {
+                        Button(
+                            onClick = { confirmCopyMalToAniList = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                        ) { Text("Copy MAL → AniList") }
+                    }
+                )
+            }
+
+            if (confirmCopyAniListToMal) {
+                AlertDialog(
+                    onDismissRequest = { confirmCopyAniListToMal = false },
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    title = { Text("Copy AniList → MyAnimeList") },
+                    text = { Text("This overwrites your MyAnimeList entries with your AniList data (status, score and progress). Continue?") },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                confirmCopyAniListToMal = false
+                                mainViewModel.applyCrossProviderCopy(toMal = true)
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                        ) { Text("Copy") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { confirmCopyAniListToMal = false }) { Text("Cancel") }
+                    }
+                )
+            }
+
+            if (confirmCopyMalToAniList) {
+                AlertDialog(
+                    onDismissRequest = { confirmCopyMalToAniList = false },
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    title = { Text("Copy MyAnimeList → AniList") },
+                    text = { Text("This overwrites your AniList entries with your MyAnimeList data (status, score and progress). Continue?") },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                confirmCopyMalToAniList = false
+                                mainViewModel.applyCrossProviderCopy(toMal = false)
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                        ) { Text("Copy") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { confirmCopyMalToAniList = false }) { Text("Cancel") }
+                    }
+                )
+            }
+
+            } // end AppTheme wrapping the cross-provider dialogs
 
             val themeMode = remember(themeModeStr) { ThemeMode.fromValue(themeModeStr) }
             AppTheme(themeMode = themeMode, useMonochrome = disableMaterialColors) {

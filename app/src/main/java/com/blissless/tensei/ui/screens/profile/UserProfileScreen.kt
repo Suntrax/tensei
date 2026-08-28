@@ -173,7 +173,7 @@ fun UserProfileScreen(
     }
 
     val favorites: List<JikanFavoriteAnime> = when (loginProvider) {
-        LoginProvider.ANILIST -> {
+        LoginProvider.ANILIST, LoginProvider.BOTH -> {
             aniListFavorites.map { aniListFavorite ->
                 val coverUrl = aniListFavorite.coverImage?.extraLarge ?: ""
                 JikanFavoriteAnime(
@@ -196,7 +196,7 @@ fun UserProfileScreen(
     }
 
     val historyData = when (loginProvider) {
-        LoginProvider.ANILIST -> {
+        LoginProvider.ANILIST, LoginProvider.BOTH -> {
             val statuses = mutableListOf<String>()
             val progress = mutableListOf<String>()
             val entries = userActivity.take(50).map { activity ->

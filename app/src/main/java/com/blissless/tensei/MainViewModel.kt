@@ -66,9 +66,15 @@ import com.blissless.tensei.torrent.MagnetExtensionClient
 import okhttp3.OkHttpClient
 // Extension functions on MainViewModel (defined in com.blissless.tensei.viewmodel)
 import com.blissless.tensei.viewmodel.startApiRetryLoop
+import com.blissless.tensei.viewmodel.offerCrossProviderSync
+import com.blissless.tensei.viewmodel.runCrossProviderStartupSync
+import com.blissless.tensei.viewmodel.isAniListActive
+import com.blissless.tensei.viewmodel.isMalActive
+import com.blissless.tensei.viewmodel.isBothActive
 import com.blissless.tensei.viewmodel.queueSync
 import com.blissless.tensei.viewmodel.fetchMalList
 import com.blissless.tensei.viewmodel.initManga
+import com.blissless.tensei.viewmodel.clearMangaUserData
 import com.blissless.tensei.viewmodel.mangaDownloadManager
 import com.blissless.tensei.viewmodel.fetchMangaExplore
 import com.blissless.tensei.viewmodel.restoreMangaExploreFromCache
@@ -394,6 +400,9 @@ class MainViewModel : ViewModel() {
     private var jikanService: JikanService? = null
     private var malUsername: String? = null
     private val _malUsername = MutableStateFlow<String?>(null)
+    val malUsernameFlow: StateFlow<String?> = _malUsername.asStateFlow()
+    private val _malAvatar = MutableStateFlow<String?>(null)
+    val malAvatar: StateFlow<String?> = _malAvatar.asStateFlow()
 
     private val _isFavoriteRateLimited = MutableStateFlow(false)
     val isFavoriteRateLimited: StateFlow<Boolean> = _isFavoriteRateLimited.asStateFlow()
@@ -437,6 +446,8 @@ class MainViewModel : ViewModel() {
     val bufferSizeMb: StateFlow<Int> get() = userPreferences.bufferSizeMb
     val showBufferIndicator: StateFlow<Boolean> get() = userPreferences.showBufferIndicator
     val checkUpdatesOnStart: StateFlow<Boolean> get() = userPreferences.checkUpdatesOnStart
+    val autoSyncCrossProviderStartup: StateFlow<Boolean> get() = userPreferences.autoSyncCrossProviderStartup
+    val autoSyncCrossProviderDirection: StateFlow<Boolean> get() = userPreferences.autoSyncCrossProviderDirection
     val autoUpdateExtensions: StateFlow<Boolean> get() = userPreferences.autoUpdateExtensions
     val streamMethod: StateFlow<String> get() = userPreferences.streamMethod
     val defaultStreamExtension: StateFlow<String?> get() = userPreferences.defaultStreamExtension
@@ -569,11 +580,16 @@ class MainViewModel : ViewModel() {
         loadAiringScheduleCache()
         updateOfflineLists()
 
-        // Check login provider
-        if (hasToken) {
-            _loginProvider.value = LoginProvider.ANILIST
-        } else if (malApiService.getAuthManager().isLoggedIn) {
-            _loginProvider.value = LoginProvider.MAL
+        // Check login provider (a user can be logged into both AniList and MAL simultaneously)
+        val anilistLoggedIn = hasToken
+        val malLoggedIn = malApiService.getAuthManager().isLoggedIn
+        _loginProvider.value = when {
+            anilistLoggedIn && malLoggedIn -> LoginProvider.BOTH
+            anilistLoggedIn -> LoginProvider.ANILIST
+            malLoggedIn -> LoginProvider.MAL
+            else -> LoginProvider.NONE
+        }
+        if (malLoggedIn) {
             loadMalUserData()
         }
 
@@ -599,6 +615,15 @@ class MainViewModel : ViewModel() {
                 // Show persisted manga sections immediately, then refresh in the background.
                 restoreMangaExploreFromCache()
                 fetchMangaExplore()
+            }
+
+            // On app start with both providers logged in and auto-sync enabled, run a directional
+            // sync (AniList -> MAL or MAL -> AniList per the chosen preference) to reconcile lists.
+            launch {
+                if (_loginProvider.value == LoginProvider.BOTH &&
+                    userPreferences.autoSyncCrossProviderStartup.value) {
+                    runCrossProviderStartupSync(userPreferences.autoSyncCrossProviderDirection.value)
+                }
             }
 
             // Check for updates on start if enabled
@@ -671,6 +696,7 @@ class MainViewModel : ViewModel() {
             _userAvatar.value = userInfo.picture
             malUsername = userInfo.name
             _malUsername.value = userInfo.name
+            _malAvatar.value = userInfo.picture
             fetchJikanUserData()
         }
     }
@@ -714,12 +740,17 @@ class MainViewModel : ViewModel() {
             _toastMessage.emit("Completing MAL login...")
             val success = malApiService.exchangeCodeForToken(code, BuildConfig.MAL_CLIENT_ID, null)
             if (success) {
-                userPreferences.clearToken()
-                _loginProvider.value = LoginProvider.MAL
+                val anilistStillLoggedIn = userPreferences.authToken.value != null
+                // Do NOT clear the AniList token — we support simultaneous login.
+                _loginProvider.value = if (anilistStillLoggedIn) LoginProvider.BOTH else LoginProvider.MAL
                 loadMalUserData()
                 fetchMalList()
                 // prefetchOfflineWatchingStreams() // Disabled for now
                 _toastMessage.emit("Successfully logged into MyAnimeList!")
+                // If the user is now on both providers, offer the one-time copy + ongoing sync.
+                if (anilistStillLoggedIn) {
+                    viewModelScope.launch { offerCrossProviderSync() }
+                }
             } else {
                 _toastMessage.emit("MAL login failed: Token exchange error")
             }
@@ -727,12 +758,8 @@ class MainViewModel : ViewModel() {
     }
 
     fun loginWithAniList() {
-        // Clear MAL data if switching
-        if (_loginProvider.value == LoginProvider.MAL) {
-            malApiService.getAuthManager().clearToken()
-            _malFavorites.value = emptyList()
-        }
-
+        // Do NOT clear MAL data — we support simultaneous login. If MAL is already logged in,
+        // the provider becomes BOTH once the token comes back.
         val url = com.blissless.tensei.network.Endpoints.AniList.authUrl(CLIENT_ID)
         context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
     }
@@ -741,7 +768,8 @@ class MainViewModel : ViewModel() {
         intent?.dataString?.takeIf { it.startsWith("animescraper://success") }?.let { uri ->
             uri.replace("#", "?").toUri().getQueryParameter("access_token")?.let { token ->
                 userPreferences.saveToken(token)
-                _loginProvider.value = LoginProvider.ANILIST
+                val malStillLoggedIn = malApiService.getAuthManager().isLoggedIn
+                _loginProvider.value = if (malStillLoggedIn) LoginProvider.BOTH else LoginProvider.ANILIST
                 viewModelScope.launch {
                     _isLoadingHome.value = true
                     fetchUser()
@@ -752,6 +780,10 @@ class MainViewModel : ViewModel() {
                     fetchMangaExplore()
                     fetchMangaUserProfile()
                     // prefetchContinueWatchingStreams() // Disabled for now
+                    // If the user is now on both providers, offer the one-time copy + ongoing sync.
+                    if (malStillLoggedIn) {
+                        offerCrossProviderSync()
+                    }
                 }
             }
         }
@@ -759,20 +791,35 @@ class MainViewModel : ViewModel() {
 
     fun logout() {
         when (_loginProvider.value) {
-            LoginProvider.ANILIST -> {
+            LoginProvider.ANILIST, LoginProvider.BOTH -> {
                 userPreferences.clearAllUserData()
                 userPreferences.clearToken()
+                clearMangaUserData()
             }
             LoginProvider.MAL -> {
                 malApiService.getAuthManager().clearToken()
                 userPreferences.clearMalFavorites()
+                userPreferences.clearMalMangaFavorites()
                 _malFavorites.value = emptyList()
                 _jikanFavorites.value = null
                 _jikanHistory.value = null
                 malUsername = null
                 _malUsername.value = null
+                _malAvatar.value = null
             }
             LoginProvider.NONE -> {}
+        }
+        // In BOTH mode, clear MAL data too (drop: the user is fully logging out).
+        if (_loginProvider.value == LoginProvider.BOTH) {
+            malApiService.getAuthManager().clearToken()
+            userPreferences.clearMalFavorites()
+            userPreferences.clearMalMangaFavorites()
+            _malFavorites.value = emptyList()
+            _jikanFavorites.value = null
+            _jikanHistory.value = null
+            malUsername = null
+            _malUsername.value = null
+            _malAvatar.value = null
         }
 
         cacheManager.clearAllCaches()
@@ -785,6 +832,48 @@ class MainViewModel : ViewModel() {
 
         viewModelScope.launch {
             _logoutEvent.emit(Unit)
+        }
+    }
+
+    /**
+     * Log out a single provider (used for per-provider logout buttons in Settings when both
+     * are logged in). The other provider stays signed in and _loginProvider is recomputed.
+     */
+    fun logoutProvider(target: LoginProvider) {
+        when (target) {
+            LoginProvider.ANILIST -> {
+                userPreferences.clearAllUserData()
+                userPreferences.clearToken()
+                clearMangaUserData()
+                cacheManager.clearAllCaches()
+                _userId.value = null; _userName.value = null; _userAvatar.value = null
+                _userBanner.value = null; _userBio.value = null; _userSiteUrl.value = null; _userCreatedAt.value = null
+                _currentlyWatching.value = emptyList(); _planningToWatch.value = emptyList()
+                _completed.value = emptyList(); _onHold.value = emptyList(); _dropped.value = emptyList()
+                _aniListFavorites.value = emptyList()
+                _isLoadingHome.value = false
+                val malStillLoggedIn = malApiService.getAuthManager().isLoggedIn
+                _loginProvider.value = if (malStillLoggedIn) LoginProvider.MAL else LoginProvider.NONE
+                if (malStillLoggedIn) {
+                    // Restore MAL profile into the shared fields so the UI reflects it.
+                    _userName.value = _malUsername.value
+                    _userAvatar.value = _malAvatar.value
+                }
+            }
+            LoginProvider.MAL -> {
+                malApiService.getAuthManager().clearToken()
+                userPreferences.clearMalFavorites()
+                userPreferences.clearMalMangaFavorites()
+                _malFavorites.value = emptyList()
+                _jikanFavorites.value = null
+                _jikanHistory.value = null
+                malUsername = null
+                _malUsername.value = null
+                _malAvatar.value = null
+                val anilistStillLoggedIn = userPreferences.authToken.value != null
+                _loginProvider.value = if (anilistStillLoggedIn) LoginProvider.ANILIST else LoginProvider.NONE
+            }
+            LoginProvider.BOTH, LoginProvider.NONE -> {}
         }
     }
 
@@ -883,10 +972,9 @@ class MainViewModel : ViewModel() {
         if (now - lastHomeRefreshTime < MIN_REFRESH_INTERVAL_MS) {
             _isLoadingHome.value = false
             refreshReleasingAnimeProgress()
-            // Manga tracking is NOT cached like the anime lists, so always re-sync it from AniList
-            // even inside the 5-minute window. Otherwise AniList-tracked manga silently go stale and
-            // new additions don't show up until the window passes (the reported intermittency).
-            if (_loginProvider.value != LoginProvider.MAL) {
+            // Manga tracking is NOT cached like the anime lists, so always re-sync it.
+            // Prefer AniList when both providers are active (AniList is the primary source).
+            if (isAniListActive) {
                 viewModelScope.launch { fetchMangaLists() }
             }
             return
@@ -907,6 +995,19 @@ class MainViewModel : ViewModel() {
             mangaListsSuccess = mangaListsDeferred.await()
         }
         _isLoadingHome.value = false
+
+        // When logged into both, AniList is the primary source. Only fall back to MAL when
+        // AniList is unavailable (e.g. its API had an outage) so the home lists don't go empty.
+        if (isBothActive && !userSuccess) {
+            // AniList user/profile fetch failed — fall back to MAL data for the home lists.
+            if (isMalActive) {
+                fetchMalList()
+                // Prefer the MAL username/avatar when AniList is unavailable.
+                val malUser = malApiService.getAuthManager().userInfo.value
+                malUsername?.let { _userName.value = it }
+                malUser?.picture?.let { _userAvatar.value = it }
+            }
+        }
 
         if (userSuccess && listsSuccess) {
             lastHomeRefreshTime = System.currentTimeMillis()
@@ -1139,7 +1240,7 @@ class MainViewModel : ViewModel() {
         val cachedAnime = cacheManager.detailedAnimeCache.value[mediaId]
         val malId = cachedAnime?.malId
 
-        if (_loginProvider.value == LoginProvider.MAL && malId == null) {
+        if (isMalActive && malId == null) {
             viewModelScope.launch {
                 cacheManager.clearDetailedAnimeCache(mediaId)
                 val details = fetchDetailedAnimeData(mediaId)
@@ -1193,7 +1294,7 @@ class MainViewModel : ViewModel() {
         val malId = cachedAnime?.malId
         val resolvedScore = score ?: currentEntry?.score
 
-        if (_loginProvider.value == LoginProvider.MAL && malId == null) {
+        if (isMalActive && malId == null) {
             viewModelScope.launch {
                 cacheManager.clearDetailedAnimeCache(mediaId)
                 val details = fetchDetailedAnimeData(mediaId)

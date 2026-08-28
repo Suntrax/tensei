@@ -58,6 +58,10 @@ class UserPreferences(context: Context) {
         private const val KEY_DOWNLOAD_PREFERRED_CATEGORY = "download_preferred_category"
         private const val KEY_DOWNLOAD_SUBTITLE_LANG = "download_subtitle_lang"
         private const val KEY_MAL_FAVORITES = "mal_favorites"
+        private const val KEY_MAL_MANGA_FAVORITES = "mal_manga_favorites"
+        private const val KEY_CROSS_PROVIDER_COPY_DONE = "cross_provider_copy_done"
+        private const val KEY_AUTO_SYNC_CROSS_PROVIDER_STARTUP = "auto_sync_cross_provider_startup"
+        private const val KEY_AUTO_SYNC_CROSS_PROVIDER_DIRECTION = "auto_sync_cross_provider_direction"
         private const val KEY_CHECK_UPDATES_ON_START = "check_updates_on_start"
         private const val KEY_SWIPE_VOLUME = "swipe_volume"
         private const val KEY_SWIPE_BRIGHTNESS = "swipe_brightness"
@@ -385,6 +389,8 @@ class UserPreferences(context: Context) {
         _bufferSizeMb.value = sharedPreferences.getInt(KEY_BUFFER_SIZE_MB, 200)
         _showBufferIndicator.value = sharedPreferences.getBoolean(KEY_SHOW_BUFFER_INDICATOR, true)
         _checkUpdatesOnStart.value = sharedPreferences.getBoolean(KEY_CHECK_UPDATES_ON_START, true)
+        _autoSyncCrossProviderStartup.value = sharedPreferences.getBoolean(KEY_AUTO_SYNC_CROSS_PROVIDER_STARTUP, false)
+        _autoSyncCrossProviderDirection.value = sharedPreferences.getBoolean(KEY_AUTO_SYNC_CROSS_PROVIDER_DIRECTION, true)
         _swipeVolume.value = sharedPreferences.getBoolean(KEY_SWIPE_VOLUME, false)
         _swipeBrightness.value = sharedPreferences.getBoolean(KEY_SWIPE_BRIGHTNESS, false)
         _swipeSwap.value = sharedPreferences.getBoolean(KEY_SWIPE_SWAP, false)
@@ -875,6 +881,14 @@ class UserPreferences(context: Context) {
     private val _checkUpdatesOnStart = MutableStateFlow(true)
     val checkUpdatesOnStart: StateFlow<Boolean> = _checkUpdatesOnStart.asStateFlow()
 
+    // Auto-sync AniList <-> MAL on startup (default OFF)
+    private val _autoSyncCrossProviderStartup = MutableStateFlow(false)
+    val autoSyncCrossProviderStartup: StateFlow<Boolean> = _autoSyncCrossProviderStartup.asStateFlow()
+
+    // Direction to auto-sync on startup: true = AniList -> MAL, false = MAL -> AniList (default AniList -> MAL)
+    private val _autoSyncCrossProviderDirection = MutableStateFlow(true)
+    val autoSyncCrossProviderDirection: StateFlow<Boolean> = _autoSyncCrossProviderDirection.asStateFlow()
+
     // Swipe Gesture Controls
     private val _swipeVolume = MutableStateFlow(false)
     val swipeVolume: StateFlow<Boolean> = _swipeVolume.asStateFlow()
@@ -957,6 +971,16 @@ class UserPreferences(context: Context) {
         sharedPreferences.edit { putBoolean(KEY_CHECK_UPDATES_ON_START, enabled) }
     }
 
+    fun setAutoSyncCrossProviderStartup(enabled: Boolean) {
+        _autoSyncCrossProviderStartup.value = enabled
+        sharedPreferences.edit { putBoolean(KEY_AUTO_SYNC_CROSS_PROVIDER_STARTUP, enabled) }
+    }
+
+    fun setAutoSyncCrossProviderDirection(toMal: Boolean) {
+        _autoSyncCrossProviderDirection.value = toMal
+        sharedPreferences.edit { putBoolean(KEY_AUTO_SYNC_CROSS_PROVIDER_DIRECTION, toMal) }
+    }
+
     fun setSwipeVolume(enabled: Boolean) {
         _swipeVolume.value = enabled
         sharedPreferences.edit { putBoolean(KEY_SWIPE_VOLUME, enabled) }
@@ -992,6 +1016,36 @@ class UserPreferences(context: Context) {
     fun clearMalFavorites() {
         sharedPreferences.edit {
             remove(KEY_MAL_FAVORITES)
+        }
+    }
+
+    // ─── MAL Manga Favorites ──────────────────────────────────────────
+
+    fun getMalMangaFavorites(): Set<Int> {
+        val saved = sharedPreferences.getStringSet(KEY_MAL_MANGA_FAVORITES, emptySet()) ?: emptySet()
+        return saved.mapNotNull { it.toIntOrNull() }.toSet()
+    }
+
+    fun saveMalMangaFavorites(favorites: List<Int>) {
+        sharedPreferences.edit {
+            putStringSet(KEY_MAL_MANGA_FAVORITES, favorites.map { it.toString() }.toSet())
+        }
+    }
+
+    fun clearMalMangaFavorites() {
+        sharedPreferences.edit {
+            remove(KEY_MAL_MANGA_FAVORITES)
+        }
+    }
+
+    // ─── Cross-provider one-time copy ─────────────────────────────────
+
+    fun isCrossProviderCopyDone(): Boolean =
+        sharedPreferences.getBoolean(KEY_CROSS_PROVIDER_COPY_DONE, false)
+
+    fun setCrossProviderCopyDone(done: Boolean) {
+        sharedPreferences.edit {
+            putBoolean(KEY_CROSS_PROVIDER_COPY_DONE, done)
         }
     }
 

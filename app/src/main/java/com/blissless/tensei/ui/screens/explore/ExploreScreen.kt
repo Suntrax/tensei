@@ -304,6 +304,11 @@ fun ExploreScreen(
     var categoryListManga by remember { mutableStateOf<List<MangaExploreMedia>>(emptyList()) }
     var categoryListIsManga by remember { mutableStateOf(false) }
 
+    // Hide the bottom navbar while the category list overlay is open (mirror home's status list).
+    LaunchedEffect(showCategoryList) {
+        viewModel.setHideNavbar(showCategoryList)
+    }
+
     fun openAnimeCategory(title: String, icon: ImageVector, list: List<ExploreAnime>) {
         categoryListTitle = title
         categoryListIcon = icon

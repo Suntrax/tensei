@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.SystemClock
 import androidx.lifecycle.viewModelScope
+import com.blissless.tensei.api.myanimelist.MalMangaListEntry
 import com.blissless.tensei.MainViewModel
 import com.blissless.tensei.data.manga.DownloadedManga
 import com.blissless.tensei.data.manga.MangaBatchDownloadState
@@ -33,6 +34,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
 import org.json.JSONObject
 
 data class InstalledExtension(val label: String, val packageName: String) {
@@ -648,6 +650,33 @@ fun MainViewModel.clearMangaDetail() {
     _hasLoadedMangaChapters.value = false
 }
 
+/** Clear all AniList user-scoped manga state on logout. */
+fun MainViewModel.clearMangaUserData() {
+    _mangaContinueReading.value = emptyList()
+    _mangaCurrentlyReading.value = emptyList()
+    _mangaPlanningToRead.value = emptyList()
+    _mangaCompleted.value = emptyList()
+    _mangaPaused.value = emptyList()
+    _mangaDropped.value = emptyList()
+    _mangaFavorites.value = emptyList()
+    _mangaActivity.value = emptyList()
+    _mangaUserProfile.value = null
+    _favoritedMangaIds.value = emptySet()
+    _malMangaFavorites.value = emptySet()
+    _mangaExploreSections.value = emptyMap()
+    _mangaDetail.value = null
+    _mangaChapters.value = emptyList()
+    _mangaTotalChapters.value = 0
+    _mangaChapterImages.value = null
+    _mangaChapterImagesError.value = null
+    _mangaChapterImagesCache.value = emptyMap()
+    _mangaDexId.value = null
+    _mangaExtensionTitle.value = null
+    _hasLoadedMangaChapters.value = false
+    _isLoadingManga.value = false
+    _isLoadingMangaChapters.value = false
+}
+
 suspend fun MainViewModel.fetchMangaAllCharacters(mangaId: Int): List<MangaCharacterNode> =
     mangaRepository?.fetchMangaAllCharacters(mangaId) ?: emptyList()
 
@@ -1174,48 +1203,109 @@ private suspend fun MainViewModel.executeMangaPendingSyncs() {
 
     val token = authToken.value
     var didPush = false
-    if (token != null) {
-        for ((_, sync) in syncs) {
-            val ok = when (sync.type) {
-                "status", "progress" -> {
-                    val status = sync.status
-                        ?: mangaTrackManager?.getTrack(sync.mediaId)?.status
-                        ?: "CURRENT"
-                    mangaRepository?.updateMangaStatus(sync.mediaId, status, token, sync.progress, score = sync.score)
+    for ((_, sync) in syncs) {
+        val malMangaId = resolveMalMangaId(sync.mediaId)
+        val ok = when (sync.type) {
+            "status", "progress" -> {
+                val status = sync.status
+                    ?: mangaTrackManager?.getTrack(sync.mediaId)?.status
+                    ?: "CURRENT"
+                var result = true
+                // Push to AniList whenever AniList is active (alone or as part of BOTH).
+                if (isAniListActive && token != null) {
+                    val r = mangaRepository?.updateMangaStatus(sync.mediaId, status, token, sync.progress, score = sync.score)
+                    result = result && (r == true)
                 }
-                "score" -> {
-                    val score = sync.score
-                        ?: mangaTrackManager?.getTrack(sync.mediaId)?.score
-                        ?: 0
-                    val status = sync.status
-                        ?: mangaTrackManager?.getTrack(sync.mediaId)?.status
-                        ?: "CURRENT"
-                    mangaRepository?.updateMangaStatus(sync.mediaId, status, token, sync.progress, score = score)
+                // Push to MAL whenever MAL is active (using the AniList manga's idMal).
+                if (isMalActive && malMangaId != null) {
+                    val malStatus = mapMangaStatusToMal(status)
+                    val r = malApiService.updateMangaStatus(
+                        malMangaId,
+                        malStatus?.takeIf { sync.type != "progress" },
+                        sync.score?.let { (it / 10f).roundToInt().coerceIn(0, 10) },
+                        sync.progress
+                    )
+                    result = result && r
                 }
-                "delete" -> {
+                result
+            }
+            "score" -> {
+                val score = sync.score
+                    ?: mangaTrackManager?.getTrack(sync.mediaId)?.score
+                    ?: 0
+                val status = sync.status
+                    ?: mangaTrackManager?.getTrack(sync.mediaId)?.status
+                    ?: "CURRENT"
+                var result = true
+                if (isAniListActive && token != null) {
+                    val r = mangaRepository?.updateMangaStatus(sync.mediaId, status, token, sync.progress, score = score)
+                    result = result && (r == true)
+                }
+                if (isMalActive && malMangaId != null) {
+                    val r = malApiService.updateMangaStatus(
+                        malMangaId,
+                        mapMangaStatusToMal(status),
+                        (score / 10f).roundToInt().coerceIn(0, 10),
+                        sync.progress
+                    )
+                    result = result && r
+                }
+                result
+            }
+            "delete" -> {
+                var result = true
+                if (isAniListActive && token != null) {
                     val entryId = sync.entryId
-                    if (entryId != null) mangaRepository?.deleteMangaListEntry(entryId, token) else null
+                    if (entryId != null) {
+                        val r = mangaRepository?.deleteMangaListEntry(entryId, token)
+                        result = result && (r == true)
+                    }
                 }
-                else -> null
+                if (isMalActive && malMangaId != null) {
+                    result = result && malApiService.deleteMangaFromList(malMangaId)
+                }
+                result
             }
-            android.util.Log.d("MangaSyncDebug", "executeMangaPendingSyncs: type=${sync.type} mediaId=${sync.mediaId} ok=$ok")
-            if (ok == true) {
-                didPush = true
-            } else {
-                // Re-queue the failed sync so it retries on the next debounce cycle
-                pendingMangaSyncs[sync.mediaId] = sync
-            }
+            else -> null
         }
-    } else {
-        android.util.Log.d("MangaSyncDebug", "executeMangaPendingSyncs: skipped — no auth token")
+        android.util.Log.d("MangaSyncDebug", "executeMangaPendingSyncs: type=${sync.type} mediaId=${sync.mediaId} malId=$malMangaId ok=$ok")
+        if (ok == true) {
+            didPush = true
+        } else {
+            // Re-queue the failed sync so it retries on the next debounce cycle
+            pendingMangaSyncs[sync.mediaId] = sync
+        }
     }
 
     if (didPush) {
-        // Refresh from AniList so local + remote stay in sync
-        if (_userId.value != null) {
+        // Refresh the lists so local + remote stay in sync. Prefer AniList; fall back to MAL.
+        if (isAniListActive && _userId.value != null) {
             fetchMangaLists()
+        } else if (isMalActive) {
+            fetchMalMangaList()
         }
         loadLocalMangaTracking()
+    }
+}
+
+/** Resolve the MAL manga id for an AniList manga (the manga's `idMal`). */
+private fun MainViewModel.resolveMalMangaId(animeMangaId: Int): Int? {
+    _mangaDetail.value?.takeIf { it.id == animeMangaId }?.malId?.let { return it }
+    val inLists = _mangaContinueReading.value + _mangaCurrentlyReading.value +
+        _mangaPlanningToRead.value + _mangaCompleted.value +
+        _mangaPaused.value + _mangaDropped.value
+    return inLists.firstOrNull { it.id == animeMangaId }?.malId
+}
+
+/** Map an AniList manga status (CURRENT/PLANNING/COMPLETED/PAUSED/DROPPED) to MAL. */
+internal fun mapMangaStatusToMal(status: String): String? {
+    return when (status) {
+        "CURRENT" -> "reading"
+        "PLANNING" -> "plan_to_read"
+        "COMPLETED" -> "completed"
+        "PAUSED" -> "on_hold"
+        "DROPPED" -> "dropped"
+        else -> null
     }
 }
 
@@ -1344,6 +1434,85 @@ fun MainViewModel.dismissMangaContinueReading(mangaId: Int) {
     mangaTrackManager?.clearChapterProgress(mangaId)
     loadLocalMangaTracking()
 }
+
+// ─── MAL manga sync & favorites ─────────────────────────────────────────────
+
+/** MAL manga favorites held locally (MAL has no favorite-write API) keyed by AniList/manga id. */
+private val _malMangaFavorites = MutableStateFlow<Set<Int>>(emptySet())
+val MainViewModel.malMangaFavorites: StateFlow<Set<Int>> get() = _malMangaFavorites.asStateFlow()
+
+/**
+ * Fetch the user's MAL manga list and merge it into local manga tracking, mirroring
+ * [fetchMalList] for anime. MAL entries are matched to AniList manga by the manga's
+ * `idMal` when known, falling back to the MAL id itself. Used as the MAL fallback when
+ * AniList is unavailable, and for the diff-sync/reconcile path.
+ */
+internal suspend fun MainViewModel.fetchMalMangaList() {
+    if (!isMalActive) return
+
+    val entries = malApiService.getMangaList()
+    val localTracker = mangaTrackManager ?: return
+
+    for (entry in entries) {
+        val malId = entry.node.id
+        val status = entry.list_status?.status
+        val progress = entry.list_status?.num_chapters_read ?: 0
+        val score = entry.list_status?.score
+
+        // Resolve an AniList manga key via idMal when possible; else fall back to the MAL id.
+        val mangaKey = resolveMangaIdForMal(malId) ?: malId
+
+        val title = entry.node.alternative_titles?.en ?: entry.node.title
+
+        localTracker.ensureTrack(mangaKey, title, entry.node.main_picture?.large ?: entry.node.main_picture?.medium ?: "", entry.node.num_chapters, null)
+        localTracker.updateTrackingStatus(mangaKey, mapMangaStatusFromMal(status))
+        if (progress > 0) localTracker.updateChapterProgressKeepMax(mangaKey, progress.toFloat())
+        if (score != null && score > 0) localTracker.updateScore(mangaKey, (score * 10).coerceAtMost(100))
+    }
+
+    loadLocalMangaTracking()
+    loadMalMangaFavoritesFromCache()
+}
+
+/** Map an AniList manga id → its MAL id (idMal), using detail + tracked lists. */
+internal fun MainViewModel.resolveMangaIdForMal(malId: Int): Int? {
+    _mangaDetail.value?.takeIf { it.malId == malId }?.id?.let { return it }
+    val inLists = _mangaContinueReading.value + _mangaCurrentlyReading.value +
+        _mangaPlanningToRead.value + _mangaCompleted.value +
+        _mangaPaused.value + _mangaDropped.value
+    return inLists.firstOrNull { it.malId == malId }?.id
+}
+
+/** Map a MAL manga status to an AniList manga status. */
+internal fun mapMangaStatusFromMal(malStatus: String?): String {
+    return when (malStatus) {
+        "reading" -> "CURRENT"
+        "plan_to_read" -> "PLANNING"
+        "completed" -> "COMPLETED"
+        "on_hold" -> "PAUSED"
+        "dropped" -> "DROPPED"
+        else -> "PLANNING"
+    }
+}
+
+/** Restore locally-persisted MAL manga favorites. */
+internal fun MainViewModel.loadMalMangaFavoritesFromCache() {
+    _malMangaFavorites.value = userPreferences.getMalMangaFavorites()
+}
+
+/**
+ * Toggle a manga's MAL "favorite" state. Since MAL's public API has no write endpoint for
+ * profile favorites, this is purely local (mirrors anime's toggleMalFavoriteById), keyed by
+ * the manga's AniList id. AniList favoriting remains API-backed and is handled separately.
+ */
+fun MainViewModel.toggleMalMangaFavorite(mangaId: Int) {
+    val current = _malMangaFavorites.value
+    _malMangaFavorites.value = if (mangaId in current) current - mangaId else current + mangaId
+    userPreferences.saveMalMangaFavorites(_malMangaFavorites.value.toList())
+}
+
+/** True when the manga (by AniList id) is in the local MAL-favorites set. */
+fun MainViewModel.isMangaMalFavorited(mangaId: Int): Boolean = mangaId in _malMangaFavorites.value
 
 // ─── Downloads ───────────────────────────────────────────────────────
 

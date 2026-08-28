@@ -158,6 +158,8 @@ import com.blissless.tensei.viewmodel.setSupportsPiP
 import com.blissless.tensei.viewmodel.setPlayerEngine
 import com.blissless.tensei.viewmodel.setDiscordRichPresence
 import com.blissless.tensei.viewmodel.setCheckUpdatesOnStart
+import com.blissless.tensei.viewmodel.setAutoSyncCrossProviderStartup
+import com.blissless.tensei.viewmodel.setAutoSyncCrossProviderDirection
 import com.blissless.tensei.viewmodel.setAutoUpdateExtensions
 import com.blissless.tensei.viewmodel.loadAvailableMagnetExtensions
 import com.blissless.tensei.viewmodel.loadAvailableStreamExtensions
@@ -170,6 +172,7 @@ import com.blissless.tensei.viewmodel.installedExtensions
 import com.blissless.tensei.viewmodel.InstalledExtension
 import com.blissless.tensei.viewmodel.selectedExtensionAuthority
 import com.blissless.tensei.viewmodel.selectExtension
+import com.blissless.tensei.viewmodel.showCrossProviderCopyDialog
 import com.blissless.tensei.util.ErrorHandler
 import com.blissless.tensei.util.toast
 import com.blissless.tensei.util.longToast
@@ -260,24 +263,27 @@ private fun AccountSettingsPage(
     viewModel: MainViewModel,
     onBack: () -> Unit
 ) {
-    var showLogoutConfirmation by remember { mutableStateOf(false) }
+    var showAniListLogoutConfirmation by remember { mutableStateOf(false) }
+    var showMalLogoutConfirmation by remember { mutableStateOf(false) }
     val loginProvider by viewModel.loginProvider.collectAsState(initial = LoginProvider.NONE)
     val trackingPercentage by viewModel.trackingPercentage.collectAsState(initial = 85)
     val preventScheduleSync by viewModel.preventScheduleSync.collectAsState()
     val mangaSyncThreshold by viewModel.mangaSyncThreshold.collectAsState()
     val discordRichPresence by viewModel.discordRichPresence.collectAsState(initial = false)
+    val autoSyncCrossProviderStartup by viewModel.autoSyncCrossProviderStartup.collectAsState(initial = false)
+    val autoSyncCrossProviderDirection by viewModel.autoSyncCrossProviderDirection.collectAsState(initial = true)
+
+    val userName by viewModel.userName.collectAsState()
+    val userAvatar by viewModel.userAvatar.collectAsState()
+    val malUsername by viewModel.malUsernameFlow.collectAsState()
+    val malAvatar by viewModel.malAvatar.collectAsState()
 
     SettingsPageScaffold(title = "Account & Sync", onBack = onBack) {
-        if (loginProvider != LoginProvider.NONE) {
-            val userName by viewModel.userName.collectAsState()
-            val userAvatar by viewModel.userAvatar.collectAsState()
-            val providerName = when (loginProvider) {
-                LoginProvider.ANILIST -> "AniList"
-                LoginProvider.MAL -> "MyAnimeList"
-                else -> ""
-            }
+        val anilistLogged = loginProvider == LoginProvider.ANILIST || loginProvider == LoginProvider.BOTH
+        val malLogged = loginProvider == LoginProvider.MAL || loginProvider == LoginProvider.BOTH
 
-            SectionHeader("SIGNED IN")
+        if (anilistLogged) {
+            SectionHeader("ANILIST")
             SettingsCard {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
@@ -287,7 +293,7 @@ private fun AccountSettingsPage(
                     if (userAvatar != null) {
                         AsyncImage(
                             model = userAvatar,
-                            contentDescription = "User Avatar",
+                            contentDescription = "AniList Avatar",
                             modifier = Modifier.size(52.dp).clip(RoundedCornerShape(14.dp)),
                             contentScale = ContentScale.Crop
                         )
@@ -301,61 +307,176 @@ private fun AccountSettingsPage(
                     }
                     Column {
                         Text(userName ?: "Logged In", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-                        Text("via $providerName", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                        Text("via AniList", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
                     }
-                }
-            }
-
-            Button(
-                onClick = { showLogoutConfirmation = true },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.9f)
-                ),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text("Log Out", color = Color.White)
-            }
-        } else {            SectionHeader("SIGN IN")
-            SettingsCard {
-                Spacer(modifier = Modifier.height(4.dp))
-                Button(
-                    onClick = { viewModel.loginWithAniList() },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary
-                    )
-                ) {
-                    AsyncImage(
-                        model = ImageRequest.Builder(LocalContext.current)
-                            .data(com.blissless.tensei.network.Endpoints.AniList.FAVICON)
-                            .crossfade(true).build(),
-                        contentDescription = "AniList",
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text("Login with AniList")
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(
-                    onClick = { viewModel.loginWithMal() },
+                    onClick = { showAniListLogoutConfirmation = true },
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)
-                    )
+                        containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.9f)
+                    ),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
-                    AsyncImage(
-                        model = ImageRequest.Builder(LocalContext.current)
-                            .data(com.blissless.tensei.network.Endpoints.Mal.FAVICON)
-                            .crossfade(true).build(),
-                        contentDescription = "MyAnimeList",
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text("Login with MyAnimeList")
+                    Text("Log Out of AniList", color = Color.White)
                 }
+            }
+
+            // When only AniList is logged in, offer adding MAL so the user can reach BOTH.
+            if (loginProvider == LoginProvider.ANILIST) {
+                Spacer(modifier = Modifier.height(8.dp))
+                MalLoginButton(viewModel)
+            }
+        }
+
+        if (malLogged) {
+            Spacer(modifier = Modifier.height(8.dp))
+            SectionHeader("MYANIMELIST")
+            SettingsCard {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    if (malAvatar != null) {
+                        AsyncImage(
+                            model = malAvatar,
+                            contentDescription = "MyAnimeList Avatar",
+                            modifier = Modifier.size(52.dp).clip(RoundedCornerShape(14.dp)),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier.size(52.dp).clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.error.copy(alpha = 0.1f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(26.dp))
+                        }
+                    }
+                    Column {
+                        Text(malUsername ?: "Logged In", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                        Text("via MyAnimeList", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = { showMalLogoutConfirmation = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.9f)
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Log Out of MyAnimeList", color = Color.White)
+                }
+            }
+
+            // When only MAL is logged in, offer adding AniList so the user can reach BOTH.
+            if (loginProvider == LoginProvider.MAL) {
+                Spacer(modifier = Modifier.height(8.dp))
+                AniListLoginButton(viewModel)
+            }
+        }
+
+        if (loginProvider == LoginProvider.BOTH) {
+            Spacer(modifier = Modifier.height(10.dp))
+            Button(
+                onClick = { viewModel.showCrossProviderCopyDialog() },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)
+                )
+            ) {
+                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Sync Now (AniList ↔ MAL)")
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        "Auto-Sync on Start",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        "Automatically sync AniList and MyAnimeList when the app starts",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Switch(
+                    checked = autoSyncCrossProviderStartup,
+                    onCheckedChange = { viewModel.setAutoSyncCrossProviderStartup(it) }
+                )
+            }
+            if (autoSyncCrossProviderStartup) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    "Sync Direction",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    Button(
+                        onClick = { viewModel.setAutoSyncCrossProviderDirection(true) },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (autoSyncCrossProviderDirection)
+                                MaterialTheme.colorScheme.primary
+                            else
+                                MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    ) {
+                        Text(
+                            "AniList → MAL",
+                            color = if (autoSyncCrossProviderDirection)
+                                MaterialTheme.colorScheme.onPrimary
+                            else
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = { viewModel.setAutoSyncCrossProviderDirection(false) },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (!autoSyncCrossProviderDirection)
+                                MaterialTheme.colorScheme.primary
+                            else
+                                MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    ) {
+                        Text(
+                            "MAL → AniList",
+                            color = if (!autoSyncCrossProviderDirection)
+                                MaterialTheme.colorScheme.onPrimary
+                            else
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+
+        if (loginProvider == LoginProvider.NONE) {
+            SectionHeader("SIGN IN")
+            SettingsCard {
+                Spacer(modifier = Modifier.height(4.dp))
+                AniListLoginButton(viewModel)
+                Spacer(modifier = Modifier.height(8.dp))
+                MalLoginButton(viewModel)
                 Spacer(modifier = Modifier.height(4.dp))
             }
         }
@@ -407,26 +528,82 @@ private fun AccountSettingsPage(
         }
     }
 
-    if (showLogoutConfirmation) {
-        val providerName = when (loginProvider) {
-            LoginProvider.ANILIST -> "AniList"
-            LoginProvider.MAL -> "MyAnimeList"
-            LoginProvider.NONE -> ""
-        }
+    if (showAniListLogoutConfirmation) {
         AlertDialog(
-            onDismissRequest = { showLogoutConfirmation = false },
-            title = { Text("Logout") },
-            text = { Text("Are you sure you want to log out from $providerName?") },
+            onDismissRequest = { showAniListLogoutConfirmation = false },
+            title = { Text("Log Out of AniList") },
+            text = { Text("Are you sure you want to log out of AniList? Your MyAnimeList session will be kept.") },
             confirmButton = {
                 Button(
-                    onClick = { viewModel.logout(); showLogoutConfirmation = false },
+                    onClick = { viewModel.logoutProvider(LoginProvider.ANILIST); showAniListLogoutConfirmation = false },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) { Text("Log Out") }
             },
             dismissButton = {
-                TextButton(onClick = { showLogoutConfirmation = false }) { Text("Cancel") }
+                TextButton(onClick = { showAniListLogoutConfirmation = false }) { Text("Cancel") }
             }
         )
+    }
+
+    if (showMalLogoutConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showMalLogoutConfirmation = false },
+            title = { Text("Log Out of MyAnimeList") },
+            text = { Text("Are you sure you want to log out of MyAnimeList? Your AniList session will be kept.") },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.logoutProvider(LoginProvider.MAL); showMalLogoutConfirmation = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) { Text("Log Out") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showMalLogoutConfirmation = false }) { Text("Cancel") }
+            }
+        )
+    }
+}
+
+@Composable
+private fun AniListLoginButton(viewModel: MainViewModel) {
+    Button(
+        onClick = { viewModel.loginWithAniList() },
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = MaterialTheme.colorScheme.primary
+        )
+    ) {
+        AsyncImage(
+            model = ImageRequest.Builder(LocalContext.current)
+                .data(com.blissless.tensei.network.Endpoints.AniList.FAVICON)
+                .crossfade(true).build(),
+            contentDescription = "AniList",
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(modifier = Modifier.width(10.dp))
+        Text("Login with AniList")
+    }
+}
+
+@Composable
+private fun MalLoginButton(viewModel: MainViewModel) {
+    Button(
+        onClick = { viewModel.loginWithMal() },
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)
+        )
+    ) {
+        AsyncImage(
+            model = ImageRequest.Builder(LocalContext.current)
+                .data(com.blissless.tensei.network.Endpoints.Mal.FAVICON)
+                .crossfade(true).build(),
+            contentDescription = "MyAnimeList",
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(modifier = Modifier.width(10.dp))
+        Text("Login with MyAnimeList")
     }
 }
 

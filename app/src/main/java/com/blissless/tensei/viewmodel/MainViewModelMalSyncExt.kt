@@ -24,6 +24,20 @@ import kotlin.time.Duration.Companion.milliseconds
  * still being hidden from outside the module.
  */
 
+// ─── Active provider helpers ────────────────────────────────────────────────
+
+/** True when the user is logged into AniList (alone or alongside MAL). */
+internal val MainViewModel.isAniListActive: Boolean
+    get() = _loginProvider.value == LoginProvider.ANILIST || _loginProvider.value == LoginProvider.BOTH
+
+/** True when the user is logged into MAL (alone or alongside AniList). */
+internal val MainViewModel.isMalActive: Boolean
+    get() = _loginProvider.value == LoginProvider.MAL || _loginProvider.value == LoginProvider.BOTH
+
+/** True when the user is logged into both AniList and MAL simultaneously. */
+internal val MainViewModel.isBothActive: Boolean
+    get() = _loginProvider.value == LoginProvider.BOTH
+
 // ─── API retry loop ─────────────────────────────────────────────────────────
 
 fun MainViewModel.startApiRetryLoop() {
@@ -110,53 +124,53 @@ internal suspend fun MainViewModel.executePendingSyncs() {
         when (sync.type) {
             "status" -> {
                 sync.status?.let {
-                    if (_loginProvider.value == LoginProvider.MAL) {
-                        val malId = sync.malId
-                        if (malId != null) {
+                    // Write to AniList whenever it is active (alone or as part of BOTH).
+                    if (isAniListActive) {
+                        android.util.Log.d("AniListScoreDebug", "executePendingSyncs -> repository.updateStatus mediaId=${sync.mediaId} status=$it progress=${sync.progress} score=${sync.score}")
+                        repository.updateStatus(sync.mediaId, it, sync.progress, sync.score)
+                    }
+                    // Write to MAL whenever it is active (alone or as part of BOTH).
+                    if (isMalActive) {
+                        sync.malId?.let { malId ->
                             val malStatus = mapToMalStatus(it)
                             if (malStatus != null) {
                                 malApiService.updateAnimeStatus(malId, malStatus, sync.score, sync.progress)
                             }
                         }
-                    } else {
-                        android.util.Log.d("AniListScoreDebug", "executePendingSyncs -> repository.updateStatus mediaId=${sync.mediaId} status=$it progress=${sync.progress} score=${sync.score}")
-                        repository.updateStatus(sync.mediaId, it, sync.progress, sync.score)
                     }
                 }
             }
             "progress" -> {
                 sync.progress?.let {
-                    if (_loginProvider.value == LoginProvider.MAL) {
-                        val malId = sync.malId
-                        if (malId != null) {
+                    if (isAniListActive) {
+                        repository.updateProgress(sync.mediaId, it)
+                    }
+                    if (isMalActive) {
+                        sync.malId?.let { malId ->
                             malApiService.updateAnimeStatus(malId, null, null, it)
                         }
-                    } else {
-                        repository.updateProgress(sync.mediaId, it)
                     }
                 }
             }
             "score" -> {
                 sync.score?.let {
-                    if (_loginProvider.value == LoginProvider.MAL) {
-                        val malId = sync.malId
-                        if (malId != null) {
+                    if (isAniListActive) {
+                        repository.updateScore(sync.mediaId, it)
+                    }
+                    if (isMalActive) {
+                        sync.malId?.let { malId ->
                             malApiService.updateAnimeStatus(malId, null, it, null)
                         }
-                    } else {
-                        repository.updateScore(sync.mediaId, it)
                     }
                 }
             }
             "delete" -> {
-                sync.entryId?.let {
-                    if (_loginProvider.value == LoginProvider.MAL) {
-                        val malId = sync.malId
-                        if (malId != null) {
-                            malApiService.deleteAnimeFromList(malId)
-                        }
-                    } else {
-                        repository.deleteListEntry(it)
+                if (isAniListActive) {
+                    sync.entryId?.let { repository.deleteListEntry(it) }
+                }
+                if (isMalActive) {
+                    sync.malId?.let { malId ->
+                        malApiService.deleteAnimeFromList(malId)
                     }
                 }
             }
@@ -164,10 +178,12 @@ internal suspend fun MainViewModel.executePendingSyncs() {
     }
 
     if (syncsToExecute.isNotEmpty()) {
-        if (_loginProvider.value == LoginProvider.MAL) {
+        // After a write, refresh the home lists. Prefer AniList; fall back to MAL on outage.
+        if (isAniListActive) {
+            val ok = fetchLists()
+            if (!ok && isMalActive) fetchMalList()
+        } else if (isMalActive) {
             fetchMalList()
-        } else {
-            fetchLists()
         }
     }
 }
@@ -199,7 +215,7 @@ internal fun MainViewModel.mapFromMalStatus(malStatus: String?): String {
 // ─── MAL list fetch & reconciliation ────────────────────────────────────────
 
 internal suspend fun MainViewModel.fetchMalList() {
-    if (_loginProvider.value != LoginProvider.MAL) return
+    if (!isMalActive) return
 
     val entries = malApiService.getAnimeList()
 
