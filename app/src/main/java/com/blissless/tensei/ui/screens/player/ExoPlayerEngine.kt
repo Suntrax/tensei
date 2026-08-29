@@ -16,7 +16,6 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
-import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 
 class ExoPlayerEngine(
@@ -262,12 +261,11 @@ class ExoPlayerEngine(
     }
 
     override fun setResizeMode(mode: Int) {
-        playerView.resizeMode = when (mode) {
-            0 -> AspectRatioFrameLayout.RESIZE_MODE_FIT
-            1 -> AspectRatioFrameLayout.RESIZE_MODE_FILL
-            2 -> AspectRatioFrameLayout.RESIZE_MODE_FIXED_WIDTH
-            else -> AspectRatioFrameLayout.RESIZE_MODE_FIT
-        }
+        // PlayerScreen passes the official media3 AspectRatioFrameLayout constants directly:
+        //   RESIZE_MODE_FIT (0)  -> 16:9 / Fit (letterbox)
+        //   RESIZE_MODE_FILL (3) -> Stretch (fills the whole view, ignoring the aspect ratio)
+        // Forwarding the constant lets PlayerView handle both natively.
+        playerView.resizeMode = mode
     }
 
     override fun selectSubtitleTrack(index: Int) {

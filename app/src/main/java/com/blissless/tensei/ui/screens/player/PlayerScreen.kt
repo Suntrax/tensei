@@ -225,10 +225,11 @@ fun PlayerScreen(
 
     var resizeModeIndex by remember { mutableIntStateOf(0) }
     val resizeModes = listOf(
-        AspectRatioFrameLayout.RESIZE_MODE_FIT to "Fit",
+        AspectRatioFrameLayout.RESIZE_MODE_FIT to "16:9",
         AspectRatioFrameLayout.RESIZE_MODE_FILL to "Stretch",
-        AspectRatioFrameLayout.RESIZE_MODE_FIXED_WIDTH to "16:9"
     )
+
+    // Cycles: 16:9 (fit, letterboxed) <-> Stretch (fill the whole screen)
 
     // Fullscreen state is owned by the host (lifted so it survives player recreation
     // on episode changes). The host mirrors it back in as this parameter.
@@ -1151,7 +1152,7 @@ fun PlayerScreen(
                         v.setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
                         v.controllerShowTimeoutMs = 3000
                         v.controllerAutoShow = false
-                        v.resizeMode = resizeModes[resizeModeIndex].first
+                        engine.setResizeMode(resizeModes[resizeModeIndex].first)
                         val activeSubSettings = getActiveSubtitleSettings()
                         v.subtitleView?.apply { applySubtitleStyle(this, activeSubSettings) }
                     }
@@ -1161,7 +1162,7 @@ fun PlayerScreen(
                     .fillMaxSize(),
                 update = { view ->
                     if (view is PlayerView) {
-                        view.resizeMode = resizeModes[resizeModeIndex].first
+                        engine.setResizeMode(resizeModes[resizeModeIndex].first)
                         subtitleViewRef = view.subtitleView
                         val activeSubSettings = getActiveSubtitleSettings()
                         view.subtitleView?.apply { applySubtitleStyle(this, activeSubSettings) }
@@ -1174,6 +1175,12 @@ fun PlayerScreen(
             subtitleViewRef?.let { view ->
                 applySubtitleStyle(view, getActiveSubtitleSettings())
             }
+        }
+
+        // Apply resize mode to the active engine (ExoPlayer sets PlayerView.resizeMode,
+        // mpv sets video-aspect-override). Covers both engines uniformly.
+        LaunchedEffect(resizeModeIndex) {
+            engine.setResizeMode(resizeModes[resizeModeIndex].first)
         }
 
         // 2. Active Gesture Zones (Middle Layer)

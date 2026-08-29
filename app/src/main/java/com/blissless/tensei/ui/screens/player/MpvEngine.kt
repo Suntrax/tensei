@@ -8,6 +8,7 @@ import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.View
+import androidx.media3.ui.AspectRatioFrameLayout
 import `is`.xyz.mpv.MPV
 import `is`.xyz.mpv.MPVNode
 import java.io.File
@@ -72,6 +73,9 @@ class MpvEngine(private val context: Context) : PlayerEngine {
     private var pendingUrl: String? = null
     private var surfaceReady = false
     private var currentSurface: Surface? = null
+    private var lastSurfaceWidth = 0
+    private var lastSurfaceHeight = 0
+    private var activeResizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
     var anime4kShader: String = "none"
 
     private var initHeaders: Map<String, String> = emptyMap()
@@ -134,6 +138,9 @@ class MpvEngine(private val context: Context) : PlayerEngine {
 
                 override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
                     Log.d(TAG, "Surface changed: ${width}x$height")
+                    lastSurfaceWidth = width
+                    lastSurfaceHeight = height
+                    reapplyResizeMode()
                 }
 
                 override fun surfaceDestroyed(holder: SurfaceHolder) {
@@ -206,6 +213,7 @@ class MpvEngine(private val context: Context) : PlayerEngine {
                     val dur = mpv?.getPropertyDouble("duration")
                     if (dur != null) _duration = (dur * 1000).toLong()
                     loadTracksFromMpv()
+                    reapplyResizeMode()
                     listener?.onIsPlayingChanged(true)
                 }
                 MPV.mpvEvent.MPV_EVENT_END_FILE -> {
@@ -512,12 +520,40 @@ class MpvEngine(private val context: Context) : PlayerEngine {
     }
 
     override fun setResizeMode(mode: Int) {
-        Log.d(TAG, "setResizeMode($mode) - not supported in mpv engine")
+        val player = mpv ?: run {
+            Log.d(TAG, "setResizeMode($mode) - mpv not initialized yet")
+            return
+        }
+        activeResizeMode = mode
+        Log.d(TAG, "setResizeMode($mode) surface=${lastSurfaceWidth}x$lastSurfaceHeight")
+        when (mode) {
+            AspectRatioFrameLayout.RESIZE_MODE_FILL -> {
+                // Stretch: force the video to the surface aspect ratio so it fills
+                // the whole screen (may distort).
+                if (lastSurfaceWidth > 0 && lastSurfaceHeight > 0) {
+                    player.setPropertyString("video-aspect-override", "$lastSurfaceWidth:$lastSurfaceHeight")
+                } else {
+                    player.setPropertyString("video-aspect-override", "16:9")
+                }
+            }
+            else -> {
+                // 16:9 / Fit: maintain the video's native aspect ratio (mpv letterboxes)
+                player.setPropertyString("video-aspect-override", "no")
+            }
+        }
     }
 
     override fun selectSubtitleTrack(index: Int) {
         Log.d(TAG, "selectSubtitleTrack($index)")
         mpv?.setPropertyInt("sid", index)
+    }
+
+    private fun reapplyResizeMode() {
+        // Stretch uses the surface's aspect ratio, which changes on rotation or when
+        // the player view is laid out. Re-apply the active mode so it stays correct.
+        if (mpv != null && activeResizeMode == AspectRatioFrameLayout.RESIZE_MODE_FILL) {
+            setResizeMode(activeResizeMode)
+        }
     }
 
     override fun overrideSubtitleTrack(trackIndex: Int, groupIndex: Int) {
