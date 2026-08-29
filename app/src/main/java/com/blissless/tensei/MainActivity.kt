@@ -222,7 +222,7 @@ class MainActivity : ComponentActivity() {
         val engine = com.blissless.tensei.stream.PlayerData.playerEngine
         val isPlaying = engine?.isPlaying == true
         val live = (engine as? com.blissless.tensei.ui.screens.player.MpvEngine)?.liveIsPlaying()
-        android.util.Log.d("PiPDebug", "buildPiPParams[src=$source] isPlaying=$isPlaying live=$live engine=${engine?.javaClass?.simpleName} engineId=${System.identityHashCode(engine)}")
+        android.util.Log.d("serverChange", "buildPiPParams[src=$source] isPlaying=$isPlaying live=$live engine=${engine?.javaClass?.simpleName} engineId=${System.identityHashCode(engine)}")
         val icon = getPipPlayPauseIcon(isPlaying)
         val intent = Intent(ACTION_PIP_PLAY_PAUSE).setPackage(packageName)
         val requestCode = if (isPlaying) 0 else 1
@@ -278,7 +278,7 @@ class MainActivity : ComponentActivity() {
         registerPiPReceiver()
         ensurePiPMediaSession()
         android.util.Log.d(
-            "PiPDebug",
+            "serverChange",
             "enterPiPMode now engine.isPlaying=${com.blissless.tensei.stream.PlayerData.playerEngine?.isPlaying} engineId=${System.identityHashCode(com.blissless.tensei.stream.PlayerData.playerEngine)}"
         )
         enterPictureInPictureMode(buildPiPParams(source = "enterPiPMode"))

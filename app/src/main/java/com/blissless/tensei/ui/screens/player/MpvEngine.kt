@@ -195,7 +195,7 @@ class MpvEngine(private val context: Context) : PlayerEngine {
             Log.d(TAG, "mpv event: $eventId")
             when (eventId) {
                 MPV.mpvEvent.MPV_EVENT_FILE_LOADED -> {
-                    Log.d(TAG, "FILE_LOADED")
+                    Log.d("serverChange", "FILE_LOADED")
                     _playbackState = PlayerEngine.STATE_READY
                     // Keep the engine isPlaying state in sync with the listener
                     // notification so PlayerData.playerEngine.isPlaying (used by the
@@ -209,9 +209,11 @@ class MpvEngine(private val context: Context) : PlayerEngine {
                     listener?.onIsPlayingChanged(true)
                 }
                 MPV.mpvEvent.MPV_EVENT_END_FILE -> {
-                    Log.d(TAG, "END_FILE")
+                    var rawReason: Any = "N/A"
+                    try { rawReason = data?.get("reason") ?: "NULL" } catch (_: Exception) { rawReason = "ERR" }
+                    Log.d("serverChange", "END_FILE id=$eventId data=$data rawReason=$rawReason")
                     val reason = endFileReason(data)
-                    Log.d(TAG, "END_FILE reason=$reason")
+                    Log.d("serverChange", "END_FILE resolvedReason=$reason")
                     when (reason) {
                         // Genuine end of file (mpv_end_file_reason EOF)
                         0L -> {
@@ -225,11 +227,11 @@ class MpvEngine(private val context: Context) : PlayerEngine {
                         // demuxer reload that happens on seeks of streamed/HLS sources).
                         // Do NOT treat these as the episode ending, otherwise seeking would
                         // advance to the next episode / clear playback position.
-                        else -> Log.d(TAG, "END_FILE transitional (reason=$reason), not advancing")
+                        else -> Log.d("serverChange", "END_FILE transitional (reason=$reason), not advancing")
                     }
                 }
                 MPV.mpvEvent.MPV_EVENT_START_FILE -> {
-                    Log.d(TAG, "START_FILE")
+                    Log.d("serverChange", "START_FILE")
                     _playbackState = PlayerEngine.STATE_BUFFERING
                     listener?.onPlaybackStateChanged(PlayerEngine.STATE_BUFFERING)
                 }
@@ -367,7 +369,7 @@ class MpvEngine(private val context: Context) : PlayerEngine {
         referer: String,
         httpClient: Any?,
     ) {
-        Log.d(TAG, "loadMedia: ${url.take(120)} startMs=$startPositionMs headers=${headers.size} subs=${subtitleConfigs.size}")
+        Log.d("serverChange", "MPV loadMedia: ${url.take(120)}")
         _isHls = url.contains(".m3u8") || url.contains("/m3u8")
 
         val needsReinit = mpv != null && (
@@ -425,12 +427,12 @@ class MpvEngine(private val context: Context) : PlayerEngine {
     }
 
     override fun stop() {
-        Log.d(TAG, "stop()")
+        Log.d("serverChange", "MPV stop()")
         mpv?.command("stop")
     }
 
     override fun clearMediaItems() {
-        Log.d(TAG, "clearMediaItems()")
+        Log.d("serverChange", "MPV clearMediaItems()")
         mpv?.command("stop")
     }
 
@@ -553,14 +555,21 @@ class MpvEngine(private val context: Context) : PlayerEngine {
     }
 
     // Reads mpv_end_file_reason from the MPV_EVENT_END_FILE data node.
+    // This binding reports the reason as a String ("end-of-file", "stop", "error",
+    // "quit", "redirect"). Map it to the mpv_end_file_reason constants:
     // 0 = EOF (genuine end), 2 = STOP, 3 = QUIT, 4 = ERROR, 5 = REDIRECT.
-    // Defaults to EOF so normal completion still advances to the next episode even if
-    // the reason node is unavailable.
+    // Only a genuine "end-of-file" should advance the episode.
     private fun endFileReason(data: MPVNode): Long {
-        return try {
-            data["reason"]?.asInt() ?: 0L
-        } catch (_: Exception) {
-            0L
+        val node = try { data["reason"] } catch (_: Exception) { null } ?: return 0L
+        val intValue = try { node.asInt() } catch (_: Exception) { null }
+        if (intValue != null) return intValue
+        return when (try { node.asString() } catch (_: Exception) { null }) {
+            "end-of-file" -> 0L
+            "stop" -> 2L
+            "quit" -> 3L
+            "error" -> 4L
+            "redirect" -> 5L
+            else -> 0L
         }
     }
 

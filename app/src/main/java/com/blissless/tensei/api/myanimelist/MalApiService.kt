@@ -482,7 +482,11 @@ class MalApiService(context: Context) {
                         list_status = MalMangaListStatus(
                             status = status,
                             score = obj.optInt("score", 0),
-                            num_chapters_read = obj.optInt("num_chapters_read", 0)
+                            // MAL's website "load.json" manga list uses "num_read_chapters"
+                            // (NOT the /v2 API name "num_chapters_read"). Reading the wrong
+                            // field defaulted to 0, which made every reading entry look like
+                            // 0 chapters and spuriously re-pushed progress on every sync.
+                            num_chapters_read = obj.optInt("num_read_chapters", 0)
                         )
                     )
                 )

@@ -18,7 +18,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.math.roundToInt
 
 /** Direction of the one-time cross-provider copy offered on first simultaneous login. */
 data class CrossProviderCopyPrompt(
@@ -189,11 +188,16 @@ fun MainViewModel.applyCrossProviderCopy(toMal: Boolean) {
             processed = pushed,
             total = pushed + skipped
         )
-        val doneMessage = if (toMal) "Copied $pushed items from AniList to MAL" else "Copied $pushed items from MAL to AniList"
-        showSyncCompleteNotification(context, doneMessage)
-        withContext(Dispatchers.Main.immediate) {
-            android.util.Log.d("CrossSync", "cross-provider copy complete (toMal=$toMal)")
-            viewModelScope.launch { _toastMessage.emit(doneMessage) }
+        cancelSyncNotification(context)
+        if (pushed > 0) {
+            val doneMessage = if (toMal) "Copied $pushed items from AniList to MAL" else "Copied $pushed items from MAL to AniList"
+            showSyncCompleteNotification(context, doneMessage)
+            withContext(Dispatchers.Main.immediate) {
+                android.util.Log.d("CrossSync", "cross-provider copy complete (toMal=$toMal)")
+                viewModelScope.launch { _toastMessage.emit(doneMessage) }
+            }
+        } else {
+            android.util.Log.d("CrossSync", "cross-provider copy finished: nothing changed (pushed=$pushed skipped=$skipped), no notification shown")
         }
     }
 }
@@ -233,10 +237,15 @@ internal fun MainViewModel.runCrossProviderStartupSync(toMal: Boolean) {
             processed = pushed,
             total = pushed + skipped
         )
-        val doneMessage = if (toMal) "AniList → MAL sync complete ($pushed items)" else "MAL → AniList sync complete ($pushed items)"
-        showSyncCompleteNotification(context, doneMessage)
-        withContext(Dispatchers.Main.immediate) {
-            viewModelScope.launch { _toastMessage.emit(doneMessage) }
+        cancelSyncNotification(context)
+        if (pushed > 0) {
+            val doneMessage = if (toMal) "AniList → MAL sync complete ($pushed items)" else "MAL → AniList sync complete ($pushed items)"
+            showSyncCompleteNotification(context, doneMessage)
+            withContext(Dispatchers.Main.immediate) {
+                viewModelScope.launch { _toastMessage.emit(doneMessage) }
+            }
+        } else {
+            android.util.Log.d("CrossSync", "startup sync finished: nothing changed (pushed=$pushed skipped=$skipped), no notification shown")
         }
     }
 }
@@ -299,7 +308,8 @@ private suspend fun MainViewModel.copyAniListToMal(): Pair<Int, Int> {
             continue
         }
         android.util.Log.d(tag, "copyAniListToMal anime${if (isNew) " (new)" else ""}: title=${anime.title} malId=$malId " +
-            "listStatus=${anime.listStatus}->mal=$malStatus score=$score progress=${anime.progress}")
+            "AL[status=${anime.listStatus}->mal=$malStatus score=$score progress=${anime.progress}] " +
+            "MAL[status=${mal?.list_status?.status} score=${mal?.list_status?.score} progress=${mal?.list_status?.num_episodes_watched}] differs=$differs")
         try {
             val updated = malApiService.updateAnimeStatus(malId, malStatus, score, anime.progress)
             if (updated) {
@@ -325,7 +335,11 @@ private suspend fun MainViewModel.copyAniListToMal(): Pair<Int, Int> {
         val malMangaId = manga.malId
         if (malMangaId == null) { skipped++; continue }
         val malStatus = mapMangaStatusToMal(manga.listStatus)
-        val malScore = manga.userScore?.let { (it / 10f).roundToInt().coerceIn(0, 10) }
+        // Scores are kept on AniList's 0-10 scale and passed through as-is, matching the
+        // anime path. (AniList's GraphQL `score` returns the per-account format; for a
+        // 10-point account a 10/10 is `10`, not `100`. The previous `/10` here halved
+        // every rating, pushing e.g. 10 -> 1 onto MAL.)
+        val malScore = manga.userScore?.coerceIn(0, 10)
         val mal = malMangaMap[malMangaId]
         val isNew = mal == null
         val differs = isNew ||
@@ -338,7 +352,8 @@ private suspend fun MainViewModel.copyAniListToMal(): Pair<Int, Int> {
             continue
         }
         android.util.Log.d(tag, "copyAniListToMal manga${if (isNew) " (new)" else ""}: title=${manga.title} malId=$malMangaId " +
-            "listStatus=${manga.listStatus}->mal=$malStatus score=$malScore progress=${manga.progress}")
+            "AL[status=${manga.listStatus}->mal=$malStatus score=$malScore progress=${manga.progress}] " +
+            "MAL[status=${mal?.list_status?.status} score=${mal?.list_status?.score} chapters=${mal?.list_status?.num_chapters_read}] differs=$differs")
         try {
             val updated = malApiService.updateMangaStatus(
                 malMangaId,
@@ -469,7 +484,7 @@ private suspend fun MainViewModel.copyMalToAniList(): Pair<Int, Int> {
         val anilistId = resolveMangaIdForMal(malId)
         val anilistStatus = mapMangaStatusFromMal(entry.list_status?.status)
         val progress = entry.list_status?.num_chapters_read ?: 0
-        val score = (entry.list_status?.score ?: 0).let { if (it > 0) it * 10 else null }
+        val score = entry.list_status?.score?.takeIf { it > 0 }
         if (anilistId == null) {
             android.util.Log.d(tag, "copyMalToAniList manga: no AniList id resolved for malId=$malId, skipping")
             skipped++
@@ -557,7 +572,8 @@ internal suspend fun MainViewModel.runCrossProviderDiffSync() {
     for (manga in allManga) {
         val malId = manga.malId ?: continue
         val mal = malMangaByMalId[malId]
-        val anilistScore = (manga.userScore ?: 0) / 10
+        // 0-10 scale, passed through as-is (matches anime path; see copyAniListToMal).
+        val anilistScore = (manga.userScore ?: 0).coerceIn(0, 10)
         val differs = mal == null ||
             mal.status != mapMangaStatusToMal(manga.listStatus) ||
             mal.score != anilistScore ||

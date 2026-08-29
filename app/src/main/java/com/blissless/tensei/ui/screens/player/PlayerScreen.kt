@@ -520,7 +520,7 @@ fun PlayerScreen(
 
             override fun onPlaybackStateChanged(state: Int) {
                 val stateName = when (state) { PlayerEngine.STATE_IDLE -> "IDLE"; PlayerEngine.STATE_BUFFERING -> "BUFFERING"; PlayerEngine.STATE_READY -> "READY"; PlayerEngine.STATE_ENDED -> "ENDED"; else -> "$state" }
-                Log.d("PlayerScreen", "onPlaybackStateChanged: $stateName isManuallySeeking=$isManuallySeeking seekRetryCount=$seekRetryCount")
+                Log.d("serverChange", "onPlaybackStateChanged: $stateName isManuallySeeking=$isManuallySeeking seekRetryCount=$seekRetryCount isChangingServer=$isChangingServer")
                 isBuffering = state == PlayerEngine.STATE_BUFFERING
                 if (state == PlayerEngine.STATE_READY) {
                     hasError = false
@@ -630,6 +630,7 @@ fun PlayerScreen(
     }
 
     LaunchedEffect(videoUrl, serverChangeTrigger) {
+        Log.d("serverChange", "reload-LaunchedEffect trigger=$serverChangeTrigger videoUrl=${videoUrl?.take(60)}")
         hasError = false
         playbackError = null
         hasRestoredPosition = false
@@ -646,9 +647,12 @@ fun PlayerScreen(
         seekRetryCount = 0
         isInitialLoading = true
 
-        engine.stop()
-        delay(100.milliseconds)
-        engine.clearMediaItems()
+        // No explicit stop()/clearMediaItems() here: loadMedia() replaces the
+        // current file for both engines (ExoPlayer releases and rebuilds the
+        // player; mpv's loadfile swaps the current playlist entry). Issuing
+        // stop() commands before loadMedia on a reused mpv session can leave the
+        // mpv core in a stale transitional/idle state that silently drops the
+        // subsequent loadfile (no START_FILE/FILE_LOADED), freezing playback.
 
         // Use pendingSeekPosition for refresh-based seeks, otherwise restore savedPosition.
         // pendingSeekPosition is cleared externally (onBackClick / new episode load) to
@@ -677,6 +681,12 @@ fun PlayerScreen(
         }
 
         Log.d("PlayerScreen", "Preparing playback: videoUrl=${videoUrl.take(120)} referer=$referer subtitleUrl=${subtitleUrl?.take(80)} extensionOkHttpClient=${extensionOkHttpClient != null} videoHeaders=$extensionVideoHeaders")
+
+        // Give mpv time to fully tear down the previous file (its async END_FILE /
+        // stop handling) before loadfile. Issuing stop() + loadfile back-to-back
+        // can race mpv's unload and silently drop the new loadfile (no START_FILE /
+        // FILE_LOADED), leaving playback frozen with no error.
+        delay(300.milliseconds)
 
         engine.loadMedia(
             url = videoUrl,
@@ -1022,19 +1032,18 @@ fun PlayerScreen(
     } else false
 
     fun handleServerChange(serverName: String, category: String) {
+        Log.d("serverChange", "handleServerChange server=$serverName cat=$category")
         isChangingServer = true
         hasPlaybackStarted = false
         hasError = false
         playbackError = null
 
-        // Save current position BEFORE stopping
+        // Save current position BEFORE switching (no explicit stop here — loadMedia
+        // replaces the current file for both engines; pre-stopping a reused mpv
+        // session can drop the subsequent loadfile and freeze playback).
         val currentDur = engine.duration
         onSavePosition?.invoke(engine.currentPosition, if (currentDur > 0) currentDur else 0L)
         onPositionSaved?.invoke(engine.currentPosition)
-
-        // Stop and clear the current playback to prevent audio overlap
-        engine.stop()
-        engine.clearMediaItems()
 
         // Small delay before triggering server change to ensure error popup disappears
         scope.launch {
@@ -1052,8 +1061,6 @@ fun PlayerScreen(
         hasPlaybackStarted = false
         hasError = false
         playbackError = null
-        engine.stop()
-        engine.clearMediaItems()
         if (extensionServers.isNotEmpty()) {
             onExtensionServerChange?.invoke(target)
         } else {
@@ -1498,8 +1505,6 @@ fun PlayerScreen(
                                                                 showServerMenu = false
                                                                 autoRetryServers.clear()
                                                                 pendingAutoRetry = null
-                                                                engine.stop()
-                                                                engine.clearMediaItems()
                                                                 onExtensionServerChange?.invoke(server.name)
                                                             }
                                                         )
@@ -1516,8 +1521,6 @@ fun PlayerScreen(
                                                                 showServerMenu = false
                                                                 autoRetryServers.clear()
                                                                 pendingAutoRetry = null
-                                                                engine.stop()
-                                                                engine.clearMediaItems()
                                                                 onExtensionServerChange?.invoke(server.name)
                                                             }
                                                         )
@@ -1534,8 +1537,6 @@ fun PlayerScreen(
                                                                 showServerMenu = false
                                                                 autoRetryServers.clear()
                                                                 pendingAutoRetry = null
-                                                                engine.stop()
-                                                                engine.clearMediaItems()
                                                                 onExtensionServerChange?.invoke(server.name)
                                                             }
                                                         )
