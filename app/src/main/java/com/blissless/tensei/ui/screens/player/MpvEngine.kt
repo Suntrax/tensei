@@ -197,6 +197,11 @@ class MpvEngine(private val context: Context) : PlayerEngine {
                 MPV.mpvEvent.MPV_EVENT_FILE_LOADED -> {
                     Log.d(TAG, "FILE_LOADED")
                     _playbackState = PlayerEngine.STATE_READY
+                    // Keep the engine isPlaying state in sync with the listener
+                    // notification so PlayerData.playerEngine.isPlaying (used by the
+                    // PIP play/pause icon) reflects actual playback after load.
+                    _isPlaying = true
+                    _isPaused = false
                     listener?.onPlaybackStateChanged(PlayerEngine.STATE_READY)
                     val dur = mpv?.getPropertyDouble("duration")
                     if (dur != null) _duration = (dur * 1000).toLong()
@@ -205,13 +210,44 @@ class MpvEngine(private val context: Context) : PlayerEngine {
                 }
                 MPV.mpvEvent.MPV_EVENT_END_FILE -> {
                     Log.d(TAG, "END_FILE")
-                    _playbackState = PlayerEngine.STATE_ENDED
-                    listener?.onPlaybackStateChanged(PlayerEngine.STATE_ENDED)
+                    val reason = endFileReason(data)
+                    Log.d(TAG, "END_FILE reason=$reason")
+                    when (reason) {
+                        // Genuine end of file (mpv_end_file_reason EOF)
+                        0L -> {
+                            _playbackState = PlayerEngine.STATE_ENDED
+                            listener?.onPlaybackStateChanged(PlayerEngine.STATE_ENDED)
+                        }
+                        // ERROR: surface as error so PlayerScreen's retry logic (seek retry)
+                        // handles it instead of treating it as the episode ending.
+                        4L -> listener?.onError("MPV playback error during seek")
+                        // STOP/QUIT/REDIRECT: transitional (episode change, stop(), or the
+                        // demuxer reload that happens on seeks of streamed/HLS sources).
+                        // Do NOT treat these as the episode ending, otherwise seeking would
+                        // advance to the next episode / clear playback position.
+                        else -> Log.d(TAG, "END_FILE transitional (reason=$reason), not advancing")
+                    }
                 }
                 MPV.mpvEvent.MPV_EVENT_START_FILE -> {
                     Log.d(TAG, "START_FILE")
                     _playbackState = PlayerEngine.STATE_BUFFERING
                     listener?.onPlaybackStateChanged(PlayerEngine.STATE_BUFFERING)
+                }
+                MPV.mpvEvent.MPV_EVENT_SEEK -> {
+                    Log.d(TAG, "SEEK")
+                    _playbackState = PlayerEngine.STATE_BUFFERING
+                    listener?.onPlaybackStateChanged(PlayerEngine.STATE_BUFFERING)
+                }
+                MPV.mpvEvent.MPV_EVENT_PLAYBACK_RESTART -> {
+                    Log.d(TAG, "PLAYBACK_RESTART")
+                    // Playback restarted after a seek/buffer. Report READY so PlayerScreen
+                    // clears its isBuffering (loading) flag. If mpv is still paused-for-cache,
+                    // leave BUFFERING and let the position poller flip to READY when it resumes.
+                    val stillBuffering = mpv?.getPropertyBoolean("paused-for-cache") ?: false
+                    if (!stillBuffering && _playbackState != PlayerEngine.STATE_READY) {
+                        _playbackState = PlayerEngine.STATE_READY
+                        listener?.onPlaybackStateChanged(PlayerEngine.STATE_READY)
+                    }
                 }
             }
         }
@@ -302,8 +338,15 @@ class MpvEngine(private val context: Context) : PlayerEngine {
         }
     }
 
-    override val view: View get() = mpvView
+        override val view: View get() = mpvView
     override val isPlaying: Boolean get() = _isPlaying
+
+    fun liveIsPlaying(): Boolean? {
+        val paused = try { mpv?.getPropertyBoolean("pause") } catch (_: Exception) { null }
+        return paused?.let { !it }
+    }
+
+
     override val currentPosition: Long get() = _currentPosition
     override val duration: Long get() = _duration
     override val bufferedPosition: Long get() = _bufferedPosition
@@ -365,8 +408,8 @@ class MpvEngine(private val context: Context) : PlayerEngine {
 
         if (startPositionMs > 0) {
             Handler(Looper.getMainLooper()).postDelayed({
-                Log.d(TAG, "Restoring position: ${startPositionMs}ms")
-                mpv?.command("seek", startPositionMs.toString(), "absolute+exact")
+                Log.d(TAG, "Restoring position: ${startPositionMs}ms -> seek seconds=${startPositionMs / 1000}")
+                mpv?.command("seek", (startPositionMs / 1000).toString(), "absolute+exact")
             }, 500)
         }
     }
@@ -402,28 +445,37 @@ class MpvEngine(private val context: Context) : PlayerEngine {
     override fun play() {
         Log.d(TAG, "play()")
         _isPaused = false
+        // Set isPlaying directly (not just via the pause poll/event) so the engine state,
+        // which the PIP play/pause icon reads, is correct immediately on play.
+        _isPlaying = true
         mpv?.setPropertyBoolean("pause", false)
+        listener?.onIsPlayingChanged(true)
     }
 
     override fun pause() {
         Log.d(TAG, "pause()")
         _isPaused = true
+        _isPlaying = false
         mpv?.setPropertyBoolean("pause", true)
+        listener?.onIsPlayingChanged(false)
     }
 
     override fun togglePlayPause() {
         Log.d(TAG, "togglePlayPause()")
+        _isPlaying = !_isPlaying
+        _isPaused = !_isPlaying
         mpv?.command("cycle", "pause")
+        listener?.onIsPlayingChanged(_isPlaying)
     }
 
     override fun seekTo(positionMs: Long) {
-        Log.d(TAG, "seekTo($positionMs)")
-        mpv?.command("seek", positionMs.toString(), "absolute+exact")
+        Log.d(TAG, "seekTo($positionMs)ms -> seek seconds=${positionMs / 1000}")
+        mpv?.command("seek", (positionMs / 1000).toString(), "absolute+exact")
     }
 
     override fun seekOutsideBuffer(positionMs: Long) {
-        Log.d(TAG, "seekOutsideBuffer($positionMs)")
-        mpv?.command("seek", positionMs.toString(), "absolute+exact")
+        Log.d(TAG, "seekOutsideBuffer($positionMs)ms -> seek seconds=${positionMs / 1000}")
+        mpv?.command("seek", (positionMs / 1000).toString(), "absolute+exact")
     }
 
     override fun setPlaybackSpeed(speed: Float) {
@@ -452,7 +504,7 @@ class MpvEngine(private val context: Context) : PlayerEngine {
         }
         if (startPositionMs > 0) {
             Handler(Looper.getMainLooper()).postDelayed({
-                mpv?.command("seek", startPositionMs.toString(), "absolute+exact")
+                mpv?.command("seek", (startPositionMs / 1000).toString(), "absolute+exact")
             }, 200)
         }
     }
@@ -498,6 +550,18 @@ class MpvEngine(private val context: Context) : PlayerEngine {
         }
         _currentSubtitleTracks = tracks
         listener?.onTracksChanged(tracks)
+    }
+
+    // Reads mpv_end_file_reason from the MPV_EVENT_END_FILE data node.
+    // 0 = EOF (genuine end), 2 = STOP, 3 = QUIT, 4 = ERROR, 5 = REDIRECT.
+    // Defaults to EOF so normal completion still advances to the next episode even if
+    // the reason node is unavailable.
+    private fun endFileReason(data: MPVNode): Long {
+        return try {
+            data["reason"]?.asInt() ?: 0L
+        } catch (_: Exception) {
+            0L
+        }
     }
 
     private fun startPositionPolling() {

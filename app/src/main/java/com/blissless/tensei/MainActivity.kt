@@ -171,7 +171,6 @@ class MainActivity : ComponentActivity() {
     var wasFullscreenBeforePiP = false
     var playerViewBounds = android.graphics.Rect()
     private var pipReceiver: android.content.BroadcastReceiver? = null
-    private var pipActionCounter = 0
     private var pipMediaSession: android.media.session.MediaSession? = null
 
     companion object {
@@ -219,13 +218,17 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun buildPiPParams(autoEnter: Boolean = false): PictureInPictureParams {
-        val isPlaying = com.blissless.tensei.stream.PlayerData.playerEngine?.isPlaying == true
+    private fun buildPiPParams(autoEnter: Boolean = false, source: String = "?"): PictureInPictureParams {
+        val engine = com.blissless.tensei.stream.PlayerData.playerEngine
+        val isPlaying = engine?.isPlaying == true
+        val live = (engine as? com.blissless.tensei.ui.screens.player.MpvEngine)?.liveIsPlaying()
+        android.util.Log.d("PiPDebug", "buildPiPParams[src=$source] isPlaying=$isPlaying live=$live engine=${engine?.javaClass?.simpleName} engineId=${System.identityHashCode(engine)}")
         val icon = getPipPlayPauseIcon(isPlaying)
         val intent = Intent(ACTION_PIP_PLAY_PAUSE).setPackage(packageName)
+        val requestCode = if (isPlaying) 0 else 1
         val pendingIntent = android.app.PendingIntent.getBroadcast(
-            this, pipActionCounter++, intent,
-            android.app.PendingIntent.FLAG_CANCEL_CURRENT or android.app.PendingIntent.FLAG_MUTABLE
+            this, requestCode, intent,
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_MUTABLE
         )
         val action = RemoteAction(icon, "Play/Pause", "Play or Pause", pendingIntent)
         val builder = PictureInPictureParams.Builder()
@@ -262,13 +265,23 @@ class MainActivity : ComponentActivity() {
 
     fun updatePiPParams(autoEnter: Boolean) {
         ensurePiPMediaSession()
-        setPictureInPictureParams(buildPiPParams(autoEnter))
+        setPictureInPictureParams(buildPiPParams(autoEnter, "updatePiPParams"))
+    }
+
+    fun refreshAutoEnterPiPSnapshot() {
+        if (!shouldAutoEnterPiP) return
+        ensurePiPMediaSession()
+        setPictureInPictureParams(buildPiPParams(true, "refreshAutoEnter"))
     }
 
     fun enterPiPMode() {
         registerPiPReceiver()
         ensurePiPMediaSession()
-        enterPictureInPictureMode(buildPiPParams())
+        android.util.Log.d(
+            "PiPDebug",
+            "enterPiPMode now engine.isPlaying=${com.blissless.tensei.stream.PlayerData.playerEngine?.isPlaying} engineId=${System.identityHashCode(com.blissless.tensei.stream.PlayerData.playerEngine)}"
+        )
+        enterPictureInPictureMode(buildPiPParams(source = "enterPiPMode"))
     }
 
     fun releasePiPMediaSession() {
@@ -324,9 +337,10 @@ class MainActivity : ComponentActivity() {
     fun updatePiPPlayPauseIcon(isPlaying: Boolean = com.blissless.tensei.stream.PlayerData.playerEngine?.isPlaying == true) {
         val icon = getPipPlayPauseIcon(isPlaying)
         val intent = Intent(ACTION_PIP_PLAY_PAUSE).setPackage(packageName)
+        val requestCode = if (isPlaying) 0 else 1
         val pendingIntent = android.app.PendingIntent.getBroadcast(
-            this, pipActionCounter++, intent,
-            android.app.PendingIntent.FLAG_CANCEL_CURRENT or android.app.PendingIntent.FLAG_MUTABLE
+            this, requestCode, intent,
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_MUTABLE
         )
         val action = RemoteAction(icon, "Play/Pause", "Play or Pause", pendingIntent)
         val params = PictureInPictureParams.Builder()

@@ -411,8 +411,16 @@ fun PlayerScreen(
                     hasPlaybackStarted = true
                 }
                 val act = context as? Activity
-                if (act is com.blissless.tensei.MainActivity && act.isInPiPMode.value) {
-                    act.updatePiPPlayPauseIcon(playing)
+                if (act is com.blissless.tensei.MainActivity) {
+                    if (act.isInPiPMode.value) {
+                        act.updatePiPPlayPauseIcon(playing)
+                    } else {
+                        // Refresh the auto-enter PIP params so the system caches the correct
+                        // play/pause icon for the moment the user actually enters PIP.
+                        // Otherwise the snapshot taken when the player first appeared (still
+                        // loading, engine not playing) would show the wrong icon on entry.
+                        act.refreshAutoEnterPiPSnapshot()
+                    }
                 }
             }
 
