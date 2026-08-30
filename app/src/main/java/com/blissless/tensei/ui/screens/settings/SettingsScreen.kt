@@ -198,14 +198,14 @@ fun SettingsScreen(
 
     val groups = remember {
         listOf(
-            SettingsGroup("account", "Account & Sync", "Login, tracking, and sync settings", Icons.Default.Person),
             SettingsGroup("appearance", "Appearance", "Theme, colors, and display options", Icons.Default.Palette),
+            SettingsGroup("account", "Account & Sync", "Login, tracking, and sync settings", Icons.Default.Person),
             SettingsGroup("general", "General", "Startup screen and content preferences", Icons.Default.Settings),
-            SettingsGroup("extensions", "Extensions", "Manage source extensions", Icons.Default.Extension),
-            SettingsGroup("downloads", "Downloads", "Anime and manga download preferences", Icons.Default.Download),
             SettingsGroup("stream", "Stream Settings", "Streaming method, audio, and buffering", Icons.Default.PlayArrow),
             SettingsGroup("player", "Player Settings", "Playback controls and skipping", Icons.Default.Subscriptions),
             SettingsGroup("reader", "Reader Settings", "Manga reading preferences", Icons.Default.Bookmark),
+            SettingsGroup("extensions", "Extensions", "Manage source extensions", Icons.Default.Extension),
+            SettingsGroup("downloads", "Downloads", "Anime and manga download preferences", Icons.Default.Download),
             SettingsGroup("cache", "Cache Management", "Storage and data cleanup", Icons.Default.Storage),
             SettingsGroup("about", "About", "Version and updates", Icons.Default.Info)
         )
@@ -233,16 +233,16 @@ fun SettingsScreen(
         } else {
             BackHandler { selectedGroup = null }
             when (targetGroup) {
-                "account" -> AccountSettingsPage(viewModel = viewModel, onBack = { selectedGroup = null })
                 "appearance" -> AppearanceSettingsPage(viewModel = viewModel, disableMaterialColors = disableMaterialColors, onBack = { selectedGroup = null })
+                "account" -> AccountSettingsPage(viewModel = viewModel, onBack = { selectedGroup = null })
                 "general" -> GeneralSettingsPage(viewModel = viewModel, onBack = { selectedGroup = null })
-                "downloads" -> DownloadsSettingsPage(viewModel = viewModel, onBack = { selectedGroup = null })
                 "stream" -> StreamSettingsPage(viewModel = viewModel,
                     preferredCategory = preferredCategory, onNavigateToExtensions = { selectedGroup = "extensions" }, onBack = { selectedGroup = null })
                 "player" -> PlayerSettingsPage(viewModel = viewModel, autoSkipOpening = autoSkipOpening, autoSkipEnding = autoSkipEnding, autoPlayNextEpisode = autoPlayNextEpisode, onBack = { selectedGroup = null })
                 "reader" -> ReaderSettingsPage(viewModel = viewModel, onBack = { selectedGroup = null })
-                "cache" -> CacheSettingsPage(viewModel = viewModel, context = LocalContext.current, onBack = { selectedGroup = null })
                 "extensions" -> ExtensionsSettingsPage(viewModel = viewModel, onBack = { selectedGroup = null })
+                "downloads" -> DownloadsSettingsPage(viewModel = viewModel, onBack = { selectedGroup = null })
+                "cache" -> CacheSettingsPage(viewModel = viewModel, context = LocalContext.current, onBack = { selectedGroup = null })
                 "about" -> AboutSettingsPage(viewModel = viewModel, onBack = { selectedGroup = null })
             }
         }
@@ -1408,59 +1408,6 @@ private fun DownloadsSettingsPage(
             )
         }
 
-        SectionHeader("BACKGROUND DOWNLOADS")
-        SettingsCard {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(
-                            if (isIgnoringBattery) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
-                            else MaterialTheme.colorScheme.error.copy(alpha = 0.1f)
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        Icons.Default.Storage,
-                        contentDescription = null,
-                        tint = if (isIgnoringBattery) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Battery Optimization", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-                    Text(
-                        if (isIgnoringBattery) "Disabled - downloads will work reliably" else "Disabling it allows background downloads to work reliably",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                    )
-                }
-                TextButton(onClick = {
-                    if (isIgnoringBattery) {
-                        context.toast("Battery optimization is already disabled")
-                    } else {
-                        try {
-                            val intent = android.content.Intent(
-                                android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS
-                            )
-                            context.startActivity(intent)
-                        } catch (_: Exception) {
-                        }
-                    }
-                }) {
-                    Text(
-                        if (isIgnoringBattery) "Disabled" else "Fix",
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-        }
-
         if (streamMethod == "magnet") {
             SectionHeader("DOWNLOAD LOCATION")
             SettingsCard {
@@ -1510,6 +1457,59 @@ private fun DownloadsSettingsPage(
                             fontWeight = FontWeight.Bold
                         )
                     }
+                }
+            }
+        }
+
+        SectionHeader("BACKGROUND DOWNLOADS")
+        SettingsCard {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(
+                            if (isIgnoringBattery) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                            else MaterialTheme.colorScheme.error.copy(alpha = 0.1f)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Storage,
+                        contentDescription = null,
+                        tint = if (isIgnoringBattery) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Battery Optimization", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                    Text(
+                        if (isIgnoringBattery) "Disabled - downloads will work reliably" else "Disabling it allows background downloads to work reliably",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
+                }
+                TextButton(onClick = {
+                    if (isIgnoringBattery) {
+                        context.toast("Battery optimization is already disabled")
+                    } else {
+                        try {
+                            val intent = android.content.Intent(
+                                android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS
+                            )
+                            context.startActivity(intent)
+                        } catch (_: Exception) {
+                        }
+                    }
+                }) {
+                    Text(
+                        if (isIgnoringBattery) "Disabled" else "Fix",
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }
