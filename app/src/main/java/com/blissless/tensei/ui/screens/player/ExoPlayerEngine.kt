@@ -145,6 +145,9 @@ class ExoPlayerEngine(
                 .setSelectionFlags(if (config.selected) C.SELECTION_FLAG_DEFAULT else 0)
                 .build()
         }
+        Log.d("SubDebug", "ExoPlayer loadMedia: subtitleConfigs=${subtitleConfigs.size} -> " +
+            subtitleConfigs.map { "lang=${it.language} selected=${it.selected} ${it.url.take(50)}" })
+        Log.d("SubDebug", "ExoPlayer loadMedia: mediaSubtitleConfigs=${mediaSubtitleConfigs.size}")
 
         val mediaItem = MediaItem.Builder()
             .setUri(url)
@@ -231,9 +234,11 @@ class ExoPlayerEngine(
 
     override fun disableSubtitles() {
         val player = exoPlayer ?: return
+        Log.d("SubDebug", "ExoPlayer disableSubtitles: disabling TRACK_TYPE_TEXT")
         player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
             .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
             .build()
+        Log.d("SubDebug", "ExoPlayer disableSubtitles: textDisabled=${player.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)}")
     }
 
     override fun rebuildWithSubtitles(
@@ -243,6 +248,8 @@ class ExoPlayerEngine(
         playWhenReady: Boolean,
     ) {
         val player = exoPlayer ?: return
+        Log.d("SubDebug", "ExoPlayer rebuildWithSubtitles: url=${url.take(60)} configs=${subtitleConfigs.size} playWhenReady=$playWhenReady")
+        Log.d("SubDebug", "ExoPlayer rebuildWithSubtitles: ${subtitleConfigs.map { "lang=${it.language} selected=${it.selected}" }}")
         val mediaSubtitleConfigs = subtitleConfigs.map { config ->
             MediaItem.SubtitleConfiguration.Builder(config.url.toUri())
                 .setMimeType(config.mimeType)
@@ -250,14 +257,28 @@ class ExoPlayerEngine(
                 .setSelectionFlags(if (config.selected) C.SELECTION_FLAG_DEFAULT else 0)
                 .build()
         }
-        val currentItem = player.currentMediaItem ?: return
+        val currentItem = player.currentMediaItem
+        if (currentItem == null) {
+            Log.d("SubDebug", "ExoPlayer rebuildWithSubtitles: currentMediaItem is NULL, cannot rebuild")
+            return
+        }
         val newItem = currentItem.buildUpon()
             .setSubtitleConfigurations(mediaSubtitleConfigs)
             .build()
+        Log.d("SubDebug", "ExoPlayer rebuildWithSubtitles: stopping + rebuilding media item")
         player.stop()
         player.setMediaItem(newItem, startPositionMs)
         player.prepare()
         player.playWhenReady = playWhenReady
+        Log.d("SubDebug", "ExoPlayer rebuildWithSubtitles: textDisabled before enable=${player.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)}")
+        // Ensure text tracks are not disabled after rebuilding (the Off flow disables them).
+        if (subtitleConfigs.isNotEmpty() && player.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)) {
+            player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                .build()
+            Log.d("SubDebug", "ExoPlayer rebuildWithSubtitles: re-enabled text tracks (was disabled)")
+        }
+        Log.d("SubDebug", "ExoPlayer rebuildWithSubtitles: textDisabled after enable=${player.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)}")
     }
 
     override fun setResizeMode(mode: Int) {
@@ -271,8 +292,10 @@ class ExoPlayerEngine(
     override fun selectSubtitleTrack(index: Int) {
         val player = exoPlayer ?: return
         val textTracks = _currentSubtitleTracks
+        Log.d("SubDebug", "ExoPlayer selectSubtitleTrack($index) textTracks=${textTracks.size}")
         if (index in textTracks.indices) {
             val track = textTracks[index]
+            Log.d("SubDebug", "ExoPlayer selectSubtitleTrack: choosing '${track.label}' trackIndex=${track.trackIndex}")
             overrideSubtitleTrack(track.trackIndex, 0)
         }
     }
@@ -280,10 +303,12 @@ class ExoPlayerEngine(
     override fun overrideSubtitleTrack(trackIndex: Int, groupIndex: Int) {
         val player = exoPlayer ?: return
         val tracks = player.currentTracks
+        Log.d("SubDebug", "ExoPlayer overrideSubtitleTrack(track=$trackIndex, group=$groupIndex) groups=${tracks.groups.size}")
         for (i in 0 until tracks.groups.size) {
             val group = tracks.groups[i]
             if (group.type == C.TRACK_TYPE_TEXT) {
                 val override = TrackSelectionOverride(group.mediaTrackGroup, listOf(trackIndex))
+                Log.d("SubDebug", "ExoPlayer overrideSubtitleTrack: overriding text group $i with track $trackIndex")
                 player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
                     .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
                     .setOverrideForType(override)
@@ -291,6 +316,7 @@ class ExoPlayerEngine(
                 return
             }
         }
+        Log.d("SubDebug", "ExoPlayer overrideSubtitleTrack: NO text group found")
     }
 
     fun setPlayerViewResizeMode(mode: Int) {
@@ -337,6 +363,7 @@ class ExoPlayerEngine(
                 }
             }
             _currentSubtitleTracks = discovered
+            Log.d("SubDebug", "ExoPlayer onTracksChanged: groups=${tracks.groups.size} textGroups=${tracks.groups.count { it.type == C.TRACK_TYPE_TEXT }} discovered=${discovered.map { "idx=${it.trackIndex} '${it.label}'" }}")
             listener?.onTracksChanged(discovered)
         }
 

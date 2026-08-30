@@ -71,6 +71,7 @@ class MpvEngine(private val context: Context) : PlayerEngine {
     private var _isPaused = true
 
     private var pendingUrl: String? = null
+    private var pendingSubtitleConfigs: List<SubtitleConfig> = emptyList()
     private var surfaceReady = false
     private var currentSurface: Surface? = null
     private var lastSurfaceWidth = 0
@@ -81,7 +82,9 @@ class MpvEngine(private val context: Context) : PlayerEngine {
     private var initHeaders: Map<String, String> = emptyMap()
     private var initReferer: String = ""
     private var initShaderKey: String = "none"
-
+    // TEMP TEST: disables Anime4K shaders on the mpv path to check if they break
+    // mpv's GPU subtitle composition. Set to false to restore shaders.
+    private var anime4kDisabledForTest = true
     private val positionPoller = Handler(Looper.getMainLooper())
     private val positionPollRunnable = object : Runnable {
         override fun run() {
@@ -213,6 +216,7 @@ class MpvEngine(private val context: Context) : PlayerEngine {
                     val dur = mpv?.getPropertyDouble("duration")
                     if (dur != null) _duration = (dur * 1000).toLong()
                     loadTracksFromMpv()
+                    reapplyPendingSubtitles()
                     reapplyResizeMode()
                     listener?.onIsPlayingChanged(true)
                 }
@@ -280,7 +284,7 @@ class MpvEngine(private val context: Context) : PlayerEngine {
 
             player.setOptionString("config", "no")
             player.setOptionString("vo", "gpu")
-            player.setOptionString("hwdec", "mediacodec")
+            player.setOptionString("hwdec", "mediacodec-copy")
             player.setOptionString("hwdec-codecs", "h264,hevc,mpeg4,mpeg2video,vp8,vp9,av1")
             player.setOptionString("ao", "audiotrack")
             player.setOptionString("input-default-bindings", "no")
@@ -293,6 +297,7 @@ class MpvEngine(private val context: Context) : PlayerEngine {
             player.setOptionString("opengl-es", "yes")
             player.setOptionString("keep-open", "no")
             player.setOptionString("ytdl", "no")
+            player.setOptionString("sub-visibility", "yes")
 
             val userAgent = headers["User-Agent"]
             if (userAgent != null) {
@@ -305,11 +310,16 @@ class MpvEngine(private val context: Context) : PlayerEngine {
             }
 
             val chain = Anime4KShaders.getChain(shaderKey)
-            if (chain.isNotEmpty()) {
+            // TEMP TEST: Anime4K CNN shaders silently fail/no-op on this OpenGL ES config
+            // and may break mpv's GPU composition (subtitle plane not displayed). Skipping
+            // them to verify whether they are the cause of invisible mpv subtitles.
+            if (chain.isNotEmpty() && !anime4kDisabledForTest) {
                 val shaderDir = Anime4KShaders.copyShadersToInternal(context)
                 val shaderPaths = chain.joinToString("\n") { File(shaderDir, it).absolutePath }
                 val r = player.setOptionString("glsl-shaders", "\n$shaderPaths")
                 Log.d(TAG, "setOptionString glsl-shaders: result=$r chain=$shaderKey")
+            } else {
+                Log.d(TAG, "SKIPPED glsl-shaders for subtitle debug test (chain=${chain.size} files)")
             }
 
             player.init()
@@ -319,6 +329,20 @@ class MpvEngine(private val context: Context) : PlayerEngine {
             player.observeProperty("pause", MPV.mpvFormat.MPV_FORMAT_FLAG)
             player.observeProperty("paused-for-cache", MPV.mpvFormat.MPV_FORMAT_FLAG)
             player.observeProperty("track-list", MPV.mpvFormat.MPV_FORMAT_NONE)
+
+            // Surface mpv's internal log (errors from sub-add / subtitle loading) to logcat.
+            player.addLogObserver(object : MPV.LogObserver {
+                override fun logMessage(prefix: String, level: Int, text: String) {
+                    if (level <= MPV.mpvLogLevel.MPV_LOG_LEVEL_WARN ||
+                        text.contains("sub", ignoreCase = true) ||
+                        text.contains("sid", ignoreCase = true) ||
+                        text.contains("track", ignoreCase = true)) {
+                        Log.d("SubDebug", "mpvLog [$prefix]: $text")
+                    }
+                }
+            })
+            player.setOptionString("msg-level", "cplayer=v,sub=trace,demux=trace")
+            Log.d("SubDebug", "mpv: enabled subtitle/player debug logging")
 
             if (referer.isNotEmpty()) {
                 val headerNode = MPVNode.ArrayNode(arrayOf(MPVNode.StringNode("Referer: $referer")))
@@ -403,10 +427,18 @@ class MpvEngine(private val context: Context) : PlayerEngine {
             currentSurface?.let { mpv?.attachSurface(it) }
         }
 
+        pendingSubtitleConfigs = subtitleConfigs
         for (config in subtitleConfigs) {
             Log.d(TAG, "Adding subtitle: ${config.url.take(80)}")
-            mpv?.command("sub-add", config.url, "select")
+            try {
+                val res = mpv?.commandNode("sub-add", config.url, "select", "TenseiSub", config.language)
+                Log.d("SubDebug", "mpv loadMedia sub-add cmdNode result=${res}")
+            } catch (e: Throwable) {
+                Log.e("SubDebug", "mpv loadMedia sub-add FAILED: ${e.message}")
+            }
         }
+        Log.d("SubDebug", "mpv loadMedia: subtitleConfigs=${subtitleConfigs.map { "lang=${it.language} selected=${it.selected} ${it.url.take(50)}" }}")
+        Log.d("SubDebug", "mpv loadMedia: sid after sub-add=${mpv?.getPropertyInt("sid")}")
 
         if (surfaceReady) {
             Log.d(TAG, "Surface ready, loading file now")
@@ -499,6 +531,7 @@ class MpvEngine(private val context: Context) : PlayerEngine {
 
     override fun disableSubtitles() {
         Log.d(TAG, "disableSubtitles()")
+        Log.d("SubDebug", "mpv disableSubtitles: setting sid=0")
         mpv?.setPropertyInt("sid", 0)
     }
 
@@ -509,9 +542,18 @@ class MpvEngine(private val context: Context) : PlayerEngine {
         playWhenReady: Boolean,
     ) {
         Log.d(TAG, "rebuildWithSubtitles: subs=${subtitleConfigs.size}")
+        Log.d("SubDebug", "mpv rebuildWithSubtitles: url=${url.take(60)} configs=${subtitleConfigs.map { "lang=${it.language} selected=${it.selected} ${it.url.take(40)}" }}")
+        Log.d("SubDebug", "mpv rebuildWithSubtitles: sid BEFORE=${mpv?.getPropertyInt("sid")}")
         for (config in subtitleConfigs) {
-            mpv?.command("sub-add", config.url, "select")
+            Log.d(TAG, "Adding subtitle: ${config.url.take(80)}")
+            try {
+                val res = mpv?.commandNode("sub-add", config.url, "select", "TenseiSub", config.language)
+                Log.d("SubDebug", "mpv rebuildWithSubtitles sub-add cmdNode result=${res}")
+            } catch (e: Throwable) {
+                Log.e("SubDebug", "mpv rebuildWithSubtitles sub-add FAILED: ${e.message}")
+            }
         }
+        Log.d("SubDebug", "mpv rebuildWithSubtitles: sid AFTER=${mpv?.getPropertyInt("sid")} trackcount=${mpv?.getPropertyInt("track-list/count")}")
         if (startPositionMs > 0) {
             Handler(Looper.getMainLooper()).postDelayed({
                 mpv?.command("seek", (startPositionMs / 1000).toString(), "absolute+exact")
@@ -545,6 +587,7 @@ class MpvEngine(private val context: Context) : PlayerEngine {
 
     override fun selectSubtitleTrack(index: Int) {
         Log.d(TAG, "selectSubtitleTrack($index)")
+        Log.d("SubDebug", "mpv selectSubtitleTrack($index): setting sid")
         mpv?.setPropertyInt("sid", index)
     }
 
@@ -558,11 +601,43 @@ class MpvEngine(private val context: Context) : PlayerEngine {
 
     override fun overrideSubtitleTrack(trackIndex: Int, groupIndex: Int) {
         Log.d(TAG, "overrideSubtitleTrack(track=$trackIndex, group=$groupIndex)")
+        Log.d("SubDebug", "mpv overrideSubtitleTrack(track=$trackIndex, group=$groupIndex): setting sid")
         mpv?.setPropertyInt("sid", trackIndex)
     }
 
     override fun setListener(listener: PlayerEngine.Listener) {
         this.listener = listener
+    }
+
+    // mpv discards sub-add subtitles issued before the file loads (the loadfile
+    // resets the track list), so pending subtitle configs are re-applied after
+    // MPV_EVENT_FILE_LOADED. Deduplicate by url so re-adding the same file several
+    // times doesn't create duplicate tracks.
+    private fun reapplyPendingSubtitles() {
+        val player = mpv ?: return
+        if (pendingSubtitleConfigs.isEmpty()) return
+        val configs = pendingSubtitleConfigs
+        val seen = mutableSetOf<String>()
+        val existing = mutableSetOf<String>()
+        val count = player.getPropertyInt("track-list/count") ?: 0
+        for (i in 0 until count) {
+            player.getPropertyString("track-list/$i/type")?.let { t ->
+                if (t == "sub") {
+                    player.getPropertyString("track-list/$i/external")?.let { existing += it }
+                }
+            }
+        }
+        for (config in configs) {
+            if (config.url in existing || !seen.add(config.url)) continue
+            try {
+                val res = player.commandNode("sub-add", config.url, "select", "TenseiSub", config.language)
+                Log.d("SubDebug", "mpv reapplyPendingSubtitles sub-add result=${res}")
+            } catch (e: Throwable) {
+                Log.e("SubDebug", "mpv reapplyPendingSubtitles sub-add FAILED: ${e.message}")
+            }
+        }
+        pendingSubtitleConfigs = emptyList()
+        Log.d("SubDebug", "mpv reapplyPendingSubtitles: sid now=${player.getPropertyInt("sid")} subTracks=$existing")
     }
 
     private fun loadTracksFromMpv() {
@@ -576,17 +651,20 @@ class MpvEngine(private val context: Context) : PlayerEngine {
                 val id = player.getPropertyInt("track-list/$i/id") ?: continue
                 val lang = player.getPropertyString("track-list/$i/lang")
                 val title = player.getPropertyString("track-list/$i/title")
+                val external = player.getPropertyString("track-list/$i/external") ?: "no"
+                val selected = player.getPropertyString("track-list/$i/selected") ?: "no"
                 val label = when {
                     !title.isNullOrEmpty() && !lang.isNullOrEmpty() -> "$title ($lang)"
                     !title.isNullOrEmpty() -> title
                     !lang.isNullOrEmpty() -> lang
                     else -> "Track $id"
                 }
-                Log.d(TAG, "  Sub track: id=$id label=$label")
+                Log.d("SubDebug", "mpv loadTracksFromMpv: i=$i id=$id external=$external selected=$selected lang=$lang title=$title label='$label'")
                 tracks.add(EmbeddedSubtitleTrack(trackIndex = id, label = label))
             }
         }
         _currentSubtitleTracks = tracks
+        Log.d("SubDebug", "mpv loadTracksFromMpv: total sub tracks=$tracks.size sid=${player.getPropertyInt("sid")}")
         listener?.onTracksChanged(tracks)
     }
 

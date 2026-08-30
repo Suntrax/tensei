@@ -681,6 +681,9 @@ fun PlayerScreen(
             emptyList()
         }
 
+        Log.d("SubDebug", "PlayerScreen preparePlayback: subtitlesEnabled=$subtitlesEnabled subtitleTracks=${subtitleTracks.map { it.lang }} subtitleUrl=${subtitleUrl != null} selectedSubtitleIndex=$selectedSubtitleIndex engine=${engine.javaClass.simpleName}")
+        Log.d("SubDebug", "PlayerScreen preparePlayback: built configs=${subtitleConfigs.map { "lang=${it.language} selected=${it.selected}" }}")
+
         Log.d("PlayerScreen", "Preparing playback: videoUrl=${videoUrl.take(120)} referer=$referer subtitleUrl=${subtitleUrl?.take(80)} extensionOkHttpClient=${extensionOkHttpClient != null} videoHeaders=$extensionVideoHeaders")
 
         // Give mpv time to fully tear down the previous file (its async END_FILE /
@@ -1097,6 +1100,12 @@ fun PlayerScreen(
         } else {
             emptyList()
         }
+        Log.d("SubDebug", "PlayerScreen rebuildWithSubtitles(enable=$enable): " +
+            "subtitleTracks=${subtitleTracks.size} subtitleUrl=${subtitleUrl != null} " +
+            "selectedSubtitleIndex=$selectedSubtitleIndex selectedEmbeddedTrackIndex=$selectedEmbeddedTrackIndex " +
+            "embeddedSubtitleTracks=${embeddedSubtitleTracks.map { "idx=${it.trackIndex} '${it.label}'" }} " +
+            "engine=${engine.javaClass.simpleName}")
+        Log.d("SubDebug", "PlayerScreen rebuildWithSubtitles: built configs=${subtitleConfigs.map { "lang=${it.language} selected=${it.selected}" }}")
         if (!enable) {
             engine.disableSubtitles()
         } else {
@@ -1652,6 +1661,7 @@ fun PlayerScreen(
                                                 DropdownMenuItem(
                                                     text = { Text("Off", color = if (!subtitlesEnabled) MaterialTheme.colorScheme.primary else Color.White) },
                                                     onClick = {
+                                                        Log.d("SubDebug", "PlayerScreen MENU: Off tapped (subtitlesEnabled=$subtitlesEnabled)")
                                                         if (subtitlesEnabled) rebuildWithSubtitles(false)
                                                         selectedEmbeddedTrackIndex = -1
                                                         engine.disableSubtitles()
@@ -1670,6 +1680,7 @@ fun PlayerScreen(
                                                         DropdownMenuItem(
                                                             text = { Text(track.lang.uppercase(), color = if (isSelected) MaterialTheme.colorScheme.primary else Color.White) },
                                                             onClick = {
+                                                                Log.d("SubDebug", "PlayerScreen MENU: External track $index selected (lang=${track.lang})")
                                                                 selectedSubtitleIndex = index
                                                                 selectedEmbeddedTrackIndex = -1
                                                                 rebuildWithSubtitles(true)
@@ -1689,6 +1700,7 @@ fun PlayerScreen(
                                                         DropdownMenuItem(
                                                             text = { Text(track.label, color = if (isSelected) MaterialTheme.colorScheme.primary else Color.White) },
                                                             onClick = {
+                                                                Log.d("SubDebug", "PlayerScreen MENU: Embedded track $index selected ('${track.label}' idx=${track.trackIndex})")
                                                                 engine.overrideSubtitleTrack(track.trackIndex, 0)
                                                                 Log.d("PlayerScreen", "selectEmbeddedSubtitle: selected '${track.label}' idx=${track.trackIndex}")
                                                                 selectedEmbeddedTrackIndex = index
