@@ -221,8 +221,7 @@ class MainActivity : ComponentActivity() {
     private fun buildPiPParams(autoEnter: Boolean = false, source: String = "?"): PictureInPictureParams {
         val engine = com.blissless.tensei.stream.PlayerData.playerEngine
         val isPlaying = engine?.isPlaying == true
-        val live = (engine as? com.blissless.tensei.ui.screens.player.MpvEngine)?.liveIsPlaying()
-        android.util.Log.d("serverChange", "buildPiPParams[src=$source] isPlaying=$isPlaying live=$live engine=${engine?.javaClass?.simpleName} engineId=${System.identityHashCode(engine)}")
+        android.util.Log.d("serverChange", "buildPiPParams[src=$source] isPlaying=$isPlaying engine=${engine?.javaClass?.simpleName} engineId=${System.identityHashCode(engine)}")
         val icon = getPipPlayPauseIcon(isPlaying)
         val intent = Intent(ACTION_PIP_PLAY_PAUSE).setPackage(packageName)
         val requestCode = if (isPlaying) 0 else 1
@@ -2703,8 +2702,6 @@ fun MainScreen(
                 onPiPToggle = { viewModel.setSupportsPiP(it) },
                 isInPiPMode = isInPiPMode,
                 onPlayerBoundsChanged = { l, t, r, b -> activity.playerViewBounds = android.graphics.Rect(l, t, r, b) },
-                playerEngine = viewModel.playerEngine.collectAsState().value,
-                anime4kShader = viewModel.anime4kShader.collectAsState().value,
                 discordRichPresence = viewModel.discordRichPresence.collectAsState().value,
             )
             }

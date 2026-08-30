@@ -87,9 +87,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -145,7 +142,6 @@ import com.blissless.tensei.viewmodel.setDefaultSubtitleLang
 import com.blissless.tensei.viewmodel.setDownloadPreferredCategory
 import com.blissless.tensei.viewmodel.setDownloadSubtitleLang
 import com.blissless.tensei.viewmodel.setTrackingPercentage
-import com.blissless.tensei.viewmodel.setAnime4kShader
 import com.blissless.tensei.viewmodel.setForwardSkipSeconds
 import com.blissless.tensei.viewmodel.setBackwardSkipSeconds
 import com.blissless.tensei.viewmodel.setAutoSkipOpening
@@ -155,7 +151,6 @@ import com.blissless.tensei.viewmodel.setSwipeVolume
 import com.blissless.tensei.viewmodel.setSwipeBrightness
 import com.blissless.tensei.viewmodel.setSwipeSwap
 import com.blissless.tensei.viewmodel.setSupportsPiP
-import com.blissless.tensei.viewmodel.setPlayerEngine
 import com.blissless.tensei.viewmodel.setDiscordRichPresence
 import com.blissless.tensei.viewmodel.setCheckUpdatesOnStart
 import com.blissless.tensei.viewmodel.setAutoSyncCrossProviderStartup
@@ -1663,95 +1658,9 @@ private fun PlayerSettingsPage(
     val swipeBrightness by viewModel.swipeBrightness.collectAsState(initial = false)
     val swipeSwap by viewModel.swipeSwap.collectAsState(initial = false)
     val supportsPiP by viewModel.supportsPiP.collectAsState(initial = false)
-    val playerEngine by viewModel.playerEngine.collectAsState(initial = "exo")
-    val anime4kShader by viewModel.anime4kShader.collectAsState(initial = "none")
     val context = LocalContext.current
 
     SettingsPageScaffold(title = "Player Settings", onBack = onBack) {
-        SectionHeader("PLAYER ENGINE")
-        SettingsCard {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                SettingsChoiceChip(label = "ExoPlayer", isSelected = playerEngine == "exo", onClick = { viewModel.setPlayerEngine("exo") })
-                SettingsChoiceChip(label = "MPV", isSelected = playerEngine == "mpv", onClick = { viewModel.setPlayerEngine("mpv") })
-            }
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                "ExoPlayer is the default. MPV offers better codec support.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        if (playerEngine == "mpv") {
-            SectionHeader("ANIME4K SHADERS")
-            SettingsCard {
-                Text(
-                    "Anime4K shaders make anime look sharper and cleaner. Only works with MPV.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                val options = listOf(
-                    "none" to Triple("Off", "No extra processing", ""),
-                    "mode_a" to Triple(
-                        "Mode A (Fast)",
-                        "Quickly sharpens lines and makes low-res anime look cleaner",
-                        "Best for slower devices"
-                    ),
-                    "mode_b" to Triple(
-                        "Mode B (Balanced)",
-                        "Sharpen lines and clean up artifacts while keeping good speed",
-                        "Good balance of quality and performance"
-                    ),
-                    "mode_c" to Triple(
-                        "Mode C (Quality)",
-                        "Best possible image quality, but needs a powerful device",
-                        "Uses more battery and may lag on older phones"
-                    ),
-                    "deblur" to Triple(
-                        "Deblur",
-                        "Reduces blurriness, especially useful for older or low-quality sources",
-                        null
-                    ),
-                    "denoise" to Triple(
-                        "Denoise",
-                        "Removes grain and visual noise from the video",
-                        null
-                    ),
-                )
-                for ((key, triple) in options) {
-                    val (label, description, extra) = triple
-                    SettingsToggle(
-                        title = label,
-                        description = if (!extra.isNullOrEmpty()) "$description\n$extra" else description,
-                        checked = anime4kShader == key,
-                        onCheckedChange = { if (it) viewModel.setAnime4kShader(key) }
-                    )
-                }
-                Spacer(modifier = Modifier.height(4.dp))
-                val anime4kUrl = "https://github.com/bloc97/Anime4K"
-                Text(
-                    buildAnnotatedString {
-                        pushStringAnnotation(tag = "URL", annotation = anime4kUrl)
-                        withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary)) {
-                            append("Source: bloc97/Anime4K")
-                        }
-                        pop()
-                        append(" (MIT License)")
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.clickable {
-                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, anime4kUrl.toUri())
-                        context.startActivity(intent)
-                    }
-                )
-            }
-        }
-
         SectionHeader("SKIP CONTROLS")
         SettingsCard {
             SettingsSliderRow(

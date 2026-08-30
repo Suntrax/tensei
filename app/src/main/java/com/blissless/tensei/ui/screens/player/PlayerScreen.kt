@@ -167,8 +167,6 @@ fun PlayerScreen(
     disableMaterialColors: Boolean = false,
     showBufferIndicator: Boolean = true,
     bufferAheadSeconds: Int = 30,
-    playerEngine: String = "exo",
-    anime4kShader: String = "none",
     swipeVolume: Boolean = false,
     swipeBrightness: Boolean = false,
     swipeSwap: Boolean = false,
@@ -391,17 +389,8 @@ fun PlayerScreen(
         selectedQuality = currentQuality
     }
 
-    val engine = remember(context, bufferAheadSeconds, playerEngine) {
-        when (playerEngine) {
-            "mpv" -> MpvEngine(context)
-            else -> ExoPlayerEngine(context, bufferAheadSeconds) { ref -> onGetCacheDataSourceFactory(ref) }
-        }
-    }
-
-    LaunchedEffect(engine, anime4kShader) {
-        if (engine is MpvEngine) {
-            engine.anime4kShader = anime4kShader
-        }
+    val engine = remember(context, bufferAheadSeconds) {
+        ExoPlayerEngine(context, bufferAheadSeconds) { ref -> onGetCacheDataSourceFactory(ref) }
     }
 
     LaunchedEffect(engine) {
@@ -649,11 +638,7 @@ fun PlayerScreen(
         isInitialLoading = true
 
         // No explicit stop()/clearMediaItems() here: loadMedia() replaces the
-        // current file for both engines (ExoPlayer releases and rebuilds the
-        // player; mpv's loadfile swaps the current playlist entry). Issuing
-        // stop() commands before loadMedia on a reused mpv session can leave the
-        // mpv core in a stale transitional/idle state that silently drops the
-        // subsequent loadfile (no START_FILE/FILE_LOADED), freezing playback.
+        // current file (ExoPlayer releases and rebuilds the player).
 
         // Use pendingSeekPosition for refresh-based seeks, otherwise restore savedPosition.
         // pendingSeekPosition is cleared externally (onBackClick / new episode load) to
@@ -685,12 +670,6 @@ fun PlayerScreen(
         Log.d("SubDebug", "PlayerScreen preparePlayback: built configs=${subtitleConfigs.map { "lang=${it.language} selected=${it.selected}" }}")
 
         Log.d("PlayerScreen", "Preparing playback: videoUrl=${videoUrl.take(120)} referer=$referer subtitleUrl=${subtitleUrl?.take(80)} extensionOkHttpClient=${extensionOkHttpClient != null} videoHeaders=$extensionVideoHeaders")
-
-        // Give mpv time to fully tear down the previous file (its async END_FILE /
-        // stop handling) before loadfile. Issuing stop() + loadfile back-to-back
-        // can race mpv's unload and silently drop the new loadfile (no START_FILE /
-        // FILE_LOADED), leaving playback frozen with no error.
-        delay(300.milliseconds)
 
         engine.loadMedia(
             url = videoUrl,
@@ -1043,8 +1022,7 @@ fun PlayerScreen(
         playbackError = null
 
         // Save current position BEFORE switching (no explicit stop here — loadMedia
-        // replaces the current file for both engines; pre-stopping a reused mpv
-        // session can drop the subsequent loadfile and freeze playback).
+        // replaces the current file on the player).
         val currentDur = engine.duration
         onSavePosition?.invoke(engine.currentPosition, if (currentDur > 0) currentDur else 0L)
         onPositionSaved?.invoke(engine.currentPosition)
@@ -1149,7 +1127,7 @@ fun PlayerScreen(
         // controls fit the reduced-height video area.
         val isCompact = !isFullscreen
         // Player view - recreate when server or engine changes
-        key(serverChangeTrigger, playerEngine) {
+        key(serverChangeTrigger) {
             AndroidView(
                 factory = { _ ->
                     // Apply initial settings; the engine owns and configures its own view
@@ -1186,8 +1164,7 @@ fun PlayerScreen(
             }
         }
 
-        // Apply resize mode to the active engine (ExoPlayer sets PlayerView.resizeMode,
-        // mpv sets video-aspect-override). Covers both engines uniformly.
+        // Apply resize mode to the active ExoPlayer engine (sets PlayerView.resizeMode).
         LaunchedEffect(resizeModeIndex) {
             engine.setResizeMode(resizeModes[resizeModeIndex].first)
         }

@@ -76,9 +76,6 @@ fun MainViewModel.setAutoPlayNextEpisode(enabled: Boolean) =
 fun MainViewModel.setSupportsPiP(enabled: Boolean) =
     userPreferences.setSupportsPiP(enabled)
 
-fun MainViewModel.setPlayerEngine(engine: String) =
-    userPreferences.setPlayerEngine(engine)
-
 fun MainViewModel.setDiscordRichPresence(enabled: Boolean) {
     userPreferences.setDiscordRichPresence(enabled)
     if (enabled) {
@@ -88,9 +85,6 @@ fun MainViewModel.setDiscordRichPresence(enabled: Boolean) {
         com.blissless.tensei.discord.DiscordRichPresence.disconnect()
     }
 }
-
-fun MainViewModel.setAnime4kShader(shader: String) =
-    userPreferences.setAnime4kShader(shader)
 
 fun MainViewModel.setDefaultSubtitleLang(lang: String) =
     userPreferences.setDefaultSubtitleLang(lang)

@@ -310,7 +310,7 @@ suspend fun MainViewModel.playEpisodeWithExtension(
             }
             Log.d(epTag, "playEpisodeWithExtension: found ${allVideos.size} videos for ep $episodeNumber")
             allVideos.forEach { v ->
-                Log.d(epTag, "  video: ${v.video.videoTitle} (${v.video.resolution}p) url=${v.video.videoUrl.take(100)} hoster=${v.hosterName} internalData=${v.video.internalData.take(60)} mpvArgs=${v.video.mpvArgs}")
+                Log.d(epTag, "  video: ${v.video.videoTitle} (${v.video.resolution}p) url=${v.video.videoUrl.take(100)} hoster=${v.hosterName} internalData=${v.video.internalData.take(60)}")
             }
 
             val dubVideos = allVideos.filter {
