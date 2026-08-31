@@ -158,7 +158,7 @@ fun UserProfileScreen(
     val mangaAbandoned by viewModel.mangaDropped.collectAsState()
 
     LaunchedEffect(loginProvider) {
-        if (loginProvider == LoginProvider.ANILIST) {
+        if (loginProvider == LoginProvider.ANILIST || loginProvider == LoginProvider.BOTH) {
             viewModel.loadAniListFavoritesFromStorage()
             // Refresh the Viewer profile (name/avatar/banner/bio/joined/stats) and
             // ensure _userId is populated BEFORE the child fetches that depend on it —
