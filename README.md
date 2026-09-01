@@ -12,7 +12,6 @@ An anime &amp; manga streaming app for Android with a 5-tab, cinema-inspired int
 - **5-tab navigation**: Schedule, Anime, Home, Manga, and Search — with a cinematic vertical-scroll item animation shared across the schedule, status list, and profile favorites/history.
 - **Streaming player**: Media3/ExoPlayer engine with HLS support, multiple server/extension sources, live proxy server, and skip-opening/intro detection.
 - **Torrent &amp; magnet streaming**: Built-in libtorrent4j engine with a local streaming server for magnet links.
-- **Full offline experience**: Download episodes and manga chapters for reading offline, video cache, and a comprehensive cache manager.
 - **Manga reader**: Mihon/Tachiyomi-based reader with horizontal pager and continuous scroll modes, zoomable images, resume progress, and chapter tracking.
 - **Tracking &amp; lists**: Status lists (watching/completed/planning/etc.) for both anime and manga, with cross-provider sync between AniList and MAL (including startup and diff sync).
 - **Profile, favorites &amp; history**: Track favorites and watch/read history for both anime and manga with the cinematic item animation.
