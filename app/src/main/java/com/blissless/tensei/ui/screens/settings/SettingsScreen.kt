@@ -376,7 +376,7 @@ private fun AccountSettingsPage(
             ) {
                 Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Sync Now (AniList â†” MAL)")
+                Text("Sync Now (AniList to MAL)")
             }
             Spacer(modifier = Modifier.height(10.dp))
             Row(
@@ -424,7 +424,7 @@ private fun AccountSettingsPage(
                         )
                     ) {
                         Text(
-                            "AniList â†’ MAL",
+                            "AniList to MAL",
                             color = if (autoSyncCrossProviderDirection)
                                 MaterialTheme.colorScheme.onPrimary
                             else
@@ -444,7 +444,7 @@ private fun AccountSettingsPage(
                         )
                     ) {
                         Text(
-                            "MAL â†’ AniList",
+                            "MAL to AniList",
                             color = if (!autoSyncCrossProviderDirection)
                                 MaterialTheme.colorScheme.onPrimary
                             else

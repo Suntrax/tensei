@@ -930,7 +930,8 @@ private fun MangaFeaturedCarousel(
                     ) {
                         val avgScore = currentManga.averageScore
                         val format = currentManga.format
-                        currentManga.seasonYear?.let { year ->
+                        val releaseYear = currentManga.seasonYear ?: currentManga.startDate?.year
+                        releaseYear?.let { year ->
                             Text(text = year.toString(), color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodyMedium)
                             Text(text = " • ", color = Color.White.copy(alpha = 0.4f), style = MaterialTheme.typography.bodyMedium)
                         }

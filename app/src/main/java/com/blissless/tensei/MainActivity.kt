@@ -144,6 +144,7 @@ import com.blissless.tensei.viewmodel.setSupportsPiP
 import com.blissless.tensei.viewmodel.crossProviderCopyPrompt
 import com.blissless.tensei.viewmodel.applyCrossProviderCopy
 import com.blissless.tensei.viewmodel.dismissCrossProviderCopyPrompt
+import com.blissless.tensei.viewmodel.advanceCrossProviderCopyPrompt
 import com.blissless.tensei.data.models.MangaExploreMedia
 import com.blissless.tensei.data.models.MangaMedia
 import eu.kanade.tachiyomi.animesource.model.Video
@@ -460,28 +461,50 @@ class MainActivity : ComponentActivity() {
             val dialogThemeMode = remember(themeModeStr) { ThemeMode.fromValue(themeModeStr) }
             AppTheme(themeMode = dialogThemeMode, useMonochrome = disableMaterialColors) {
             crossCopyPrompt?.takeIf { it.visible }?.let { prompt ->
-                AlertDialog(
-                    onDismissRequest = { mainViewModel.dismissCrossProviderCopyPrompt() },
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface,
-                    textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    title = { Text("Sync Across Providers", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
-                    text = { Text("You're logged into both AniList and MyAnimeList. " +
-                        "Choose which list to copy across so they match. This copies status, score and progress. " +
-                        "You can also skip and let ongoing changes sync automatically.") },
-                    confirmButton = {
-                        Button(
-                            onClick = { confirmCopyAniListToMal = true },
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                        ) { Text("Copy AniList → MAL") }
-                    },
-                    dismissButton = {
-                        Button(
-                            onClick = { confirmCopyMalToAniList = true },
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
-                        ) { Text("Copy MAL → AniList") }
-                    }
-                )
+                if (!prompt.askDirection) {
+                    // First step: ask whether to enable auto-sync and inform AniList is the main source.
+                    AlertDialog(
+                        onDismissRequest = { mainViewModel.dismissCrossProviderCopyPrompt() },
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        titleContentColor = MaterialTheme.colorScheme.onSurface,
+                        textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        title = { Text("Sync Between Providers?", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
+                        text = { Text("You're logged into both AniList and MyAnimeList.\n\n" +
+                            "AniList is your main list source and will be used to fetch your lists. " +
+                            "Do you want to enable auto-sync so your status, score and progress stay in sync across both providers?") },
+                        confirmButton = {
+                            Button(
+                                onClick = { mainViewModel.advanceCrossProviderCopyPrompt() },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                            ) { Text("Enable Sync") }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { mainViewModel.dismissCrossProviderCopyPrompt() }) { Text("Skip") }
+                        }
+                    )
+                } else {
+                    // Second step: ask which direction the sync should go. AniList remains the main source.
+                    AlertDialog(
+                        onDismissRequest = { mainViewModel.dismissCrossProviderCopyPrompt() },
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        titleContentColor = MaterialTheme.colorScheme.onSurface,
+                        textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        title = { Text("Sync Direction", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
+                        text = { Text("Which direction should the sync go? AniList is your main list source.") },
+                        confirmButton = {
+                            Button(
+                                onClick = { confirmCopyAniListToMal = true },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                            ) { Text("AniList to MAL") }
+                        },
+                        dismissButton = {
+                            Button(
+                                onClick = { confirmCopyMalToAniList = true },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                            ) { Text("MAL to AniList") }
+                        }
+                    )
+                }
             }
 
             if (confirmCopyAniListToMal) {
@@ -490,8 +513,8 @@ class MainActivity : ComponentActivity() {
                     containerColor = MaterialTheme.colorScheme.surface,
                     titleContentColor = MaterialTheme.colorScheme.onSurface,
                     textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    title = { Text("Copy AniList → MyAnimeList") },
-                    text = { Text("This overwrites your MyAnimeList entries with your AniList data (status, score and progress). Continue?") },
+                    title = { Text("Copy AniList to MyAnimeList") },
+                    text = { Text("This overwrites your MyAnimeList entries with your AniList data (status, score and progress) and enables auto-sync from AniList to MyAnimeList. Continue?") },
                     confirmButton = {
                         Button(
                             onClick = {
@@ -513,8 +536,8 @@ class MainActivity : ComponentActivity() {
                     containerColor = MaterialTheme.colorScheme.surface,
                     titleContentColor = MaterialTheme.colorScheme.onSurface,
                     textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    title = { Text("Copy MyAnimeList → AniList") },
-                    text = { Text("This overwrites your AniList entries with your MyAnimeList data (status, score and progress). Continue?") },
+                    title = { Text("Copy MyAnimeList to AniList") },
+                    text = { Text("This overwrites your AniList entries with your MyAnimeList data (status, score and progress) and enables auto-sync from MyAnimeList to AniList. Continue?") },
                     confirmButton = {
                         Button(
                             onClick = {

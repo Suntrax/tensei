@@ -21,7 +21,9 @@ import kotlinx.coroutines.withContext
 
 /** Direction of the one-time cross-provider copy offered on first simultaneous login. */
 data class CrossProviderCopyPrompt(
-    val visible: Boolean
+    val visible: Boolean,
+    /** true = direction step (ask AniList→MAL vs MAL→AniList); false = first step (ask whether to enable auto-sync). */
+    val askDirection: Boolean = false
 )
 
 /**
@@ -130,12 +132,19 @@ fun MainViewModel.offerCrossProviderSync() {
 }
 
 /**
- * Force-show the copy dialog, bypassing the one-time flag. Used by the manual "Sync Now"
- * button in Settings when both providers are active.
+ * Force-show the direction step of the copy dialog, bypassing the one-time flag. Used by the
+ * manual "Sync Now" button in Settings when both providers are active.
  */
 fun MainViewModel.showCrossProviderCopyDialog() {
     if (!isBothActive) return
-    _crossProviderCopyPrompt.value = CrossProviderCopyPrompt(visible = true)
+    _crossProviderCopyPrompt.value = CrossProviderCopyPrompt(visible = true, askDirection = true)
+}
+
+/** The user chose to enable auto-sync; advance from the first step to the direction step. */
+fun MainViewModel.advanceCrossProviderCopyPrompt() {
+    val current = _crossProviderCopyPrompt.value ?: return
+    if (!current.visible) return
+    _crossProviderCopyPrompt.value = CrossProviderCopyPrompt(visible = true, askDirection = true)
 }
 
 /** Dismiss the copy prompt without performing a copy. */
@@ -152,6 +161,9 @@ fun MainViewModel.dismissCrossProviderCopyPrompt() {
 fun MainViewModel.applyCrossProviderCopy(toMal: Boolean) {
     _crossProviderCopyPrompt.value = CrossProviderCopyPrompt(visible = false)
     userPreferences.setCrossProviderCopyDone(true)
+    // Persist the chosen direction and enable the startup auto-sync alongside the one-time copy.
+    userPreferences.setAutoSyncCrossProviderStartup(true)
+    userPreferences.setAutoSyncCrossProviderDirection(toMal)
     viewModelScope.launch(Dispatchers.IO) {
         android.util.Log.d("CrossSync", "applyCrossProviderCopy: direction=${if (toMal) "AniList->MAL" else "MAL->AniList"} " +
             "aniListActive=$isAniListActive malActive=$isMalActive")
