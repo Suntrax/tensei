@@ -47,7 +47,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
@@ -101,13 +100,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
-import androidx.media3.exoplayer.offline.Download
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.blissless.tensei.MainViewModel
 import com.blissless.tensei.data.models.AnimeMedia
 import com.blissless.tensei.data.models.TmdbEpisode
-import com.blissless.tensei.download.EpisodeDownloadManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -345,7 +342,6 @@ fun RichEpisodeScreen(
     isOled: Boolean,
     onDismiss: () -> Unit,
     onEpisodeSelect: (Int, String?) -> Unit,
-    onDownloadClick: (() -> Unit)? = null,
     preferEnglishTitles: Boolean = true,
 ) {
     val context = LocalContext.current
@@ -362,7 +358,6 @@ fun RichEpisodeScreen(
     var selectedEpisode by remember { mutableStateOf<Int?>(null) }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
-    val downloadsInfo by viewModel.episodeDownloadManager.downloadsInfo.collectAsState()
 
     // Extension matching state
     val availableExtensions by viewModel.availableExtensions.collectAsState()
@@ -773,20 +768,6 @@ fun RichEpisodeScreen(
                 Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(24.dp))
             }
 
-            if (onDownloadClick != null) {
-                IconButton(
-                    onClick = onDownloadClick,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(top = statusBarsPadding.calculateTopPadding() + 12.dp, end = 16.dp)
-                        .size(40.dp)
-                        .background(Color.Black.copy(alpha = 0.6f), CircleShape)
-                        .zIndex(10f)
-                ) {
-                    Icon(Icons.Default.Download, contentDescription = "Download", tint = Color.White, modifier = Modifier.size(24.dp))
-                }
-            }
-
             Box(modifier = Modifier
                 .align(Alignment.TopCenter)
                 .padding(top = statusBarsPadding.calculateTopPadding() + 12.dp)
@@ -961,7 +942,6 @@ fun RichEpisodeScreen(
                         val isWatched = episodeNum <= currentProgress
                         val isCurrent = episodeNum == currentProgress + 1
                         val hasAired = episodeNum <= released
-                        val downloadInfo = downloadsInfo["${anime.id}_$episodeNum"]
                         RichTmdbEpisodeCard(
                             episodeNumber = episodeNum,
                             title = ep.title,
@@ -975,7 +955,6 @@ fun RichEpisodeScreen(
                             playbackPositions = playbackPositions,
                             playbackDurations = playbackDurations,
                             animeId = anime.id,
-                            downloadInfo = downloadInfo,
                             onSelect = { selectedEpisode = episodeNum },
                             onPlay = {
                                 if (hasAired) {
@@ -1368,7 +1347,6 @@ private fun RichTmdbEpisodeCard(
     playbackPositions: Map<String, Long> = emptyMap(),
     playbackDurations: Map<String, Long> = emptyMap(),
     animeId: Int = 0,
-    downloadInfo: EpisodeDownloadManager.DownloadInfo? = null,
     onSelect: () -> Unit,
     onPlay: () -> Unit
 ) {
@@ -1563,38 +1541,10 @@ private fun RichTmdbEpisodeCard(
                             color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    if (downloadInfo != null && downloadInfo.state == Download.STATE_COMPLETED) {
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Text(
-                                text = if (downloadInfo.category == "dub") "DUB" else "SUB",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (isOled) Color.White.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                text = "·",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (isOled) Color.White.copy(alpha = 0.25f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                            )
-                            Text(
-                                text = formatDownloadTimestamp(downloadInfo.downloadTimestamp),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (isOled) Color.White.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
                 }
             }
         }
     }
-}
-
-private fun formatDownloadTimestamp(timestamp: Long): String {
-    val sdf = java.text.SimpleDateFormat("MMM dd, yyyy", java.util.Locale.getDefault())
-    return sdf.format(java.util.Date(timestamp))
 }
 
 private fun formatTimeFromMs(ms: Long): String {

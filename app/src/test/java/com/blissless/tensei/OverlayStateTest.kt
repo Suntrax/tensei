@@ -1,6 +1,5 @@
 package com.blissless.tensei
 
-import com.blissless.tensei.data.models.AnimeMedia
 import com.blissless.tensei.data.models.ExploreAnime
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
@@ -109,34 +108,6 @@ class OverlayStateTest {
         val state = OverlayState.AllRelationsDialog(animeId = 50, animeTitle = "Test Anime")
         assertThat(state.animeId).isEqualTo(50)
         assertThat(state.animeTitle).isEqualTo("Test Anime")
-        assertThat(state.previousStates).isEmpty()
-    }
-
-    // ─── EpisodeDownloadDialog ────────────────────────────────────────────
-
-    @Test
-    fun `EpisodeDownloadDialog stores anime`() {
-        val anime = AnimeMedia(
-            id = 1, title = "Test", titleEnglish = null, cover = "",
-            banner = null, progress = 0, totalEpisodes = 12,
-            latestEpisode = 0, status = "CURRENT", averageScore = 80,
-            genres = emptyList(), listStatus = "", listEntryId = 0,
-            year = 2024, malId = null, format = "TV"
-        )
-        val state = OverlayState.EpisodeDownloadDialog(anime = anime)
-        assertThat(state.anime).isEqualTo(anime)
-    }
-
-    @Test
-    fun `EpisodeDownloadDialog has empty previousStates by default`() {
-        val anime = AnimeMedia(
-            id = 1, title = "Test", titleEnglish = null, cover = "",
-            banner = null, progress = 0, totalEpisodes = 12,
-            latestEpisode = 0, status = "CURRENT", averageScore = 80,
-            genres = emptyList(), listStatus = "", listEntryId = 0,
-            year = 2024, malId = null, format = "TV"
-        )
-        val state = OverlayState.EpisodeDownloadDialog(anime = anime)
         assertThat(state.previousStates).isEmpty()
     }
 

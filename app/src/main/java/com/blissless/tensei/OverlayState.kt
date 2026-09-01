@@ -54,10 +54,6 @@ sealed class OverlayState {
         override val previousStates: List<OverlayState> = emptyList()
     ) : OverlayState()
 
-    data class EpisodeDownloadDialog(
-        val anime: AnimeMedia
-    ) : OverlayState()
-
     // ─── Manga ────────────────────────────────────────────────────────────
 
     data class MangaDetailDialog(

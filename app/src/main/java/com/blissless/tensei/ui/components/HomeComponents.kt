@@ -428,10 +428,10 @@ fun HomeAnimeCard(
 
     Column(modifier = Modifier.width(140.dp)) {
         Card(
-            shape = RoundedCornerShape(14.dp),
+            shape = RoundedCornerShape(4.dp),
             modifier = Modifier
                 .height(195.dp)
-                .clip(RoundedCornerShape(14.dp))
+                .clip(RoundedCornerShape(4.dp))
                 .clickable {
                     onClick(
                         if (cardBounds != null && cardBounds!!.width() > 0 && cardBounds!!.height() > 0) {

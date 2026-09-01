@@ -17,9 +17,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Explore
-import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -34,13 +36,13 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
 /**
- * Bottom pill-style navigation bar with four tabs (Schedule, Explore, Home, Downloads).
+ * Bottom pill-style navigation bar with five tabs (Schedule, Anime, Home, Manga, Search).
  *
  * Extracted from MainActivity.kt's MainScreen composable to reduce file size.
  * The selected tab animates to a wider pill with a label; the others collapse
  * to icon-only.
  *
- * @param selectedIndex     Currently selected tab index (0..3)
+ * @param selectedIndex     Currently selected tab index (0..4)
  * @param isOled            Whether OLED-black mode is enabled (affects colors)
  * @param disableMaterialColors Whether to override Material colors with white-on-black
  * @param hideNavbar        When true, the navbar is not rendered
@@ -89,8 +91,8 @@ fun BottomNavigationBar(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    val items = listOf("Schedule", "Explore", "Home", "Downloads")
-                    val icons = listOf(Icons.Default.CalendarMonth, Icons.Default.Explore, Icons.Default.Home, Icons.Default.FileDownload)
+                    val items = listOf("Schedule", "Anime", "Home", "Manga", "Search")
+                    val icons = listOf(Icons.Default.CalendarMonth, Icons.Default.Movie, Icons.Default.Home, Icons.Default.MenuBook, Icons.Default.Search)
 
                     items.forEachIndexed { index, item ->
                         val isSelected = index == selectedIndex

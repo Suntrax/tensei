@@ -1,4 +1,4 @@
-package com.blissless.tensei.ui.screens.settings
+﻿package com.blissless.tensei.ui.screens.settings
 
 import android.content.Context
 import android.net.Uri
@@ -38,10 +38,10 @@ import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.FastRewind
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Storage
@@ -119,10 +119,6 @@ import com.blissless.tensei.viewmodel.setSimplifyEpisodeMenu
 import com.blissless.tensei.viewmodel.setStartupScreen
 import com.blissless.tensei.viewmodel.setPreventScheduleSync
 import com.blissless.tensei.viewmodel.setHideAdultContent
-import com.blissless.tensei.viewmodel.setDownloadDirectoryUri
-import com.blissless.tensei.viewmodel.mangaDownloadDirectoryUri
-import com.blissless.tensei.viewmodel.setMangaDownloadLocation
-import com.blissless.tensei.viewmodel.setKeepDownloadedFiles
 import com.blissless.tensei.viewmodel.setMangaReaderMode
 import com.blissless.tensei.viewmodel.setMangaDataSaver
 import com.blissless.tensei.viewmodel.setMangaPageIndicator
@@ -139,8 +135,6 @@ import com.blissless.tensei.viewmodel.setDefaultExtensionPackage
 import com.blissless.tensei.viewmodel.setDefaultMagnetExtension
 import com.blissless.tensei.viewmodel.setDefaultStreamExtension
 import com.blissless.tensei.viewmodel.setDefaultSubtitleLang
-import com.blissless.tensei.viewmodel.setDownloadPreferredCategory
-import com.blissless.tensei.viewmodel.setDownloadSubtitleLang
 import com.blissless.tensei.viewmodel.setTrackingPercentage
 import com.blissless.tensei.viewmodel.setForwardSkipSeconds
 import com.blissless.tensei.viewmodel.setBackwardSkipSeconds
@@ -159,9 +153,7 @@ import com.blissless.tensei.viewmodel.setAutoUpdateExtensions
 import com.blissless.tensei.viewmodel.loadAvailableMagnetExtensions
 import com.blissless.tensei.viewmodel.loadAvailableStreamExtensions
 import com.blissless.tensei.viewmodel.getVideoCacheSize
-import com.blissless.tensei.viewmodel.getDownloadCacheSize
 import com.blissless.tensei.viewmodel.clearNonEssentialCaches
-import com.blissless.tensei.viewmodel.clearDownloadCache
 import com.blissless.tensei.viewmodel.discoverExtensions
 import com.blissless.tensei.viewmodel.installedExtensions
 import com.blissless.tensei.viewmodel.InstalledExtension
@@ -205,7 +197,6 @@ fun SettingsScreen(
             SettingsGroup("player", "Player Settings", "Playback controls and skipping", Icons.Default.Subscriptions),
             SettingsGroup("reader", "Reader Settings", "Manga reading preferences", Icons.Default.Bookmark),
             SettingsGroup("extensions", "Extensions", "Manage source extensions", Icons.Default.Extension),
-            SettingsGroup("downloads", "Downloads", "Anime and manga download preferences", Icons.Default.Download),
             SettingsGroup("cache", "Cache Management", "Storage and data cleanup", Icons.Default.Storage),
             SettingsGroup("about", "About", "Version and updates", Icons.Default.Info)
         )
@@ -241,7 +232,6 @@ fun SettingsScreen(
                 "player" -> PlayerSettingsPage(viewModel = viewModel, autoSkipOpening = autoSkipOpening, autoSkipEnding = autoSkipEnding, autoPlayNextEpisode = autoPlayNextEpisode, onBack = { selectedGroup = null })
                 "reader" -> ReaderSettingsPage(viewModel = viewModel, onBack = { selectedGroup = null })
                 "extensions" -> ExtensionsSettingsPage(viewModel = viewModel, onBack = { selectedGroup = null })
-                "downloads" -> DownloadsSettingsPage(viewModel = viewModel, onBack = { selectedGroup = null })
                 "cache" -> CacheSettingsPage(viewModel = viewModel, context = LocalContext.current, onBack = { selectedGroup = null })
                 "about" -> AboutSettingsPage(viewModel = viewModel, onBack = { selectedGroup = null })
             }
@@ -251,7 +241,7 @@ fun SettingsScreen(
 
 
 
-// ─── Account ────────────────────────────────────────────────────────────
+// â”€â”€â”€ Account â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @Composable
 private fun AccountSettingsPage(
@@ -386,7 +376,7 @@ private fun AccountSettingsPage(
             ) {
                 Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Sync Now (AniList ↔ MAL)")
+                Text("Sync Now (AniList â†” MAL)")
             }
             Spacer(modifier = Modifier.height(10.dp))
             Row(
@@ -434,7 +424,7 @@ private fun AccountSettingsPage(
                         )
                     ) {
                         Text(
-                            "AniList → MAL",
+                            "AniList â†’ MAL",
                             color = if (autoSyncCrossProviderDirection)
                                 MaterialTheme.colorScheme.onPrimary
                             else
@@ -454,7 +444,7 @@ private fun AccountSettingsPage(
                         )
                     ) {
                         Text(
-                            "MAL → AniList",
+                            "MAL â†’ AniList",
                             color = if (!autoSyncCrossProviderDirection)
                                 MaterialTheme.colorScheme.onPrimary
                             else
@@ -602,7 +592,7 @@ private fun MalLoginButton(viewModel: MainViewModel) {
     }
 }
 
-// ─── Appearance ─────────────────────────────────────────────────────────
+// â”€â”€â”€ Appearance â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @Composable
 private fun AppearanceSettingsPage(
@@ -775,7 +765,7 @@ private fun AppearanceSettingsPage(
     }
 }
 
-// ─── General ────────────────────────────────────────────────────────────
+// â”€â”€â”€ General â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @Composable
 private fun GeneralSettingsPage(
@@ -811,8 +801,8 @@ private fun GeneralSettingsPage(
                 selected = startupScreenState == 1,
                 onClick = { viewModel.setStartupScreen(1) },
                 icon = Icons.Default.Explore,
-                title = "Explore",
-                description = "Browse and discover anime and manga"
+                title = "Anime",
+                description = "Browse and discover anime"
             )
             HorizontalDivider(
                 modifier = Modifier.padding(start = 54.dp),
@@ -834,9 +824,21 @@ private fun GeneralSettingsPage(
             SettingsRadioItem(
                 selected = startupScreenState == 3,
                 onClick = { viewModel.setStartupScreen(3) },
-                icon = Icons.Default.FileDownload,
-                title = "Downloads",
-                description = "Downloaded episodes and chapters"
+                icon = Icons.Default.MenuBook,
+                title = "Manga",
+                description = "Browse and discover manga"
+            )
+            HorizontalDivider(
+                modifier = Modifier.padding(start = 54.dp),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.15f),
+                thickness = 0.5.dp
+            )
+            SettingsRadioItem(
+                selected = startupScreenState == 4,
+                onClick = { viewModel.setStartupScreen(4) },
+                icon = Icons.Default.Search,
+                title = "Search",
+                description = "Search anime and manga"
             )
         }
 
@@ -874,7 +876,7 @@ private fun GeneralSettingsPage(
     }
 }
 
-// ─── Stream Settings ────────────────────────────────────────────────────
+// â”€â”€â”€ Stream Settings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @Composable
 private fun StreamSettingsPage(
@@ -898,21 +900,6 @@ private fun StreamSettingsPage(
     var showExtPicker by remember { mutableStateOf(false) }
     var showSubtitleLangPicker by remember { mutableStateOf(false) }
     val subtitleLanguages = listOf("English", "Arabic", "French", "German", "Italian", "Portuguese", "Russian", "Spanish", "Japanese", "Chinese", "Korean")
-    val downloadDirectoryUri by viewModel.downloadDirectoryUri.collectAsState()
-    val keepDownloadedFiles by viewModel.keepDownloadedFiles.collectAsState()
-    val streamCtx = LocalContext.current
-    val directoryPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocumentTree()
-    ) { uri: Uri? ->
-        if (uri != null) {
-            try {
-                streamCtx.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-            } catch (e: Exception) { ErrorHandler.ignore("SettingsScreen", "best-effort operation failed", e) }
-            viewModel.setDownloadDirectoryUri(uri.toString())
-            viewModel.setKeepDownloadedFiles(true)
-        }
-    }
-
     LaunchedEffect(Unit) {
         viewModel.loadAvailableMagnetExtensions()
         viewModel.loadAvailableStreamExtensions()
@@ -934,101 +921,6 @@ private fun StreamSettingsPage(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
             )
-        }
-
-        if (streamMethod == "magnet") {
-            SectionHeader("DOWNLOAD LOCATION")
-            SettingsCard {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Default.FileDownload,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Keep downloaded files", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-                        Text(
-                            "Save MKV/MP4 files to a custom folder instead of app cache",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                        )
-                    }
-                    Switch(
-                        checked = keepDownloadedFiles,
-                        onCheckedChange = { viewModel.setKeepDownloadedFiles(it) },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                            checkedTrackColor = MaterialTheme.colorScheme.primary,
-                            uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
-                        )
-                    )
-                }
-            }
-            if (keepDownloadedFiles) {
-                SettingsCard {
-                    val displayPath = downloadDirectoryUri?.let { uri ->
-                        try {
-                            java.net.URLDecoder.decode(
-                                uri.substringAfter("%3A").substringAfter(":"),
-                                "UTF-8"
-                            ).let { path ->
-                                if (path.isNotEmpty()) "/$path" else null
-                            }
-                        } catch (e: Exception) { ErrorHandler.report("SettingsScreen", "operation failed, returning null", e); null }
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(
-                                    if (downloadDirectoryUri != null) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
-                                    else MaterialTheme.colorScheme.error.copy(alpha = 0.1f)
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Default.Storage,
-                                contentDescription = null,
-                                tint = if (downloadDirectoryUri != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Download Location", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-                            Text(
-                                if (displayPath != null) displayPath else "No folder selected — files stay in app cache",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                            )
-                        }
-                        TextButton(onClick = { directoryPickerLauncher.launch(null) }) {
-                            Text(
-                                if (downloadDirectoryUri != null) "Change" else "Select",
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                }
-            }
         }
 
         SectionHeader("AUDIO")
@@ -1321,328 +1213,7 @@ private fun StreamSettingsPage(
     }
 }
 
-
-
-// ─── Downloads ──────────────────────────────────────────────────────────
-
-@Composable
-private fun DownloadsSettingsPage(
-    viewModel: MainViewModel,
-    onBack: () -> Unit
-) {
-    val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
-    val downloadPreferredCategory by viewModel.downloadPreferredCategory.collectAsState(initial = "same_as_stream")
-    val downloadSubtitleLang by viewModel.downloadSubtitleLang.collectAsState(initial = "same_as_stream")
-    val streamSubtitleLang by viewModel.defaultSubtitleLang.collectAsState()
-    var isIgnoringBattery by remember { mutableStateOf(checkBatteryOpt(context)) }
-    DisposableEffect(lifecycleOwner) {
-        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
-                isIgnoringBattery = checkBatteryOpt(context)
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
-    val subtitleLanguages = listOf("English", "Arabic", "French", "German", "Italian", "Portuguese", "Russian", "Spanish", "Japanese", "Chinese", "Korean")
-    var showSubtitleLangPicker by remember { mutableStateOf(false) }
-    val streamMethod by viewModel.streamMethod.collectAsState()
-    val downloadDirectoryUri by viewModel.downloadDirectoryUri.collectAsState()
-    val mangaDownloadDirectoryUri by viewModel.mangaDownloadDirectoryUri.collectAsState()
-    val keepDownloadedFiles by viewModel.keepDownloadedFiles.collectAsState()
-    val directoryPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocumentTree()
-    ) { uri: Uri? ->
-        if (uri != null) {
-            try {
-                context.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-            } catch (e: Exception) { ErrorHandler.ignore("SettingsScreen", "best-effort operation failed", e) }
-            viewModel.setDownloadDirectoryUri(uri.toString())
-            viewModel.setKeepDownloadedFiles(true)
-        }
-    }
-    val mangaDirectoryPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocumentTree()
-    ) { uri: Uri? ->
-        if (uri != null) {
-            try {
-                context.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-            } catch (e: Exception) { ErrorHandler.ignore("SettingsScreen", "best-effort operation failed", e) }
-            viewModel.setMangaDownloadLocation(uri.toString())
-        }
-    }
-
-    SettingsPageScaffold(title = "Downloads", onBack = onBack) {
-        SectionHeader("AUDIO")
-        SettingsCard {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                SettingsChoiceChip(label = "Same as stream", isSelected = downloadPreferredCategory == "same_as_stream", onClick = { viewModel.setDownloadPreferredCategory("same_as_stream") })
-                SettingsChoiceChip(label = "SUB", isSelected = downloadPreferredCategory == "sub", onClick = { viewModel.setDownloadPreferredCategory("sub") })
-                SettingsChoiceChip(label = "DUB", isSelected = downloadPreferredCategory == "dub", onClick = { viewModel.setDownloadPreferredCategory("dub") })
-            }
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                "Preferred Audio Category",
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                "Download subbed or dubbed audio when available",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-            )
-        }
-
-        SectionHeader("SUBTITLES")
-        SettingsCard {
-            ClickableSettingsRow(
-                onClick = { showSubtitleLangPicker = true },
-                icon = Icons.Default.Subtitles,
-                title = "Preferred Subtitle Language",
-                subtitle = if (downloadSubtitleLang == "same_as_stream") "Same as stream ($streamSubtitleLang)" else downloadSubtitleLang
-            )
-        }
-
-        if (streamMethod == "magnet") {
-            SectionHeader("DOWNLOAD LOCATION")
-            SettingsCard {
-                val displayPath = downloadDirectoryUri?.let { uri ->
-                    try {
-                        java.net.URLDecoder.decode(
-                            uri.substringAfter("%3A").substringAfter(":"),
-                            "UTF-8"
-                        ).let { path ->
-                            if (path.isNotEmpty()) "/$path" else null
-                        }
-                    } catch (e: Exception) { ErrorHandler.report("SettingsScreen", "operation failed, returning null", e); null }
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(
-                                if (downloadDirectoryUri != null) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
-                                else MaterialTheme.colorScheme.error.copy(alpha = 0.1f)
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Default.Storage,
-                            contentDescription = null,
-                            tint = if (downloadDirectoryUri != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Download Location", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-                        Text(
-                            if (displayPath != null) displayPath else "No folder selected — files stay in app cache",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                        )
-                    }
-                    TextButton(onClick = { directoryPickerLauncher.launch(null) }) {
-                        Text(
-                            if (downloadDirectoryUri != null) "Change" else "Select",
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-            }
-        }
-
-        SectionHeader("BACKGROUND DOWNLOADS")
-        SettingsCard {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(
-                            if (isIgnoringBattery) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
-                            else MaterialTheme.colorScheme.error.copy(alpha = 0.1f)
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        Icons.Default.Storage,
-                        contentDescription = null,
-                        tint = if (isIgnoringBattery) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Battery Optimization", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-                    Text(
-                        if (isIgnoringBattery) "Disabled - downloads will work reliably" else "Disabling it allows background downloads to work reliably",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                    )
-                }
-                TextButton(onClick = {
-                    if (isIgnoringBattery) {
-                        context.toast("Battery optimization is already disabled")
-                    } else {
-                        try {
-                            val intent = android.content.Intent(
-                                android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS
-                            )
-                            context.startActivity(intent)
-                        } catch (_: Exception) {
-                        }
-                    }
-                }) {
-                    Text(
-                        if (isIgnoringBattery) "Disabled" else "Fix",
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-        }
-
-        SectionHeader("MANGA DOWNLOADS")
-        SettingsCard {
-            val mangaDisplayPath = mangaDownloadDirectoryUri?.let { uri ->
-                try {
-                    java.net.URLDecoder.decode(
-                        uri.substringAfter("%3A").substringAfter(":"),
-                        "UTF-8"
-                    ).let { path ->
-                        if (path.isNotEmpty()) "/$path" else null
-                    }
-                } catch (e: Exception) { ErrorHandler.report("SettingsScreen", "operation failed, returning null", e); null }
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(
-                            if (mangaDownloadDirectoryUri != null) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
-                            else MaterialTheme.colorScheme.error.copy(alpha = 0.1f)
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        Icons.Default.Storage,
-                        contentDescription = null,
-                        tint = if (mangaDownloadDirectoryUri != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Manga Download Location", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-                    Text(
-                        if (mangaDisplayPath != null) mangaDisplayPath else "Default — app internal storage",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                    )
-                }
-                TextButton(onClick = { mangaDirectoryPickerLauncher.launch(null) }) {
-                    Text(
-                        if (mangaDownloadDirectoryUri != null) "Change" else "Select",
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                if (mangaDownloadDirectoryUri != null) {
-                    TextButton(onClick = { viewModel.setMangaDownloadLocation(null) }) {
-                        Text("Default", fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        }
-    }
-
-    if (showSubtitleLangPicker) {
-        AlertDialog(
-            onDismissRequest = { showSubtitleLangPicker = false },
-            title = { Text("Preferred Subtitle Language") },
-            text = {
-                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                    val isSameAsStream = downloadSubtitleLang == "same_as_stream"
-                    TextButton(
-                        onClick = { viewModel.setDownloadSubtitleLang("same_as_stream"); showSubtitleLangPicker = false },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            RadioButton(
-                                selected = isSameAsStream,
-                                onClick = null,
-                                colors = RadioButtonDefaults.colors(
-                                    selectedColor = MaterialTheme.colorScheme.primary
-                                )
-                            )
-                            Text(
-                                "Same as stream ($streamSubtitleLang)",
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = if (isSameAsStream) FontWeight.SemiBold else FontWeight.Normal,
-                                modifier = Modifier.weight(1f)
-                            )
-                            if (isSameAsStream) {
-                                Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                            }
-                        }
-                    }
-                    subtitleLanguages.forEach { lang ->
-                        val isSelected = lang == downloadSubtitleLang
-                        TextButton(
-                            onClick = { viewModel.setDownloadSubtitleLang(lang); showSubtitleLangPicker = false },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(16.dp)
-                            ) {
-                                RadioButton(
-                                    selected = isSelected,
-                                    onClick = null,
-                                    colors = RadioButtonDefaults.colors(
-                                        selectedColor = MaterialTheme.colorScheme.primary
-                                    )
-                                )
-                                Text(
-                                    lang,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                if (isSelected) {
-                                    Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = { TextButton(onClick = { showSubtitleLangPicker = false }) { Text("Cancel") } }
-        )
-    }
-}
-
-// ─── Player Settings ────────────────────────────────────────────────────
+// â”€â”€â”€ Player Settings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @Composable
 private fun PlayerSettingsPage(
@@ -1741,7 +1312,7 @@ private fun PlayerSettingsPage(
     }
 }
 
-// ─── Reader Settings ───────────────────────────────────────────────────
+// â”€â”€â”€ Reader Settings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @Composable
 private fun ReaderSettingsPage(
@@ -1897,7 +1468,7 @@ private fun ReaderSettingsPage(
     }
 }
 
-// ─── Cache Management ───────────────────────────────────────────────────
+// â”€â”€â”€ Cache Management â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @Composable
 private fun CacheSettingsPage(
@@ -1906,12 +1477,10 @@ private fun CacheSettingsPage(
     onBack: () -> Unit
 ) {
     var videoCacheSize by remember { mutableLongStateOf(0L) }
-    var downloadCacheSize by remember { mutableLongStateOf(0L) }
     var showClearCacheConfirmation by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         videoCacheSize = viewModel.getVideoCacheSize(context)
-        downloadCacheSize = viewModel.getDownloadCacheSize()
     }
 
     SettingsPageScaffold(title = "Cache Management", onBack = onBack) {
@@ -1924,47 +1493,31 @@ private fun CacheSettingsPage(
                 onClear = { showClearCacheConfirmation = "video" }
             )
         }
-        SettingsCard {
-            CacheRow(
-                icon = Icons.Default.Download,
-                title = "Download Cache",
-                size = formatFileSize(downloadCacheSize),
-                onClear = { showClearCacheConfirmation = "download" }
-            )
-        }
     }
 
     if (showClearCacheConfirmation != null) {
         val isVideo = showClearCacheConfirmation == "video"
-        AlertDialog(
-            onDismissRequest = { showClearCacheConfirmation = null },
-            title = { Text(if (isVideo) "Clear Video Cache" else "Clear Download Cache") },
-            text = {
-                Text(
-                    if (isVideo)
-                        "This will clear all video cache and temporary data. Your playback positions will be preserved."
-                    else
-                        "This will delete all downloaded episodes. They will need to be re-downloaded."
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (isVideo) {
+        if (isVideo) {
+            AlertDialog(
+                onDismissRequest = { showClearCacheConfirmation = null },
+                title = { Text("Clear Video Cache") },
+                text = {
+                    Text("This will clear all video cache and temporary data. Your playback positions will be preserved.")
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
                             viewModel.clearNonEssentialCaches(context)
                             videoCacheSize = 0L
-                        } else {
-                            viewModel.clearDownloadCache()
-                            downloadCacheSize = 0L
-                        }
-                        showClearCacheConfirmation = null
-                        context.toast("Cache cleared")
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) { Text("Clear") }
-            },
-            dismissButton = { TextButton(onClick = { showClearCacheConfirmation = null }) { Text("Cancel") } }
-        )
+                            showClearCacheConfirmation = null
+                            context.toast("Cache cleared")
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    ) { Text("Clear") }
+                },
+                dismissButton = { TextButton(onClick = { showClearCacheConfirmation = null }) { Text("Cancel") } }
+            )
+        }
     }
 }
 
@@ -2003,7 +1556,7 @@ private fun CacheRow(
     }
 }
 
-// ─── Extensions ─────────────────────────────────────────────────────────
+// â”€â”€â”€ Extensions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @Composable
 private fun ExtensionsSettingsPage(
@@ -2023,7 +1576,7 @@ private fun ExtensionsSettingsPage(
     }
 }
 
-// ─── About ──────────────────────────────────────────────────────────────
+// â”€â”€â”€ About â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @Composable
 private fun AboutSettingsPage(

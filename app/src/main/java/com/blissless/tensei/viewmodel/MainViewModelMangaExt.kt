@@ -1,4 +1,4 @@
-package com.blissless.tensei.viewmodel
+﻿package com.blissless.tensei.viewmodel
 
 import android.content.Intent
 import android.net.Uri
@@ -6,12 +6,7 @@ import android.os.SystemClock
 import androidx.lifecycle.viewModelScope
 import com.blissless.tensei.api.myanimelist.MalMangaListEntry
 import com.blissless.tensei.MainViewModel
-import com.blissless.tensei.data.manga.DownloadedManga
-import com.blissless.tensei.data.manga.MangaBatchDownloadState
-import com.blissless.tensei.data.manga.MangaChapterDownload
 import com.blissless.tensei.data.manga.MangaDexManager
-import com.blissless.tensei.data.manga.MangaDownloadManager
-import com.blissless.tensei.data.manga.MangaDownloadTask
 import com.blissless.tensei.data.manga.MangaRepository
 import com.blissless.tensei.data.manga.MangaTrackManager
 import com.blissless.tensei.data.models.MangaActivityNode
@@ -60,7 +55,7 @@ data class ExtensionChapter(
     val pageCount: Int
 )
 
-// ─── Managers (lazily initialized from MainViewModel.init) ──────────
+// â”€â”€â”€ Managers (lazily initialized from MainViewModel.init) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 var MainViewModel.mangaRepository: MangaRepository?
     get() = _mangaRepository
     set(value) { _mangaRepository = value }
@@ -76,12 +71,7 @@ var MainViewModel.mangaDexManager: MangaDexManager?
     set(value) { _mangaDexManager = value }
 private var _mangaDexManager: MangaDexManager? = null
 
-var MainViewModel.mangaDownloadManager: MangaDownloadManager?
-    get() = _mangaDownloadManager
-    set(value) { _mangaDownloadManager = value }
-private var _mangaDownloadManager: MangaDownloadManager? = null
-
-// ─── Extension State ──────────────────────────────────────────────────
+// â”€â”€â”€ Extension State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 private val _installedExtensions = MutableStateFlow<List<InstalledExtension>>(emptyList())
 val MainViewModel.installedExtensions: StateFlow<List<InstalledExtension>> get() = _installedExtensions.asStateFlow()
@@ -188,7 +178,7 @@ private suspend fun MainViewModel.fetchExtensionChapterList(mangaTitle: String):
             android.util.Log.d("MangaDebug", "Title: '$mangaTitle'")
             val cursor = context.contentResolver.query(uri, null, null, null, null)
             if (cursor == null) {
-                android.util.Log.e("MangaDebug", "RESULT: cursor is NULL — content provider not found at authority='$authority'")
+                android.util.Log.e("MangaDebug", "RESULT: cursor is NULL â€” content provider not found at authority='$authority'")
                 android.util.Log.e("MangaDebug", "Check manifest: android:authorities should be '$authority'")
                 return@withContext null
             }
@@ -297,7 +287,7 @@ private fun MainViewModel.fetchExtensionChapterImages(mangaTitle: String, chapte
     }
 }
 
-// ─── State Flows ─────────────────────────────────────────────────────
+// â”€â”€â”€ State Flows â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 private val _mangaContinueReading = MutableStateFlow<List<MangaMedia>>(emptyList())
 val MainViewModel.mangaContinueReading: StateFlow<List<MangaMedia>> get() = _mangaContinueReading.asStateFlow()
@@ -336,7 +326,7 @@ private val _mangaTotalChapters = MutableStateFlow<Int>(0)
 val MainViewModel.mangaTotalChapters: StateFlow<Int> get() = _mangaTotalChapters.asStateFlow()
 
 /**
- * Chapter image loading state — null = loading, empty list = error/no source,
+ * Chapter image loading state â€” null = loading, empty list = error/no source,
  * non-empty = success. Surfaces errors distinctly so the reader can render an error UI.
  */
 private val _mangaChapterImages = MutableStateFlow<List<String>?>(null)
@@ -349,8 +339,8 @@ val MainViewModel.mangaChapterImagesError: StateFlow<String?> get() = _mangaChap
 /**
  * Cached image URL lists keyed by chapterId. Populated by [loadChapterImages] on success and
  * by [prefetchMangaChapterImages] (which scrapes the NEXT chapter while the reader is near the
- * end of the current one). Serving from this cache makes chapter transitions — including
- * auto-advance — instant instead of waiting on a scrape round-trip.
+ * end of the current one). Serving from this cache makes chapter transitions â€” including
+ * auto-advance â€” instant instead of waiting on a scrape round-trip.
  */
 private val _mangaChapterImagesCache = MutableStateFlow<Map<String, List<String>>>(emptyMap())
 
@@ -358,7 +348,7 @@ private val _mangaChapterImagesCache = MutableStateFlow<Map<String, List<String>
 private val _prefetchingChapterIds = mutableSetOf<String>()
 
 /** In-flight chapter-image load. Cancelled whenever a new chapter is requested so only the
- *  most recent load can write to [MainViewModel.mangaChapterImages] — otherwise a slower,
+ *  most recent load can write to [MainViewModel.mangaChapterImages] â€” otherwise a slower,
  *  stale fetch from a previous chapter (rapid next/prev taps) would overwrite the new one. */
 private var chapterImagesJob: Job? = null
 
@@ -386,7 +376,7 @@ val MainViewModel.isLoadingMangaChapters: StateFlow<Boolean> get() = _isLoadingM
 private val _hasLoadedMangaChapters = MutableStateFlow(false)
 val MainViewModel.hasLoadedMangaChapters: StateFlow<Boolean> get() = _hasLoadedMangaChapters.asStateFlow()
 
-// Profile state — real AniList favorites and activity, not faked from tracking lists
+// Profile state â€” real AniList favorites and activity, not faked from tracking lists
 private val _mangaFavorites = MutableStateFlow<List<MangaFavorite>>(emptyList())
 val MainViewModel.mangaFavorites: StateFlow<List<MangaFavorite>> get() = _mangaFavorites.asStateFlow()
 
@@ -400,18 +390,14 @@ val MainViewModel.mangaUserProfile: StateFlow<com.blissless.tensei.data.models.M
 private val _favoritedMangaIds = MutableStateFlow<Set<Int>>(emptySet())
 val MainViewModel.favoritedMangaIds: StateFlow<Set<Int>> get() = _favoritedMangaIds.asStateFlow()
 
-// ─── Initialization ──────────────────────────────────────────────────
+// â”€â”€â”€ Initialization â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 fun MainViewModel.initManga() {
     _mangaRepository = MangaRepository()
     _mangaTrackManager = MangaTrackManager(context)
     _mangaDexManager = MangaDexManager()
-    _mangaDownloadManager = MangaDownloadManager(context) { slug ->
-        mangaTrackManager?.getAllTracking()?.firstOrNull { slugify(it.title) == slug }
-            ?.let { Triple(it.mangaId, it.title, it.cover) }
-    }
     loadLocalMangaTracking()
-    // Discover installed extensions on every init — cheap and surfaces new installs.
+    // Discover installed extensions on every init â€” cheap and surfaces new installs.
     discoverExtensions()
     // Restore the user's previously-selected extension authority (if any).
     restoreExtensionSelection()
@@ -449,10 +435,10 @@ private fun toMangaMedia(track: MangaTrack): MangaMedia {
     )
 }
 
-// ─── Search & Explore ────────────────────────────────────────────────
+// â”€â”€â”€ Search & Explore â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
- * Basic manga search — kept for backward compat. Returns results via callback.
+ * Basic manga search â€” kept for backward compat. Returns results via callback.
  * For new UI, prefer [searchMangaAdvanced] which returns via a StateFlow.
  */
 fun MainViewModel.searchManga(query: String, page: Int = 1, onResult: (List<MangaExploreMedia>) -> Unit = {}) {
@@ -481,7 +467,7 @@ suspend fun MainViewModel.searchMangaAdvanced(
 suspend fun MainViewModel.fetchMangaExplore() {
     android.util.Log.d("MangaExplore", "fetchMangaExplore: start, mangaRepository=${mangaRepository != null}")
     _isLoadingManga.value = true
-    // Pass the auth token when available — AniList may treat authenticated requests differently
+    // Pass the auth token when available â€” AniList may treat authenticated requests differently
     // during rate-limiting/outages (HTTP 403 "API temporarily disabled").
     val token = authToken.value
     val sections = mangaRepository?.fetchExploreSections(token) ?: run {
@@ -489,7 +475,7 @@ suspend fun MainViewModel.fetchMangaExplore() {
         emptyMap()
     }
     android.util.Log.d("MangaExplore", "fetchMangaExplore: got ${sections.size} sections, keys=${sections.keys}")
-    // Only overwrite existing data with a successful fetch — never wipe cached sections
+    // Only overwrite existing data with a successful fetch â€” never wipe cached sections
     // with an empty response (network hiccup or API outage).
     if (sections.isNotEmpty()) {
         _mangaExploreSections.value = sections
@@ -563,7 +549,7 @@ suspend fun MainViewModel.fetchMangaLists(): Boolean {
     return true
 }
 
-// ─── Profile: real AniList favorites & activity ──────────────────────
+// â”€â”€â”€ Profile: real AniList favorites & activity â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Fetch the user's manga favorites + activity + profile stats from AniList.
@@ -615,7 +601,7 @@ fun MainViewModel.toggleMangaFavorite(mangaId: Int) {
 /** Returns true if the given manga is currently favorited on AniList. */
 fun MainViewModel.isMangaFavorited(mangaId: Int): Boolean = mangaId in _favoritedMangaIds.value
 
-// ─── Detail ──────────────────────────────────────────────────────────
+// â”€â”€â”€ Detail â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 suspend fun MainViewModel.fetchMangaDetail(mangaId: Int) {
     android.util.Log.d("MangaDetail", "fetchMangaDetail: START mangaId=$mangaId")
@@ -633,7 +619,7 @@ suspend fun MainViewModel.fetchMangaDetail(mangaId: Int) {
             "format=${detail.format} source=${detail.source} volumes=${detail.volumes} " +
             "rankings=${detail.rankings.size} externalLinks=${detail.externalLinks.size}")
     } else {
-        android.util.Log.w("MangaDetail", "fetchMangaDetail: FAILED (null) mangaId=$mangaId — detail screen will fall back to shallow MangaMedia.asDetail()")
+        android.util.Log.w("MangaDetail", "fetchMangaDetail: FAILED (null) mangaId=$mangaId â€” detail screen will fall back to shallow MangaMedia.asDetail()")
     }
     _isLoadingManga.value = false
     android.util.Log.d("MangaDetail", "fetchMangaDetail: END mangaId=$mangaId isLoadingManga=${_isLoadingManga.value}")
@@ -689,15 +675,15 @@ suspend fun MainViewModel.fetchMangaAllRelations(mangaId: Int): List<MangaRelati
 suspend fun MainViewModel.fetchMangaAllRecommendations(mangaId: Int): List<MangaMedia> =
     mangaRepository?.fetchMangaAllRecommendations(mangaId) ?: emptyList()
 
-// ─── Chapters ────────────────────────────────────────────────────────
+// â”€â”€â”€ Chapters â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Load the chapter list for a manga. Matches oni's exact flow:
  *
- * 1. Fetch MangaDex aggregate FIRST (for count/volume metadata only — NOT for the chapter list)
- * 2. Fetch extension chapter list (atsu.moe) — this is the actual source of truth
- * 3. If extension returns chapters → use them with URL scheme `anilist_${mediaId}_ch_${number}`
- * 4. If extension returns nothing → synthesize 1..N fallback using AniList/MangaDex count
+ * 1. Fetch MangaDex aggregate FIRST (for count/volume metadata only â€” NOT for the chapter list)
+ * 2. Fetch extension chapter list (atsu.moe) â€” this is the actual source of truth
+ * 3. If extension returns chapters â†’ use them with URL scheme `anilist_${mediaId}_ch_${number}`
+ * 4. If extension returns nothing â†’ synthesize 1..N fallback using AniList/MangaDex count
  *
  * The chapter URL is a routing token, NOT a real URL. The chapter number is later extracted
  * from the chapter TITLE (not the URL) when scraping images, matching oni's contract.
@@ -709,31 +695,11 @@ suspend fun MainViewModel.loadMangaChapters(mangaId: Int, title: String) {
     _mangaTotalChapters.value = 0
     mangaTrackManager?.resetTotalChapters(mangaId)
 
-    // Without a manga extension there is no real chapter source. If the manga has downloaded
-    // chapters, fall back to them so the reader still works fully offline. Otherwise the
-    // synthetic fallback (AniList chapter count) is wrong for releasing manga, so skip it
-    // entirely — the reader shows the "select an extension" screen instead of a bogus list.
+    // Without a manga extension there is no real chapter source, so skip the synthetic
+    // fallback (AniList chapter count) entirely â€” it is wrong for releasing manga. The reader
+    // shows the "select an extension" screen instead of a bogus list.
     if (_selectedExtensionAuthority.value == null) {
-        val downloaded = mangaDownloadManager?.getDownloadedChapters(mangaId) ?: emptyList()
-        if (downloaded.isNotEmpty()) {
-            android.util.Log.d("MangaChapters", "loadMangaChapters: no extension, serving ${downloaded.size} downloaded chapters")
-            _mangaExtensionTitle.value = null
-            val downloadedChapters = downloaded.sortedBy { it.chapterNumber }.map { ch ->
-                MangaChapter(
-                    url = "anilist_${mangaId}_ch_${formatChapterNumberLocal(ch.chapterNumber)}",
-                    title = if (ch.chapterTitle.isNotBlank()) ch.chapterTitle else "Chapter ${formatChapterNumberLocal(ch.chapterNumber)}",
-                    chapterId = "anilist_${mangaId}_ch_${formatChapterNumberLocal(ch.chapterNumber)}",
-                    chapterNumber = ch.chapterNumber
-                )
-            }
-            _mangaChapters.value = downloadedChapters
-            mangaTrackManager?.updateTotalChapters(mangaId, downloadedChapters.size, null)
-            loadLocalMangaTracking()
-            _hasLoadedMangaChapters.value = true
-            _isLoadingMangaChapters.value = false
-            return
-        }
-        android.util.Log.w("MangaChapters", "loadMangaChapters: no extension selected — skipping chapter list generation")
+        android.util.Log.w("MangaChapters", "loadMangaChapters: no extension selected â€” skipping chapter list generation")
         _mangaChapters.value = emptyList()
         _hasLoadedMangaChapters.value = true
         _isLoadingMangaChapters.value = false
@@ -744,7 +710,7 @@ suspend fun MainViewModel.loadMangaChapters(mangaId: Int, title: String) {
     android.util.Log.d("MangaChapters", "loadMangaChapters: detail=${detail != null} detail.chapters=${detail?.chapters} detail.title=${detail?.title}")
     var chapters = emptyList<MangaChapter>()
 
-    // Resolve the title — prefer English, then Romaji, then the passed-in title
+    // Resolve the title â€” prefer English, then Romaji, then the passed-in title
     val resolvedTitle = detail?.titleEnglish?.takeIf { it.isNotBlank() }
         ?: detail?.title?.takeIf { it.isNotBlank() }
         ?: title
@@ -771,7 +737,7 @@ suspend fun MainViewModel.loadMangaChapters(mangaId: Int, title: String) {
         }
     }
 
-    // --- 2. Fetch extension chapter list (atsu.moe) — the actual source of truth ---
+    // --- 2. Fetch extension chapter list (atsu.moe) â€” the actual source of truth ---
     val titlesToTry = listOfNotNull(
         resolvedTitle,
         detail?.titleEnglish?.takeIf { it.isNotBlank() },
@@ -788,7 +754,7 @@ suspend fun MainViewModel.loadMangaChapters(mangaId: Int, title: String) {
         val extResult = fetchExtensionChapterList(t)
         val resultChapters = extResult?.first
         val resultTotal = extResult?.second ?: 0
-        // Keep the highest totalChapters seen across attempts — a later failed/null result
+        // Keep the highest totalChapters seen across attempts â€” a later failed/null result
         // must not wipe the count reported by an earlier successful query.
         if (resultTotal > extTotalChapters) extTotalChapters = resultTotal
         android.util.Log.d("MangaChapters", "loadMangaChapters: extension returned ${resultChapters?.size ?: 0} chapters (total=$resultTotal) for '$t'")
@@ -815,10 +781,7 @@ suspend fun MainViewModel.loadMangaChapters(mangaId: Int, title: String) {
     } else if (extTotalChapters > 0) {
         // The extension reports the CURRENT release count (totalChapters) but returned no
         // chapter entries for this title (e.g. the source page only exposes the count).
-        // Use the extension total — the authoritative current number — as the chapter list.
-        // This must NOT be replaced by the downloaded-chapter list: downloaded chapters still
-        // open instantly because loadChapterImages serves local files by chapter number first,
-        // and the count here is what home / detail / the chapter selection must show.
+        // Use the extension total â€” the authoritative current number â€” as the chapter list.
         android.util.Log.d("MangaChapters", "loadMangaChapters: extension returned only totalChapters=$extTotalChapters, building synthetic list")
         _mangaExtensionTitle.value = null
         chapters = (1..extTotalChapters).map { i ->
@@ -830,43 +793,27 @@ suspend fun MainViewModel.loadMangaChapters(mangaId: Int, title: String) {
             )
         }
     } else {
-        // Extension gave no data at all (e.g. offline). If this manga has downloaded chapters,
-        // serve those so the reader stays fully offline even when an extension IS selected
-        // (the reader's loadChapterImages serves local files first).
-        val downloaded = mangaDownloadManager?.getDownloadedChapters(mangaId) ?: emptyList()
-        if (downloaded.isNotEmpty()) {
-            android.util.Log.d("MangaChapters", "loadMangaChapters: extension unavailable, serving ${downloaded.size} downloaded chapters")
-            _mangaExtensionTitle.value = null
-            chapters = downloaded.sortedBy { it.chapterNumber }.map { ch ->
+        // Extension gave no data at all (e.g. offline). Fall back to synthetic chapter list.
+        android.util.Log.d("MangaChapters", "loadMangaChapters: no extension chapters, using synthetic fallback")
+        _mangaExtensionTitle.value = null
+        // --- 3. Fallback: synthetic chapter list from the best available count ---
+        // Only reached when the extension returned neither chapters nor a total.
+        // Priority: MangaDex latest > AniList chapters > 0
+        // AniList often returns chapters=null for ongoing manga, so it's the last resort.
+        val fallbackTotal = when {
+            mdLatestChapter != null && mdLatestChapter > 0 -> mdLatestChapter
+            detail?.chapters != null && detail.chapters > 0 -> detail.chapters
+            else -> 0
+        }
+        android.util.Log.d("MangaChapters", "loadMangaChapters: fallbackTotal=$fallbackTotal (mdLatest=$mdLatestChapter, detail.chapters=${detail?.chapters})")
+        if (fallbackTotal > 0) {
+            chapters = (1..fallbackTotal).map { i ->
                 MangaChapter(
-                    url = "anilist_${mangaId}_ch_${formatChapterNumberLocal(ch.chapterNumber)}",
-                    title = if (ch.chapterTitle.isNotBlank()) ch.chapterTitle else "Chapter ${formatChapterNumberLocal(ch.chapterNumber)}",
-                    chapterId = "anilist_${mangaId}_ch_${formatChapterNumberLocal(ch.chapterNumber)}",
-                    chapterNumber = ch.chapterNumber
+                    url = "anilist_${mangaId}_ch_$i",
+                    title = "Chapter $i",
+                    chapterId = "anilist_${mangaId}_ch_$i",
+                    chapterNumber = i.toFloat()
                 )
-            }
-        } else {
-            android.util.Log.d("MangaChapters", "loadMangaChapters: no extension chapters, using synthetic fallback")
-            _mangaExtensionTitle.value = null
-            // --- 3. Fallback: synthetic chapter list from the best available count ---
-            // Only reached when the extension returned neither chapters nor a total.
-            // Priority: MangaDex latest > AniList chapters > 0
-            // AniList often returns chapters=null for ongoing manga, so it's the last resort.
-            val fallbackTotal = when {
-                mdLatestChapter != null && mdLatestChapter > 0 -> mdLatestChapter
-                detail?.chapters != null && detail.chapters > 0 -> detail.chapters
-                else -> 0
-            }
-            android.util.Log.d("MangaChapters", "loadMangaChapters: fallbackTotal=$fallbackTotal (mdLatest=$mdLatestChapter, detail.chapters=${detail?.chapters})")
-            if (fallbackTotal > 0) {
-                chapters = (1..fallbackTotal).map { i ->
-                    MangaChapter(
-                        url = "anilist_${mangaId}_ch_$i",
-                        title = "Chapter $i",
-                        chapterId = "anilist_${mangaId}_ch_$i",
-                        chapterNumber = i.toFloat()
-                    )
-                }
             }
         }
     }
@@ -874,7 +821,7 @@ suspend fun MainViewModel.loadMangaChapters(mangaId: Int, title: String) {
     android.util.Log.d("MangaDebug", "loadMangaChapters: final chapters.size=${chapters.size}")
     _mangaChapters.value = chapters
 
-    // Count only integer chapters for the display total — semi-chapters (e.g. 238.5) should
+    // Count only integer chapters for the display total â€” semi-chapters (e.g. 238.5) should
     // not inflate the denominator or count as full chapters toward AniList progress.
     // Use tolerance-based check to handle float imprecision (e.g. 238.00002f).
     val integerChapterCount = chapters.count { ch ->
@@ -912,13 +859,13 @@ suspend fun MainViewModel.loadMangaChapters(mangaId: Int, title: String) {
     _isLoadingMangaChapters.value = false
 }
 
-// ─── Chapter Images ──────────────────────────────────────────────────
+// â”€â”€â”€ Chapter Images â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Load the image URL list for a single chapter. Matches oni's exact flow:
  *
  * 1. Extract the chapter number from the chapter TITLE (not the URL)
- *    Title format: "Chapter 346" or "Chapter 346.2: Some Title" → "346" or "346.2"
+ *    Title format: "Chapter 346" or "Chapter 346.2: Some Title" â†’ "346" or "346.2"
  * 2. Resolve the manga title (extension-matched title > detail title > passed title)
  * 3. Call the extension's /scrape endpoint with manga=<title>&chapter=<number>
  * 4. Parse the {chapter:{images:[...]}} JSON response
@@ -928,28 +875,6 @@ suspend fun MainViewModel.loadMangaChapters(mangaId: Int, title: String) {
 fun MainViewModel.loadChapterImages(chapterId: String, useDataSaver: Boolean = false, mangaTitle: String? = null, chapterTitle: String? = null, mangaId: Int = 0) {
     chapterImagesJob?.cancel()
     chapterImagesJob = viewModelScope.launch {
-        // Offline-first: if this chapter is downloaded, serve the local page files straight
-        // from disk. No network, no extension scrape — this is what makes reading work when
-        // the connection is down (and makes downloaded chapters open instantly).
-        // Titles can be "Chapter 1", "Chapter 1.5: Title", or the local "Ch. 1" format.
-        val chapterNumber = chapterTitle
-            ?.replaceFirst("Chapter ", "")
-            ?.replaceFirst("Ch. ", "")
-            ?.substringBefore(":")
-            ?.trim()
-            ?.toFloatOrNull()
-        if (mangaId > 0 && chapterNumber != null) {
-            val downloaded = mangaDownloadManager?.getDownloadedChapters(mangaId)
-                ?.firstOrNull { it.chapterNumber == chapterNumber }
-            if (downloaded != null && downloaded.pageFiles.isNotEmpty()) {
-                android.util.Log.d("MangaReader", "loadChapterImages: serving ${downloaded.pageFiles.size} LOCAL pages for downloaded chapter $chapterNumber")
-                _mangaChapterImagesCache.value = _mangaChapterImagesCache.value + (chapterId to downloaded.pageFiles)
-                _mangaChapterImages.value = downloaded.pageFiles
-                _mangaChapterImagesError.value = null
-                return@launch
-            }
-        }
-
         // Serve from the prefetch cache first so chapter transitions (incl. auto-advance)
         // load instantly instead of waiting on a scrape round-trip.
         _mangaChapterImagesCache.value[chapterId]?.let { cached ->
@@ -965,7 +890,7 @@ fun MainViewModel.loadChapterImages(chapterId: String, useDataSaver: Boolean = f
         android.util.Log.d("MangaReader", "loadChapterImages: chapterId='$chapterId' chapterTitle='$chapterTitle' mangaTitle='$mangaTitle' mangaId=$mangaId")
 
         // Extract the chapter number from the chapter TITLE (matching oni's contract)
-        // Title format: "Chapter 346" or "Chapter 346.2: Some Title" → "346" or "346.2"
+        // Title format: "Chapter 346" or "Chapter 346.2: Some Title" â†’ "346" or "346.2"
         val chapterParam = chapterTitle?.let { title ->
             title.removePrefix("Chapter ").substringBefore(":").trim()
         } ?: chapterId.substringAfterLast("_ch_").trim()
@@ -990,7 +915,7 @@ fun MainViewModel.loadChapterImages(chapterId: String, useDataSaver: Boolean = f
         if (authority == null) {
             android.util.Log.w("MangaReader", "loadChapterImages: no extension selected")
             _mangaChapterImages.value = emptyList()
-            _mangaChapterImagesError.value = "No manga extension selected. Pick one in Settings → Extensions to read this chapter."
+            _mangaChapterImagesError.value = "No manga extension selected. Pick one in Settings â†’ Extensions to read this chapter."
             return@launch
         }
 
@@ -1022,20 +947,10 @@ fun MainViewModel.loadChapterImages(chapterId: String, useDataSaver: Boolean = f
  * (manually or via auto-advance) is instant. Never touches [mangaChapterImages], so the reader
  * keeps showing the current chapter. Skips chapters that are already cached or in flight.
  */
-fun MainViewModel.prefetchMangaChapterImages(chapter: MangaChapter?, mangaTitle: String? = null, mangaId: Int = 0, downloadedChapterNumbers: Set<Float> = emptySet()) {
+fun MainViewModel.prefetchMangaChapterImages(chapter: MangaChapter?, mangaTitle: String? = null, mangaId: Int = 0) {
     val next = chapter ?: return
     if (_mangaChapterImagesCache.value.containsKey(next.chapterId)) return
     if (!_prefetchingChapterIds.add(next.chapterId)) return
-    // Already downloaded — the chapter opens straight from disk, nothing to prefetch.
-    // This MUST use the in-memory scan result, never storage.isChapterDownloaded(): that does
-    // real filesystem/SAF work, and this runs on the main thread from the reader's near-end
-    // prefetch effect. The old code removed the id right after the check, so that main-thread
-    // I/O re-ran on EVERY scroll frame past ~90% — the reader janked at the sync-threshold
-    // point in both online and offline modes. Leaving the id in the in-flight set makes this a
-    // one-time check per session (a downloaded chapter opens from disk anyway).
-    if (mangaId > 0 && next.chapterNumber in downloadedChapterNumbers) {
-        return
-    }
 
     viewModelScope.launch {
         try {
@@ -1070,13 +985,13 @@ fun MainViewModel.clearChapterImages() {
     _mangaChapterImagesError.value = null
 }
 
-// ─── Tracking ────────────────────────────────────────────────────────
+// â”€â”€â”€ Tracking â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Mark a chapter as read locally. If the user has no track for this manga yet, one is auto-created
  * with status CURRENT (matching oni's behavior).
  *
- * The AniList progress push is NOT done here — [onMangaScrollProgress] schedules a single
+ * The AniList progress push is NOT done here â€” [onMangaScrollProgress] schedules a single
  * debounced (3s) AniList update when the sync threshold is reached. This function is called on
  * every scroll frame above the threshold, so pushing here would fire one mutation per frame and
  * spam/rate-limit the API (which silently breaks later updates, including manual status changes).
@@ -1096,7 +1011,7 @@ fun MainViewModel.markMangaChapterRead(mangaId: Int, chapter: MangaChapter, mang
 }
 
 /**
- * Called when a chapter is opened in the reader. NOTE: this intentionally does nothing — a local
+ * Called when a chapter is opened in the reader. NOTE: this intentionally does nothing â€” a local
  * track is created lazily only once the user actually reads (see updateMangaScrollProgress), so
  * merely opening a chapter does not add the manga to tracking. Retained (empty) as a stable API
  * so the reader's "opened" call site still documents the intended entry point.
@@ -1115,7 +1030,7 @@ fun MainViewModel.updateMangaProgress(mangaId: Int, progress: Float) {
     loadLocalMangaTracking()
 }
 
-// ─── Manga → AniList sync queue (local-first, debounced) ──────────────
+// â”€â”€â”€ Manga â†’ AniList sync queue (local-first, debounced) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Mirrors the anime queueSync/executePendingSyncs pattern: the UI is updated
 // immediately from local tracking and the AniList mutation is pushed in the
 // background after a short debounce. Rapid changes for the same manga coalesce
@@ -1135,7 +1050,7 @@ private val pendingMangaSyncs = mutableMapOf<Int, PendingMangaSync>()
 private var mangaSyncJob: Job? = null
 
 // Scroll-progress persistence is throttled so the reader doesn't write SharedPreferences
-// (full JSON encode of every track) on every scroll frame — that per-frame write, plus the
+// (full JSON encode of every track) on every scroll frame â€” that per-frame write, plus the
 // repeated threshold-crossing work, was the source of jank once the autosync threshold hit.
 private const val MANGA_SCROLL_PERSIST_INTERVAL_MS = 500L
 private var lastMangaScrollPersistTime = 0L
@@ -1147,7 +1062,7 @@ private val mangaTrackEnsured = mutableSetOf<Int>()
 
 // Chapters already marked read + pushed to AniList this session, keyed "$mangaId:$chapterId".
 // The threshold-crossing path (track writes, tracking-list refresh, debounced sync re-queue)
-// must run once per chapter — otherwise every scroll frame past the threshold re-runs it.
+// must run once per chapter â€” otherwise every scroll frame past the threshold re-runs it.
 private val mangaReadSyncedChapters = mutableSetOf<String>()
 
 private fun MainViewModel.queueMangaSync(
@@ -1170,27 +1085,27 @@ private fun MainViewModel.queueMangaSync(
     mangaSyncJob?.cancel()
     // Run the push on a background dispatcher. The mutation is a network call, and the
     // post-push refresh (fetchMangaLists) merges every AniList row into local tracking with
-    // per-item SharedPreferences reads/writes — none of that may run on the main thread, or
+    // per-item SharedPreferences reads/writes â€” none of that may run on the main thread, or
     // the reader janks ~2s after progress crosses the sync threshold.
     mangaSyncJob = viewModelScope.launch(Dispatchers.IO) {
         delay(MainViewModel.SYNC_DEBOUNCE_MS)
         // Run the push to completion even if a newer sync is queued mid-flight.
         // Cancelling the executing job would abort the network call in progress and
-        // skip the re-queue for failed pushes — rapid chapter flips (next-chapter
+        // skip the re-queue for failed pushes â€” rapid chapter flips (next-chapter
         // button) hit this constantly, silently dropping AniList updates.
         withContext(NonCancellable) { executeMangaPendingSyncs() }
     }
 }
 
 /**
- * Flush any pending manga → AniList syncs immediately, skipping the debounce.
+ * Flush any pending manga â†’ AniList syncs immediately, skipping the debounce.
  * Called when the reader closes so progress read in the last few seconds isn't
  * lost if the app is killed within the debounce window.
  */
 fun MainViewModel.flushMangaSync() {
     if (pendingMangaSyncs.isEmpty()) return
     mangaSyncJob?.cancel()
-    // Background dispatcher — see queueMangaSync for why the sync must not run on main.
+    // Background dispatcher â€” see queueMangaSync for why the sync must not run on main.
     mangaSyncJob = viewModelScope.launch(Dispatchers.IO) {
         withContext(NonCancellable) { executeMangaPendingSyncs() }
     }
@@ -1338,7 +1253,7 @@ fun MainViewModel.onMangaScrollProgress(
 
     val threshold = userPreferences.mangaSyncThreshold.value / 100f
     if (scrollPercent >= threshold) {
-        // Mark the chapter read (and push to AniList) only ONCE per chapter — on the first frame
+        // Mark the chapter read (and push to AniList) only ONCE per chapter â€” on the first frame
         // that crosses the threshold. Without this guard every subsequent scroll frame re-runs the
         // track writes, the tracking-list StateFlow refresh, and the debounced sync re-queue,
         // which janks the reader once the threshold is reached.
@@ -1367,13 +1282,13 @@ fun MainViewModel.setMangaSyncThreshold(percent: Int) {
 }
 
 fun MainViewModel.updateMangaScrollProgress(mangaId: Int, scrollProgress: Float, mangaTitle: String = "", mangaCover: String = "") {
-    // Guard against NaN/Infinity — same defensive pattern as oni's TrackingManager
+    // Guard against NaN/Infinity â€” same defensive pattern as oni's TrackingManager
     val safe = if (scrollProgress.isNaN() || scrollProgress.isInfinite()) 0f else scrollProgress
-    // NOTE: Track creation is intentionally NOT done here — it was previously called on first
+    // NOTE: Track creation is intentionally NOT done here â€” it was previously called on first
     // scroll progress (safe > 0f) which caused every opened chapter to appear in "Continue
     // Reading" immediately, even without the user reading enough. Track creation is now handled
     // exclusively by markMangaChapterRead, which fires only when the sync threshold is crossed.
-    // Persist scroll progress — throttled, because writing SharedPreferences (full JSON encode of
+    // Persist scroll progress â€” throttled, because writing SharedPreferences (full JSON encode of
     // all tracks) on every scroll frame is the jank source once the reader is at/over the sync
     // threshold. Resets to 0 (opening a non-resume chapter) are rare and must land immediately so
     // stale Continue Reading cards clear correctly; the final persisted value of a scroll gesture
@@ -1435,7 +1350,7 @@ fun MainViewModel.dismissMangaContinueReading(mangaId: Int) {
     loadLocalMangaTracking()
 }
 
-// ─── MAL manga sync & favorites ─────────────────────────────────────────────
+// â”€â”€â”€ MAL manga sync & favorites â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /** MAL manga favorites held locally (MAL has no favorite-write API) keyed by AniList/manga id. */
 private val _malMangaFavorites = MutableStateFlow<Set<Int>>(emptySet())
@@ -1474,7 +1389,7 @@ internal suspend fun MainViewModel.fetchMalMangaList() {
     loadMalMangaFavoritesFromCache()
 }
 
-/** Map an AniList manga id → its MAL id (idMal), using detail + tracked lists. */
+/** Map an AniList manga id â†’ its MAL id (idMal), using detail + tracked lists. */
 internal fun MainViewModel.resolveMangaIdForMal(malId: Int): Int? {
     _mangaDetail.value?.takeIf { it.malId == malId }?.id?.let { return it }
     val inLists = _mangaContinueReading.value + _mangaCurrentlyReading.value +
@@ -1513,147 +1428,3 @@ fun MainViewModel.toggleMalMangaFavorite(mangaId: Int) {
 
 /** True when the manga (by AniList id) is in the local MAL-favorites set. */
 fun MainViewModel.isMangaMalFavorited(mangaId: Int): Boolean = mangaId in _malMangaFavorites.value
-
-// ─── Downloads ───────────────────────────────────────────────────────
-
-/** Stable fallback flows used until [initManga] creates the download manager. */
-private val _emptyBatchState = MutableStateFlow<MangaBatchDownloadState?>(null)
-private val _emptyDownloadsFlow = MutableStateFlow<List<DownloadedManga>>(emptyList())
-private val _emptyActiveDownloadsFlow = MutableStateFlow<List<MangaDownloadTask>>(emptyList())
-
-/** Live batch-download progress for the download dialog (null when idle). */
-val MainViewModel.mangaBatchDownloadState: StateFlow<MangaBatchDownloadState?>
-    get() = mangaDownloadManager?.batchDownloadState ?: _emptyBatchState
-
-/** Reactive list of downloaded manga (refreshed on every scan). */
-val MainViewModel.mangaDownloads: StateFlow<List<DownloadedManga>>
-    get() = mangaDownloadManager?.downloadedManga ?: _emptyDownloadsFlow
-
-/** Live list of queued/downloading manga chapter tasks. */
-val MainViewModel.mangaActiveDownloads: StateFlow<List<MangaDownloadTask>>
-    get() = mangaDownloadManager?.activeDownloads ?: _emptyActiveDownloadsFlow
-
-/** True when the last scan failed because the app lost access to the selected folder. */
-val MainViewModel.mangaLocationPermissionDenied: StateFlow<Boolean>
-    get() = mangaDownloadManager?.locationPermissionDenied ?: MutableStateFlow(false)
-
-/**
- * Re-scans the current download location. Called when the Manga Downloads screen opens so
- * files moved into the folder while the app was running (or after a reinstall) show up.
- */
-fun MainViewModel.refreshMangaDownloads() {
-    mangaDownloadManager?.scanDownloadedManga()
-}
-
-fun MainViewModel.downloadMangaChapter(mangaId: Int, mangaTitle: String, coverUrl: String, chapter: MangaChapter, imageUrls: List<String>) {
-    viewModelScope.launch {
-        mangaDownloadManager?.startDownload(
-            mangaId = mangaId,
-            mangaTitle = mangaTitle,
-            coverUrl = coverUrl,
-            chapterId = chapter.chapterId,
-            chapterNumber = chapter.chapterNumber,
-            imageUrls = imageUrls
-        )
-    }
-}
-
-/**
- * Scrape the image URLs for one chapter so it can be queued for download. Mirrors
- * [MainViewModel.loadChapterImages]'s title/number extraction and extension routing.
- */
-fun MainViewModel.fetchChapterImagesForDownload(
-    mangaTitle: String,
-    chapterNumber: String,
-    onResult: (Result<List<String>>) -> Unit
-) {
-    viewModelScope.launch {
-        val authority = _selectedExtensionAuthority.value
-        if (authority == null) {
-            onResult(Result.failure(Exception("No manga extension selected")))
-            return@launch
-        }
-        val extTitle = _mangaExtensionTitle.value
-            ?: _mangaDetail.value?.titleEnglish?.takeIf { it.isNotBlank() }
-            ?: _mangaDetail.value?.title?.takeIf { it.isNotBlank() }
-            ?: mangaTitle
-        if (extTitle.isBlank()) {
-            onResult(Result.failure(Exception("Could not determine the manga title")))
-            return@launch
-        }
-        val images = withContext(Dispatchers.IO) {
-            fetchExtensionChapterImages(extTitle, chapterNumber, authority)
-        }
-        onResult(Result.success(images ?: emptyList()))
-    }
-}
-
-/**
- * Refetch the up-to-date chapter list from the user's selected default extension. Used by the
- * download dialog so a chapter released since the screen was opened shows up — and so the dialog
- * never shows only the downloaded-chapters fallback when the initial extension fetch failed.
- * Tries the same set of titles as [loadMangaChapters] (English > Romaji > passed title) to find
- * the one the extension recognizes. Returns the same MangaChapter mapping the reader uses (oni
- * URL scheme). Empty list when no extension is selected, the fetch fails, or the source has no
- * chapters.
- */
-suspend fun MainViewModel.fetchLatestChaptersForDownload(mangaId: Int, mangaTitle: String): List<MangaChapter> {
-    val authority = _selectedExtensionAuthority.value ?: return emptyList()
-    if (mangaTitle.isBlank()) return emptyList()
-    android.util.Log.d("MangaDownload", "refetching latest chapters for '$mangaTitle' via authority='$authority'")
-    val titlesToTry = listOfNotNull(
-        _mangaDetail.value?.titleEnglish?.takeIf { it.isNotBlank() },
-        _mangaDetail.value?.title?.takeIf { it.isNotBlank() },
-        mangaTitle
-    ).distinct()
-    var extChapters: List<ExtensionChapter>? = null
-    for (t in titlesToTry) {
-        android.util.Log.d("MangaDownload", "refetching chapters with title='$t'")
-        val extResult = fetchExtensionChapterList(t)
-        extChapters = extResult?.first
-        android.util.Log.d("MangaDownload", "refetch returned ${extChapters?.size ?: 0} chapters for '$t'")
-        if (extChapters != null && extChapters.isNotEmpty()) break
-    }
-    if (extChapters.isNullOrEmpty()) return emptyList()
-    return extChapters.sortedBy { it.index }.mapIndexed { idx, ch ->
-        MangaChapter(
-            url = "anilist_${mangaId}_ch_${ch.number}",
-            title = if (ch.title.isNotBlank()) "Chapter ${ch.number}: ${ch.title}" else "Chapter ${ch.number}",
-            chapterId = "anilist_${mangaId}_ch_${ch.number}",
-            chapterNumber = ch.number.toFloatOrNull() ?: idx.toFloat()
-        )
-    }
-}
-
-/** Kick off a multi-chapter batch download (runs on the manager's own scope). */
-fun MainViewModel.startMangaBatchDownload(mangaId: Int, mangaTitle: String, coverUrl: String, chapters: List<MangaChapterDownload>) {    if (chapters.isEmpty()) return
-    mangaDownloadManager?.startBatchDownload(mangaId, mangaTitle, coverUrl, chapters)
-}
-
-fun MainViewModel.cancelMangaBatchDownload() {
-    mangaDownloadManager?.cancelBatchDownload()
-}
-
-fun MainViewModel.cancelMangaDownload(mangaId: Int, chapterId: String) {
-    mangaDownloadManager?.cancelDownload(mangaId, chapterId)
-}
-
-fun MainViewModel.deleteMangaChapter(mangaId: Int, chapterNumber: Float) {
-    mangaDownloadManager?.deleteChapter(mangaId, chapterNumber)
-}
-
-fun MainViewModel.deleteMangaDownload(mangaId: Int) {
-    mangaDownloadManager?.deleteManga(mangaId)
-}
-
-fun MainViewModel.isChapterDownloaded(mangaId: Int, chapterNumber: Float): Boolean {
-    return mangaDownloadManager?.isChapterDownloaded(mangaId, chapterNumber) ?: false
-}
-
-/** Formats a chapter number for display/URLs: 1.0 → "1", 1.5 → "1.5". */
-private fun formatChapterNumberLocal(chapterNumber: Float): String =
-    if (chapterNumber % 1f == 0f) chapterNumber.toInt().toString() else chapterNumber.toString()
-
-/** Mirrors the oni folder-slug rule: "Blue Lock" → "blue-lock". */
-private fun slugify(title: String): String =
-    title.lowercase().trim().replace(Regex("[^a-z0-9]+"), "-").trim('-')

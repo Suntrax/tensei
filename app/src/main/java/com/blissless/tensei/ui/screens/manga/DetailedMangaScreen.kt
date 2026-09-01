@@ -56,10 +56,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Description             
-import androidx.compose.material.icons.filled.Download                
 import androidx.compose.material.icons.filled.EmojiEvents            
 import androidx.compose.material.icons.filled.Favorite                
-import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Link
@@ -124,12 +122,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
-import android.widget.Toast
 import coil.compose.AsyncImage
 import com.blissless.tensei.MainViewModel
-import com.blissless.tensei.data.manga.DownloadedManga
-import com.blissless.tensei.data.manga.MangaBatchDownloadState
-import com.blissless.tensei.data.manga.MangaChapterDownload
 import com.blissless.tensei.data.models.MangaChapter
 import com.blissless.tensei.data.models.MangaCharacterNode
 import com.blissless.tensei.data.models.MangaDetail
@@ -146,20 +140,14 @@ import com.blissless.tensei.ui.theme.StatusColors
 import com.blissless.tensei.ui.theme.StatusLabels
 import com.blissless.tensei.ui.theme.MangaStatusLabels
 import com.blissless.tensei.dialogs.userScoreToDisplay
-import com.blissless.tensei.viewmodel.cancelMangaBatchDownload
 import com.blissless.tensei.viewmodel.clearMangaDetail
-import com.blissless.tensei.viewmodel.fetchChapterImagesForDownload
-import com.blissless.tensei.viewmodel.fetchLatestChaptersForDownload
 import com.blissless.tensei.viewmodel.fetchMangaDetail
 import com.blissless.tensei.viewmodel.loadMangaChapters
-import com.blissless.tensei.viewmodel.mangaBatchDownloadState
 import com.blissless.tensei.viewmodel.mangaChapters
 import com.blissless.tensei.viewmodel.mangaDetail
-import com.blissless.tensei.viewmodel.mangaDownloads
 import com.blissless.tensei.viewmodel.mangaTotalChapters
 import com.blissless.tensei.viewmodel.isLoadingManga
 import com.blissless.tensei.viewmodel.isLoadingMangaChapters
-import com.blissless.tensei.viewmodel.startMangaBatchDownload
 import com.blissless.tensei.viewmodel.toggleMangaFavorite
 import com.blissless.tensei.viewmodel.favoritedMangaIds
 import com.blissless.tensei.viewmodel.updateMangaStatus
@@ -242,7 +230,6 @@ fun DetailedMangaScreen(
 
     var showStatusDialog by remember { mutableStateOf(false) }
     var showRatingSheet by remember { mutableStateOf(false) }
-    var showDownloadDialog by remember { mutableStateOf(false) }
     var selectedTagForDescription by remember { mutableStateOf<TagData?>(null) }
     var fullscreenImageUrl by remember { mutableStateOf<String?>(null) }
 
@@ -471,19 +458,6 @@ fun DetailedMangaScreen(
                         )
                     )
                 }
-            }
-
-            // Download button
-            IconButton(
-                onClick = { showDownloadDialog = true },
-                modifier = Modifier
-                    .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp, end = 68.dp)
-                    .align(Alignment.TopEnd)
-                    .size(40.dp)
-                    .background(Color.Black.copy(alpha = 0.6f), CircleShape)
-                    .zIndex(10f)
-            ) {
-                Icon(Icons.Default.FileDownload, contentDescription = "Download", tint = Color.White, modifier = Modifier.size(24.dp))
             }
 
             // Share button
@@ -1634,17 +1608,6 @@ fun DetailedMangaScreen(
             }
         )
     }
-
-    if (showDownloadDialog && chapters.isNotEmpty()) {
-        MangaDownloadDialog(
-            mangaId = manga.id,
-            mangaTitle = manga.title,
-            coverUrl = manga.cover,
-            chapters = chapters,
-            viewModel = viewModel,
-            onDismiss = { showDownloadDialog = false }
-        )
-    }
 }
 
 @Composable
@@ -1824,453 +1787,3 @@ private fun MangaMedia.asDetail(): MangaDetail = MangaDetail(
     siteUrl = siteUrl,
     malId = malId
 )
-
-// ─── Manga Download Dialog ─────────────────────────────────────────────
-
-private enum class ChapterDownloadResult { PENDING, DOWNLOADING, COMPLETED, FAILED }
-
-/**
- * Chapter multi-select download dialog. Ported from oni's DownloadChapterDialog:
- * select any subset of chapters (or "missing" ones), scrape their image URLs, then run
- * a sequential batch download whose progress is rendered inline per chapter.
- */
-@Composable
-private fun MangaDownloadDialog(
-    mangaId: Int,
-    mangaTitle: String,
-    coverUrl: String,
-    chapters: List<MangaChapter>,
-    viewModel: MainViewModel,
-    onDismiss: () -> Unit
-) {
-    val context = LocalContext.current
-    var selectedChapters by remember { mutableStateOf(setOf<Int>()) }
-    // Always refetch the chapter list from the user's default extension when the dialog opens.
-    // The passed-in list can be a downloaded-only fallback (the extension fetch failed when the
-    // detail screen loaded its chapters), which would otherwise make this dialog show only the
-    // already-downloaded chapters with no way to pick the rest. If the refetch fails (e.g.
-    // offline) or no extension is selected, the passed-in list is kept as-is.
-    var chaptersState by remember { mutableStateOf(chapters) }
-    var isRefreshingChapters by remember { mutableStateOf(false) }
-    LaunchedEffect(mangaId) {
-        isRefreshingChapters = true
-        val fresh = viewModel.fetchLatestChaptersForDownload(mangaId, mangaTitle)
-        if (fresh.isNotEmpty()) {
-            val oldSize = chaptersState.size
-            chaptersState = fresh
-            if (fresh.size != oldSize) selectedChapters = emptySet()
-        }
-        isRefreshingChapters = false
-    }
-    val allSelected = selectedChapters.size == chaptersState.size
-
-    val allDownloads by viewModel.mangaDownloads.collectAsState()
-    val downloadedChapterNums = remember(allDownloads) {
-        allDownloads.find { it.mangaId == mangaId }?.chapters?.map { it.chapterNumber }?.toSet() ?: emptySet()
-    }
-
-    val missingIndices = remember(chaptersState, downloadedChapterNums) {
-        chaptersState.mapIndexedNotNull { index, ch ->
-            if (ch.chapterNumber !in downloadedChapterNums) index else null
-        }.toSet()
-    }
-
-    val batchState by viewModel.mangaBatchDownloadState.collectAsState()
-    val isBatchActive = batchState != null && batchState?.mangaId == mangaId && !batchState!!.isComplete
-    val isBatchComplete = batchState != null && batchState?.mangaId == mangaId && batchState!!.isComplete
-
-    var isFetchingUrls by remember { mutableStateOf(false) }
-    val chapterChNums = remember(chaptersState) {
-        chaptersState.map { it.chapterNumber }
-    }
-
-    AlertDialog(
-        onDismissRequest = {
-            if (!isFetchingUrls && !isBatchActive) onDismiss()
-        },
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-        shape = RoundedCornerShape(20.dp),
-        title = {
-            Text(
-                when {
-                    isBatchComplete -> "Download Complete"
-                    isBatchActive -> "Downloading..."
-                    else -> "Download Chapters"
-                },
-                fontWeight = FontWeight.Bold
-            )
-        },
-        text = {
-            Column {
-                Text(
-                    mangaTitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                if (!isFetchingUrls && !isBatchActive && !isBatchComplete) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        "${selectedChapters.size} of ${chaptersState.size} selected",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-
-                if (isRefreshingChapters) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(14.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Refreshing chapter list...", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-
-                if (isFetchingUrls) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(14.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Fetching chapter URLs...", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-
-                if (isBatchActive && batchState != null) {
-                    val state = batchState!!
-                    Spacer(modifier = Modifier.height(12.dp))
-                    LinearProgressIndicator(
-                        progress = { (state.currentIndex + 1).toFloat() / state.totalChapters.coerceAtLeast(1).toFloat() },
-                        modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
-                        color = MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    val failedText = if (state.failedChapters > 0) ", ${state.failedChapters} failed" else ""
-                    Text(
-                        "Chapter ${state.currentIndex + 1}/${state.totalChapters} - ${state.completedChapters} done$failedText",
-                        fontSize = 12.sp,
-                        color = if (state.failedChapters > 0) Color(0xFFFFAB40) else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                if (isBatchComplete && batchState != null) {
-                    val state = batchState!!
-                    Spacer(modifier = Modifier.height(12.dp))
-                    LinearProgressIndicator(
-                        progress = { 1f },
-                        modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
-                        color = if (state.failedChapters == 0) Color(0xFF34D399) else MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    val summary = when {
-                        state.failedChapters == 0 -> "All ${state.completedChapters} chapters downloaded"
-                        else -> "${state.completedChapters} downloaded, ${state.failedChapters} failed"
-                    }
-                    Text(
-                        summary,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = if (state.failedChapters == 0) Color(0xFF34D399) else Color(0xFFFFAB40)
-                    )
-                }
-
-                if (!isFetchingUrls && !isBatchActive) {
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // Select all toggle
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable {
-                                selectedChapters = if (allSelected) emptySet()
-                                else chaptersState.indices.toSet()
-                            }
-                            .padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            if (allSelected) Icons.Default.Check else Icons.Default.Close,
-                            contentDescription = null,
-                            tint = if (allSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            if (allSelected) "Deselect All" else "Select All",
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-
-                    // Select missing toggle
-                    if (missingIndices.isNotEmpty() && missingIndices.size < chaptersState.size) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable {
-                                    selectedChapters = if (selectedChapters == missingIndices) emptySet()
-                                    else missingIndices
-                                }
-                                .padding(vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                if (selectedChapters == missingIndices) Icons.Default.Check else Icons.Default.Download,
-                                contentDescription = null,
-                                tint = if (selectedChapters == missingIndices) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                "Select Not Downloaded (${missingIndices.size})",
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    Spacer(modifier = Modifier.height(4.dp))
-                }
-
-                // Chapter list (scrollable)
-                val chapterListState = rememberLazyListState()
-                LaunchedEffect(batchState?.currentIndex) {
-                    val idx = batchState?.currentIndex
-                    if (idx != null && idx >= 0) {
-                        chapterListState.animateScrollToItem(idx)
-                    }
-                }
-                LazyColumn(
-                    state = chapterListState,
-                    modifier = Modifier.heightIn(max = 300.dp),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    itemsIndexed(chaptersState) { index, chapter ->
-                        val isSelected = index in selectedChapters && !isBatchActive && !isBatchComplete
-                        val chNumValue = chapterChNums[index]
-                        val isDownloaded = chNumValue in downloadedChapterNums
-                        val chNum = chNumValue.let { if (it == it.toInt().toFloat()) "${it.toInt()}" else "$it" }
-
-                        // Batch download status for this chapter
-                        val chapterResult = if (isBatchActive || isBatchComplete) {
-                            val state = batchState
-                            when {
-                                state == null -> ChapterDownloadResult.PENDING
-                                chNumValue in state.completedNumbers -> ChapterDownloadResult.COMPLETED
-                                chNumValue in state.failedNumbers -> ChapterDownloadResult.FAILED
-                                index == state.currentIndex && !state.isComplete -> ChapterDownloadResult.DOWNLOADING
-                                index > state.currentIndex -> ChapterDownloadResult.PENDING
-                                else -> ChapterDownloadResult.COMPLETED
-                            }
-                        } else null
-
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(
-                                    when {
-                                        chapterResult == ChapterDownloadResult.DOWNLOADING ->
-                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)
-                                        chapterResult == ChapterDownloadResult.COMPLETED ->
-                                            Color(0xFF34D399).copy(alpha = 0.06f)
-                                        chapterResult == ChapterDownloadResult.FAILED ->
-                                            Color(0xFFFF5252).copy(alpha = 0.06f)
-                                        isSelected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
-                                        else -> Color.Transparent
-                                    }
-                                )
-                                .then(
-                                    if (!isBatchActive && !isBatchComplete) {
-                                        Modifier.clickable {
-                                            selectedChapters = if (isSelected) selectedChapters - index
-                                            else selectedChapters + index
-                                        }
-                                    } else Modifier
-                                )
-                                .padding(horizontal = 8.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            if (chapterResult == null) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(18.dp)
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .border(
-                                            1.5.dp,
-                                            if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
-                                            RoundedCornerShape(4.dp)
-                                        )
-                                        .background(
-                                            if (isSelected) MaterialTheme.colorScheme.primary
-                                            else Color.Transparent
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    if (isSelected) {
-                                        Icon(
-                                            Icons.Default.Check,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.onPrimary,
-                                            modifier = Modifier.size(12.dp)
-                                        )
-                                    }
-                                }
-                            } else {
-                                Box(
-                                    modifier = Modifier.size(18.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    when (chapterResult) {
-                                        ChapterDownloadResult.COMPLETED -> {
-                                            Icon(
-                                                Icons.Default.Check,
-                                                contentDescription = "Downloaded",
-                                                tint = Color(0xFF34D399),
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                        }
-                                        ChapterDownloadResult.FAILED -> {
-                                            Icon(
-                                                Icons.Default.Close,
-                                                contentDescription = "Failed",
-                                                tint = Color(0xFFFF5252),
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                        }
-                                        ChapterDownloadResult.DOWNLOADING -> {
-                                            CircularProgressIndicator(
-                                                modifier = Modifier.size(16.dp),
-                                                strokeWidth = 2.dp,
-                                                color = MaterialTheme.colorScheme.primary
-                                            )
-                                        }
-                                        ChapterDownloadResult.PENDING -> {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(8.dp)
-                                                    .clip(CircleShape)
-                                                    .background(MaterialTheme.colorScheme.outlineVariant)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                "Ch. $chNum",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = if (isDownloaded && chapterResult == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.width(56.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                chapter.title,
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f)
-                            )
-                            if (isDownloaded && chapterResult == null) {
-                                Icon(
-                                    Icons.Default.Check,
-                                    contentDescription = "Downloaded",
-                                    tint = Color(0xFF34D399),
-                                    modifier = Modifier.size(14.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    if (isBatchComplete) {
-                        onDismiss()
-                        return@Button
-                    }
-                    val selected = selectedChapters.mapNotNull { idx -> chaptersState.getOrNull(idx) }
-                    if (selected.isNotEmpty()) {
-                        isFetchingUrls = true
-                        Toast.makeText(context, "Downloading ${selected.size} chapter(s)...", Toast.LENGTH_SHORT).show()
-                        var chaptersRemaining = selected.size
-                        val chapterDownloads = mutableListOf<MangaChapterDownload>()
-                        selected.forEach { ch ->
-                            val numStr = ch.title.removePrefix("Chapter ").substringBefore(":").trim()
-                            viewModel.fetchChapterImagesForDownload(mangaTitle, numStr) { result ->
-                                val images = result.getOrDefault(emptyList())
-                                synchronized(chapterDownloads) {
-                                    chapterDownloads.add(MangaChapterDownload(ch.chapterId, ch.chapterNumber, images))
-                                    chaptersRemaining--
-                                    if (chaptersRemaining == 0) {
-                                        isFetchingUrls = false
-                                        viewModel.startMangaBatchDownload(mangaId, mangaTitle, coverUrl, chapterDownloads.toList())
-                                    }
-                                }
-                            }
-                        }
-                    }
-                },
-                enabled = (selectedChapters.isNotEmpty() && !isFetchingUrls && !isBatchActive) || isBatchComplete,
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                when {
-                    isFetchingUrls -> {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            strokeWidth = 2.dp
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Fetching...")
-                    }
-                    isBatchActive -> {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            strokeWidth = 2.dp
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Downloading...")
-                    }
-                    isBatchComplete -> {
-                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Close")
-                    }
-                    else -> {
-                        Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Download ${selectedChapters.size}")
-                    }
-                }
-            }
-        },
-        dismissButton = {
-            TextButton(
-                onClick = onDismiss,
-                enabled = !isFetchingUrls && !isBatchActive
-            ) {
-                Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-    )
-}

@@ -594,10 +594,10 @@ private fun StatusListAnimeCard(
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Card(
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(4.dp),
             modifier = Modifier
                 .height(220.dp)
-                .clip(RoundedCornerShape(12.dp))
+                .clip(RoundedCornerShape(4.dp))
                 .clickable {
                     onClick(
                         if (cardBounds != null && cardBounds!!.width() > 0 && cardBounds!!.height() > 0) {
@@ -767,10 +767,10 @@ private fun StatusListMangaCard(
     }
     Column(modifier = Modifier.fillMaxWidth()) {
         Card(
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(4.dp),
             modifier = Modifier
                 .height(220.dp)
-                .clip(RoundedCornerShape(12.dp))
+                .clip(RoundedCornerShape(4.dp))
                 .clickable(onClick = onClick)
         ) {
             Box(modifier = Modifier.fillMaxSize()) {

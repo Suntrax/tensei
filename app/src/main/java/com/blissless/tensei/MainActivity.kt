@@ -95,9 +95,8 @@ import com.blissless.tensei.ui.screens.cast.AllStaffScreen
 import com.blissless.tensei.ui.screens.character.CharacterScreen
 import com.blissless.tensei.ui.screens.character.StaffScreen
 import com.blissless.tensei.ui.screens.details.DetailedAnimeScreen
-import com.blissless.tensei.ui.screens.downloads.DownloadsScreen
-import com.blissless.tensei.ui.screens.downloads.EpisodeDownloadDialog
-import com.blissless.tensei.ui.screens.explore.ExploreScreen
+import com.blissless.tensei.ui.screens.explore.AnimeScreen
+import com.blissless.tensei.ui.screens.explore.MangaScreen
 import com.blissless.tensei.ui.screens.home.HomeScreen
 import com.blissless.tensei.ui.screens.episode.RichEpisodeList
 import com.blissless.tensei.ui.screens.episode.SimpleEpisodeGrid
@@ -367,7 +366,6 @@ class MainActivity : ComponentActivity() {
 
         mainViewModel.init(applicationContext, hasToken)
 
-        intent.getStringExtra("notification_anime")?.let { if (it.isNotBlank()) mainViewModel.onNotificationAnimeTap(it) }
         intent.getIntExtra("widget_anime_id", 0).let { if (it > 0) _widgetClicks.tryEmit(it) }
         if (intent.getBooleanExtra("open_extensions", false)) {
             mainViewModel.requestOpenExtensions()
@@ -609,7 +607,6 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleAuthCallback(intent)
-        intent.getStringExtra("notification_anime")?.let { if (it.isNotBlank()) mainViewModel.onNotificationAnimeTap(it) }
         intent.getIntExtra("widget_anime_id", 0).let { if (it > 0) _widgetClicks.tryEmit(it) }
         if (intent.getBooleanExtra("open_extensions", false)) {
             mainViewModel.requestOpenExtensions()
@@ -677,8 +674,9 @@ fun MainScreen(
     val startupScreen by viewModel.startupScreen.collectAsState()
     val currentPageState = remember { mutableIntStateOf(startupScreen) }
     var currentPage by currentPageState
+    var pageBeforeSearch by remember { mutableIntStateOf(0) }
 
-    var preloadedPages by remember { mutableStateOf(setOf(1, 3)) }
+    var preloadedPages by remember { mutableStateOf(setOf(1)) }
 
     var overlayOpen by remember { mutableStateOf(false) }
 
@@ -813,9 +811,6 @@ fun MainScreen(
     // ─── Manga state ──────────────────────────────────────────────────
     var showMangaReader by remember { mutableStateOf(false) }
     var mangaReaderChapterIndex by remember { mutableIntStateOf(0) }
-    // When the reader is opened from the Downloads tab (offline), the target chapter is
-    // identified by its NUMBER (indexes differ between the online and offline chapter lists).
-    var mangaReaderChapterNumber by remember { mutableStateOf<Float?>(null) }
     var mangaDetailStack by remember { mutableStateOf<List<com.blissless.tensei.data.models.MangaMedia>>(emptyList()) }
     val currentManga = mangaDetailStack.lastOrNull()
     var showMangaDetailScreen by remember { mutableStateOf(false) }
@@ -2101,7 +2096,6 @@ fun MainScreen(
                     "autoShowChapters=$mangaAutoShowChapters detailBehind=$showMangaDetailScreen stackDepth=${mangaDetailStack.size}")
                 mangaAutoShowChapters = false
                 showMangaReader = false
-                mangaReaderChapterNumber = null
                 if (!showMangaDetailScreen) {
                     // Reader was opened directly (e.g. from a home card) with no detail behind.
                     mangaDetailStack = mangaDetailStack.dropLast(1)
@@ -2132,7 +2126,6 @@ fun MainScreen(
             MangaReaderScreen(
                 manga = readerManga,
                 initialChapterIndex = mangaReaderChapterIndex,
-                initialChapterNumber = mangaReaderChapterNumber,
                 viewModel = viewModel,
                 isOled = isOled,
                 onClose = closeReader,
@@ -2423,24 +2416,6 @@ fun MainScreen(
                     animeId = allStaffDialog.animeId,
                     previousStates = allStaffDialog.previousStates + allStaffDialog
                 )
-            }
-        )
-    }
-
-    // Episode Download Dialog
-    val downloadDialog = overlayState as? OverlayState.EpisodeDownloadDialog
-    if (downloadDialog != null) {
-        EpisodeDownloadDialog(
-            anime = downloadDialog.anime,
-            viewModel = viewModel,
-            downloadManager = viewModel.episodeDownloadManager,
-            isOled = isOled,
-            preferEnglishTitles = preferEnglishTitles,
-            onDismiss = { overlayState = OverlayState.None },
-            onNavigateToSettings = {
-                overlayState = OverlayState.None
-                showSettings = true
-                pendingSettingsGroup = if (extUiState.extensions.isEmpty()) "extensions" else "stream"
             }
         )
     }
@@ -2887,14 +2862,12 @@ fun MainScreen(
                             },
                             onAnimeDetailMangaClick = openMangaDetail
                         )
-                        1 -> ExploreScreen(
+                        1 -> AnimeScreen(
                             viewModel = viewModel,
                             isLoggedIn = isLoggedIn,
                             isOled = isOled,
                             showStatusColors = showStatusColors,
                             showAnimeCardButtons = showAnimeCardButtons,
-                            showMangaCardButtons = showMangaCardButtons,
-                            showMangaStatusColors = showMangaStatusColors,
                             preferEnglishTitles = preferEnglishTitles,
                             hideAdultContent = hideAdultContent,
                             favoriteIds = if (viewModel.loginProvider.collectAsState().value == LoginProvider.MAL) malFavorites.map { it.id }.toSet() else aniListFavoriteIds,
@@ -2929,8 +2902,18 @@ fun MainScreen(
                                 showSettings = true
                                 pendingSettingsGroup = if (extUiState.extensions.isEmpty()) "extensions" else "stream"
                             },
+                            onAnimeDetailMangaClick = openMangaDetail
+                        )
+                        3 -> MangaScreen(
+                            viewModel = viewModel,
+                            isOled = isOled,
+                            showMangaCardButtons = showMangaCardButtons,
+                            showMangaStatusColors = showMangaStatusColors,
+                            preferEnglishTitles = preferEnglishTitles,
+                            isVisible = true,
+                            onSearchClick = { showSearchScreen = true },
                             onMangaClick = { manga ->
-                                android.util.Log.d("MangaNav", "EXPLORE onMangaClick: id=${manga.id} title='${manga.title.romaji ?: manga.title.english}' -> DETAIL")
+                                android.util.Log.d("MangaNav", "MANGA TAB onMangaClick: id=${manga.id} title='${manga.title.romaji ?: manga.title.english}' -> DETAIL")
                                 openMangaDetail(
                                     com.blissless.tensei.data.models.MangaMedia(
                                         id = manga.id,
@@ -2943,7 +2926,7 @@ fun MainScreen(
                                 )
                             },
                             onMangaReadClick = { manga ->
-                                android.util.Log.d("MangaNav", "EXPLORE onMangaReadClick: id=${manga.id} title='${manga.title.romaji ?: manga.title.english}' -> READER (chapter selection)")
+                                android.util.Log.d("MangaNav", "MANGA TAB onMangaReadClick: id=${manga.id} title='${manga.title.romaji ?: manga.title.english}' -> READER (chapter selection)")
                                 mangaAutoShowChapters = true
                                 mangaDetailStack = mangaDetailStack + com.blissless.tensei.data.models.MangaMedia(
                                     id = manga.id,
@@ -2959,8 +2942,7 @@ fun MainScreen(
                             onMangaNoExtension = {
                                 showSettings = true
                                 pendingSettingsGroup = "reader"
-                            },
-                            onAnimeDetailMangaClick = openMangaDetail
+                            }
                         )
                         2 -> HomeScreen(
                             viewModel = viewModel,
@@ -3065,27 +3047,62 @@ fun MainScreen(
                             playbackDurations = playbackDurations,
                             startedAt = startedAt
                         )
-                        3 -> DownloadsScreen(
+                        4 -> SearchScreen(
                             viewModel = viewModel,
-                            downloadManager = viewModel.episodeDownloadManager,
                             isOled = isOled,
-                            onNavbarHidden = viewModel::setHideNavbar,
-                            onOpenMangaReader = { manga, chapterNumber ->
-                                android.util.Log.d("MangaNav", "DOWNLOADS onOpenMangaReader: id=${manga.id} title='${manga.title}' chapterNumber=$chapterNumber")
-                                // Clear any chapter list left over from a previous manga so the
-                                // reader reloads the downloaded chapters for THIS title.
-                                viewModel.clearMangaDetail()
-                                mangaAutoShowChapters = false
-                                mangaDetailStack = mangaDetailStack + manga
-                                mangaReaderChapterIndex = 0
-                                mangaReaderChapterNumber = chapterNumber
-                                showMangaReader = true
+                            isLoggedIn = isLoggedIn,
+                            preferEnglishTitles = preferEnglishTitles,
+                            hideAdultContent = hideAdultContent,
+                            currentlyWatching = currentlyWatching,
+                            planningToWatch = planningToWatch,
+                            completed = completed,
+                            onHold = onHold,
+                            dropped = dropped,
+                            localAnimeStatus = viewModel.localAnimeStatus.collectAsState().value,
+                            favoriteIds = if (viewModel.loginProvider.collectAsState().value == LoginProvider.MAL) malFavorites.map { it.id }.toSet() else aniListFavoriteIds,
+                            onClose = { currentPage = pageBeforeSearch },
+                            onPlayEpisode = onPlayEpisode,
+                            onCharacterClick = { characterId ->
+                                overlayState = OverlayState.CharacterDialog(characterId = characterId, animeId = 0)
                             },
+                            onStaffClick = { staffId ->
+                                overlayState = OverlayState.StaffDialog(staffId = staffId, animeId = 0)
+                            },
+                            onViewAllCast = { animeId, animeTitle ->
+                                overlayState = OverlayState.AllCastDialog(animeId = animeId, animeTitle = animeTitle)
+                            },
+                            onViewAllStaff = { animeId, animeTitle ->
+                                overlayState = OverlayState.AllStaffDialog(animeId = animeId, animeTitle = animeTitle)
+                            },
+                            onViewAllRelations = { animeId, animeTitle ->
+                                overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = animeTitle)
+                            },
+                            onViewAllRecommendations = { animeId, animeTitle ->
+                                overlayState = OverlayState.AllRecommendationsDialog(animeId = animeId, animeTitle = animeTitle)
+                            },
+                            onNoExtension = {
+                                showSettings = true
+                                pendingSettingsGroup = if (extUiState.extensions.isEmpty()) "extensions" else "stream"
+                            },
+                            onMangaClick = { manga ->
+                                android.util.Log.d("MangaNav", "SEARCH TAB onMangaClick: id=${manga.id} title='${manga.title.romaji ?: manga.title.english}' -> DETAIL")
+                                openMangaDetail(
+                                    com.blissless.tensei.data.models.MangaMedia(
+                                        id = manga.id,
+                                        title = manga.title.romaji ?: manga.title.english ?: "Unknown",
+                                        titleEnglish = manga.title.english,
+                                        cover = manga.coverImage?.extraLarge ?: manga.coverImage?.large ?: "",
+                                        totalChapters = manga.chapters ?: 0,
+                                        averageScore = manga.averageScore
+                                    )
+                                )
+                            },
+                            onAnimeDetailMangaClick = openMangaDetail
                         )
                     }
 
                 AnimatedVisibility(
-                    visible = showSearchScreen,
+                    visible = showSearchScreen && currentPage != 4,
                     enter = fadeIn(animationSpec = tween(300)),
                     exit = fadeOut(animationSpec = tween(250))
                 ) {
@@ -3269,8 +3286,11 @@ fun MainScreen(
                     disableMaterialColors = disableMaterialColors,
                     hideNavbar = hideNavbar,
                     isLoadingStream = isLoadingStream,
-                    showSearchScreen = showSearchScreen || showUserProfilePage,
-                    onSelect = { currentPage = it },
+                    showSearchScreen = (showSearchScreen || showUserProfilePage) && currentPage != 4,
+                    onSelect = {
+                        if (it == 4 && currentPage != 4) pageBeforeSearch = currentPage
+                        currentPage = it
+                    },
                     scope = scope,
                 )
 

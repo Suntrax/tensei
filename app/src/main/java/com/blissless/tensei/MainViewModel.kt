@@ -36,7 +36,6 @@ import com.blissless.tensei.data.models.TmdbEpisode
 import com.blissless.tensei.data.models.UserActivity
 import com.blissless.tensei.data.models.UserAnimeStats
 import com.blissless.tensei.data.models.UserFavoriteAnime
-import com.blissless.tensei.download.EpisodeDownloadManager
 import com.blissless.tensei.update.GitHubRelease
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -75,7 +74,6 @@ import com.blissless.tensei.viewmodel.queueSync
 import com.blissless.tensei.viewmodel.fetchMalList
 import com.blissless.tensei.viewmodel.initManga
 import com.blissless.tensei.viewmodel.clearMangaUserData
-import com.blissless.tensei.viewmodel.mangaDownloadManager
 import com.blissless.tensei.viewmodel.fetchMangaExplore
 import com.blissless.tensei.viewmodel.restoreMangaExploreFromCache
 import com.blissless.tensei.viewmodel.fetchMangaLists
@@ -117,7 +115,6 @@ class MainViewModel : ViewModel() {
 
     internal lateinit var userPreferences: UserPreferences
     internal lateinit var cacheManager: CacheManager
-    lateinit var episodeDownloadManager: EpisodeDownloadManager
     internal lateinit var repository: AnimeRepository
     internal lateinit var context: Context
     private var connectivityCallback: ConnectivityManager.NetworkCallback? = null
@@ -434,8 +431,6 @@ class MainViewModel : ViewModel() {
     val localAnimeStatus: StateFlow<Map<Int, LocalAnimeEntry>> get() = userPreferences.localAnimeStatus
     val defaultExtensionPackage: StateFlow<String> get() = userPreferences.defaultExtensionPackage
     val defaultSubtitleLang: StateFlow<String> get() = userPreferences.defaultSubtitleLang
-    val downloadPreferredCategory: StateFlow<String> get() = userPreferences.downloadPreferredCategory
-    val downloadSubtitleLang: StateFlow<String> get() = userPreferences.downloadSubtitleLang
     val hideAdultContent: StateFlow<Boolean> get() = userPreferences.hideAdultContent
     val startupScreen: StateFlow<Int> get() = userPreferences.startupScreen
 
@@ -449,8 +444,6 @@ class MainViewModel : ViewModel() {
     val autoUpdateExtensions: StateFlow<Boolean> get() = userPreferences.autoUpdateExtensions
     val streamMethod: StateFlow<String> get() = userPreferences.streamMethod
     val defaultStreamExtension: StateFlow<String?> get() = userPreferences.defaultStreamExtension
-    val downloadDirectoryUri: StateFlow<String?> get() = userPreferences.downloadDirectoryUri
-    val keepDownloadedFiles: StateFlow<Boolean> get() = userPreferences.keepDownloadedFiles
     val mangaReaderMode: StateFlow<String> get() = userPreferences.mangaReaderMode
     val mangaDataSaver: StateFlow<Boolean> get() = userPreferences.mangaDataSaver
     val mangaPageLayout: StateFlow<String> get() = userPreferences.mangaPageLayout
@@ -462,13 +455,6 @@ class MainViewModel : ViewModel() {
     val mangaSyncThreshold: StateFlow<Int> get() = userPreferences.mangaSyncThreshold
 
     // Notification tap events
-    private val _notificationAnimeTaps = MutableSharedFlow<String>(replay = 1, extraBufferCapacity = 1)
-    val notificationAnimeTaps: SharedFlow<String> = _notificationAnimeTaps.asSharedFlow()
-
-    fun onNotificationAnimeTap(animeName: String) {
-        _notificationAnimeTaps.tryEmit(animeName)
-    }
-
     private val _openExtensionsEvents = Channel<Unit>(Channel.BUFFERED)
     val openExtensionsEvents: Flow<Unit> = _openExtensionsEvents.receiveAsFlow()
 
@@ -486,8 +472,7 @@ class MainViewModel : ViewModel() {
     val playbackPositions: StateFlow<Map<String, Long>> get() = cacheManager.playbackPositions
 
     // Cache methods — implementations live in viewmodel/MainViewModelCacheExt.kt
-    // (fun getCacheDataSourceFactory, getDownloadCacheSize, clearDownloadCache,
-    //  savePlaybackPosition, … clearNonEssentialCaches)
+    // (fun getCacheDataSourceFactory, savePlaybackPosition, … clearNonEssentialCaches)
 
     // MAL API Service
     internal lateinit var malApiService: MalApiService
@@ -560,17 +545,12 @@ class MainViewModel : ViewModel() {
         // Initialize video cache for offline playback
         cacheManager.initializeVideoCache(context)
 
-        // Initialize download manager
-        episodeDownloadManager = EpisodeDownloadManager(context)
-        episodeDownloadManager.initialize()
-
         // Check connectivity and register callback for auto-detection
         checkConnectivity()
         registerConnectivityCallback()
         startApiRetryLoop()
 
         userPreferences.loadPreferences(hasToken)
-        mangaDownloadManager?.setDownloadLocation(userPreferences.mangaDownloadDirectoryUri.value)
         cacheManager.loadStreamCache()
         cacheManager.loadExtensionStreamCache()
         cacheManager.loadPlaybackPositions()
@@ -1760,65 +1740,6 @@ class MainViewModel : ViewModel() {
     fun clearTmdbEpisodeCache(animeId: Int) = cacheManager.clearTmdbEpisodeCache(animeId)
     fun pruneTmdbEpisodeCache(retainedIds: Set<Int>) = cacheManager.pruneTmdbEpisodeCache(retainedIds)
     val tmdbEpisodeCache: StateFlow<Map<Int, List<TmdbEpisode>>> get() = cacheManager.tmdbEpisodeCache
-
-    fun retryDownload(animeId: Int, episode: Int) {
-        viewModelScope.launch {
-            val defaultPkg = defaultExtensionPackage.value
-            if (defaultPkg.isEmpty()) {
-                _toastMessage.emit("No extension configured for download")
-                return@launch
-            }
-
-            // Build AnimeMedia from available data
-            val cached = cacheManager.detailedAnimeCache.value[animeId]
-            val allLists = currentlyWatching.value + planningToWatch.value + completed.value + onHold.value + dropped.value
-            val offlineLists = offlineCurrentlyWatching.value + offlinePlanningToWatch.value + offlineCompleted.value + offlineOnHold.value + offlineDropped.value
-            val localFavs = localFavorites.value.values.map { fav ->
-                AnimeMedia(id = fav.id, title = fav.title, cover = fav.cover, banner = fav.banner, year = fav.year, averageScore = fav.averageScore)
-            }
-            val allFromLists = allLists + offlineLists + localFavs
-            val listAnime = allFromLists.find { it.id == animeId }
-
-            val anime = if (cached != null) {
-                AnimeMedia(
-                    id = cached.id, title = cached.title, titleEnglish = cached.titleEnglish,
-                    cover = cached.cover, banner = cached.banner, year = cached.year,
-                    format = cached.format, status = cached.status ?: "",
-                    totalEpisodes = cached.episodes, averageScore = cached.averageScore,
-                    genres = cached.genres, malId = cached.malId,
-                )
-            } else listAnime
-
-            if (anime == null) {
-                _toastMessage.emit("Cannot retry: anime data not found")
-                return@launch
-            }
-
-            val result = playEpisodeWithExtension(anime, episode, defaultPkg)
-            if (result == null) {
-                _toastMessage.emit("Retry failed: could not fetch fresh stream data")
-                return@launch
-            }
-
-            episodeDownloadManager.removeDownload("${animeId}_$episode")
-            episodeDownloadManager.downloadDirectoryUri = downloadDirectoryUri.value
-            episodeDownloadManager.keepDownloadedFiles = keepDownloadedFiles.value
-            episodeDownloadManager.startDownload(
-                animeId = animeId,
-                animeName = anime.title,
-                episode = episode,
-                videoUrl = result.url,
-                referer = result.referer,
-                videoTitle = result.videoTitle,
-                subtitleUrl = result.subtitleUrl,
-                subtitleTracks = result.subtitleTrackList,
-                videoHeaders = result.videoHeaders,
-                mimeType = if (result.url.contains(".m3u8")) "application/x-mpegurl" else "video/mp4",
-                malId = anime.malId,
-                year = anime.year,
-            )
-        }
-    }
 
     fun addExploreAnimeToList(anime: ExploreAnime, status: String, score: Int? = null) {
         queueSync(anime.id, "status", malId = anime.malId, status = status, progress = if (status == "CURRENT") 0 else null, score = score)

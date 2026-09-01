@@ -1,10 +1,8 @@
 package com.blissless.tensei.viewmodel
 
 import android.content.Context
-import androidx.lifecycle.viewModelScope
 import com.blissless.tensei.MainViewModel
 import com.blissless.tensei.data.models.CachedExtensionStream
-import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 
 /**
@@ -21,19 +19,6 @@ fun MainViewModel.getCacheDataSourceFactory(
     extensionClient: OkHttpClient? = null,
     extensionHeaders: Map<String, String> = emptyMap(),
 ) = cacheManager.getCacheDataSourceFactory(referer, extensionClient, extensionHeaders)
-
-// ─── Download cache ─────────────────────────────────────────────────────────
-
-fun MainViewModel.getDownloadCacheSize(): Long =
-    episodeDownloadManager.getDownloadCacheSize()
-
-fun MainViewModel.clearDownloadCache() {
-    viewModelScope.launch {
-        episodeDownloadManager.clearDownloadCache()
-        // Re-initialize for future downloads
-        episodeDownloadManager.initialize()
-    }
-}
 
 // ─── Playback position ──────────────────────────────────────────────────────
 

@@ -13,11 +13,10 @@ import com.blissless.tensei.util.ErrorHandler
 /**
  * Subtitle styling and profile persistence helpers.
  *
- * Extracted from PlayerScreen.kt. These functions are shared between
- * PlayerScreen and OfflinePlayerScreen for applying subtitle visual
- * settings (font size, color, outline, shadow, position, rotation)
- * to a Media3 SubtitleView, and for loading/saving subtitle profiles
- * from SharedPreferences.
+ * Extracted from PlayerScreen.kt. These functions are shared for applying
+ * subtitle visual settings (font size, color, outline, shadow, position,
+ * rotation) to a Media3 SubtitleView, and for loading/saving subtitle
+ * profiles from SharedPreferences.
  */
 
 /**

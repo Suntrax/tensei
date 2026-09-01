@@ -131,7 +131,6 @@ import com.blissless.tensei.dialogs.userScoreToDisplay
 import com.blissless.tensei.ui.components.rememberCinematicAnimation
 import com.blissless.tensei.ui.theme.StatusColors
 import com.blissless.tensei.ui.theme.StatusLabels
-import com.blissless.tensei.ui.screens.downloads.EpisodeDownloadDialog
 import com.blissless.tensei.ui.screens.episode.EpisodeSelectionDialog
 import com.blissless.tensei.ui.screens.episode.RichEpisodeScreen
 import kotlinx.coroutines.delay
@@ -186,7 +185,6 @@ fun DetailedAnimeScreen(
     var detailedData by remember { mutableStateOf<DetailedAnimeData?>(null) }
     var isLoadingDetails by remember { mutableStateOf(true) }
     var relations by remember { mutableStateOf<List<AnimeRelation>>(emptyList()) }
-    var showDownloadDialog by remember { mutableStateOf(false) }
 
     var isVisible by remember { mutableStateOf(false) }
     var previousAnimeId by remember { mutableIntStateOf(anime.id) }
@@ -478,30 +476,7 @@ fun DetailedAnimeScreen(
                     onEpisodeSelect = { episode, _ ->
                         showEpisodeSelection = false
                         onPlayEpisode(episode, null)
-                    },
-                    onDownloadClick = {
-                        showDownloadDialog = true
                     }
-                )
-            }
-        }
-
-        if (showDownloadDialog) {
-            Dialog(
-                onDismissRequest = { showDownloadDialog = false },
-                properties = DialogProperties(
-                    usePlatformDefaultWidth = false,
-                    decorFitsSystemWindows = false
-                )
-            ) {
-                EpisodeDownloadDialog(
-                    anime = animeMedia,
-                    viewModel = viewModel,
-                    downloadManager = viewModel.episodeDownloadManager,
-                    isOled = isOled,
-                    preferEnglishTitles = preferEnglishTitles,
-                    onDismiss = { showDownloadDialog = false },
-                    onNavigateToSettings = onNavigateToSettings
                 )
             }
         }

@@ -55,8 +55,6 @@ class UserPreferences(context: Context) {
         private const val KEY_LAST_EXPLORE_REFRESH = "last_explore_refresh_time"
         private const val KEY_LOCAL_ANIME_STATUS = "local_anime_status"
         private const val KEY_DEFAULT_SUBTITLE_LANG = "default_subtitle_lang"
-        private const val KEY_DOWNLOAD_PREFERRED_CATEGORY = "download_preferred_category"
-        private const val KEY_DOWNLOAD_SUBTITLE_LANG = "download_subtitle_lang"
         private const val KEY_MAL_FAVORITES = "mal_favorites"
         private const val KEY_MAL_MANGA_FAVORITES = "mal_manga_favorites"
         private const val KEY_CROSS_PROVIDER_COPY_DONE = "cross_provider_copy_done"
@@ -71,10 +69,7 @@ class UserPreferences(context: Context) {
         private const val KEY_SUBTITLE_PROFILES = "subtitle_profiles"
         private const val KEY_STREAM_METHOD = "stream_method"
         private const val KEY_DEFAULT_MAGNET_EXTENSION = "default_magnet_extension"
-        private const val KEY_DOWNLOAD_DIRECTORY_URI = "download_directory_uri"
-        private const val KEY_MANGA_DOWNLOAD_DIRECTORY_URI = "manga_download_directory_uri"
         private const val KEY_DEFAULT_STREAM_EXTENSION = "default_stream_extension"
-        private const val KEY_KEEP_DOWNLOADED_FILES = "keep_downloaded_files"
         private const val KEY_MANGA_READER_MODE = "manga_reader_mode"
         private const val KEY_MANGA_DATA_SAVER = "manga_data_saver"
         private const val KEY_MANGA_PAGE_LAYOUT = "manga_page_layout"
@@ -183,13 +178,6 @@ class UserPreferences(context: Context) {
     private val _defaultSubtitleLang = MutableStateFlow("English")
     val defaultSubtitleLang: StateFlow<String> = _defaultSubtitleLang.asStateFlow()
 
-    // Download-specific preferences (default "same_as_stream" mirrors stream settings)
-    private val _downloadPreferredCategory = MutableStateFlow("same_as_stream")
-    val downloadPreferredCategory: StateFlow<String> = _downloadPreferredCategory.asStateFlow()
-
-    private val _downloadSubtitleLang = MutableStateFlow("same_as_stream")
-    val downloadSubtitleLang: StateFlow<String> = _downloadSubtitleLang.asStateFlow()
-
     // Hide Adult Content
     private val _hideAdultContent = MutableStateFlow(false)
     val hideAdultContent: StateFlow<Boolean> = _hideAdultContent.asStateFlow()
@@ -209,18 +197,6 @@ class UserPreferences(context: Context) {
     // Default Stream Extension (tensei stream — ContentProvider-based)
     private val _defaultStreamExtension = MutableStateFlow<String?>(null)
     val defaultStreamExtension: StateFlow<String?> = _defaultStreamExtension.asStateFlow()
-
-    // Download Directory URI (SAF tree URI for custom download location)
-    private val _downloadDirectoryUri = MutableStateFlow<String?>(null)
-    val downloadDirectoryUri: StateFlow<String?> = _downloadDirectoryUri.asStateFlow()
-
-    // Manga Download Directory URI (SAF tree URI for custom manga download location)
-    private val _mangaDownloadDirectoryUri = MutableStateFlow<String?>(null)
-    val mangaDownloadDirectoryUri: StateFlow<String?> = _mangaDownloadDirectoryUri.asStateFlow()
-
-    // Keep downloaded files after deletion from list
-    private val _keepDownloadedFiles = MutableStateFlow(false)
-    val keepDownloadedFiles: StateFlow<Boolean> = _keepDownloadedFiles.asStateFlow()
 
     // Manga Reader Preferences
     private val _mangaReaderMode = MutableStateFlow("vertical_scroll")
@@ -357,8 +333,6 @@ class UserPreferences(context: Context) {
         _preferredScraper.value = sharedPreferences.getString(KEY_PREFERRED_SCRAPER, "Animekai") ?: "Animekai"
         _defaultExtensionPackage.value = sharedPreferences.getString(KEY_DEFAULT_EXTENSION, "") ?: ""
         _defaultSubtitleLang.value = sharedPreferences.getString(KEY_DEFAULT_SUBTITLE_LANG, "English") ?: "English"
-        _downloadPreferredCategory.value = sharedPreferences.getString(KEY_DOWNLOAD_PREFERRED_CATEGORY, "same_as_stream") ?: "same_as_stream"
-        _downloadSubtitleLang.value = sharedPreferences.getString(KEY_DOWNLOAD_SUBTITLE_LANG, "same_as_stream") ?: "same_as_stream"
         _hideAdultContent.value = sharedPreferences.getBoolean(KEY_HIDE_ADULT_CONTENT, true)
         _streamProvider.value = sharedPreferences.getInt(KEY_STREAM_PROVIDER, 1)
         _streamMethod.value = sharedPreferences.getString(KEY_STREAM_METHOD, "direct") ?: "direct"
@@ -385,9 +359,6 @@ class UserPreferences(context: Context) {
         _swipeBrightness.value = sharedPreferences.getBoolean(KEY_SWIPE_BRIGHTNESS, false)
         _swipeSwap.value = sharedPreferences.getBoolean(KEY_SWIPE_SWAP, false)
         _autoUpdateExtensions.value = sharedPreferences.getBoolean(KEY_AUTO_UPDATE_EXTENSIONS, true)
-        _downloadDirectoryUri.value = sharedPreferences.getString(KEY_DOWNLOAD_DIRECTORY_URI, null)
-        _mangaDownloadDirectoryUri.value = sharedPreferences.getString(KEY_MANGA_DOWNLOAD_DIRECTORY_URI, null)
-        _keepDownloadedFiles.value = sharedPreferences.getBoolean(KEY_KEEP_DOWNLOADED_FILES, false)
         _mangaReaderMode.value = sharedPreferences.getString(KEY_MANGA_READER_MODE, "vertical_scroll") ?: "vertical_scroll"
         _mangaDataSaver.value = sharedPreferences.getBoolean(KEY_MANGA_DATA_SAVER, false)
         _mangaPageLayout.value = sharedPreferences.getString(KEY_MANGA_PAGE_LAYOUT, "single_page") ?: "single_page"
@@ -567,16 +538,6 @@ class UserPreferences(context: Context) {
         sharedPreferences.edit { putString(KEY_DEFAULT_SUBTITLE_LANG, lang) }
     }
 
-    fun setDownloadPreferredCategory(category: String) {
-        _downloadPreferredCategory.value = category
-        sharedPreferences.edit { putString(KEY_DOWNLOAD_PREFERRED_CATEGORY, category) }
-    }
-
-    fun setDownloadSubtitleLang(lang: String) {
-        _downloadSubtitleLang.value = lang
-        sharedPreferences.edit { putString(KEY_DOWNLOAD_SUBTITLE_LANG, lang) }
-    }
-
     fun setHideAdultContent(enabled: Boolean) {
         _hideAdultContent.value = enabled
         sharedPreferences.edit { putBoolean(KEY_HIDE_ADULT_CONTENT, enabled) }
@@ -600,21 +561,6 @@ class UserPreferences(context: Context) {
     fun setDefaultStreamExtension(authority: String?) {
         _defaultStreamExtension.value = authority
         sharedPreferences.edit { putString(KEY_DEFAULT_STREAM_EXTENSION, authority) }
-    }
-
-    fun setDownloadDirectoryUri(uri: String?) {
-        _downloadDirectoryUri.value = uri
-        sharedPreferences.edit { putString(KEY_DOWNLOAD_DIRECTORY_URI, uri) }
-    }
-
-    fun setMangaDownloadDirectoryUri(uri: String?) {
-        _mangaDownloadDirectoryUri.value = uri
-        sharedPreferences.edit { putString(KEY_MANGA_DOWNLOAD_DIRECTORY_URI, uri) }
-    }
-
-    fun setKeepDownloadedFiles(enabled: Boolean) {
-        _keepDownloadedFiles.value = enabled
-        sharedPreferences.edit { putBoolean(KEY_KEEP_DOWNLOADED_FILES, enabled) }
     }
 
     fun setMangaReaderMode(mode: String) {

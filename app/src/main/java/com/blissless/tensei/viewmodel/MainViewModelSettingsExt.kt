@@ -89,12 +89,6 @@ fun MainViewModel.setDiscordRichPresence(enabled: Boolean) {
 fun MainViewModel.setDefaultSubtitleLang(lang: String) =
     userPreferences.setDefaultSubtitleLang(lang)
 
-fun MainViewModel.setDownloadPreferredCategory(category: String) =
-    userPreferences.setDownloadPreferredCategory(category)
-
-fun MainViewModel.setDownloadSubtitleLang(lang: String) =
-    userPreferences.setDownloadSubtitleLang(lang)
-
 fun MainViewModel.setHideAdultContent(enabled: Boolean) =
     userPreferences.setHideAdultContent(enabled)
 
@@ -133,22 +127,6 @@ fun MainViewModel.setSwipeSwap(enabled: Boolean) =
 
 fun MainViewModel.setStreamMethod(method: String) =
     userPreferences.setStreamMethod(method)
-
-fun MainViewModel.setDownloadDirectoryUri(uri: String?) =
-    userPreferences.setDownloadDirectoryUri(uri)
-
-/** Currently selected manga download location (SAF tree URI, null = app internal storage). */
-val MainViewModel.mangaDownloadDirectoryUri: StateFlow<String?>
-    get() = userPreferences.mangaDownloadDirectoryUri
-
-/** Persists the manga download location and switches the download manager to it. */
-fun MainViewModel.setMangaDownloadLocation(uri: String?) {
-    userPreferences.setMangaDownloadDirectoryUri(uri)
-    mangaDownloadManager?.setDownloadLocation(uri)
-}
-
-fun MainViewModel.setKeepDownloadedFiles(enabled: Boolean) =
-    userPreferences.setKeepDownloadedFiles(enabled)
 
 fun MainViewModel.setMangaReaderMode(mode: String) =
     userPreferences.setMangaReaderMode(mode)

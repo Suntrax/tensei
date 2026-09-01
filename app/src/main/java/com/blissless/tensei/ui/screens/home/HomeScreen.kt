@@ -112,7 +112,6 @@ import com.blissless.tensei.ui.components.appIconDrawable
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.blissless.tensei.ui.screens.details.DetailedAnimeScreen
-import com.blissless.tensei.ui.screens.downloads.EpisodeDownloadDialog
 import com.blissless.tensei.ui.screens.status.StatusListScreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -197,7 +196,6 @@ fun HomeScreen(
 
     var selectedAnime by remember { mutableStateOf<AnimeMedia?>(null) }
     var showEpisodeSheet by remember { mutableStateOf(false) }
-    var showDownloadDialog by remember { mutableStateOf(false) }
     var showStatusDialog by remember { mutableStateOf(false) }
     var showMangaStatusDialog by remember { mutableStateOf(false) }
     var statusListMangaForDialog by remember { mutableStateOf<MangaMedia?>(null) }
@@ -977,9 +975,6 @@ fun HomeScreen(
                 onEpisodeSelect = { episode, title ->
                     onPlayEpisode(selectedAnime!!, episode, title)
                     showEpisodeSheet = false
-                },
-                onDownloadClick = {
-                    showDownloadDialog = true
                 }
             )
         }
@@ -1012,23 +1007,6 @@ fun HomeScreen(
                 }
             }
         )
-    }
-
-    if (showDownloadDialog && selectedAnime != null) {
-        Dialog(
-            onDismissRequest = { showDownloadDialog = false },
-            properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
-        ) {
-            EpisodeDownloadDialog(
-                anime = selectedAnime!!,
-                viewModel = viewModel,
-                downloadManager = viewModel.episodeDownloadManager,
-                isOled = isOled,
-                preferEnglishTitles = preferEnglishTitles,
-                onDismiss = { showDownloadDialog = false },
-                onNavigateToSettings = onNavigateToSettings
-            )
-        }
     }
 
     if (showStatusDialog && selectedAnime != null) {
@@ -1386,10 +1364,10 @@ private fun MangaHorizontalRow(
             }
             Column(modifier = Modifier.width(140.dp)) {
                 Card(
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(4.dp),
                     modifier = Modifier
                         .height(195.dp)
-                        .clip(RoundedCornerShape(14.dp))
+                        .clip(RoundedCornerShape(4.dp))
                         .clickable { onMangaClick(manga) }
                 ) {
                     Box(modifier = Modifier.fillMaxSize()) {

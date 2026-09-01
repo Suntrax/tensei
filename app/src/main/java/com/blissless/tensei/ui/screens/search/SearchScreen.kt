@@ -105,6 +105,7 @@ import com.blissless.tensei.data.models.toDetailedAnimeData
 import com.blissless.tensei.ui.screens.details.DetailedAnimeScreen
 import com.blissless.tensei.ui.theme.StatusColors
 import com.blissless.tensei.ui.theme.StatusLabels
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
@@ -238,6 +239,7 @@ fun SearchScreen(
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
     val scope = rememberCoroutineScope()
+    var searchJob by remember { mutableStateOf<Job?>(null) }
     val gridState = rememberLazyGridState()
 
     val savedAnimeMap = remember(currentlyWatching, planningToWatch, completed, onHold, dropped, localAnimeStatus) {
@@ -287,7 +289,8 @@ fun SearchScreen(
      * Replaces existing results for each fetched type.
      */
     fun performSearch() {
-        scope.launch {
+        searchJob?.cancel()
+        searchJob = scope.launch {
             isSearching = true
             hasSearched = true
             val seasonYearVal = filters.seasonYear.toIntOrNull()
@@ -444,6 +447,14 @@ fun SearchScreen(
             delay(400.milliseconds)
             performSearch()
         }
+    }
+
+    // On first open, run a default search with an empty query so the screen
+    // shows results immediately (popular/trending by default sort) instead of
+    // a blank "type to search" state.
+    LaunchedEffect(Unit) {
+        delay(250.milliseconds)
+        performSearch()
     }
 
     val activeFilterCount = listOfNotNull(
