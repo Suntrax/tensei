@@ -221,8 +221,6 @@ fun HomeScreen(
     var statusListTitle by remember { mutableStateOf("") }
     var statusListIcon by remember { mutableStateOf(Icons.Default.PlayArrow) }
     var statusListType by remember { mutableStateOf("") }
-    var statusListAnime by remember { mutableStateOf<List<AnimeMedia>>(emptyList()) }
-    var statusListManga by remember { mutableStateOf<List<MangaMedia>>(emptyList()) }
     var statusListIsManga by remember { mutableStateOf(false) }
 
     // Track first anime for back navigation
@@ -274,6 +272,12 @@ fun HomeScreen(
                 } else null
             } else null
         }.sortedByDescending { it.startedAt }
+    }
+
+    val activeMangaContinueReading = mangaContinueReading.filter { manga ->
+        val pageTotal = manga.currentChapterPages
+        val scrollProgress = manga.scrollProgress.coerceIn(0f, 1f)
+        pageTotal > 1 && ((scrollProgress * pageTotal).toInt() + 1) in 1 until pageTotal
     }
 
     val hasOfflineContent = !isLoggedIn && (localFavorites.isNotEmpty() || localAnimeStatus.isNotEmpty())
@@ -550,9 +554,6 @@ fun HomeScreen(
                                     statusListTitle = "Continue Watching"
                                     statusListIcon = Icons.Default.PlayArrow
                                     statusListType = "CURRENT"
-                                    statusListAnime = continueWatchingEpisodes.map { entry ->
-                                        animeById[entry.animeId] ?: AnimeMedia(id = entry.animeId, title = entry.animeTitle, titleEnglish = entry.animeTitleEnglish, cover = entry.animeCover, banner = entry.animeBanner)
-                                    }
                                     statusListIsManga = false
                                     showStatusListScreen = true
                                 }
@@ -586,11 +587,6 @@ fun HomeScreen(
                         // Only show cards for a chapter that is actively in progress — hide
                         // entries whose current chapter hasn't been opened (no page count) or
                         // was scrolled to the end (finished, e.g. 25/25).
-                        val activeMangaContinueReading = mangaContinueReading.filter { manga ->
-                            val pageTotal = manga.currentChapterPages
-                            val scrollProgress = manga.scrollProgress.coerceIn(0f, 1f)
-                            pageTotal > 1 && ((scrollProgress * pageTotal).toInt() + 1) in 1 until pageTotal
-                        }
                         if (activeMangaContinueReading.isNotEmpty()) {
                             SectionHeader(
                                 title = "Continue Reading",
@@ -601,7 +597,6 @@ fun HomeScreen(
                                     statusListTitle = "Continue Reading"
                                     statusListIcon = Icons.Default.PlayArrow
                                     statusListType = "CURRENT"
-                                    statusListManga = activeMangaContinueReading
                                     statusListIsManga = true
                                     showStatusListScreen = true
                                 }
@@ -624,7 +619,6 @@ fun HomeScreen(
                                     statusListTitle = "Currently Watching"
                                     statusListIcon = Icons.Default.PlayArrow
                                     statusListType = "CURRENT"
-                                    statusListAnime = effectiveCurrentlyWatching
                                     statusListIsManga = false
                                     showStatusListScreen = true
                                 }
@@ -657,7 +651,6 @@ fun HomeScreen(
                                     statusListTitle = "Planning to Watch"
                                     statusListIcon = Icons.Default.Bookmark
                                     statusListType = "PLANNING"
-                                    statusListAnime = effectivePlanningToWatch
                                     statusListIsManga = false
                                     showStatusListScreen = true
                                 }
@@ -689,7 +682,6 @@ fun HomeScreen(
                                     statusListTitle = "Completed"
                                     statusListIcon = Icons.Default.Check
                                     statusListType = "COMPLETED"
-                                    statusListAnime = effectiveCompleted
                                     statusListIsManga = false
                                     showStatusListScreen = true
                                 }
@@ -721,7 +713,6 @@ fun HomeScreen(
                                     statusListTitle = "On Hold"
                                     statusListIcon = Icons.Default.Pause
                                     statusListType = "PAUSED"
-                                    statusListAnime = effectiveOnHold
                                     statusListIsManga = false
                                     showStatusListScreen = true
                                 }
@@ -753,7 +744,6 @@ fun HomeScreen(
                                     statusListTitle = "Dropped"
                                     statusListIcon = Icons.Default.Delete
                                     statusListType = "DROPPED"
-                                    statusListAnime = effectiveDropped
                                     statusListIsManga = false
                                     showStatusListScreen = true
                                 }
@@ -789,7 +779,6 @@ fun HomeScreen(
                                     statusListTitle = "Currently Reading"
                                     statusListIcon = Icons.Default.PlayArrow
                                     statusListType = "CURRENT"
-                                    statusListManga = mangaCurrentlyReading
                                     statusListIsManga = true
                                     showStatusListScreen = true
                                 }
@@ -812,7 +801,6 @@ fun HomeScreen(
                                     statusListTitle = "Planning to Read"
                                     statusListIcon = Icons.Default.Bookmark
                                     statusListType = "PLANNING"
-                                    statusListManga = mangaPlanningToRead
                                     statusListIsManga = true
                                     showStatusListScreen = true
                                 }
@@ -835,7 +823,6 @@ fun HomeScreen(
                                     statusListTitle = "Completed"
                                     statusListIcon = Icons.Default.Check
                                     statusListType = "COMPLETED"
-                                    statusListManga = mangaCompleted
                                     statusListIsManga = true
                                     showStatusListScreen = true
                                 }
@@ -876,6 +863,36 @@ fun HomeScreen(
         }
 
         // Status List Screen overlay (slides up from bottom like search)
+        val liveStatusListAnime: List<AnimeMedia> =
+            if (!statusListIsManga) {
+                when (statusListTitle) {
+                    "Continue Watching" -> continueWatchingEpisodes.map { entry ->
+                        animeById[entry.animeId] ?: AnimeMedia(id = entry.animeId, title = entry.animeTitle, titleEnglish = entry.animeTitleEnglish, cover = entry.animeCover, banner = entry.animeBanner)
+                    }
+                    else -> when (statusListType) {
+                        "CURRENT" -> effectiveCurrentlyWatching
+                        "PLANNING" -> effectivePlanningToWatch
+                        "COMPLETED" -> effectiveCompleted
+                        "PAUSED" -> effectiveOnHold
+                        "DROPPED" -> effectiveDropped
+                        else -> emptyList()
+                    }
+                }
+            } else emptyList()
+
+        val liveStatusListManga: List<MangaMedia> =
+            if (statusListIsManga) {
+                when (statusListTitle) {
+                    "Continue Reading" -> activeMangaContinueReading
+                    else -> when (statusListType) {
+                        "CURRENT" -> mangaCurrentlyReading
+                        "PLANNING" -> mangaPlanningToRead
+                        "COMPLETED" -> mangaCompleted
+                        else -> emptyList()
+                    }
+                }
+            } else emptyList()
+
         AnimatedVisibility(
             visible = showStatusListScreen,
             enter = slideInVertically(
@@ -906,8 +923,8 @@ fun HomeScreen(
             StatusListScreen(
                 title = statusListTitle,
                 icon = statusListIcon,
-                animeList = statusListAnime,
-                mangaList = statusListManga,
+                animeList = liveStatusListAnime,
+                mangaList = liveStatusListManga,
                 listType = statusListType,
                 isManga = statusListIsManga,
                 showStatusColors = showStatusColors,

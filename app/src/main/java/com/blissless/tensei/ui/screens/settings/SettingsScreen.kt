@@ -33,6 +33,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Extension
@@ -868,7 +869,7 @@ private fun GeneralSettingsPage(
             val maxPerformanceState by viewModel.maxPerformance.collectAsState(initial = false)
             SettingsToggle(
                 title = "Max Performance",
-                description = "Force the app to run at the highest refresh rate available",
+                description = "Force the app to run at the highest refresh rate available. Only works on Android 11+",
                 checked = maxPerformanceState,
                 onCheckedChange = { viewModel.setMaxPerformance(it) }
             )
@@ -1564,14 +1565,23 @@ private fun ExtensionsSettingsPage(
     onBack: () -> Unit
 ) {
     val extViewModel: ExtensionsViewModel = viewModel()
+    var selectedRepoUrl by remember { mutableStateOf<String?>(null) }
 
-    SettingsPageScaffold(title = "Extensions", onBack = onBack, scrollable = false, actions = {
-        IconButton(onClick = { extViewModel.loadExtensions(true) }) {
-            Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+    SettingsPageScaffold(
+        title = "Extensions",
+        onBack = onBack,
+        scrollable = false,
+        navigationIcon = if (selectedRepoUrl != null) Icons.Default.Close else Icons.AutoMirrored.Filled.ArrowBack,
+        actions = {
+            IconButton(onClick = { extViewModel.loadExtensions(true) }) {
+                Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+            }
         }
-    }) {
+    ) {
         ExtensionsScreen(
-            viewModel = extViewModel
+            viewModel = extViewModel,
+            selectedRepoUrl = selectedRepoUrl,
+            onSelectRepo = { selectedRepoUrl = it }
         )
     }
 }

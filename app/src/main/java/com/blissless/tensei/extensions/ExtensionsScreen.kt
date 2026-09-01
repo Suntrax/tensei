@@ -94,11 +94,12 @@ import com.blissless.tensei.viewmodel.InstalledExtension
 @Composable
 fun ExtensionsScreen(
     viewModel: ExtensionsViewModel = viewModel(),
+    selectedRepoUrl: String? = null,
+    onSelectRepo: (String?) -> Unit = {},
     onBrowseChanged: ((Boolean) -> Unit)? = null,
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var repoUrl by remember { mutableStateOf("") }
-    var selectedRepoUrl by remember { mutableStateOf<String?>(null) }
     var reposExpanded by remember { mutableStateOf(true) }
     var extensionsExpanded by remember { mutableStateOf(true) }
     var addRepoExpanded by remember { mutableStateOf(false) }
@@ -138,7 +139,7 @@ fun ExtensionsScreen(
     }
 
     BackHandler(enabled = selectedRepoUrl != null) {
-        selectedRepoUrl = null
+        onSelectRepo(null)
     }
 
     val selectedRepoState = selectedRepoUrl?.let { url ->
@@ -153,7 +154,7 @@ fun ExtensionsScreen(
             updatablePackageNames = uiState.updatablePackageNames,
             updatableNames = uiState.updatableNames,
             onInstall = { viewModel.installExtension(it) },
-            onBack = { selectedRepoUrl = null },
+            onBack = { onSelectRepo(null) },
             onRemoveRepo = { url -> viewModel.removeRepo(url) }
         )
         return
@@ -234,7 +235,7 @@ fun ExtensionsScreen(
                 ) {
                     RepoCard(
                         repoState = repoState,
-                        onClick = { selectedRepoUrl = repoState.url },
+                        onClick = { onSelectRepo(repoState.url) },
                         onRemoveRepo = { viewModel.removeRepo(repoState.url) }
                     )
                 }
