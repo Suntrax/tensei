@@ -10,6 +10,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -517,12 +518,13 @@ private fun ExploreCategoryAnimeCard(
         Color.Black.copy(alpha = 0.6f)
     }
 
-    Column(modifier = Modifier.width(160.dp)) {
+    Column(modifier = Modifier.fillMaxWidth()) {
         Card(
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(4.dp),
             modifier = Modifier
-                .height(220.dp)
-                .clip(RoundedCornerShape(12.dp))
+                .fillMaxWidth()
+                .aspectRatio(140f / 195f)
+                .clip(RoundedCornerShape(4.dp))
                 .clickable {
                     onClick(
                         if (cardBounds != null && cardBounds!!.width() > 0 && cardBounds!!.height() > 0) {
@@ -663,7 +665,7 @@ private fun ExploreCategoryAnimeCard(
         val displayTitle = if (preferEnglishTitles && !anime.titleEnglish.isNullOrEmpty()) anime.titleEnglish else anime.title
         Box(
             modifier = Modifier
-                .width(160.dp)
+                .fillMaxWidth()
                 .height(40.dp)
                 .padding(top = 6.dp)
         ) {
@@ -689,12 +691,13 @@ private fun ExploreCategoryMangaCard(
                else manga.title.romaji ?: "Unknown"
     val coverUrl = manga.coverImage?.extraLarge ?: manga.coverImage?.large ?: manga.coverImage?.medium ?: ""
 
-    Column(modifier = Modifier.width(160.dp)) {
+    Column(modifier = Modifier.fillMaxWidth()) {
         Card(
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(4.dp),
             modifier = Modifier
-                .height(220.dp)
-                .clip(RoundedCornerShape(12.dp))
+                .fillMaxWidth()
+                .aspectRatio(140f / 195f)
+                .clip(RoundedCornerShape(4.dp))
                 .clickable(onClick = onClick)
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
@@ -752,7 +755,7 @@ private fun ExploreCategoryMangaCard(
             }
         }
         Box(
-            modifier = Modifier.width(160.dp).height(40.dp).padding(top = 6.dp)
+            modifier = Modifier.fillMaxWidth().height(40.dp).padding(top = 6.dp)
         ) {
             Text(
                 text = title,

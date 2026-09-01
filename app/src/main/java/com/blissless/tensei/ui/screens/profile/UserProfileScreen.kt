@@ -49,7 +49,21 @@ import androidx.compose.material3.TextButton
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
+import com.blissless.tensei.ui.components.rememberCinematicAnimation
+import kotlin.math.absoluteValue
+import kotlin.math.min
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.runtime.Composable
@@ -756,7 +770,18 @@ private fun FavoritesContent(
     } else {
         var animeExpanded by remember { mutableStateOf(true) }
         var mangaExpanded by remember { mutableStateOf(true) }
+        val listState = rememberLazyListState()
+        val density = LocalDensity.current
+        val translationYOffset = with(density) { (-30).dp.toPx() }
+        val isScrolling by remember {
+            derivedStateOf { listState.isScrollInProgress }
+        }
+        val cinematicProgress = rememberCinematicAnimation("userProfile_favorites",
+            isVisible = true,
+            playOncePerSession = true
+        )
         LazyColumn(
+            state = listState,
             verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(vertical = 8.dp)
         ) {
@@ -779,13 +804,50 @@ private fun FavoritesContent(
                     }
                 }
                 if (animeExpanded) {
-                    itemsIndexed(favorites) { _, anime ->
-                        FavoriteItem(
-                            anime = anime,
-                            preferEnglishTitles = preferEnglishTitles,
-                            onClick = { onAnimeClick(anime) },
-                            onRemove = { onRemoveFavorite?.invoke(anime) }
+                    itemsIndexed(favorites) { index, anime ->
+                        val staggerDelay = minOf(index, 20) * 30f
+                        val staggerMs = staggerDelay / 1000f
+                        val rawProgress = ((cinematicProgress - staggerMs) / (1f - staggerMs))
+                        val easedProgress = easeOutCubic(rawProgress.coerceAtLeast(0f).coerceAtMost(1f))
+                        val introScale = 0.3f + easedProgress * 0.7f
+                        val introAlpha = easedProgress.coerceAtLeast(0f)
+                        val introTranslationY = translationYOffset * (1f - easedProgress)
+                        val layoutInfo by remember { derivedStateOf { listState.layoutInfo } }
+                        val visibleItems = layoutInfo.visibleItemsInfo
+                        val itemInfo = visibleItems.find { it.index == index }
+                        val centerOffset = if (itemInfo != null) {
+                            val ic = itemInfo.offset + itemInfo.size / 2
+                            val sc = (layoutInfo.viewportSize.height / 2).toFloat()
+                            (ic - sc) / sc
+                        } else 0f
+                        val animatedOffset by animateFloatAsState(
+                            targetValue = if (isScrolling) centerOffset.coerceIn(-2f, 2f) else 0f,
+                            animationSpec = if (isScrolling) spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium) else spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+                            label = "offset"
                         )
+                        val scrollScale = 1f - (animatedOffset.absoluteValue * 0.15f).coerceAtMost(0.15f)
+                        val scrollAlpha = 1f - (animatedOffset.absoluteValue * 0.3f).coerceAtMost(0.4f)
+                        val scrollParallax = animatedOffset * 20f
+                        val finalScale = scrollScale * introScale
+                        val finalAlpha = (scrollAlpha * introAlpha).coerceIn(0f, 1f)
+                        val finalTranslationY = scrollParallax + introTranslationY
+                        Box(
+                            modifier = Modifier
+                                .animateItem()
+                                .graphicsLayer {
+                                    scaleX = finalScale
+                                    scaleY = finalScale
+                                    alpha = finalAlpha
+                                    translationY = finalTranslationY
+                                }
+                        ) {
+                            FavoriteItem(
+                                anime = anime,
+                                preferEnglishTitles = preferEnglishTitles,
+                                onClick = { onAnimeClick(anime) },
+                                onRemove = { onRemoveFavorite?.invoke(anime) }
+                            )
+                        }
                     }
                 }
             }
@@ -809,13 +871,50 @@ private fun FavoritesContent(
                     }
                 }
                 if (mangaExpanded) {
-                    itemsIndexed(mangaFavorites) { _, manga ->
-                        MangaFavoriteItem(
-                            manga = manga,
-                            preferEnglishTitles = preferEnglishTitles,
-                            onClick = { onMangaClick(manga) },
-                            onRemove = { onRemoveMangaFavorite?.invoke(manga) }
+                    itemsIndexed(mangaFavorites) { index, manga ->
+                        val staggerDelay = minOf(index, 20) * 30f
+                        val staggerMs = staggerDelay / 1000f
+                        val rawProgress = ((cinematicProgress - staggerMs) / (1f - staggerMs))
+                        val easedProgress = easeOutCubic(rawProgress.coerceAtLeast(0f).coerceAtMost(1f))
+                        val introScale = 0.3f + easedProgress * 0.7f
+                        val introAlpha = easedProgress.coerceAtLeast(0f)
+                        val introTranslationY = translationYOffset * (1f - easedProgress)
+                        val layoutInfo by remember { derivedStateOf { listState.layoutInfo } }
+                        val visibleItems = layoutInfo.visibleItemsInfo
+                        val itemInfo = visibleItems.find { it.index == index }
+                        val centerOffset = if (itemInfo != null) {
+                            val ic = itemInfo.offset + itemInfo.size / 2
+                            val sc = (layoutInfo.viewportSize.height / 2).toFloat()
+                            (ic - sc) / sc
+                        } else 0f
+                        val animatedOffset by animateFloatAsState(
+                            targetValue = if (isScrolling) centerOffset.coerceIn(-2f, 2f) else 0f,
+                            animationSpec = if (isScrolling) spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium) else spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+                            label = "offset"
                         )
+                        val scrollScale = 1f - (animatedOffset.absoluteValue * 0.15f).coerceAtMost(0.15f)
+                        val scrollAlpha = 1f - (animatedOffset.absoluteValue * 0.3f).coerceAtMost(0.4f)
+                        val scrollParallax = animatedOffset * 20f
+                        val finalScale = scrollScale * introScale
+                        val finalAlpha = (scrollAlpha * introAlpha).coerceIn(0f, 1f)
+                        val finalTranslationY = scrollParallax + introTranslationY
+                        Box(
+                            modifier = Modifier
+                                .animateItem()
+                                .graphicsLayer {
+                                    scaleX = finalScale
+                                    scaleY = finalScale
+                                    alpha = finalAlpha
+                                    translationY = finalTranslationY
+                                }
+                        ) {
+                            MangaFavoriteItem(
+                                manga = manga,
+                                preferEnglishTitles = preferEnglishTitles,
+                                onClick = { onMangaClick(manga) },
+                                onRemove = { onRemoveMangaFavorite?.invoke(manga) }
+                            )
+                        }
                     }
                 }
             }
@@ -942,7 +1041,13 @@ private fun HistoryContent(
         var animeExpanded by remember { mutableStateOf(true) }
         var mangaExpanded by remember { mutableStateOf(true) }
 
+        val listState = rememberLazyListState()
+        val isScrolling by remember {
+            derivedStateOf { listState.isScrollInProgress }
+        }
+
         LazyColumn(
+            state = listState,
             verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(vertical = 8.dp)
         ) {
@@ -966,13 +1071,51 @@ private fun HistoryContent(
                 }
                 if (animeExpanded) {
                     itemsIndexed(history) { index, entry ->
-                        HistoryItem(
-                            entry = entry,
-                            preferEnglishTitles = preferEnglishTitles,
-                            onClick = { onAnimeClick(entry) },
-                            status = statuses.getOrNull(index),
-                            progress = progressList.getOrNull(index)
+                        val staggerDelayMs = minOf(index, 20) * 60
+                        val layoutInfo by remember { derivedStateOf { listState.layoutInfo } }
+                        val visibleItems = layoutInfo.visibleItemsInfo
+                        val itemInfo = visibleItems.find { it.index == index }
+                        val centerOffset = if (itemInfo != null) {
+                            val ic = itemInfo.offset + itemInfo.size / 2
+                            val sc = (layoutInfo.viewportSize.height / 2).toFloat()
+                            (ic - sc) / sc
+                        } else 0f
+                        val animatedOffset by animateFloatAsState(
+                            targetValue = if (isScrolling) centerOffset.coerceIn(-2f, 2f) else 0f,
+                            animationSpec = if (isScrolling) spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium) else spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+                            label = "offset"
                         )
+                        val scrollScale = 1f - (animatedOffset.absoluteValue * 0.15f).coerceAtMost(0.15f)
+                        val scrollAlpha = 1f - (animatedOffset.absoluteValue * 0.3f).coerceAtMost(0.4f)
+                        val scrollParallax = animatedOffset * 20f
+                        Box(
+                            modifier = Modifier
+                                .animateItem()
+                                .graphicsLayer {
+                                    scaleX = scrollScale
+                                    scaleY = scrollScale
+                                    alpha = scrollAlpha.coerceIn(0f, 1f)
+                                    translationY = scrollParallax
+                                }
+                        ) {
+                            AnimatedVisibility(
+                                visible = true,
+                                enter = fadeIn(animationSpec = tween(400, delayMillis = staggerDelayMs, easing = FastOutSlowInEasing)) +
+                                    scaleIn(initialScale = 0.7f, animationSpec = tween(400, delayMillis = staggerDelayMs, easing = FastOutSlowInEasing)) +
+                                    slideInVertically(
+                                        animationSpec = tween(500, delayMillis = staggerDelayMs, easing = FastOutSlowInEasing),
+                                        initialOffsetY = { -it / 2 }
+                                    )
+                            ) {
+                                HistoryItem(
+                                    entry = entry,
+                                    preferEnglishTitles = preferEnglishTitles,
+                                    onClick = { onAnimeClick(entry) },
+                                    status = statuses.getOrNull(index),
+                                    progress = progressList.getOrNull(index)
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -996,8 +1139,46 @@ private fun HistoryContent(
                     }
                 }
                 if (mangaExpanded) {
-                    itemsIndexed(mangaHistory) { _, node ->
-                        MangaActivityItem(node = node, preferEnglishTitles = preferEnglishTitles, onClick = { onMangaClick(node) })
+                    itemsIndexed(mangaHistory) { index, node ->
+                        val staggerDelayMs = minOf(index, 20) * 60
+                        val layoutInfo by remember { derivedStateOf { listState.layoutInfo } }
+                        val visibleItems = layoutInfo.visibleItemsInfo
+                        val itemInfo = visibleItems.find { it.index == index }
+                        val centerOffset = if (itemInfo != null) {
+                            val ic = itemInfo.offset + itemInfo.size / 2
+                            val sc = (layoutInfo.viewportSize.height / 2).toFloat()
+                            (ic - sc) / sc
+                        } else 0f
+                        val animatedOffset by animateFloatAsState(
+                            targetValue = if (isScrolling) centerOffset.coerceIn(-2f, 2f) else 0f,
+                            animationSpec = if (isScrolling) spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium) else spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+                            label = "offset"
+                        )
+                        val scrollScale = 1f - (animatedOffset.absoluteValue * 0.15f).coerceAtMost(0.15f)
+                        val scrollAlpha = 1f - (animatedOffset.absoluteValue * 0.3f).coerceAtMost(0.4f)
+                        val scrollParallax = animatedOffset * 20f
+                        Box(
+                            modifier = Modifier
+                                .animateItem()
+                                .graphicsLayer {
+                                    scaleX = scrollScale
+                                    scaleY = scrollScale
+                                    alpha = scrollAlpha.coerceIn(0f, 1f)
+                                    translationY = scrollParallax
+                                }
+                        ) {
+                            AnimatedVisibility(
+                                visible = true,
+                                enter = fadeIn(animationSpec = tween(400, delayMillis = staggerDelayMs, easing = FastOutSlowInEasing)) +
+                                    scaleIn(initialScale = 0.7f, animationSpec = tween(400, delayMillis = staggerDelayMs, easing = FastOutSlowInEasing)) +
+                                    slideInVertically(
+                                        animationSpec = tween(500, delayMillis = staggerDelayMs, easing = FastOutSlowInEasing),
+                                        initialOffsetY = { -it / 2 }
+                                    )
+                            ) {
+                                MangaActivityItem(node = node, preferEnglishTitles = preferEnglishTitles, onClick = { onMangaClick(node) })
+                            }
+                        }
                     }
                 }
             }
@@ -1247,6 +1428,11 @@ private fun formatMangaProgress(progress: String?): String? {
 private fun formatTimestamp(timestamp: Long): String {
     val sdf = SimpleDateFormat("d MMMM, yyyy - HH:mm", Locale.getDefault())
     return sdf.format(Date(timestamp * 1000))
+}
+
+private fun easeOutCubic(t: Float): Float {
+    val t1 = t - 1
+    return t1 * t1 * t1 + 1
 }
 
 

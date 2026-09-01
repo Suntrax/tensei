@@ -10,6 +10,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -596,7 +597,8 @@ private fun StatusListAnimeCard(
         Card(
             shape = RoundedCornerShape(4.dp),
             modifier = Modifier
-                .height(220.dp)
+                .fillMaxWidth()
+                .aspectRatio(140f / 195f)
                 .clip(RoundedCornerShape(4.dp))
                 .clickable {
                     onClick(
@@ -769,7 +771,8 @@ private fun StatusListMangaCard(
         Card(
             shape = RoundedCornerShape(4.dp),
             modifier = Modifier
-                .height(220.dp)
+                .fillMaxWidth()
+                .aspectRatio(140f / 195f)
                 .clip(RoundedCornerShape(4.dp))
                 .clickable(onClick = onClick)
         ) {
