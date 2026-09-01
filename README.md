@@ -1,6 +1,6 @@
 # Tensei
 
-An offline-first anime &amp; manga streaming app for Android with a 5-tab, cinema-inspired interface.
+An anime &amp; manga streaming app for Android with a 5-tab, cinema-inspired interface.
 
 ![Platform](https://img.shields.io/badge/Platform-Android-green.svg)
 ![Language](https://img.shields.io/badge/Language-Kotlin-blue.svg)
