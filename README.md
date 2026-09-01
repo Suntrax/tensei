@@ -6,6 +6,10 @@ An anime &amp; manga streaming app for Android with a 5-tab, cinema-inspired int
 ![Language](https://img.shields.io/badge/Language-Kotlin-blue.svg)
 ![MinSDK](https://img.shields.io/badge/MinSDK-26-orange.svg)
 
+## Screenshots
+
+- TBD
+
 ## Features
 
 - **Multi-provider anime &amp; manga**: Browse, search, and stream from AniList, MyAnimeList (MAL), TMDB, Jikan, and MangaDex, backed by a full extension (Tachiyomi-compatible) catalogue system.
@@ -44,6 +48,10 @@ Download the APK from [Releases](https://github.com/TheBlissless/tensei/releases
 - **APIs**: AniList GraphQL, MyAnimeList (MAL OAuth), TMDB, Jikan, MangaDex, AnimeThemes, AnimeSkip
 - **Integration**: Discord Partner SDK
 - **Other**: AndroidX Core KTX, Lifecycle (runtime/compose/viewmodel), SplashScreen, Preferences KTX, JUnit/Mockito/Truth for testing
+
+## Forking the repository
+
+- TBD
 
 ## Disclaimer
 
