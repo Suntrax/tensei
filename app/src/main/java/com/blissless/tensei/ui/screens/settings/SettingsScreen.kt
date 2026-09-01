@@ -505,8 +505,8 @@ private fun AccountSettingsPage(
         SectionHeader("DISCORD")
         SettingsCard {
             SettingsToggle(
-                title = "Rich Presence",
-                description = "Show what you're watching/reading on Discord",
+                title = "Discord Rich Presence",
+                description = "Show what you're watching/reading on Discord\nMay only work with the official Discord app",
                 checked = discordRichPresence,
                 onCheckedChange = { viewModel.setDiscordRichPresence(it) }
             )

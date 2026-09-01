@@ -70,6 +70,8 @@ Java_com_blissless_tensei_discord_DiscordNative_nativeSetPresence(
 
     discordpp::Activity activity;
 
+    activity.SetName(c_largeText);
+
     switch (type) {
         case 0: activity.SetType(discordpp::ActivityTypes::Playing); break;
         case 1: activity.SetType(discordpp::ActivityTypes::Streaming); break;
