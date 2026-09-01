@@ -500,6 +500,7 @@ fun AnimeScreen(
         HomeAnimeStatusDialog(
             anime = animeMedia,
             isOled = isOled,
+            preferEnglishTitles = preferEnglishTitles,
             onDismiss = { showStatusDialog = false },
             onRemove = {
                 viewModel.removeAnimeFromList(anime.id)

@@ -110,6 +110,7 @@ fun ExploreCategoryListScreen(
     onAnimeClick: (ExploreAnime, AnimeCardBounds?) -> Unit = { _, _ -> },
     onBookmarkClick: (ExploreAnime) -> Unit = {},
     onMangaClick: (MangaExploreMedia) -> Unit = {},
+    onMangaBookmarkClick: (MangaExploreMedia) -> Unit = {},
     onBackClick: () -> Unit = {},
     onDismiss: () -> Unit = {}
 ) {
@@ -337,7 +338,8 @@ fun ExploreCategoryListScreen(
                                 ExploreCategoryMangaCard(
                                     manga = manga,
                                     preferEnglishTitles = preferEnglishTitles,
-                                    onClick = { onMangaClick(manga) }
+                                    onClick = { onMangaClick(manga) },
+                                    onBookmarkClick = { onMangaBookmarkClick(manga) }
                                 )
                             }
                         }
@@ -684,7 +686,8 @@ private fun ExploreCategoryAnimeCard(
 private fun ExploreCategoryMangaCard(
     manga: MangaExploreMedia,
     preferEnglishTitles: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onBookmarkClick: () -> Unit
 ) {
     val context = LocalContext.current
     val title = if (preferEnglishTitles && !manga.title.english.isNullOrBlank()) manga.title.english!!
@@ -749,6 +752,49 @@ private fun ExploreCategoryMangaCard(
                             color = Color(0xFFFFD700),
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                        )
+                    }
+                }
+
+                // Bottom Row: Bookmark Button (left) + Open Button (right)
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    FilledTonalIconButton(
+                        onClick = onBookmarkClick,
+                        modifier = Modifier.size(32.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = Color.Black.copy(alpha = 0.6f),
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.BookmarkAdd,
+                            contentDescription = "Add to list",
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    FilledTonalIconButton(
+                        onClick = onClick,
+                        modifier = Modifier.size(32.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = Color.Black.copy(alpha = 0.6f),
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.PlayArrow,
+                            contentDescription = "Open",
+                            modifier = Modifier.size(18.dp)
                         )
                     }
                 }

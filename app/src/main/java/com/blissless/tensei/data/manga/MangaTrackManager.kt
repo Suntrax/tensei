@@ -100,7 +100,7 @@ class MangaTrackManager(context: Context) {
      * Ensure a track exists for the given manga. If none exists, a new CURRENT track is created
      * with the provided metadata. Returns the (possibly newly-created) track.
      */
-    fun ensureTrack(mangaId: Int, title: String = "", cover: String = "", totalChapters: Int = 0, averageScore: Int? = null): MangaTrack {
+    fun ensureTrack(mangaId: Int, title: String = "", cover: String = "", totalChapters: Int = 0, averageScore: Int? = null, titleEnglish: String? = null): MangaTrack {
         val tracks = getTracks().toMutableList()
         val index = tracks.indexOfFirst { it.mangaId == mangaId }
         if (index >= 0) {
@@ -108,6 +108,7 @@ class MangaTrackManager(context: Context) {
             val existing = tracks[index]
             val patched = existing.copy(
                 title = existing.title.ifBlank { title },
+                titleEnglish = existing.titleEnglish?.takeIf { it.isNotBlank() } ?: titleEnglish,
                 cover = existing.cover.ifBlank { cover },
                 totalChapters = if (existing.totalChapters == 0) totalChapters else existing.totalChapters,
                 averageScore = averageScore ?: existing.averageScore
@@ -121,6 +122,7 @@ class MangaTrackManager(context: Context) {
         val newTrack = MangaTrack(
             mangaId = mangaId,
             title = title,
+            titleEnglish = titleEnglish,
             cover = cover,
             totalChapters = totalChapters,
             status = "CURRENT",
@@ -261,14 +263,18 @@ class MangaTrackManager(context: Context) {
         saveTracks(tracks)
     }
 
-    fun updateMangaInfo(mangaId: Int, title: String, cover: String) {
+    fun updateMangaInfo(mangaId: Int, title: String, cover: String, titleEnglish: String? = null) {
         // Only patch an existing track — never auto-create one here. This is called from
         // fetchMangaDetail (i.e. merely viewing a detail page), so creating a track would
         // silently add manga to "Planning to Read" without the user doing anything.
         val tracks = getTracks().toMutableList()
         val index = tracks.indexOfFirst { it.mangaId == mangaId }
         if (index >= 0) {
-            tracks[index] = tracks[index].copy(title = title, cover = cover)
+            tracks[index] = tracks[index].copy(
+                title = title,
+                cover = cover,
+                titleEnglish = titleEnglish ?: tracks[index].titleEnglish
+            )
             saveTracks(tracks)
         }
     }

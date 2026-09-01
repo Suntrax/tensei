@@ -774,6 +774,7 @@ fun SearchScreen(
                             mangaFormat = manga.format,
                             mangaScore = manga.averageScore,
                             mangaYear = manga.seasonYear ?: manga.startDate?.year,
+                            mangaChapters = manga.chapters,
                             listStatus = mangaTrackMap[manga.id],
                             onClick = { onMangaClick(manga) }
                         )
@@ -1021,6 +1022,7 @@ private fun SearchResultCard(
     mangaFormat: String? = null,
     mangaScore: Int? = null,
     mangaYear: Int? = null,
+    mangaChapters: Int? = null,
     listStatus: String? = null,
     preferEnglishTitles: Boolean = true,
     onClick: () -> Unit
@@ -1087,6 +1089,10 @@ private fun SearchResultCard(
                 }
                 year?.let {
                     Text("$it", color = Color.White.copy(alpha = 0.4f), style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                }
+                if (anime == null && mangaChapters != null) {
+                    if (format != null || year != null) Text(" • ", color = Color.White.copy(alpha = 0.3f), style = MaterialTheme.typography.labelSmall)
+                    Text("$mangaChapters ch.", color = Color.White.copy(alpha = 0.4f), style = MaterialTheme.typography.labelSmall, maxLines = 1)
                 }
                 if (anime != null && anime.episodes > 0 && format?.uppercase() != "MOVIE") {
                     if (year != null) Text(" • ", color = Color.White.copy(alpha = 0.3f), style = MaterialTheme.typography.labelSmall)
@@ -1177,10 +1183,21 @@ private fun MediaSearchResultCard(
                     }
                 }
 
-                // Type chip (top-end) — small, 24dp tall, with a subtle
+                if (displayScore != null) {
+                    Row(
+                        modifier = Modifier.align(Alignment.TopEnd).padding(6.dp).background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Star, contentDescription = null, tint = Color(0xFFFFD700), modifier = Modifier.size(12.dp))
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Text(String.format(Locale.getDefault(), "%.1f", displayScore), color = Color(0xFFFFD700), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                // Type chip (bottom-start) — small, 24dp tall, with a subtle
                 // scrim background so it stays legible over any cover art.
                 Surface(
-                    modifier = Modifier.align(Alignment.TopEnd).padding(6.dp),
+                    modifier = Modifier.align(Alignment.BottomStart).padding(6.dp),
                     shape = RoundedCornerShape(6.dp),
                     color = Color.Black.copy(alpha = 0.55f)
                 ) {
@@ -1205,17 +1222,6 @@ private fun MediaSearchResultCard(
                         )
                     }
                 }
-
-                if (displayScore != null) {
-                    Row(
-                        modifier = Modifier.align(Alignment.BottomStart).padding(6.dp).background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Default.Star, contentDescription = null, tint = Color(0xFFFFD700), modifier = Modifier.size(12.dp))
-                        Spacer(modifier = Modifier.width(2.dp))
-                        Text(String.format(Locale.getDefault(), "%.1f", displayScore), color = Color(0xFFFFD700), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-                    }
-                }
             }
             Spacer(modifier = Modifier.height(6.dp))
             Text(displayTitle, color = Color.White, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 4.dp))
@@ -1229,6 +1235,10 @@ private fun MediaSearchResultCard(
                 }
                 year?.let {
                     Text("$it", color = Color.White.copy(alpha = 0.4f), style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                }
+                if (!isAnime && manga?.chapters != null) {
+                    if (format != null || year != null) Text(" • ", color = Color.White.copy(alpha = 0.3f), style = MaterialTheme.typography.labelSmall)
+                    Text("${manga.chapters} ch.", color = Color.White.copy(alpha = 0.4f), style = MaterialTheme.typography.labelSmall, maxLines = 1)
                 }
                 if (isAnime && anime != null && anime.episodes > 0 && format?.uppercase() != "MOVIE") {
                     if (year != null) Text(" • ", color = Color.White.copy(alpha = 0.3f), style = MaterialTheme.typography.labelSmall)

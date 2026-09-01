@@ -1569,6 +1569,8 @@ fun DetailedMangaScreen(
     if (showStatusDialog) {
         MangaStatusDialog(
             title = manga.title,
+            titleEnglish = manga.titleEnglish,
+            preferEnglishTitles = preferEnglishTitles,
             coverUrl = manga.cover,
             currentStatus = statusToCheck,
             currentProgress = statusProgress,

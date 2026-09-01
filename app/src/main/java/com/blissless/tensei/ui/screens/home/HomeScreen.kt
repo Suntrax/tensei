@@ -604,6 +604,7 @@ fun HomeScreen(
                             MangaContinueReadingRow(
                                 mangaList = activeMangaContinueReading,
                                 isOled = isOled,
+                                preferEnglishTitles = preferEnglishTitles,
                                 onResumeClick = onMangaContinueReadingClick,
                                 onDismissClick = onMangaDismissClick
                             )
@@ -786,6 +787,7 @@ fun HomeScreen(
                             MangaHorizontalRow(
                                 mangaList = mangaCurrentlyReading,
                                 isOled = isOled,
+                                preferEnglishTitles = preferEnglishTitles,
                                 onMangaClick = onMangaClick,
                                 onMangaInfoClick = onMangaInfoClick
                             )
@@ -808,6 +810,7 @@ fun HomeScreen(
                             MangaHorizontalRow(
                                 mangaList = mangaPlanningToRead,
                                 isOled = isOled,
+                                preferEnglishTitles = preferEnglishTitles,
                                 onMangaClick = onMangaClick,
                                 onMangaInfoClick = onMangaInfoClick
                             )
@@ -830,6 +833,7 @@ fun HomeScreen(
                             MangaHorizontalRow(
                                 mangaList = mangaCompleted,
                                 isOled = isOled,
+                                preferEnglishTitles = preferEnglishTitles,
                                 onMangaClick = onMangaClick,
                                 onMangaInfoClick = onMangaInfoClick
                             )
@@ -1030,6 +1034,7 @@ fun HomeScreen(
         HomeAnimeStatusDialog(
             anime = selectedAnime!!,
             isOled = isOled,
+            preferEnglishTitles = preferEnglishTitles,
             onDismiss = { showStatusDialog = false },
             onRemove = {
                 viewModel.removeAnimeFromList(selectedAnime!!.id)
@@ -1045,6 +1050,8 @@ fun HomeScreen(
         val sm = statusListMangaForDialog!!
         MangaStatusDialog(
             title = sm.title,
+            titleEnglish = sm.titleEnglish,
+            preferEnglishTitles = preferEnglishTitles,
             coverUrl = sm.cover,
             currentStatus = sm.listStatus,
             currentProgress = sm.progress,
@@ -1363,6 +1370,7 @@ fun HomeScreen(
 private fun MangaHorizontalRow(
     mangaList: List<MangaMedia>,
     isOled: Boolean,
+    preferEnglishTitles: Boolean = true,
     onMangaClick: (MangaMedia) -> Unit,
     onMangaInfoClick: (MangaMedia) -> Unit = {}
 ) {
@@ -1373,6 +1381,7 @@ private fun MangaHorizontalRow(
         modifier = Modifier.fillMaxWidth()
     ) {
         itemsIndexed(mangaList) { _, manga ->
+            val displayTitle = if (preferEnglishTitles && !manga.titleEnglish.isNullOrEmpty()) manga.titleEnglish else manga.title
             val progressText = when {
                 manga.totalChapters > 0 && manga.progress > 0 -> "${manga.progress} / ${manga.totalChapters}"
                 manga.totalChapters > 0 -> "${manga.totalChapters} ch."
@@ -1433,7 +1442,7 @@ private fun MangaHorizontalRow(
                 }
                 Box(modifier = Modifier.width(140.dp).height(40.dp)) {
                     Text(
-                        text = manga.title,
+                        text = displayTitle,
                         modifier = Modifier.padding(top = 8.dp),
                         maxLines = 2,
                         style = MaterialTheme.typography.labelMedium,
@@ -1451,6 +1460,7 @@ private fun MangaHorizontalRow(
 private fun MangaContinueReadingRow(
     mangaList: List<MangaMedia>,
     isOled: Boolean,
+    preferEnglishTitles: Boolean = true,
     onResumeClick: (MangaMedia) -> Unit,
     onDismissClick: (MangaMedia) -> Unit
 ) {
@@ -1462,6 +1472,7 @@ private fun MangaContinueReadingRow(
             MangaContinueReadingCard(
                 manga = manga,
                 isOled = isOled,
+                preferEnglishTitles = preferEnglishTitles,
                 onResumeClick = { onResumeClick(manga) },
                 onDismissClick = { onDismissClick(manga) }
             )
@@ -1473,6 +1484,7 @@ private fun MangaContinueReadingRow(
 private fun MangaContinueReadingCard(
     manga: MangaMedia,
     isOled: Boolean,
+    preferEnglishTitles: Boolean = true,
     onResumeClick: () -> Unit,
     onDismissClick: () -> Unit
 ) {
@@ -1501,6 +1513,7 @@ private fun MangaContinueReadingCard(
         else -> "Ch. $nextChapter"
     }
     val progressColor = if (isOled) Color.White else MaterialTheme.colorScheme.primary
+    val displayMangaTitle = if (preferEnglishTitles && !manga.titleEnglish.isNullOrEmpty()) manga.titleEnglish else manga.title
 
     Card(
         shape = RoundedCornerShape(18.dp),
@@ -1516,7 +1529,7 @@ private fun MangaContinueReadingCard(
                     .data(manga.banner ?: manga.cover)
                     .crossfade(true)
                     .build(),
-                contentDescription = manga.title,
+                contentDescription = displayMangaTitle,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
             )
@@ -1575,7 +1588,7 @@ private fun MangaContinueReadingCard(
 
                 Column {
                     Text(
-                        text = manga.title,
+                        text = displayMangaTitle,
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.SemiBold,
                         color = Color.White,

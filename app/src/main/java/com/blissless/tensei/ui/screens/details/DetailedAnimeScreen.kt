@@ -1940,6 +1940,7 @@ fun DetailedAnimeScreen(
         HomeAnimeStatusDialog(
             anime = animeMedia,
             isOled = isOled,
+            preferEnglishTitles = preferEnglishTitles,
             onDismiss = { showStatusDialog = false },
             onRemove = {
                 effectiveOnRemove()

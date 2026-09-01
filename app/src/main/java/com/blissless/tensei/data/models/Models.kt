@@ -1228,6 +1228,7 @@ data class MangaRankingEntry(
 data class MangaTrack(
     val mangaId: Int,
     val title: String = "",
+    val titleEnglish: String? = null,
     val cover: String = "",
     val progress: Float = 0f,
     val scrollProgress: Float = 0f,

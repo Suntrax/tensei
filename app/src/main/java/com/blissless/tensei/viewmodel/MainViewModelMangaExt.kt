@@ -423,6 +423,7 @@ private fun toMangaMedia(track: MangaTrack): MangaMedia {
     return MangaMedia(
         id = track.mangaId,
         title = track.title,
+        titleEnglish = track.titleEnglish,
         cover = track.cover,
         progress = track.progress.toInt(),
         totalChapters = track.totalChapters,
@@ -515,7 +516,7 @@ suspend fun MainViewModel.fetchMangaLists(): Boolean {
     if (localTracker != null) {
         // Sync AniList entries into local tracking
         anilistCurrent?.forEach { m ->
-            localTracker.ensureTrack(m.id, m.title, m.cover, m.totalChapters, m.averageScore)
+            localTracker.ensureTrack(m.id, m.title, m.cover, m.totalChapters, m.averageScore, m.titleEnglish)
             localTracker.updateTrackingStatus(m.id, "CURRENT")
             // Never downgrade local progress: a stale AniList response (push still in
             // flight, or a network hiccup) must not roll back chapters the user just read.
@@ -523,22 +524,22 @@ suspend fun MainViewModel.fetchMangaLists(): Boolean {
             if (m.userScore != null) localTracker.updateScore(m.id, m.userScore)
         }
         anilistPlanning?.forEach { m ->
-            localTracker.ensureTrack(m.id, m.title, m.cover, m.totalChapters, m.averageScore)
+            localTracker.ensureTrack(m.id, m.title, m.cover, m.totalChapters, m.averageScore, m.titleEnglish)
             localTracker.updateTrackingStatus(m.id, "PLANNING")
             if (m.userScore != null) localTracker.updateScore(m.id, m.userScore)
         }
         anilistCompleted?.forEach { m ->
-            localTracker.ensureTrack(m.id, m.title, m.cover, m.totalChapters, m.averageScore)
+            localTracker.ensureTrack(m.id, m.title, m.cover, m.totalChapters, m.averageScore, m.titleEnglish)
             localTracker.updateTrackingStatus(m.id, "COMPLETED")
             if (m.userScore != null) localTracker.updateScore(m.id, m.userScore)
         }
         anilistPaused?.forEach { m ->
-            localTracker.ensureTrack(m.id, m.title, m.cover, m.totalChapters, m.averageScore)
+            localTracker.ensureTrack(m.id, m.title, m.cover, m.totalChapters, m.averageScore, m.titleEnglish)
             localTracker.updateTrackingStatus(m.id, "PAUSED")
             if (m.userScore != null) localTracker.updateScore(m.id, m.userScore)
         }
         anilistDropped?.forEach { m ->
-            localTracker.ensureTrack(m.id, m.title, m.cover, m.totalChapters, m.averageScore)
+            localTracker.ensureTrack(m.id, m.title, m.cover, m.totalChapters, m.averageScore, m.titleEnglish)
             localTracker.updateTrackingStatus(m.id, "DROPPED")
             if (m.userScore != null) localTracker.updateScore(m.id, m.userScore)
         }
@@ -610,7 +611,7 @@ suspend fun MainViewModel.fetchMangaDetail(mangaId: Int) {
     val detail = mangaRepository?.fetchMangaDetail(mangaId, token)
     _mangaDetail.value = detail
     if (detail != null) {
-        mangaTrackManager?.updateMangaInfo(mangaId, detail.title, detail.cover)
+        mangaTrackManager?.updateMangaInfo(mangaId, detail.title, detail.cover, detail.titleEnglish)
         android.util.Log.d("MangaDetail", "fetchMangaDetail: SUCCESS mangaId=$mangaId title='${detail.title}' " +
             "desc=${detail.description != null} genres=${detail.genres.size} tags=${detail.tags.size} " +
             "chars=${detail.characters?.nodes?.size ?: 0} staff=${detail.staff?.edges?.size ?: 0} " +
@@ -1428,3 +1429,4 @@ fun MainViewModel.toggleMalMangaFavorite(mangaId: Int) {
 
 /** True when the manga (by AniList id) is in the local MAL-favorites set. */
 fun MainViewModel.isMangaMalFavorited(mangaId: Int): Boolean = mangaId in _malMangaFavorites.value
+

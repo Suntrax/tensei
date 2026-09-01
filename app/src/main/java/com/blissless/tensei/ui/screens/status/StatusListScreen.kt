@@ -36,7 +36,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.BookmarkAdd
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -166,12 +166,16 @@ fun StatusListScreen(
         }
     }
 
-    val displayMangaList = remember(mangaList, searchQuery, selectedSort) {
+    val mangaTitleOf: (MangaMedia) -> String = { manga ->
+        if (preferEnglishTitles && !manga.titleEnglish.isNullOrEmpty()) manga.titleEnglish else manga.title
+    }
+
+    val displayMangaList = remember(mangaList, searchQuery, selectedSort, preferEnglishTitles) {
         val filtered = if (searchQuery.isBlank()) mangaList
-        else mangaList.filter { it.title.contains(searchQuery, ignoreCase = true) }
+        else mangaList.filter { mangaTitleOf(it).contains(searchQuery, ignoreCase = true) }
         when (selectedSort) {
-            SortOption.ALPHABETICAL_A_Z -> filtered.sortedBy { it.title.lowercase() }
-            SortOption.ALPHABETICAL_Z_A -> filtered.sortedByDescending { it.title.lowercase() }
+            SortOption.ALPHABETICAL_A_Z -> filtered.sortedBy { mangaTitleOf(it).lowercase() }
+            SortOption.ALPHABETICAL_Z_A -> filtered.sortedByDescending { mangaTitleOf(it).lowercase() }
             SortOption.YEAR_NEWEST -> filtered.sortedByDescending { it.year ?: Int.MIN_VALUE }
             SortOption.YEAR_OLDEST -> filtered.sortedBy { it.year ?: Int.MAX_VALUE }
             SortOption.EPISODES_MOST -> filtered.sortedByDescending {
@@ -393,6 +397,7 @@ fun StatusListScreen(
                                     manga = manga,
                                     listType = listType,
                                     showStatusColors = showStatusColors,
+                                    preferEnglishTitles = preferEnglishTitles,
                                     onClick = { onMangaClick(manga) },
                                     onInfoClick = { onMangaInfoClick(manga) },
                                     onContinueReadingClick = { onMangaContinueReadingClick(manga) },
@@ -705,8 +710,8 @@ private fun StatusListAnimeCard(
                         )
                     ) {
                         Icon(
-                            imageVector = Icons.Outlined.Edit,
-                            contentDescription = "Edit Status",
+                            imageVector = Icons.Outlined.BookmarkAdd,
+                            contentDescription = "Change status",
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -755,6 +760,7 @@ private fun StatusListMangaCard(
     manga: MangaMedia,
     listType: String,
     showStatusColors: Boolean,
+    preferEnglishTitles: Boolean,
     onClick: () -> Unit,
     onInfoClick: () -> Unit,
     onContinueReadingClick: () -> Unit,
@@ -762,6 +768,7 @@ private fun StatusListMangaCard(
 ) {
     val context = LocalContext.current
     val statusColor = HomeStatusColors.getColor(listType)
+    val displayMangaTitle = if (preferEnglishTitles && !manga.titleEnglish.isNullOrEmpty()) manga.titleEnglish else manga.title
     val progressText = when (listType) {
         "CURRENT" -> if (manga.totalChapters > 0) "${manga.progress} / ${manga.totalChapters}" else "Ch. ${manga.progress}"
         "COMPLETED" -> if (manga.totalChapters > 0) "${manga.totalChapters} ch." else "Ch. ${manga.progress}"
@@ -779,7 +786,7 @@ private fun StatusListMangaCard(
             Box(modifier = Modifier.fillMaxSize()) {
                 AsyncImage(
                     model = ImageRequest.Builder(context).data(manga.cover).crossfade(true).build(),
-                    contentDescription = manga.title,
+                    contentDescription = displayMangaTitle,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
                 )
@@ -860,8 +867,8 @@ private fun StatusListMangaCard(
                         )
                     ) {
                         Icon(
-                            imageVector = Icons.Outlined.Edit,
-                            contentDescription = "Edit Status",
+                            imageVector = Icons.Outlined.BookmarkAdd,
+                            contentDescription = "Change status",
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -890,7 +897,7 @@ private fun StatusListMangaCard(
             modifier = Modifier.fillMaxWidth().height(40.dp).padding(top = 6.dp)
         ) {
             Text(
-                text = manga.title,
+                text = displayMangaTitle,
                 maxLines = 2,
                 style = MaterialTheme.typography.labelMedium,
                 overflow = TextOverflow.Ellipsis,

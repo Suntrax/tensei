@@ -64,6 +64,7 @@ fun userScoreToDisplay(raw: Int?): Int? = raw?.let { if (it > 10) it / 10 else i
 fun HomeAnimeStatusDialog(
     anime: AnimeMedia,
     isOled: Boolean,
+    preferEnglishTitles: Boolean = true,
     onDismiss: () -> Unit,
     onRemove: () -> Unit,
     onUpdate: (String, Int?) -> Unit
@@ -92,7 +93,9 @@ fun HomeAnimeStatusDialog(
                     AsyncImage(model = anime.cover, contentDescription = anime.title, contentScale = ContentScale.Crop, modifier = Modifier.width(60.dp).height(85.dp).clip(RoundedCornerShape(10.dp)))
                     Spacer(modifier = Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(anime.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            if (preferEnglishTitles && !anime.titleEnglish.isNullOrEmpty()) anime.titleEnglish else anime.title,
+                            style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         Spacer(modifier = Modifier.height(4.dp))
                         val latestEp = anime.latestEpisode?.takeIf { it > 0 }
                         val totalEp = anime.totalEpisodes.takeIf { it > 0 }

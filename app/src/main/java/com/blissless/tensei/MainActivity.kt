@@ -3309,7 +3309,7 @@ fun MainScreen(
                     disableMaterialColors = disableMaterialColors,
                     hideNavbar = hideNavbar,
                     isLoadingStream = isLoadingStream,
-                    showSearchScreen = (showSearchScreen || showUserProfilePage) && currentPage != 4,
+                    showSearchScreen = showSearchScreen || showUserProfilePage || currentPage == 4,
                     onSelect = {
                         if (it == 4 && currentPage != 4) pageBeforeSearch = currentPage
                         currentPage = it

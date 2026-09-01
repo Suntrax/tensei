@@ -211,6 +211,8 @@ fun MangaScreen(
         val manga = selectedMangaForStatus!!
         MangaStatusDialog(
             title = manga.title.romaji ?: manga.title.english ?: "Unknown",
+            titleEnglish = manga.title.english,
+            preferEnglishTitles = preferEnglishTitles,
             coverUrl = manga.coverImage?.extraLarge ?: manga.coverImage?.large ?: "",
             currentStatus = mangaStatusMap[manga.id],
             currentProgress = mangaProgressMap[manga.id] ?: 0,
@@ -501,16 +503,20 @@ fun MangaScreen(
             enter = slideInVertically(animationSpec = tween(300, easing = FastOutSlowInEasing)) { (it * 0.15f).toInt() } + fadeIn(animationSpec = tween(300)),
             exit = slideOutVertically(animationSpec = tween(250, easing = FastOutSlowInEasing)) { (it * 0.15f).toInt() } + fadeOut(animationSpec = tween(250))
         ) {
-            ExploreCategoryListScreen(
-                title = categoryListTitle,
-                icon = categoryListIcon,
-                mangaList = categoryListManga,
-                isManga = true,
-                preferEnglishTitles = preferEnglishTitles,
-                onMangaClick = onMangaClick,
-                onBackClick = { showCategoryList = false },
-                onDismiss = { showCategoryList = false }
-            )
+                ExploreCategoryListScreen(
+                    title = categoryListTitle,
+                    icon = categoryListIcon,
+                    mangaList = categoryListManga,
+                    isManga = true,
+                    preferEnglishTitles = preferEnglishTitles,
+                    onMangaClick = onMangaClick,
+                    onMangaBookmarkClick = { manga ->
+                        selectedMangaForStatus = manga
+                        showMangaStatusDialog = true
+                    },
+                    onBackClick = { showCategoryList = false },
+                    onDismiss = { showCategoryList = false }
+                )
         }
 
     }

@@ -61,6 +61,8 @@ fun MangaStatusDialog(
     currentProgress: Int,
     totalChapters: Int,
     isOled: Boolean,
+    titleEnglish: String? = null,
+    preferEnglishTitles: Boolean = true,
     onDismiss: () -> Unit,
     onRemove: () -> Unit,
     onUpdate: (String, Int?) -> Unit
@@ -69,6 +71,7 @@ fun MangaStatusDialog(
     var selectedProgress by remember { mutableStateOf(if (currentProgress > 0) currentProgress.toString() else "") }
     var markedForRemoval by remember { mutableStateOf(false) }
     var showAnimation by remember { mutableStateOf(false) }
+    val displayTitle = if (preferEnglishTitles && !titleEnglish.isNullOrEmpty()) titleEnglish else title
 
     val scale by animateFloatAsState(
         targetValue = if (showAnimation) 1.05f else 1f,
@@ -88,14 +91,14 @@ fun MangaStatusDialog(
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 AsyncImage(
                     model = coverUrl,
-                    contentDescription = title,
+                    contentDescription = displayTitle,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.width(60.dp).height(85.dp).clip(RoundedCornerShape(10.dp))
                 )
                 Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        title,
+                        displayTitle,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
