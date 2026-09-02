@@ -22,7 +22,8 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.ClickableText
@@ -39,8 +40,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,8 +54,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -63,11 +70,14 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
+import kotlin.math.absoluteValue
 import androidx.core.net.toUri
 import coil.compose.AsyncImage
 import com.blissless.tensei.MainViewModel
 import com.blissless.tensei.data.models.CharacterData
 import com.blissless.tensei.data.models.StaffData
+import com.blissless.tensei.ui.components.rememberCinematicAnimation
+import com.blissless.tensei.ui.screens.details.easeOut
 
 private val boldRegex = Regex("__(.+?)__")
 private val italicRegex = Regex("_(.+?)_")
@@ -407,19 +417,60 @@ fun CharacterScreen(
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.onBackground
                                         )
-                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        val appearsListState = rememberLazyListState()
+                                        val isAppearsScrolling by remember {
+                                            derivedStateOf { appearsListState.isScrollInProgress }
+                                        }
+                                        val appearsCinematic = rememberCinematicAnimation("character_appears_in", isVisible = true, playOncePerSession = true)
+                                        val cameraDistancePx = with(LocalDensity.current) { 12.dp.toPx() }
                                         LazyRow(
+                                            state = appearsListState,
                                             contentPadding = PaddingValues(horizontal = 16.dp),
                                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                                         ) {
-                                            items(animeList) { anime ->
-                                                    Column(
-                                                        modifier = Modifier
-                                                            .width(100.dp)
-                                                            .clip(RoundedCornerShape(12.dp))
-                                                            .clickable { onMediaClick(anime.id, anime.format) },
-                                                        horizontalAlignment = Alignment.CenterHorizontally
-                                                    ) {
+                                            itemsIndexed(animeList) { index, anime ->
+                                                val layoutInfo by remember { derivedStateOf { appearsListState.layoutInfo } }
+                                                val visibleItems = layoutInfo.visibleItemsInfo
+                                                val itemInfo = visibleItems.find { it.index == index }
+                                                val centerOffset = if (itemInfo != null) {
+                                                    val itemCenter = itemInfo.offset + itemInfo.size / 2
+                                                    val screenCenter = (layoutInfo.viewportSize.width / 2).toFloat()
+                                                    (itemCenter - screenCenter) / screenCenter
+                                                } else 0f
+                                                val animatedOffset by animateFloatAsState(
+                                                    targetValue = if (isAppearsScrolling) centerOffset.coerceIn(-1.5f, 1.5f) else 0f,
+                                                    animationSpec = if (isAppearsScrolling) {
+                                                        spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)
+                                                    } else {
+                                                        spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)
+                                                    },
+                                                    label = "appearsCenterOffset"
+                                                )
+                                                val scrollScale = 1f - (animatedOffset.absoluteValue * 0.25f).coerceAtMost(0.25f)
+                                                val scrollAlpha = 1f - (animatedOffset.absoluteValue * 0.4f).coerceAtMost(0.6f)
+                                                val scrollTranslationX = animatedOffset * -20f
+                                                val scrollRotationY = (animatedOffset * 15f).coerceIn(-15f, 15f)
+                                                val indexFloat = index.toFloat()
+                                                val staggeredProgress = ((appearsCinematic * 1000f - (indexFloat * 40f)) / 1000f).coerceIn(0f, 1f)
+                                                val easedProgress = easeOut(staggeredProgress)
+                                                val introScale = if (appearsCinematic >= 1f) 1f else 0.85f + easedProgress * 0.15f
+                                                val introAlpha = if (appearsCinematic >= 1f) 1f else easedProgress
+                                                Column(
+                                                    modifier = Modifier
+                                                        .width(100.dp)
+                                                        .clip(RoundedCornerShape(12.dp))
+                                                        .graphicsLayer {
+                                                            scaleX = introScale * scrollScale
+                                                            scaleY = introScale * scrollScale
+                                                            this.alpha = introAlpha * scrollAlpha
+                                                            translationX = scrollTranslationX
+                                                            rotationY = scrollRotationY
+                                                            cameraDistance = cameraDistancePx
+                                                        }
+                                                        .clickable { onMediaClick(anime.id, anime.format) },
+                                                    horizontalAlignment = Alignment.CenterHorizontally
+                                                ) {
                                                         Card(
                                                             shape = RoundedCornerShape(12.dp),
                                                             modifier = Modifier.aspectRatio(3f / 4f),
@@ -696,12 +747,45 @@ fun StaffScreen(
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.onBackground
                                         )
-                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        val workedListState = rememberLazyListState()
+                                        val isWorkedScrolling by remember {
+                                            derivedStateOf { workedListState.isScrollInProgress }
+                                        }
+                                        val workedCinematic = rememberCinematicAnimation("staff_worked_on", isVisible = true, playOncePerSession = true)
+                                        val workedCameraDistancePx = with(LocalDensity.current) { 12.dp.toPx() }
                                         LazyRow(
+                                            state = workedListState,
                                             contentPadding = PaddingValues(horizontal = 16.dp),
                                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                                         ) {
-                                            items(edges) { edge ->
+                                            itemsIndexed(edges) { index, edge ->
+                                                val layoutInfo by remember { derivedStateOf { workedListState.layoutInfo } }
+                                                val visibleItems = layoutInfo.visibleItemsInfo
+                                                val itemInfo = visibleItems.find { it.index == index }
+                                                val centerOffset = if (itemInfo != null) {
+                                                    val itemCenter = itemInfo.offset + itemInfo.size / 2
+                                                    val screenCenter = (layoutInfo.viewportSize.width / 2).toFloat()
+                                                    (itemCenter - screenCenter) / screenCenter
+                                                } else 0f
+                                                val animatedOffset by animateFloatAsState(
+                                                    targetValue = if (isWorkedScrolling) centerOffset.coerceIn(-1.5f, 1.5f) else 0f,
+                                                    animationSpec = if (isWorkedScrolling) {
+                                                        spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)
+                                                    } else {
+                                                        spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)
+                                                    },
+                                                    label = "workedCenterOffset"
+                                                )
+                                                val scrollScale = 1f - (animatedOffset.absoluteValue * 0.25f).coerceAtMost(0.25f)
+                                                val scrollAlpha = 1f - (animatedOffset.absoluteValue * 0.4f).coerceAtMost(0.6f)
+                                                val scrollTranslationX = animatedOffset * -20f
+                                                val scrollRotationY = (animatedOffset * 15f).coerceIn(-15f, 15f)
+                                                val indexFloat = index.toFloat()
+                                                val staggeredProgress = ((workedCinematic * 1000f - (indexFloat * 40f)) / 1000f).coerceIn(0f, 1f)
+                                                val easedProgress = easeOut(staggeredProgress)
+                                                val introScale = if (workedCinematic >= 1f) 1f else 0.85f + easedProgress * 0.15f
+                                                val introAlpha = if (workedCinematic >= 1f) 1f else easedProgress
                                                 val anime = edge.node
                                                 val role = edge.staffRole
                                                 if (anime != null) {
@@ -709,6 +793,14 @@ fun StaffScreen(
                                                         modifier = Modifier
                                                             .width(110.dp)
                                                             .clip(RoundedCornerShape(12.dp))
+                                                            .graphicsLayer {
+                                                                scaleX = introScale * scrollScale
+                                                                scaleY = introScale * scrollScale
+                                                                this.alpha = introAlpha * scrollAlpha
+                                                                translationX = scrollTranslationX
+                                                                rotationY = scrollRotationY
+                                                                cameraDistance = workedCameraDistancePx
+                                                            }
                                                             .clickable { onMediaClick(anime.id, anime.format) },
                                                         horizontalAlignment = Alignment.CenterHorizontally
                                                     ) {
