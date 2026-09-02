@@ -19,11 +19,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** Direction of the one-time cross-provider copy offered on first simultaneous login. */
+/** State of the one-time cross-provider copy prompt offered on first simultaneous login. */
 data class CrossProviderCopyPrompt(
-    val visible: Boolean,
-    /** true = direction step (ask AniList→MAL vs MAL→AniList); false = first step (ask whether to enable auto-sync). */
-    val askDirection: Boolean = false
+    val visible: Boolean
 )
 
 /**
@@ -132,36 +130,32 @@ fun MainViewModel.offerCrossProviderSync() {
 }
 
 /**
- * Force-show the direction step of the copy dialog, bypassing the one-time flag. Used by the
- * manual "Sync Now" button in Settings when both providers are active.
+ * Force-show the copy dialog, bypassing the one-time flag. Used by the manual "Sync Now"
+ * button in Settings when both providers are active.
  */
 fun MainViewModel.showCrossProviderCopyDialog() {
     if (!isBothActive) return
-    _crossProviderCopyPrompt.value = CrossProviderCopyPrompt(visible = true, askDirection = true)
+    _crossProviderCopyPrompt.value = CrossProviderCopyPrompt(visible = true)
 }
 
-/** The user chose to enable auto-sync; advance from the first step to the direction step. */
-fun MainViewModel.advanceCrossProviderCopyPrompt() {
-    val current = _crossProviderCopyPrompt.value ?: return
-    if (!current.visible) return
-    _crossProviderCopyPrompt.value = CrossProviderCopyPrompt(visible = true, askDirection = true)
-}
-
-/** Dismiss the copy prompt without performing a copy. */
+/** Dismiss the copy prompt without performing a copy ("Don't sync existing entries"). */
 fun MainViewModel.dismissCrossProviderCopyPrompt() {
     _crossProviderCopyPrompt.value = CrossProviderCopyPrompt(visible = false)
-    // Mark done so we don't keep nagging; ongoing diff-sync still reconciles new changes.
+    // Mark done so we don't keep nagging; new changes still apply to both providers via the
+    // live write-through sync.
     userPreferences.setCrossProviderCopyDone(true)
 }
 
 /**
- * Apply the chosen copy direction and run the one-time copy for anime + manga.
- * @param toMal true = copy AniList â†’ MAL; false = copy MAL â†’ AniList.
+ * Apply the chosen copy direction and run the one-time copy for anime + manga. Also marks the
+ * chosen provider as the main list source for the home screen.
+ * @param toMal true = AniList is main and copies AniList â†’ MAL; false = MAL is main and copies MAL â†’ AniList.
  */
 fun MainViewModel.applyCrossProviderCopy(toMal: Boolean) {
     _crossProviderCopyPrompt.value = CrossProviderCopyPrompt(visible = false)
     userPreferences.setCrossProviderCopyDone(true)
-    // Persist the chosen direction and enable the startup auto-sync alongside the one-time copy.
+    // Persist the main provider + auto-sync direction and enable the startup auto-sync.
+    userPreferences.setMalAsMainProvider(!toMal)
     userPreferences.setAutoSyncCrossProviderStartup(true)
     userPreferences.setAutoSyncCrossProviderDirection(toMal)
     viewModelScope.launch(Dispatchers.IO) {
@@ -242,6 +236,17 @@ internal fun MainViewModel.runCrossProviderStartupSync(toMal: Boolean) {
             skipped = result.second
         } catch (e: Exception) {
             android.util.Log.w("CrossSync", "startup sync failed: ${e.message}", e)
+        }
+        // The startup copy above is non-destructive (it only pushes new/changed entries and
+        // never removes anything). When AniList is the main provider, follow up with the
+        // parity diff-sync so entries present on MAL but absent from AniList (e.g. added on MAL
+        // directly, then deleted/never present on AniList) are removed and the lists converge.
+        if (toMal) {
+            try {
+                runCrossProviderDiffSync()
+            } catch (e: Exception) {
+                android.util.Log.w("CrossSync", "startup diff-sync failed: ${e.message}", e)
+            }
         }
         _crossProviderCopyProgress.value = CrossProviderCopyProgress(
             isRunning = false,
@@ -541,21 +546,43 @@ private suspend fun MainViewModel.resolveAnimeIdForMal(malId: Int): Int? {
  * and retried on the next run.
  */
 internal suspend fun MainViewModel.runCrossProviderDiffSync() {
-    if (!isBothActive) return
+    android.util.Log.d("CrossSync", "diff-sync: START (bothActive=$isBothActive, malAsMain=${userPreferences.malAsMainProvider.value})")
+    if (!isBothActive) {
+        android.util.Log.d("CrossSync", "diff-sync: return (not both active)")
+        return
+    }
+    // Diff-sync treats AniList as the source of truth. When MAL is the user's chosen main
+    // provider, skip it so it doesn't overwrite the MAL-first lists — the directional startup
+    // sync handles reconciliation instead.
+    if (userPreferences.malAsMainProvider.value) {
+        android.util.Log.d("CrossSync", "diff-sync: return (MAL is main provider)")
+        return
+    }
 
     // Anime
     val malByAnimeId = mutableMapOf<Int, ListSnapshot>()
-    malApiService.getAnimeListWithWeb().forEach { e ->
-        malByAnimeId[e.node.id] = ListSnapshot(
-            status = e.list_status?.status,
-            score = e.list_status?.score ?: 0,
-            progress = e.list_status?.num_episodes_watched ?: 0
-        )
+    try {
+        malApiService.getAnimeListWithWeb().forEach { e ->
+            malByAnimeId[e.node.id] = ListSnapshot(
+                status = e.list_status?.status,
+                score = e.list_status?.score ?: 0,
+                progress = e.list_status?.num_episodes_watched ?: 0
+            )
+        }
+    } catch (e: Exception) {
+        android.util.Log.w("CrossSync", "diff-sync anime: failed to fetch MAL anime list — ${e.message}", e)
     }
     val allAnime = _currentlyWatching.value + _planningToWatch.value +
         _completed.value + _onHold.value + _dropped.value
+    // Safety guard: if no anime is present locally, treat it as a load failure rather than an
+    // empty list — otherwise the parity cleanup below would wipe every MAL anime entry.
+    val animeListLoaded = allAnime.isNotEmpty()
+    // Track every MAL id present on AniList so entries on MAL but NOT on AniList can be
+    // removed below — keeping the two lists in exact parity.
+    val malIdsOnAniListAnime = mutableSetOf<Int>()
     for (anime in allAnime) {
         val malId = anime.malId ?: continue
+        malIdsOnAniListAnime += malId
         val mal = malByAnimeId[malId]
         // Push if missing on MAL (new entry) or any field differs.
         val differs = mal == null ||
@@ -566,23 +593,64 @@ internal suspend fun MainViewModel.runCrossProviderDiffSync() {
             android.util.Log.d("CrossSync",
                 "diff-sync anime${if (mal == null) " (new)" else ""}: malId=$malId title=${anime.title} " +
                     "status=${mapToMalStatus(anime.listStatus)} score=${anime.userScore} progress=${anime.progress}")
-            malApiService.updateAnimeStatus(malId, mapToMalStatus(anime.listStatus), anime.userScore, anime.progress)
+            try {
+                malApiService.updateAnimeStatus(malId, mapToMalStatus(anime.listStatus), anime.userScore, anime.progress)
+            } catch (e: Exception) {
+                android.util.Log.w("CrossSync",
+                    "diff-sync anime PUSH FAILED malId=$malId title=${anime.title}: ${e.message}", e)
+            }
             delay(1000)
         }
     }
 
+    // Remove MAL anime entries that have no counterpart on AniList. Skips if AniList didn't load.
+    if (animeListLoaded) {
+        for ((malId, mal) in malByAnimeId) {
+            if (malId !in malIdsOnAniListAnime) {
+                android.util.Log.d("CrossSync",
+                    "diff-sync anime DELETE (not on AniList): malId=$malId status=${mal.status}")
+                try {
+                    malApiService.deleteAnimeFromList(malId)
+                } catch (e: Exception) {
+                    android.util.Log.w("CrossSync",
+                        "diff-sync anime DELETE FAILED malId=$malId: ${e.message}", e)
+                }
+                delay(1000)
+            }
+        }
+    } else {
+        android.util.Log.w("CrossSync", "diff-sync anime: AniList returned empty list — skipping parity cleanup to avoid wiping MAL")
+    }
+
     // Manga
     val malMangaByMalId = mutableMapOf<Int, ListSnapshot>()
-    malApiService.getMangaListWithWeb().forEach { e ->
-        malMangaByMalId[e.node.id] = ListSnapshot(
-            status = e.list_status?.status,
-            score = e.list_status?.score ?: 0,
-            progress = e.list_status?.num_chapters_read ?: 0
-        )
+    try {
+        malApiService.getMangaListWithWeb().forEach { e ->
+            malMangaByMalId[e.node.id] = ListSnapshot(
+                status = e.list_status?.status,
+                score = e.list_status?.score ?: 0,
+                progress = e.list_status?.num_chapters_read ?: 0
+            )
+        }
+    } catch (e: Exception) {
+        android.util.Log.w("CrossSync", "diff-sync manga: failed to fetch MAL manga list — ${e.message}", e)
     }
+    android.util.Log.d("CrossSync", "diff-sync manga: MAL entries=${malMangaByMalId.size}")
     val allManga = fetchAllAniListManga()
+    // Safety guard: if AniList returned nothing, treat it as a fetch failure rather than an empty
+    // list — otherwise the parity cleanup below would wipe every MAL entry. Never prune on empty.
+    val mangaListLoaded = allManga.isNotEmpty()
+    // Track every MAL id present on AniList so entries on MAL but NOT on AniList can be
+    // removed below — keeping the two lists in exact parity (items on AniList == items on MAL).
+    val malIdsOnAniList = mutableSetOf<Int>()
     for (manga in allManga) {
-        val malId = manga.malId ?: continue
+        val malId = manga.malId
+        if (malId == null) {
+            android.util.Log.d("CrossSync",
+                "diff-sync manga SKIP (no idMal): title=${manga.title}")
+            continue
+        }
+        malIdsOnAniList += malId
         val mal = malMangaByMalId[malId]
         // 0-10 scale, passed through as-is (matches anime path; see copyAniListToMal).
         val anilistScore = (manga.userScore ?: 0).coerceIn(0, 10)
@@ -593,14 +661,42 @@ internal suspend fun MainViewModel.runCrossProviderDiffSync() {
         if (differs) {
             android.util.Log.d("CrossSync",
                 "diff-sync manga${if (mal == null) " (new)" else ""}: malId=$malId title=${manga.title}")
-            malApiService.updateMangaStatus(
-                malId,
-                mapMangaStatusToMal(manga.listStatus),
-                anilistScore.coerceIn(0, 10),
-                manga.progress
-            )
+            try {
+                malApiService.updateMangaStatus(
+                    malId,
+                    mapMangaStatusToMal(manga.listStatus),
+                    anilistScore.coerceIn(0, 10),
+                    manga.progress
+                )
+            } catch (e: Exception) {
+                android.util.Log.w("CrossSync",
+                    "diff-sync manga PUSH FAILED malId=$malId title=${manga.title}: ${e.message}", e)
+            }
             delay(1000)
         }
+    }
+
+    // Remove MAL manga entries that have no counterpart on AniList (was deleted/removed
+    // from AniList, or only ever created on MAL). This keeps the lists in exact parity.
+    // Skips the cleanup entirely if AniList failed to load, to avoid wiping MAL on a hiccup.
+    android.util.Log.d("CrossSync",
+        "diff-sync manga: mangaListLoaded=$mangaListLoaded anilistMalIds=${malIdsOnAniList.size} malIds=${malMangaByMalId.size} maj=122663 in anilist=${122663 in malIdsOnAniList} in mal=${122663 in malMangaByMalId}")
+    if (mangaListLoaded) {
+        for ((malId, mal) in malMangaByMalId) {
+            if (malId !in malIdsOnAniList) {
+                android.util.Log.d("CrossSync",
+                    "diff-sync manga DELETE (not on AniList): malId=$malId status=${mal.status}")
+                try {
+                    malApiService.deleteMangaFromList(malId)
+                } catch (e: Exception) {
+                    android.util.Log.w("CrossSync",
+                        "diff-sync manga DELETE FAILED malId=$malId: ${e.message}", e)
+                }
+                delay(1000)
+            }
+        }
+    } else {
+        android.util.Log.w("CrossSync", "diff-sync manga: AniList returned empty list — skipping parity cleanup to avoid wiping MAL")
     }
     android.util.Log.d("CrossSync", "cross-provider diff-sync complete")
 }

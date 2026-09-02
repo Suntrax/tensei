@@ -100,7 +100,7 @@ class MangaTrackManager(context: Context) {
      * Ensure a track exists for the given manga. If none exists, a new CURRENT track is created
      * with the provided metadata. Returns the (possibly newly-created) track.
      */
-    fun ensureTrack(mangaId: Int, title: String = "", cover: String = "", totalChapters: Int = 0, averageScore: Int? = null, titleEnglish: String? = null): MangaTrack {
+    fun ensureTrack(mangaId: Int, title: String = "", cover: String = "", totalChapters: Int = 0, averageScore: Int? = null, titleEnglish: String? = null, listEntryId: Int? = null, malId: Int? = null): MangaTrack {
         val tracks = getTracks().toMutableList()
         val index = tracks.indexOfFirst { it.mangaId == mangaId }
         if (index >= 0) {
@@ -111,7 +111,9 @@ class MangaTrackManager(context: Context) {
                 titleEnglish = existing.titleEnglish?.takeIf { it.isNotBlank() } ?: titleEnglish,
                 cover = existing.cover.ifBlank { cover },
                 totalChapters = if (existing.totalChapters == 0) totalChapters else existing.totalChapters,
-                averageScore = averageScore ?: existing.averageScore
+                averageScore = averageScore ?: existing.averageScore,
+                listEntryId = existing.listEntryId ?: listEntryId,
+                malId = existing.malId ?: malId
             )
             if (patched != existing) {
                 tracks[index] = patched
@@ -126,7 +128,9 @@ class MangaTrackManager(context: Context) {
             cover = cover,
             totalChapters = totalChapters,
             status = "CURRENT",
-            averageScore = averageScore
+            averageScore = averageScore,
+            listEntryId = listEntryId,
+            malId = malId
         )
         tracks.add(newTrack)
         saveTracks(tracks)

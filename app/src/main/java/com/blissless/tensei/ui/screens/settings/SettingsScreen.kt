@@ -150,6 +150,7 @@ import com.blissless.tensei.viewmodel.setDiscordRichPresence
 import com.blissless.tensei.viewmodel.setCheckUpdatesOnStart
 import com.blissless.tensei.viewmodel.setAutoSyncCrossProviderStartup
 import com.blissless.tensei.viewmodel.setAutoSyncCrossProviderDirection
+import com.blissless.tensei.viewmodel.setMalAsMainProvider
 import com.blissless.tensei.viewmodel.setAutoUpdateExtensions
 import com.blissless.tensei.viewmodel.loadAvailableMagnetExtensions
 import com.blissless.tensei.viewmodel.loadAvailableStreamExtensions
@@ -258,6 +259,7 @@ private fun AccountSettingsPage(
     val discordRichPresence by viewModel.discordRichPresence.collectAsState(initial = false)
     val autoSyncCrossProviderStartup by viewModel.autoSyncCrossProviderStartup.collectAsState(initial = false)
     val autoSyncCrossProviderDirection by viewModel.autoSyncCrossProviderDirection.collectAsState(initial = true)
+    val malAsMainProvider by viewModel.malAsMainProvider.collectAsState(initial = false)
 
     val userName by viewModel.userName.collectAsState()
     val userAvatar by viewModel.userAvatar.collectAsState()
@@ -377,8 +379,17 @@ private fun AccountSettingsPage(
             ) {
                 Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Sync Now (AniList to MAL)")
+                Text(if (malAsMainProvider) "Sync Now (MAL to AniList)" else "Sync Now (AniList to MAL)")
             }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                if (malAsMainProvider)
+                    "MyAnimeList is your main list provider and populates the home screen."
+                else
+                    "AniList is your main list provider and populates the home screen.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             Spacer(modifier = Modifier.height(10.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -414,7 +425,10 @@ private fun AccountSettingsPage(
                 Spacer(modifier = Modifier.height(4.dp))
                 Row(modifier = Modifier.fillMaxWidth()) {
                     Button(
-                        onClick = { viewModel.setAutoSyncCrossProviderDirection(true) },
+                        onClick = {
+                            viewModel.setAutoSyncCrossProviderDirection(true)
+                            viewModel.setMalAsMainProvider(false)
+                        },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(
@@ -434,7 +448,10 @@ private fun AccountSettingsPage(
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
-                        onClick = { viewModel.setAutoSyncCrossProviderDirection(false) },
+                        onClick = {
+                            viewModel.setAutoSyncCrossProviderDirection(false)
+                            viewModel.setMalAsMainProvider(true)
+                        },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(

@@ -608,7 +608,6 @@ fun DetailedMangaScreen(
                                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Spacer(modifier = Modifier.weight(1f))
                                 displayData.averageScore?.let { score ->
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
@@ -1588,7 +1587,6 @@ fun DetailedMangaScreen(
             onRemove = {
                 android.util.Log.d("MangaSyncDebug", "MangaStatusDialog onRemove: mangaId=${manga.id}")
                 onRemove()
-                viewModel.removeMangaTracking(manga.id)
                 showStatusDialog = false
             },
             onDismiss = { showStatusDialog = false }

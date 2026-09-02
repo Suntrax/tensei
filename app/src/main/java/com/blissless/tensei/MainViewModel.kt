@@ -67,6 +67,7 @@ import okhttp3.OkHttpClient
 import com.blissless.tensei.viewmodel.startApiRetryLoop
 import com.blissless.tensei.viewmodel.offerCrossProviderSync
 import com.blissless.tensei.viewmodel.runCrossProviderStartupSync
+import com.blissless.tensei.viewmodel.runCrossProviderDiffSync
 import com.blissless.tensei.viewmodel.isAniListActive
 import com.blissless.tensei.viewmodel.isMalActive
 import com.blissless.tensei.viewmodel.isBothActive
@@ -441,6 +442,7 @@ class MainViewModel : ViewModel() {
     val checkUpdatesOnStart: StateFlow<Boolean> get() = userPreferences.checkUpdatesOnStart
     val autoSyncCrossProviderStartup: StateFlow<Boolean> get() = userPreferences.autoSyncCrossProviderStartup
     val autoSyncCrossProviderDirection: StateFlow<Boolean> get() = userPreferences.autoSyncCrossProviderDirection
+    val malAsMainProvider: StateFlow<Boolean> get() = userPreferences.malAsMainProvider
     val autoUpdateExtensions: StateFlow<Boolean> get() = userPreferences.autoUpdateExtensions
     val streamMethod: StateFlow<String> get() = userPreferences.streamMethod
     val defaultStreamExtension: StateFlow<String?> get() = userPreferences.defaultStreamExtension
@@ -722,7 +724,14 @@ class MainViewModel : ViewModel() {
                 // Do NOT clear the AniList token — we support simultaneous login.
                 _loginProvider.value = if (anilistStillLoggedIn) LoginProvider.BOTH else LoginProvider.MAL
                 loadMalUserData()
-                fetchMalList()
+                // AniList is the main provider by default when both are logged in — never let the
+                // MAL list overwrite the AniList home lists on login. Only fetch MAL as the list
+                // source when MAL is the sole provider or the user explicitly chose it as main.
+                if (anilistStillLoggedIn && !userPreferences.malAsMainProvider.value) {
+                    fetchJikanUserData()
+                } else {
+                    fetchMalList()
+                }
                 // prefetchOfflineWatchingStreams() // Disabled for now
                 _toastMessage.emit("Successfully logged into MyAnimeList!")
                 // If the user is now on both providers, offer the one-time copy + ongoing sync.
@@ -751,7 +760,11 @@ class MainViewModel : ViewModel() {
                 viewModelScope.launch {
                     _isLoadingHome.value = true
                     fetchUser()
-                    fetchLists()
+                    // If MAL was already logged in and the user chose it as the main provider,
+                    // keep the MAL list in control of the home screen instead of overwriting it.
+                    if (!(malStillLoggedIn && userPreferences.malAsMainProvider.value)) {
+                        fetchLists()
+                    }
                     fetchMangaLists()
                     _isLoadingHome.value = false
                     fetchAiringSchedule(force = true)
@@ -940,13 +953,14 @@ class MainViewModel : ViewModel() {
         // Prefetch streams for offline "Continue Watching" list
         // prefetchOfflineWatchingStreams() // Disabled for now
     }
-
-    private suspend fun loadHomeDataWithCache() {
+private suspend fun loadHomeDataWithCache() {
         cacheManager.loadHomeDataFromCache()?.let {
             updateHomeState(it)
         }
 
         val now = System.currentTimeMillis()
+        val malMain = isMalActive && userPreferences.malAsMainProvider.value
+
         if (now - lastHomeRefreshTime < MIN_REFRESH_INTERVAL_MS) {
             _isLoadingHome.value = false
             refreshReleasingAnimeProgress()
@@ -963,27 +977,41 @@ class MainViewModel : ViewModel() {
         val listsSuccess: Boolean
         val mangaListsSuccess: Boolean
         coroutineScope {
-            // fetchUser MUST complete before fetchLists/fetchMangaLists — both need _userId
-            // which is set by fetchUser. Running them in parallel was a bug that caused
-            // anime lists to silently fail (fetchLists returned false because _userId was null).
-            userSuccess = async { fetchUser() }.await()
-            val listsDeferred = async { fetchLists() }
-            val mangaListsDeferred = async { fetchMangaLists() }
-            listsSuccess = listsDeferred.await()
-            mangaListsSuccess = mangaListsDeferred.await()
+            if (malMain) {
+                // MAL is the main provider: pull its list first, but still fetch the AniList
+                // user id so AniList manga tracking and list fallback keep working. Do NOT
+                // overwrite the home lists with AniList data.
+                userSuccess = async { if (isAniListActive) fetchUser() else true }.await()
+                listsSuccess = async { fetchMalList() }.await()
+                mangaListsSuccess = async { if (isAniListActive) fetchMangaLists() else true }.await()
+            } else {
+                // fetchUser MUST complete before fetchLists/fetchMangaLists — both need _userId
+                // which is set by fetchUser. Running them in parallel was a bug that caused
+                // anime lists to silently fail (fetchLists returned false because _userId was null).
+                userSuccess = async { fetchUser() }.await()
+                val listsDeferred = async { fetchLists() }
+                val mangaListsDeferred = async { fetchMangaLists() }
+                listsSuccess = listsDeferred.await()
+                mangaListsSuccess = mangaListsDeferred.await()
+            }
         }
         _isLoadingHome.value = false
 
-        // When logged into both, AniList is the primary source. Only fall back to MAL when
-        // AniList is unavailable (e.g. its API had an outage) so the home lists don't go empty.
-        if (isBothActive && !userSuccess) {
-            // AniList user/profile fetch failed — fall back to MAL data for the home lists.
-            if (isMalActive) {
-                fetchMalList()
-                // Prefer the MAL username/avatar when AniList is unavailable.
-                val malUser = malApiService.getAuthManager().userInfo.value
-                malUsername?.let { _userName.value = it }
-                malUser?.picture?.let { _userAvatar.value = it }
+        // Fall back to the other provider when the preferred one is unavailable (e.g. API outage)
+        // so the home lists don't go empty.
+        if (!listsSuccess) {
+            if (malMain) {
+                if (isAniListActive) {
+                    fetchLists()
+                }
+            } else {
+                if (isMalActive) {
+                    fetchMalList()
+                    // Prefer the MAL username/avatar when AniList is unavailable.
+                    val malUser = malApiService.getAuthManager().userInfo.value
+                    malUsername?.let { _userName.value = it }
+                    malUser?.picture?.let { _userAvatar.value = it }
+                }
             }
         }
 
@@ -1700,14 +1728,33 @@ class MainViewModel : ViewModel() {
         cacheManager.invalidateUserCache()
         viewModelScope.launch {
             _isLoadingHome.value = true
-            if (_loginProvider.value == LoginProvider.MAL) {
-                fetchMalList()
+            val malMain = _loginProvider.value == LoginProvider.MAL || userPreferences.malAsMainProvider.value
+            if (malMain) {
+                // MAL is the main provider: pull its list first, fall back to AniList.
+                val malOk = fetchMalList()
                 fetchJikanUserData()
+                if (!malOk && isAniListActive) {
+                    fetchLists()
+                }
+                if (isAniListActive) {
+                    fetchMangaLists()
+                }
             } else {
-                fetchLists()
+                // AniList is the main provider; only fall back to MAL when it fails.
+                val listsOk = fetchLists()
                 fetchMangaLists()
+                if (!listsOk && isMalActive) {
+                    fetchMalList()
+                }
             }
             _isLoadingHome.value = false
+            // Reconcile both providers so MAL mirrors AniList (the main provider). This prunes
+            // MAL-only manga/anime and pushes AniList changes — the differential, automatic sync.
+            // It runs on the same throttle as refreshHome (MIN_REFRESH_INTERVAL_MS) and only when
+            // both providers are logged in; it no-ops otherwise.
+            if (isBothActive && !userPreferences.malAsMainProvider.value) {
+                runCrossProviderDiffSync()
+            }
             // prefetchContinueWatchingStreams() // Disabled for now
         }
     }

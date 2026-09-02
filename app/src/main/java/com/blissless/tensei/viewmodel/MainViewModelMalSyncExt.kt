@@ -178,8 +178,13 @@ internal suspend fun MainViewModel.executePendingSyncs() {
     }
 
     if (syncsToExecute.isNotEmpty()) {
-        // After a write, refresh the home lists. Prefer AniList; fall back to MAL on outage.
-        if (isAniListActive) {
+        // After a write, refresh the home lists from the chosen main provider, falling back to
+        // the other provider when the main one is unavailable.
+        val malMain = isMalActive && userPreferences.malAsMainProvider.value
+        if (malMain) {
+            val ok = fetchMalList()
+            if (!ok && isAniListActive) fetchLists()
+        } else if (isAniListActive) {
             val ok = fetchLists()
             if (!ok && isMalActive) fetchMalList()
         } else if (isMalActive) {
@@ -214,10 +219,11 @@ internal fun MainViewModel.mapFromMalStatus(malStatus: String?): String {
 
 // ─── MAL list fetch & reconciliation ────────────────────────────────────────
 
-internal suspend fun MainViewModel.fetchMalList() {
-    if (!isMalActive) return
+internal suspend fun MainViewModel.fetchMalList(): Boolean {
+    if (!isMalActive) return false
 
     val entries = malApiService.getAnimeList()
+    if (entries.isEmpty()) return false
 
     val currentlyWatching = mutableListOf<AnimeMedia>()
     val planningToWatch = mutableListOf<AnimeMedia>()
@@ -282,6 +288,7 @@ internal suspend fun MainViewModel.fetchMalList() {
     _dropped.value = dropped.sortedByDescending { it.averageScore ?: 0 }
 
     loadMalFavoritesFromCache()
+    return true
 }
 
 internal fun MainViewModel.toggleMalFavoriteById(mediaId: Int) {

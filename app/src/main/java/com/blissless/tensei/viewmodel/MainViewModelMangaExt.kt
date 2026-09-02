@@ -429,6 +429,8 @@ private fun toMangaMedia(track: MangaTrack): MangaMedia {
         totalChapters = track.totalChapters,
         totalVolumes = track.totalVolumes,
         listStatus = track.status,
+        listEntryId = track.listEntryId,
+        malId = track.malId,
         scrollProgress = track.scrollProgress,
         currentChapterPages = track.currentChapterPages,
         userScore = track.score,
@@ -516,7 +518,7 @@ suspend fun MainViewModel.fetchMangaLists(): Boolean {
     if (localTracker != null) {
         // Sync AniList entries into local tracking
         anilistCurrent?.forEach { m ->
-            localTracker.ensureTrack(m.id, m.title, m.cover, m.totalChapters, m.averageScore, m.titleEnglish)
+            localTracker.ensureTrack(m.id, m.title, m.cover, m.totalChapters, m.averageScore, m.titleEnglish, m.listEntryId, m.malId)
             localTracker.updateTrackingStatus(m.id, "CURRENT")
             // Never downgrade local progress: a stale AniList response (push still in
             // flight, or a network hiccup) must not roll back chapters the user just read.
@@ -524,22 +526,22 @@ suspend fun MainViewModel.fetchMangaLists(): Boolean {
             if (m.userScore != null) localTracker.updateScore(m.id, m.userScore)
         }
         anilistPlanning?.forEach { m ->
-            localTracker.ensureTrack(m.id, m.title, m.cover, m.totalChapters, m.averageScore, m.titleEnglish)
+            localTracker.ensureTrack(m.id, m.title, m.cover, m.totalChapters, m.averageScore, m.titleEnglish, m.listEntryId, m.malId)
             localTracker.updateTrackingStatus(m.id, "PLANNING")
             if (m.userScore != null) localTracker.updateScore(m.id, m.userScore)
         }
         anilistCompleted?.forEach { m ->
-            localTracker.ensureTrack(m.id, m.title, m.cover, m.totalChapters, m.averageScore, m.titleEnglish)
+            localTracker.ensureTrack(m.id, m.title, m.cover, m.totalChapters, m.averageScore, m.titleEnglish, m.listEntryId, m.malId)
             localTracker.updateTrackingStatus(m.id, "COMPLETED")
             if (m.userScore != null) localTracker.updateScore(m.id, m.userScore)
         }
         anilistPaused?.forEach { m ->
-            localTracker.ensureTrack(m.id, m.title, m.cover, m.totalChapters, m.averageScore, m.titleEnglish)
+            localTracker.ensureTrack(m.id, m.title, m.cover, m.totalChapters, m.averageScore, m.titleEnglish, m.listEntryId, m.malId)
             localTracker.updateTrackingStatus(m.id, "PAUSED")
             if (m.userScore != null) localTracker.updateScore(m.id, m.userScore)
         }
         anilistDropped?.forEach { m ->
-            localTracker.ensureTrack(m.id, m.title, m.cover, m.totalChapters, m.averageScore, m.titleEnglish)
+            localTracker.ensureTrack(m.id, m.title, m.cover, m.totalChapters, m.averageScore, m.titleEnglish, m.listEntryId, m.malId)
             localTracker.updateTrackingStatus(m.id, "DROPPED")
             if (m.userScore != null) localTracker.updateScore(m.id, m.userScore)
         }
@@ -1044,7 +1046,8 @@ private data class PendingMangaSync(
     val status: String? = null,
     val progress: Int? = null,
     val entryId: Int? = null,
-    val score: Int? = null
+    val score: Int? = null,
+    val malId: Int? = null
 )
 
 private val pendingMangaSyncs = mutableMapOf<Int, PendingMangaSync>()
@@ -1072,7 +1075,8 @@ private fun MainViewModel.queueMangaSync(
     status: String? = null,
     progress: Int? = null,
     entryId: Int? = null,
-    score: Int? = null
+    score: Int? = null,
+    malId: Int? = null
 ) {
     val existing = pendingMangaSyncs[mediaId]
     pendingMangaSyncs[mediaId] = PendingMangaSync(
@@ -1081,7 +1085,8 @@ private fun MainViewModel.queueMangaSync(
         status = status ?: existing?.status,
         progress = progress ?: existing?.progress,
         entryId = entryId ?: existing?.entryId,
-        score = score ?: existing?.score
+        score = score ?: existing?.score,
+        malId = malId ?: existing?.malId
     )
     mangaSyncJob?.cancel()
     // Run the push on a background dispatcher. The mutation is a network call, and the
@@ -1177,8 +1182,14 @@ private suspend fun MainViewModel.executeMangaPendingSyncs() {
                         result = result && (r == true)
                     }
                 }
-                if (isMalActive && malMangaId != null) {
-                    result = result && malApiService.deleteMangaFromList(malMangaId)
+                if (isMalActive) {
+                    // Prefer the MAL id captured at queue time: after a delete the manga is removed
+                    // from the local lists, so on-demand resolution (resolveMalMangaId) can no longer
+                    // find it. Fall back to resolution for syncs that predate the new field.
+                    val malMangaId = sync.malId ?: resolveMalMangaId(sync.mediaId)
+                    if (malMangaId != null) {
+                        result = result && malApiService.deleteMangaFromList(malMangaId)
+                    }
                 }
                 result
             }
@@ -1201,6 +1212,11 @@ private suspend fun MainViewModel.executeMangaPendingSyncs() {
             fetchMalMangaList()
         }
         loadLocalMangaTracking()
+        // After any manga change (status, progress, or delete), reconcile MAL to keep it in exact
+        // parity with AniList — prunes MAL-only entries and mirrors status/score/progress.
+        if (isBothActive && !userPreferences.malAsMainProvider.value) {
+            runCrossProviderDiffSync()
+        }
     }
 }
 
@@ -1333,11 +1349,60 @@ fun MainViewModel.updateMangaScore(mangaId: Int, score: Int) {
 
 fun MainViewModel.removeMangaTracking(mangaId: Int) {
     android.util.Log.d("MangaSyncDebug", "removeMangaTracking mangaId=$mangaId")
+    // Resolve the AniList list-entry id and the MAL id (needed by the remote deletes) from the
+    // local track or the in-memory lists BEFORE the track is removed. Without the entry id the
+    // AniList entry survives, and without the MAL id the MAL entry survives (deletion happens on a
+    // debounced background queue, by which point the manga is gone from the local lists and can no
+    // longer be resolved) — each would be silently resurrected / left behind.
+    val track = mangaTrackManager?.getTrack(mangaId)
+    val knownEntryId = track?.listEntryId
+        ?: listOf(
+            _mangaContinueReading.value,
+            _mangaCurrentlyReading.value,
+            _mangaPlanningToRead.value,
+            _mangaCompleted.value,
+            _mangaPaused.value,
+            _mangaDropped.value
+        ).flatten().firstOrNull { it.id == mangaId }?.listEntryId
+    val knownMalId = track?.malId
+        ?: listOf(
+            _mangaContinueReading.value,
+            _mangaCurrentlyReading.value,
+            _mangaPlanningToRead.value,
+            _mangaCompleted.value,
+            _mangaPaused.value,
+            _mangaDropped.value
+        ).flatten().firstOrNull { it.id == mangaId }?.malId
     mangaTrackManager?.removeTrack(mangaId)
     // Forget the ensure-track flag so re-reading this manga later recreates its local track.
     mangaTrackEnsured.remove(mangaId)
     mangaReadSyncedChapters.removeAll { it.startsWith("$mangaId:") }
     loadLocalMangaTracking()
+
+    // Both AniList and MAL need their own id for the remote delete. If we resolved both, queue
+    // immediately. If either is missing (older track without malId, or track never saw a list
+    // sync), fetch the AniList list once to fill in the blanks before deleting from each provider.
+    // We must always know the MAL id — on-demand resolution after removal can't find it in the
+    // (now empty) local lists, so the MAL entry would be left behind.
+    if (knownEntryId != null && knownMalId != null) {
+        android.util.Log.d("MangaSyncDebug", "removeMangaTracking: queuing delete mediaId=$mangaId entryId=$knownEntryId malId=$knownMalId")
+        queueMangaSync(mangaId, "delete", entryId = knownEntryId, malId = knownMalId)
+    } else {
+        viewModelScope.launch {
+            val token = authToken.value
+            val userId = _userId.value
+            if (token != null && userId != null) {
+                val fetched = mangaRepository?.fetchUserMangaLists(userId, token)
+                val listEntry = fetched?.values?.flatten()?.firstOrNull { it.id == mangaId }
+                val entryId = listEntry?.listEntryId ?: knownEntryId
+                val malId = listEntry?.malId ?: knownMalId
+                if (entryId != null || malId != null) {
+                    android.util.Log.d("MangaSyncDebug", "removeMangaTracking: queuing delete (from fetch) mediaId=$mangaId entryId=$entryId malId=$malId")
+                    queueMangaSync(mangaId, "delete", entryId = entryId, malId = malId)
+                }
+            }
+        }
+    }
 }
 
 /**

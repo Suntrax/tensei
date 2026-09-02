@@ -113,6 +113,9 @@ fun MainViewModel.setAutoSyncCrossProviderStartup(enabled: Boolean) =
 fun MainViewModel.setAutoSyncCrossProviderDirection(toMal: Boolean) =
     userPreferences.setAutoSyncCrossProviderDirection(toMal)
 
+fun MainViewModel.setMalAsMainProvider(enabled: Boolean) =
+    userPreferences.setMalAsMainProvider(enabled)
+
 fun MainViewModel.setAutoUpdateExtensions(enabled: Boolean) =
     userPreferences.setAutoUpdateExtensions(enabled)
 

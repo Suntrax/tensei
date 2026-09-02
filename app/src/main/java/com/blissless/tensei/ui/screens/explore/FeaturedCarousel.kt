@@ -26,8 +26,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.outlined.BookmarkAdd
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material3.Button
@@ -357,7 +357,7 @@ fun FeaturedCarousel(
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
-                                        if (isSaved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                                        if (isSaved) Icons.Default.Bookmark else Icons.Outlined.BookmarkAdd,
                                         contentDescription = "Save",
                                         tint = if (isSaved) statusColor else Color.White,
                                         modifier = Modifier.size(22.dp)

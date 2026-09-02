@@ -799,18 +799,17 @@ private fun StatusListMangaCard(
                 )
 
                 // Top Row: Chapter Counter (left) + Rating (right)
-                Row(
+                Box(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
                         .fillMaxWidth()
-                        .padding(8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Top
+                        .padding(8.dp)
                 ) {
                     if (progressText != null) {
                         Surface(
                             shape = RoundedCornerShape(6.dp),
-                            color = Color.Black.copy(alpha = 0.7f)
+                            color = Color.Black.copy(alpha = 0.7f),
+                            modifier = Modifier.align(Alignment.TopStart)
                         ) {
                             Text(
                                 text = progressText,
@@ -825,7 +824,8 @@ private fun StatusListMangaCard(
                     if (manga.averageScore != null && manga.averageScore > 0) {
                         Surface(
                             shape = RoundedCornerShape(6.dp),
-                            color = Color.Black.copy(alpha = 0.65f)
+                            color = Color.Black.copy(alpha = 0.65f),
+                            modifier = Modifier.align(Alignment.TopEnd)
                         ) {
                             Text(
                                 text = "★ ${String.format(java.util.Locale.US, "%.1f", manga.averageScore / 10.0)}",

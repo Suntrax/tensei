@@ -1234,10 +1234,12 @@ data class MangaTrack(
     val scrollProgress: Float = 0f,
     val totalChapters: Int = 0,
     val totalVolumes: Int? = null,
+    val listEntryId: Int? = null,
     val status: String = "PLANNING",
     val mangaDexId: String? = null,
     val lastReadChapter: MangaChapter? = null,
     val currentChapterPages: Int = 0,
+    val malId: Int? = null,
     val score: Int? = null,
     val averageScore: Int? = null
 )

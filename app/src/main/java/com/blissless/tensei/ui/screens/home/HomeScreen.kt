@@ -121,6 +121,8 @@ import com.blissless.tensei.viewmodel.loadAvailableMagnetExtensions
 import com.blissless.tensei.viewmodel.mangaCompleted
 import com.blissless.tensei.viewmodel.mangaContinueReading
 import com.blissless.tensei.viewmodel.mangaCurrentlyReading
+import com.blissless.tensei.viewmodel.mangaDropped
+import com.blissless.tensei.viewmodel.mangaPaused
 import com.blissless.tensei.viewmodel.mangaPlanningToRead
 import com.blissless.tensei.viewmodel.removeContinueWatchingEntry
 import com.blissless.tensei.viewmodel.removeMangaTracking
@@ -191,6 +193,8 @@ fun HomeScreen(
     val mangaCurrentlyReading by viewModel.mangaCurrentlyReading.collectAsState()
     val mangaPlanningToRead by viewModel.mangaPlanningToRead.collectAsState()
     val mangaCompleted by viewModel.mangaCompleted.collectAsState()
+    val mangaPaused by viewModel.mangaPaused.collectAsState()
+    val mangaDropped by viewModel.mangaDropped.collectAsState()
 
     val context = LocalContext.current
 
@@ -839,6 +843,52 @@ fun HomeScreen(
                             )
                         }
 
+                        if (mangaPaused.isNotEmpty()) {
+                            SectionHeader(
+                                title = "On Hold",
+                                icon = Icons.Default.Pause,
+                                count = mangaPaused.size,
+                                iconTint = HomeStatusColors.getColor("PAUSED"),
+                                onClick = {
+                                    statusListTitle = "On Hold"
+                                    statusListIcon = Icons.Default.Pause
+                                    statusListType = "PAUSED"
+                                    statusListIsManga = true
+                                    showStatusListScreen = true
+                                }
+                            )
+                            MangaHorizontalRow(
+                                mangaList = mangaPaused,
+                                isOled = isOled,
+                                preferEnglishTitles = preferEnglishTitles,
+                                onMangaClick = onMangaClick,
+                                onMangaInfoClick = onMangaInfoClick
+                            )
+                        }
+
+                        if (mangaDropped.isNotEmpty()) {
+                            SectionHeader(
+                                title = "Dropped",
+                                icon = Icons.Default.Delete,
+                                count = mangaDropped.size,
+                                iconTint = HomeStatusColors.getColor("DROPPED"),
+                                onClick = {
+                                    statusListTitle = "Dropped"
+                                    statusListIcon = Icons.Default.Delete
+                                    statusListType = "DROPPED"
+                                    statusListIsManga = true
+                                    showStatusListScreen = true
+                                }
+                            )
+                            MangaHorizontalRow(
+                                mangaList = mangaDropped,
+                                isOled = isOled,
+                                preferEnglishTitles = preferEnglishTitles,
+                                onMangaClick = onMangaClick,
+                                onMangaInfoClick = onMangaInfoClick
+                            )
+                        }
+
                         if (allListsEmpty && !showWelcomeCard) {
                             Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 24.dp), contentAlignment = Alignment.Center) {
                                 Surface(
@@ -892,6 +942,8 @@ fun HomeScreen(
                         "CURRENT" -> mangaCurrentlyReading
                         "PLANNING" -> mangaPlanningToRead
                         "COMPLETED" -> mangaCompleted
+                        "PAUSED" -> mangaPaused
+                        "DROPPED" -> mangaDropped
                         else -> emptyList()
                     }
                 }
@@ -1411,15 +1463,12 @@ private fun MangaHorizontalRow(
                         Box(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(80.dp)
                             .background(Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f)))))
 
-                        Row(
-                            modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.Top
-                        ) {
+                        Box(modifier = Modifier.fillMaxSize().padding(8.dp)) {
                             if (progressText != null) {
                                 Surface(
                                     shape = RoundedCornerShape(8.dp),
-                                    color = Color.Black.copy(alpha = 0.65f)
+                                    color = Color.Black.copy(alpha = 0.65f),
+                                    modifier = Modifier.align(Alignment.TopStart)
                                 ) {
                                     Text(
                                         text = progressText,
@@ -1432,11 +1481,11 @@ private fun MangaHorizontalRow(
                                 }
                             }
                             FilledTonalIconButton(
-                            onClick = { onMangaInfoClick(manga) },
-                            modifier = Modifier.size(30.dp),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = Color.Black.copy(alpha = 0.5f), contentColor = Color.White)
-                        ) { Icon(imageVector = Icons.Outlined.Info, contentDescription = "Info", modifier = Modifier.size(16.dp)) }
+                                onClick = { onMangaInfoClick(manga) },
+                                modifier = Modifier.align(Alignment.TopEnd).size(30.dp),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = Color.Black.copy(alpha = 0.5f), contentColor = Color.White)
+                            ) { Icon(imageVector = Icons.Outlined.Info, contentDescription = "Info", modifier = Modifier.size(16.dp)) }
                         }
                     }
                 }
