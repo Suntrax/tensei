@@ -1772,7 +1772,7 @@ private fun MangaChapterGroup(
                         trackColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)
                     )
                     Text(
-                        text = "${(readRatio * 100).toInt()}",
+                        text = "${(readRatio * 100).toInt()}%",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Bold,
