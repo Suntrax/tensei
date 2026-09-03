@@ -930,8 +930,8 @@ private fun StreamSettingsPage(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                SettingsChoiceChip(label = "Standard", isSelected = streamMethod == "direct", onClick = { viewModel.setStreamMethod("direct") })
                 SettingsChoiceChip(label = "Tensei", isSelected = streamMethod == "magnet", onClick = { viewModel.setStreamMethod("magnet") })
+                SettingsChoiceChip(label = "External", isSelected = streamMethod == "direct", onClick = { viewModel.setStreamMethod("direct") })
             }
             Spacer(modifier = Modifier.height(4.dp))
             Text(
@@ -1049,11 +1049,12 @@ private fun StreamSettingsPage(
                     if (streamMethod == "direct") {
                         val standardExtensions = extUiState.extensions.filter {
                             !com.blissless.tensei.extensions.ExtensionDetector.isBlisslessStreamExtension(it.packageName) &&
-                            !com.blissless.tensei.extensions.ExtensionDetector.isBlisslessTorrentExtension(it.packageName)
+                            !com.blissless.tensei.extensions.ExtensionDetector.isBlisslessTorrentExtension(it.packageName) &&
+                            !com.blissless.tensei.extensions.ExtensionDetector.isBlisslessMangaExtension(it.packageName)
                         }
                         if (standardExtensions.isNotEmpty()) {
                             Text(
-                                "Standard",
+                                "External",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,

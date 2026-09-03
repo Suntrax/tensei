@@ -787,39 +787,6 @@ fun RichEpisodeScreen(
                     Column {
                         Spacer(modifier = Modifier.height(8.dp))
                         // Extension selector - show only the active category
-                        if (currentStreamMethod == "direct" && availableExtensions.isNotEmpty()) {
-                            Row(
-                                modifier = Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Text("Standard:", style = MaterialTheme.typography.labelSmall, color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant)
-                                sortedExtensions.forEach { (extName, extPkg) ->
-                                    FilterChip(
-                                        selected = extPkg == selectedExtensionPkg && !isMagnetActive && !isStreamActive,
-                                        onClick = {
-                                            if (extPkg != selectedExtensionPkg) {
-                                                selectedExtensionPkg = extPkg
-                                                isMagnetActive = false
-                                                isStreamActive = false
-                                                selectedMagnetAuthority = null
-                                                selectedStreamAuthority = null
-                                                extensionError = null
-                                                isExtensionReady = false
-                                            }
-                                        },
-                                        label = { Text(extName, maxLines = 1, style = MaterialTheme.typography.labelSmall) },
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                            containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surface,
-                                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(4.dp))
-                        }
                         if (currentStreamMethod == "magnet" && sortedStreamExtensions.isNotEmpty()) {
                             Row(
                                 modifier = Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
@@ -888,6 +855,39 @@ fun RichEpisodeScreen(
                                 }
                             }
                             Spacer(modifier = Modifier.height(8.dp))
+                        }
+                        if (currentStreamMethod == "direct" && availableExtensions.isNotEmpty()) {
+                            Row(
+                                modifier = Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text("External:", style = MaterialTheme.typography.labelSmall, color = if (isOled) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant)
+                                sortedExtensions.forEach { (extName, extPkg) ->
+                                    FilterChip(
+                                        selected = extPkg == selectedExtensionPkg && !isMagnetActive && !isStreamActive,
+                                        onClick = {
+                                            if (extPkg != selectedExtensionPkg) {
+                                                selectedExtensionPkg = extPkg
+                                                isMagnetActive = false
+                                                isStreamActive = false
+                                                selectedMagnetAuthority = null
+                                                selectedStreamAuthority = null
+                                                extensionError = null
+                                                isExtensionReady = false
+                                            }
+                                        },
+                                        label = { Text(extName, maxLines = 1, style = MaterialTheme.typography.labelSmall) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                            containerColor = if (isOled) Color(0xFF1A1A1A) else MaterialTheme.colorScheme.surface,
+                                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
                         }
                         // Navigation chips
                         Row(
