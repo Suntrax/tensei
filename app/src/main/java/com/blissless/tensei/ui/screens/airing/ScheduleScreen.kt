@@ -3,21 +3,16 @@ package com.blissless.tensei.ui.screens.airing
 import android.annotation.SuppressLint
 import android.widget.Toast
 import com.blissless.tensei.data.models.MangaMedia
-import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -37,6 +32,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -48,8 +44,6 @@ import androidx.compose.material.icons.filled.SignalWifiOff
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -70,7 +64,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -102,20 +98,44 @@ import com.blissless.tensei.util.toast
 import com.blissless.tensei.util.longToast
 
 val DayNames = listOf("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
-val DayAbbreviations = listOf("Su", "Mo", "Tu", "We", "Th", "Fr", "Sa")
+val DayAbbreviations = listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
 
 private fun getDaysFromCurrentDay(currentDay: Int): List<Int> {
     return (0..6).map { offset -> (currentDay + offset) % 7 }
 }
 
+private fun ordinalDay(day: Int): String {
+    val suffix = when {
+        day % 100 in 11..13 -> "th"
+        day % 10 == 1 -> "st"
+        day % 10 == 2 -> "nd"
+        day % 10 == 3 -> "rd"
+        else -> "th"
+    }
+    return "$day$suffix"
+}
+
 private sealed class TimelineItem {
     data class Anime(val data: AiringScheduleAnime, val isPast: Boolean) : TimelineItem()
-    data class NowIndicator(val timeString: String) : TimelineItem()
     data class DayHeader(val dayIndex: Int, val dayName: String) : TimelineItem()
+    data class HourHeader(val hour: Int, val timeString: String) : TimelineItem()
 }
 
 private fun easeOutCubic(t: Float): Float {
     val t1 = t - 1; return t1 * t1 * t1 + 1
+}
+
+private fun firstUpcomingHourIndex(list: List<TimelineItem>, dayIndex: Int, currentHour: Int): Int {
+    var dayHeaderIndex = -1
+    var usableDayHeader = 0
+    for (i in list.indices) {
+        when (val it = list[i]) {
+            is TimelineItem.DayHeader -> { if (it.dayIndex == dayIndex) { dayHeaderIndex = i; usableDayHeader = i } }
+            is TimelineItem.HourHeader -> if (dayHeaderIndex != -1 && it.hour >= currentHour) return i
+            is TimelineItem.Anime -> {}
+        }
+    }
+    return usableDayHeader
 }
 
 @SuppressLint("FrequentlyChangingValue")
@@ -252,17 +272,16 @@ fun ScheduleScreen(
     val allUpcomingTimelineItems = remember(filteredScheduleByDay, orderedDays, currentTime, currentDayOfWeek) {
         val items = mutableListOf<TimelineItem>()
         val tf = SimpleDateFormat("HH:mm", Locale.getDefault())
-        val now = tf.format(Date(currentTime * 1000))
         orderedDays.forEach { dayIndex ->
-            val dayAnime = filteredScheduleByDay[dayIndex] ?: emptyList()
-            val isToday = dayIndex == currentDayOfWeek
+            val dayAnime = (filteredScheduleByDay[dayIndex] ?: emptyList()).sortedBy { it.airingAt }
             items.add(TimelineItem.DayHeader(dayIndex, DayNames[dayIndex]))
-            if (dayAnime.isNotEmpty() && isToday) {
-                dayAnime.filter { it.airingAt <= currentTime }.forEach { items.add(TimelineItem.Anime(it, true)) }
-                items.add(TimelineItem.NowIndicator(now))
-                dayAnime.filter { it.airingAt > currentTime }.forEach { items.add(TimelineItem.Anime(it, false)) }
-            } else if (dayAnime.isNotEmpty()) {
-                dayAnime.forEach { items.add(TimelineItem.Anime(it, false)) }
+            if (dayAnime.isNotEmpty()) {
+                val grouped = LinkedHashMap<Int, MutableList<TimelineItem.Anime>>()
+                dayAnime.forEach { a -> grouped.getOrPut((a.airingAt / 3600).toInt()) { mutableListOf() }.add(TimelineItem.Anime(a, a.airingAt <= currentTime)) }
+                grouped.forEach { (hour, list) ->
+                    items.add(TimelineItem.HourHeader(hour, tf.format(Date(hour * 3600L * 1000L))))
+                    items.addAll(list)
+                }
             }
         }
         items
@@ -271,15 +290,14 @@ fun ScheduleScreen(
     val byDayTimelineItems = remember(filteredScheduleByDay, selectedDay, currentTime, currentDayOfWeek) {
         val items = mutableListOf<TimelineItem>()
         val tf = SimpleDateFormat("HH:mm", Locale.getDefault())
-        val now = tf.format(Date(currentTime * 1000))
-        val dayAnime = filteredScheduleByDay[selectedDay] ?: emptyList()
-        val isToday = selectedDay == currentDayOfWeek
-        if (dayAnime.isNotEmpty() && isToday) {
-            dayAnime.filter { it.airingAt <= currentTime }.forEach { items.add(TimelineItem.Anime(it, true)) }
-            items.add(TimelineItem.NowIndicator(now))
-            dayAnime.filter { it.airingAt > currentTime }.forEach { items.add(TimelineItem.Anime(it, false)) }
-        } else if (dayAnime.isNotEmpty()) {
-            dayAnime.forEach { items.add(TimelineItem.Anime(it, false)) }
+        val dayAnime = (filteredScheduleByDay[selectedDay] ?: emptyList()).sortedBy { it.airingAt }
+        if (dayAnime.isNotEmpty()) {
+            val grouped = LinkedHashMap<Int, MutableList<TimelineItem.Anime>>()
+            dayAnime.forEach { a -> grouped.getOrPut((a.airingAt / 3600).toInt()) { mutableListOf() }.add(TimelineItem.Anime(a, a.airingAt <= currentTime)) }
+            grouped.forEach { (hour, list) ->
+                items.add(TimelineItem.HourHeader(hour, tf.format(Date(hour * 3600L * 1000L))))
+                items.addAll(list)
+            }
         }
         items
     }
@@ -289,9 +307,6 @@ fun ScheduleScreen(
         allUpcomingTimelineItems.forEachIndexed { i, item -> if (item is TimelineItem.DayHeader) map[item.dayIndex] = i }
         map
     }
-
-    val nowIndicatorIndexAll = remember(allUpcomingTimelineItems) { allUpcomingTimelineItems.indexOfFirst { it is TimelineItem.NowIndicator } }
-    val nowIndicatorIndexByDay = remember(byDayTimelineItems) { byDayTimelineItems.indexOfFirst { it is TimelineItem.NowIndicator } }
 
     LaunchedEffect(listStateAllUpcoming.firstVisibleItemIndex, viewMode, currentDayOfWeek) {
         if (viewMode == 0 && !isProgrammaticScroll) {
@@ -308,13 +323,15 @@ fun ScheduleScreen(
         if (isProgrammaticScroll) { delay(550.milliseconds); isProgrammaticScroll = false; isInputLocked = false }
     }
 
-    LaunchedEffect(isVisible, preventAutoSync) {
-        if (isVisible && !preventAutoSync) {
+    LaunchedEffect(isVisible) {
+        if (isVisible) {
             val today = Calendar.getInstance().get(Calendar.DAY_OF_WEEK) - 1
             currentDayOfWeek = today; visibleDayByScroll = today; selectedDay = today; lastKnownDay = today
-            val targetIndex = if (viewMode == 0) nowIndicatorIndexAll else nowIndicatorIndexByDay
-            val ls = if (viewMode == 0) listStateAllUpcoming else listStateByDay
-            if (targetIndex >= 0) ls.scrollToItem(targetIndex, scrollOffset = -100)
+            val currentHour = (System.currentTimeMillis() / 1000L / 3600).toInt()
+            val targetAll = firstUpcomingHourIndex(allUpcomingTimelineItems, today, currentHour)
+            val targetByDay = firstUpcomingHourIndex(byDayTimelineItems, -1, currentHour)
+            if (targetAll >= 0) listStateAllUpcoming.scrollToItem(targetAll, scrollOffset = -100)
+            if (targetByDay >= 0) listStateByDay.scrollToItem(targetByDay, scrollOffset = -100)
         }
     }
 
@@ -371,27 +388,6 @@ fun ScheduleScreen(
                 Text(if (viewMode == 0) "$todayPastCount aired · $totalUpcomingThisWeek upcoming" else if (selectedDayPastCount > 0) "$selectedDayPastCount aired · $selectedDayFutureCount upcoming" else "$selectedDayFutureCount upcoming",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            FilterChip(
-                selected = viewMode == 0,
-                onClick = { viewMode = 0; if (nowIndicatorIndexAll >= 0) scope.launch { listStateAllUpcoming.scrollToItem(nowIndicatorIndexAll, scrollOffset = -100) } },
-                label = { Text("All Upcoming", color = if (viewMode == 0) MaterialTheme.colorScheme.onPrimary else Color.Unspecified) },
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = MaterialTheme.colorScheme.primary,
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                ),
-                shape = RoundedCornerShape(10.dp)
-            )
-            Spacer(Modifier.width(8.dp))
-            FilterChip(
-                selected = viewMode == 1,
-                onClick = { viewMode = 1; selectedDay = currentDayOfWeek; if (nowIndicatorIndexByDay >= 0) scope.launch { listStateByDay.scrollToItem(nowIndicatorIndexByDay, scrollOffset = -100) } },
-                label = { Text("By Day", color = if (viewMode == 1) MaterialTheme.colorScheme.onPrimary else Color.Unspecified) },
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = MaterialTheme.colorScheme.primary,
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                ),
-                shape = RoundedCornerShape(10.dp)
-            )
         }
 
         Spacer(Modifier.height(12.dp))
@@ -399,108 +395,68 @@ fun ScheduleScreen(
         val orderedDaysForSelector = if (viewMode == 0) orderedDays else orderedDays
         val currentDayForSelector = if (viewMode == 0) visibleDayByScroll else selectedDay
 
-        // Day selector: weekday names (top) + timeline nodes (middle) + anime count (bottom)
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp)
+        // Day selector: horizontally swipeable day buttons (Day name, date, airing count)
+        val dateFormat = remember { SimpleDateFormat("MMM", Locale.getDefault()) }
+        val dayOfMonthFormat = remember { SimpleDateFormat("d", Locale.getDefault()) }
+        LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // Day name labels (top)
-            Row(modifier = Modifier.fillMaxWidth()) {
-                orderedDaysForSelector.forEach { dayIndex ->
-                    val isSelected = currentDayForSelector == dayIndex
-                    val isToday = currentDayOfWeek == dayIndex
-                    Box(
-                        modifier = Modifier.weight(1f),
-                        contentAlignment = Alignment.Center
+            itemsIndexed(orderedDaysForSelector) { pos, dayIndex ->
+                val isSelected = currentDayForSelector == dayIndex
+                val isToday = currentDayOfWeek == dayIndex
+                val dayCount = filteredScheduleByDay[dayIndex]?.size ?: 0
+                val dateText = buildString {
+                    append(ordinalDay(dayOfMonthFormat.format(Date((startOfToday + pos * 86400L) * 1000L)).toInt()))
+                    append(" ")
+                    append(dateFormat.format(Date((startOfToday + pos * 86400L) * 1000L)))
+                }
+                Surface(
+                    modifier = Modifier
+                        .width(100.dp)
+                        .height(56.dp)
+                        .clickable {
+                            if (viewMode == 0) {
+                                visibleDayByScroll = dayIndex
+                                val targetIndex = dayToItemIndexMapAll[dayIndex] ?: 0
+                                scope.launch { listStateAllUpcoming.scrollToItem(targetIndex, scrollOffset = if (isToday) -100 else 0) }
+                            } else {
+                                selectedDay = dayIndex
+                            }
+                        },
+                    shape = RoundedCornerShape(14.dp),
+                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                    tonalElevation = if (isSelected) 0.dp else 2.dp,
+                    border = when {
+                        isToday -> BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+                        isSelected -> null
+                        else -> BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                    }
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxSize().padding(vertical = 8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.SpaceEvenly
                     ) {
                         Text(
                             DayAbbreviations[dayIndex],
-                            fontSize = 10.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                            color = when {
-                                isSelected -> MaterialTheme.colorScheme.primary
-                                isToday -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                                else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
-                            }
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
                         )
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(6.dp))
-
-            // Timeline nodes (middle)
-            Box(modifier = Modifier.fillMaxWidth().height(24.dp)) {
-                // Connecting line
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(0.85f)
-                        .align(Alignment.Center)
-                        .height(1.5.dp)
-                        .clip(RoundedCornerShape(1.dp))
-                        .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
-                )
-
-                // Nodes
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    orderedDaysForSelector.forEach { dayIndex ->
-                        val isSelected = currentDayForSelector == dayIndex
-                        val isToday = currentDayOfWeek == dayIndex
-                        val nodeSize by animateDpAsState(
-                            targetValue = if (isSelected) 14.dp else 8.dp,
-                            spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMedium),
-                            label = "nodeSize"
+                        Text(
+                            dateText,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = if (isSelected) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant
                         )
-
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                                .clickable {
-                                    if (viewMode == 0) {
-                                        visibleDayByScroll = dayIndex
-                                        val targetIndex = if (isToday && nowIndicatorIndexAll >= 0) nowIndicatorIndexAll else dayToItemIndexMapAll[dayIndex] ?: 0
-                                        scope.launch { listStateAllUpcoming.scrollToItem(targetIndex, scrollOffset = if (isToday) -100 else 0) }
-                                    } else {
-                                        selectedDay = dayIndex
-                                    }
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(nodeSize)
-                                    .clip(CircleShape)
-                                    .then(
-                                        if (isSelected) Modifier.background(MaterialTheme.colorScheme.primary)
-                                        else if (isToday) Modifier.background(MaterialTheme.colorScheme.background).border(1.5.dp, MaterialTheme.colorScheme.primary, CircleShape)
-                                        else Modifier.background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                                    )
-                            )
-                        }
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(4.dp))
-
-            // Anime count (bottom)
-            Row(modifier = Modifier.fillMaxWidth()) {
-                orderedDaysForSelector.forEach { dayIndex ->
-                    val isSelected = currentDayForSelector == dayIndex
-                    val dayCount = filteredScheduleByDay[dayIndex]?.size ?: 0
-                    Box(
-                        modifier = Modifier.weight(1f),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (dayCount > 0) {
-                            Text(
-                                "$dayCount",
-                                fontSize = 9.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                color = if (isSelected) MaterialTheme.colorScheme.primary
-                                       else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
-                            )
-                        }
+                        Text(
+                            if (dayCount > 0) "$dayCount airing" else "none",
+                            fontSize = 11.sp,
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                            color = if (isSelected) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                        )
                     }
                 }
             }
@@ -676,33 +632,32 @@ private fun TimelineScheduleList(
     ) {
         itemsIndexed(
             items = timelineItems,
-            key = { _, item -> when (item) { is TimelineItem.Anime -> "anime_${item.data.id}_${item.data.airingEpisode}"; is TimelineItem.NowIndicator -> "now_${item.timeString}"; is TimelineItem.DayHeader -> "day_${item.dayIndex}" } }
+            key = { _, item -> when (item) { is TimelineItem.Anime -> "anime_${item.data.id}_${item.data.airingEpisode}"; is TimelineItem.DayHeader -> "day_${item.dayIndex}"; is TimelineItem.HourHeader -> "hour_${item.hour}" } }
         ) { index, item ->
-            val staggerDelay = minOf(index, 20) * 30f
-            val staggerMs = staggerDelay / 1000f
-            val rawProgress = ((cinematicProgress - staggerMs) / (1f - staggerMs))
-            val easedProgress = easeOutCubic(rawProgress.coerceAtLeast(0f).coerceAtMost(1f))
-            val introScale = 0.3f + easedProgress * 0.7f
-            val introAlpha = easedProgress.coerceAtLeast(0f)
-            val introTranslationY = translationYOffset * (1f - easedProgress)
-            val layoutInfo by remember { derivedStateOf { listState.layoutInfo } }
-            val visibleItems = layoutInfo.visibleItemsInfo
-            val itemInfo = visibleItems.find { it.index == index }
-            val centerOffset = if (itemInfo != null) { val ic = itemInfo.offset + itemInfo.size / 2; val sc = (layoutInfo.viewportSize.height / 2).toFloat(); (ic - sc) / sc } else 0f
-            val animatedOffset by animateFloatAsState(targetValue = if (isScrolling) centerOffset.coerceIn(-2f, 2f) else 0f, animationSpec = if (isScrolling) spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium) else spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow), label = "offset")
-            val scrollScale = 1f - (animatedOffset.absoluteValue * 0.2f).coerceAtMost(0.2f)
-            val scrollAlpha = 1f - (animatedOffset.absoluteValue * 0.4f).coerceAtMost(0.6f)
-            val scrollParallax = animatedOffset * 25f
-            val finalScale = scrollScale * introScale
-            val finalAlpha = (scrollAlpha * introAlpha).coerceIn(0f, 1f)
-            val finalTranslationY = scrollParallax + introTranslationY
-
-            Box(modifier = Modifier.graphicsLayer { scaleX = finalScale; scaleY = finalScale; alpha = finalAlpha; translationY = finalTranslationY }) {
-                when (item) {
-                    is TimelineItem.DayHeader -> DayHeaderItem(item.dayName, item.dayIndex == currentDayOfWeek)
-                    is TimelineItem.Anime -> TimelineAnimeItem(timeFormat.format(Date(item.data.airingAt * 1000L)), item.data, item.isPast,
-                        preferEnglishTitles, animeStatusMap[item.data.id], onClick = { onAnimeClick(item.data) })
-                    is TimelineItem.NowIndicator -> CurrentTimeIndicator(item.timeString)
+            when (item) {
+                is TimelineItem.DayHeader -> DayHeaderItem(item.dayName, item.dayIndex == currentDayOfWeek)
+                is TimelineItem.HourHeader -> HourHeaderItem(item.timeString)
+                is TimelineItem.Anime -> {
+                    val staggerDelay = minOf(index, 20) * 30f
+                    val staggerMs = staggerDelay / 1000f
+                    val rawProgress = ((cinematicProgress - staggerMs) / (1f - staggerMs))
+                    val easedProgress = easeOutCubic(rawProgress.coerceAtLeast(0f).coerceAtMost(1f))
+                    val introScale = 0.3f + easedProgress * 0.7f
+                    val introAlpha = easedProgress.coerceAtLeast(0f)
+                    val introTranslationY = translationYOffset * (1f - easedProgress)
+                    val layoutInfo by remember { derivedStateOf { listState.layoutInfo } }
+                    val visibleItems = layoutInfo.visibleItemsInfo
+                    val itemInfo = visibleItems.find { it.index == index }
+                    val centerOffset = if (itemInfo != null) { val ic = itemInfo.offset + itemInfo.size / 2; val sc = (layoutInfo.viewportSize.height / 2).toFloat(); (ic - sc) / sc } else 0f
+                    val animatedOffset by animateFloatAsState(targetValue = if (isScrolling) centerOffset.coerceIn(-2f, 2f) else 0f, animationSpec = if (isScrolling) spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium) else spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow), label = "offset")
+                    val scrollScale = 1f - (animatedOffset.absoluteValue * 0.2f).coerceAtMost(0.2f)
+                    val scrollAlpha = 1f - (animatedOffset.absoluteValue * 0.4f).coerceAtMost(0.6f)
+                    val scrollParallax = animatedOffset * 25f
+                    val finalScale = scrollScale * introScale
+                    val finalAlpha = (scrollAlpha * introAlpha).coerceIn(0f, 1f)
+                    val finalTranslationY = scrollParallax + introTranslationY
+                    TimelineAnimeItem(timeFormat.format(Date(item.data.airingAt * 1000L)), item.data, item.isPast,
+                        preferEnglishTitles, animeStatusMap[item.data.id], finalScale, finalAlpha, finalTranslationY, onClick = { onAnimeClick(item.data) })
                 }
             }
         }
@@ -712,10 +667,16 @@ private fun TimelineScheduleList(
 
 @Composable
 private fun DayHeaderItem(dayName: String, isToday: Boolean) {
+    val stripeColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 58.dp, end = 8.dp, top = 28.dp, bottom = 8.dp),
+            .drawBehind {
+                val x = 21.dp.toPx()
+                val sw = 3.dp.toPx()
+                drawLine(stripeColor, Offset(x, size.height), Offset(x, 0f), sw)
+            }
+            .padding(start = 40.dp, end = 8.dp, top = 24.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
@@ -736,113 +697,156 @@ private fun DayHeaderItem(dayName: String, isToday: Boolean) {
 }
 
 @Composable
+private fun HourHeaderItem(timeString: String) {
+    val stripeColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+    val stripeX = 21.dp
+    val stripeWidth = 3.dp
+    val dotSize = 14.dp
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val isMonochrome = primaryColor.red == primaryColor.green && primaryColor.green == primaryColor.blue
+    val dotColor = if (isMonochrome && primaryColor.red > 0.5f) Color.White
+        else if (isMonochrome) MaterialTheme.colorScheme.onSurface
+        else MaterialTheme.colorScheme.secondary
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .drawBehind {
+                val x = stripeX.toPx()
+                val sw = stripeWidth.toPx()
+                val dotTop = 16.dp.toPx()
+                val dotBottom = 30.dp.toPx()
+                val gap = 6.dp.toPx()
+                drawLine(stripeColor, Offset(x, 0f), Offset(x, dotTop - gap), sw)
+                drawLine(stripeColor, Offset(x, dotBottom + gap), Offset(x, size.height), sw)
+            }
+            .padding(top = 10.dp, bottom = 6.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .padding(start = stripeX - dotSize / 2, top = 6.dp)
+                .size(dotSize)
+                .background(dotColor, CircleShape)
+        )
+        Row(
+            modifier = Modifier.padding(start = 40.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.secondary,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                timeString,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+    }
+}
+
+@Composable
 private fun TimelineAnimeItem(
     timeString: String,
     anime: AiringScheduleAnime,
     isPast: Boolean,
     preferEnglishTitles: Boolean,
     animeStatus: String?,
+    cardScale: Float,
+    cardAlpha: Float,
+    cardTranslationY: Float,
     onClick: () -> Unit
 ) {
-    val lineColor = if (isPast) MaterialTheme.colorScheme.primary.copy(alpha = 0.3f) else MaterialTheme.colorScheme.primary
     val contentAlpha = if (isPast) 0.55f else 1f
+    val stripeColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+    val stripeX = 21.dp
+    val stripeWidth = 3.dp
 
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 8.dp),
-        verticalAlignment = Alignment.Top
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .drawBehind {
+                val x = stripeX.toPx()
+                val sw = stripeWidth.toPx()
+                drawLine(stripeColor, Offset(x, size.height), Offset(x, 0f), sw)
+            }
+            .padding(end = 12.dp, top = 8.dp, bottom = 8.dp)
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(50.dp)) {
-            Text(timeString, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = lineColor.copy(alpha = contentAlpha))
-            Box(modifier = Modifier.padding(top = 4.dp).size(10.dp).background(lineColor, CircleShape))
-            Box(modifier = Modifier.width(1.5.dp).height(90.dp).background(lineColor.copy(alpha = 0.15f)))
-        }
-
-        Spacer(Modifier.width(8.dp))
-
         Surface(
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.padding(start = 38.dp).graphicsLayer { scaleX = cardScale; scaleY = cardScale; alpha = cardAlpha; translationY = cardTranslationY },
             shape = RoundedCornerShape(14.dp),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 1.dp,
             shadowElevation = 1.dp,
             onClick = onClick
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                AsyncImage(
-                    model = anime.cover, contentDescription = anime.title, contentScale = ContentScale.Crop,
-                    modifier = Modifier.width(68.dp).height(92.dp).clip(RoundedCornerShape(10.dp)).alpha(contentAlpha)
-                )
+            Box(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 10.dp, top = 10.dp, end = 10.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    AsyncImage(
+                        model = anime.cover, contentDescription = anime.title, contentScale = ContentScale.Crop,
+                        modifier = Modifier.width(68.dp).height(92.dp).clip(RoundedCornerShape(10.dp)).alpha(contentAlpha)
+                    )
 
-                Spacer(Modifier.width(12.dp))
+                    Spacer(Modifier.width(12.dp))
 
-                Column(modifier = Modifier.weight(1f)) {
-                    val displayTitle = if (preferEnglishTitles && !anime.titleEnglish.isNullOrEmpty()) anime.titleEnglish else anime.title
-                    Text(displayTitle, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = contentAlpha))
+                    Column(modifier = Modifier.weight(1f).padding(bottom = 30.dp)) {
+                        val displayTitle = if (preferEnglishTitles && !anime.titleEnglish.isNullOrEmpty()) anime.titleEnglish else anime.title
+                        Text(
+                            displayTitle,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = contentAlpha)
+                        )
 
-                    Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(10.dp))
 
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Surface(shape = RoundedCornerShape(6.dp), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)) {
-                            Text("Ep ${anime.airingEpisode}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
-                        }
-                        if (animeStatus != null) {
-                            val statusColor = StatusColors[animeStatus] ?: Color.Gray
-                            val statusLabel = StatusLabels[animeStatus] ?: animeStatus
-                            Surface(shape = RoundedCornerShape(6.dp), color = statusColor.copy(alpha = 0.12f)) {
-                                Text(statusLabel, style = MaterialTheme.typography.labelSmall, color = statusColor, fontWeight = FontWeight.SemiBold,
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Surface(shape = RoundedCornerShape(6.dp), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)) {
+                                Text("Ep ${anime.airingEpisode}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold,
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
                             }
+                            if (animeStatus != null) {
+                                val statusColor = StatusColors[animeStatus] ?: Color.Gray
+                                val statusLabel = StatusLabels[animeStatus] ?: animeStatus
+                                Surface(shape = RoundedCornerShape(6.dp), color = statusColor.copy(alpha = 0.12f)) {
+                                    Text(statusLabel, style = MaterialTheme.typography.labelMedium, color = statusColor, fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
+                                }
+                            }
                         }
-                    }
 
-                    if (!isPast && anime.timeUntilAiring != null) {
-                        Spacer(Modifier.height(6.dp))
-                        val timeUntilText = remember(anime.timeUntilAiring) {
-                            val sec = anime.timeUntilAiring; val h = sec / 3600; val m = (sec % 3600) / 60
-                            when { h > 24 -> "${h / 24}d ${h % 24}h"; h > 0 -> "${h}h ${m}m"; else -> "${m}m" }
+                        if (!isPast && anime.timeUntilAiring != null) {
+                            Spacer(Modifier.height(8.dp))
+                            val timeUntilText = remember(anime.timeUntilAiring) {
+                                val sec = anime.timeUntilAiring; val h = sec / 3600; val m = (sec % 3600) / 60
+                                when { h > 24 -> "${h / 24}d ${h % 24}h"; h > 0 -> "${h}h ${m}m"; else -> "${m}m" }
+                            }
+                            Text("in $timeUntilText", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.primary)
                         }
-                        Text("in $timeUntilText", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.primary)
-                    }
 
-                    if (isPast) {
-                        Spacer(Modifier.height(4.dp))
-                        Text("Already aired", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+                        if (isPast) {
+                            Spacer(Modifier.height(6.dp))
+                            Text("Already aired", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+                        }
                     }
                 }
 
-                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "View details", tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f), modifier = Modifier.size(20.dp))
-            }
-        }
-    }
-}
-
-@Composable
-private fun CurrentTimeIndicator(timeString: String) {
-    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-    val scale by infiniteTransition.animateFloat(initialValue = 0.9f, targetValue = 1.3f, animationSpec = infiniteRepeatable(animation = tween(1000), repeatMode = RepeatMode.Reverse), label = "scale")
-    val alpha by infiniteTransition.animateFloat(initialValue = 0.6f, targetValue = 1f, animationSpec = infiniteRepeatable(animation = tween(1000), repeatMode = RepeatMode.Reverse), label = "alpha")
-
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 12.dp, bottom = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(50.dp)) {
-            Text(timeString, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
-            Box(modifier = Modifier.padding(vertical = 4.dp).size(10.dp).graphicsLayer { scaleX = scale; scaleY = scale; this.alpha = alpha }.background(MaterialTheme.colorScheme.secondary, CircleShape))
-        }
-
-        Spacer(Modifier.width(8.dp))
-
-        Surface(shape = RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f)) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
-                Box(modifier = Modifier.size(8.dp).background(MaterialTheme.colorScheme.secondary, CircleShape))
-                Spacer(Modifier.width(8.dp))
-                Text("NOW", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
+                Text(
+                    text = timeString,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isPast) MaterialTheme.colorScheme.primary.copy(alpha = 0.4f) else MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(end = 18.dp, bottom = 12.dp)
+                )
             }
         }
     }
@@ -858,16 +862,14 @@ private fun ScheduleLoadingSkeleton() {
         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
     ) {
         items(6) {
-            Box(modifier = Modifier.fillMaxWidth().padding(start = 58.dp, end = 8.dp, top = 24.dp, bottom = 12.dp).height(20.dp).background(skeletonColor, RoundedCornerShape(6.dp)))
+            Box(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 24.dp, bottom = 6.dp).width(60.dp).height(20.dp).background(skeletonColor, RoundedCornerShape(6.dp)))
 
-            Row(modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 12.dp), verticalAlignment = Alignment.Top) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(50.dp)) {
-                    Box(Modifier.width(36.dp).height(12.dp).background(secondaryColor, RoundedCornerShape(4.dp)))
-                    Spacer(Modifier.height(4.dp))
-                    Box(Modifier.size(10.dp).background(secondaryColor, CircleShape))
-                    Box(Modifier.padding(top = 4.dp).width(1.5.dp).height(90.dp).background(secondaryColor))
+            Box(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 4.dp).width(40.dp).height(16.dp).background(secondaryColor, RoundedCornerShape(4.dp)))
+
+            Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.Top) {
+                Box(Modifier.width(34.dp), contentAlignment = Alignment.TopCenter) {
+                    Box(Modifier.width(2.dp).fillMaxHeight().background(secondaryColor))
                 }
-                Spacer(Modifier.width(8.dp))
                 Surface(modifier = Modifier.weight(1f), shape = RoundedCornerShape(14.dp), color = skeletonColor) {
                     Row(modifier = Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.width(68.dp).height(92.dp).background(secondaryColor, RoundedCornerShape(10.dp)))
@@ -878,8 +880,9 @@ private fun ScheduleLoadingSkeleton() {
                             Box(Modifier.fillMaxWidth(0.45f).height(12.dp).background(secondaryColor, RoundedCornerShape(4.dp)))
                             Spacer(Modifier.height(10.dp))
                             Box(Modifier.width(50.dp).height(18.dp).background(secondaryColor, RoundedCornerShape(6.dp)))
+                            Spacer(Modifier.height(10.dp))
+                            Box(Modifier.width(40.dp).height(14.dp).background(secondaryColor, RoundedCornerShape(4.dp)))
                         }
-                        Box(Modifier.size(20.dp).background(secondaryColor, RoundedCornerShape(10.dp)))
                     }
                 }
             }
