@@ -57,6 +57,8 @@ import com.blissless.tensei.data.models.AnimeRelation
 fun AllRecommendationsScreen(
     animeId: Int,
     animeTitle: String,
+    animeTitleEnglish: String? = null,
+    preferEnglishTitles: Boolean = true,
     viewModel: MainViewModel,
     onDismiss: () -> Unit,
     onNavigateBack: () -> Unit = onDismiss,
@@ -67,6 +69,7 @@ fun AllRecommendationsScreen(
 
     val statusBarsPadding = WindowInsets.statusBars.asPaddingValues()
     val navigationBarsPadding = WindowInsets.navigationBars.asPaddingValues()
+    val displayTitle = if (preferEnglishTitles && !animeTitleEnglish.isNullOrBlank()) animeTitleEnglish else animeTitle
 
     LaunchedEffect(animeId) {
         isLoading = true
@@ -118,7 +121,7 @@ fun AllRecommendationsScreen(
                             color = MaterialTheme.colorScheme.onBackground,
                         )
                         Text(
-                            text = animeTitle,
+                            text = displayTitle,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
@@ -191,8 +194,10 @@ fun AllRecommendationsScreen(
                                     }
                                 }
                                 Spacer(modifier = Modifier.height(6.dp))
+                                val recDisplayTitle =
+                                    if (preferEnglishTitles) rec.title else rec.titleRomaji ?: rec.title
                                 Text(
-                                    text = rec.title,
+                                    text = recDisplayTitle,
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Medium,
                                     maxLines = 2,

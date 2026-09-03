@@ -1563,6 +1563,7 @@ private suspend fun loadHomeDataWithCache() {
                 AnimeRelation(
                     id = node.id,
                     title = node.title?.english ?: node.title?.romaji ?: "Unknown",
+                    titleRomaji = node.title?.romaji,
                     cover = node.coverImage?.extraLarge ?: "",
                     episodes = node.episodes,
                     latestEpisode = node.nextAiringEpisode?.episode?.let { it - 1 },

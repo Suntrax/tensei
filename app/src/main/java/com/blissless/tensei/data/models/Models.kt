@@ -207,6 +207,7 @@ data class StudioData(
 data class AnimeRelation(
     val id: Int,
     val title: String,
+    val titleRomaji: String? = null,
     val cover: String,
     val episodes: Int?,
     val latestEpisode: Int? = null,
@@ -1164,6 +1165,7 @@ data class MangaDetail(
 data class MangaRelation(
     val id: Int,
     val title: String,
+    val titleRomaji: String? = null,
     val cover: String,
     val chapters: Int?,
     val averageScore: Int?,

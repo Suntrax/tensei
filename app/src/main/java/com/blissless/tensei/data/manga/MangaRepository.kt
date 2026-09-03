@@ -305,6 +305,7 @@ class MangaRepository {
                     MangaRelation(
                         id = node.id,
                         title = node.title?.english ?: node.title?.romaji ?: "Unknown",
+                        titleRomaji = node.title?.romaji,
                         cover = node.coverImage?.extraLarge ?: "",
                         chapters = node.chapters,
                         averageScore = node.averageScore,
@@ -384,6 +385,7 @@ class MangaRepository {
                     MangaRelation(
                         id = node.id,
                         title = node.title?.english ?: node.title?.romaji ?: "Unknown",
+                        titleRomaji = node.title?.romaji,
                         cover = node.coverImage?.extraLarge ?: "",
                         chapters = node.chapters,
                         averageScore = node.averageScore,

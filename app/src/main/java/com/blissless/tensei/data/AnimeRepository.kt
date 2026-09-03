@@ -116,7 +116,11 @@ class AnimeRepository(
         )
 
         if (result.data == null) {
-            Log.e("GraphQLDebug", "Error: ${result.error?.message}")
+            Log.e(
+                "GraphQLDebug",
+                "Error code=${result.error?.code} message=${result.error?.message}" +
+                    " isRateLimit=${result.error?.isRateLimit} retryCount=${result.retryCount}"
+            )
         } else {
             Log.d("GraphQLDebug", "Success: ${result.data.take(200)}")
         }

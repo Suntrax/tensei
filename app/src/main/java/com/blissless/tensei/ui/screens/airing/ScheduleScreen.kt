@@ -133,10 +133,10 @@ fun ScheduleScreen(
     onAnimeDialogOpen: (Boolean) -> Unit = {},
     onCharacterClick: (Int) -> Unit = {},
     onStaffClick: (Int) -> Unit = {},
-    onViewAllCast: (Int, String) -> Unit = { _, _ -> },
-    onViewAllStaff: (Int, String) -> Unit = { _, _ -> },
-    onViewAllRelations: (Int, String) -> Unit = { _, _ -> },
-    onViewAllRecommendations: (Int, String) -> Unit = { _, _ -> },
+    onViewAllCast: (Int, String, String?) -> Unit = { _, _, _ -> },
+    onViewAllStaff: (Int, String, String?) -> Unit = { _, _, _ -> },
+    onViewAllRelations: (Int, String, String?) -> Unit = { _, _, _ -> },
+    onViewAllRecommendations: (Int, String, String?) -> Unit = { _, _, _ -> },
     onNoExtension: () -> Unit = {},
     onAnimeDetailMangaClick: (MangaMedia) -> Unit = {}
 ) {
@@ -641,10 +641,10 @@ fun ScheduleScreen(
                 }
             },
             onCharacterClick = onCharacterClick, onStaffClick = onStaffClick,
-            onViewAllCast = { onViewAllCast(selectedAnime!!.id, selectedAnime!!.title) },
-            onViewAllStaff = { onViewAllStaff(selectedAnime!!.id, selectedAnime!!.title) },
-            onViewAllRelations = { id, title -> onViewAllRelations(id, title) },
-            onViewAllRecommendations = { id, title -> onViewAllRecommendations(id, title) },
+            onViewAllCast = { onViewAllCast(selectedAnime!!.id, selectedAnime!!.title, selectedAnime!!.titleEnglish) },
+            onViewAllStaff = { onViewAllStaff(selectedAnime!!.id, selectedAnime!!.title, selectedAnime!!.titleEnglish) },
+            onViewAllRelations = { id, title, titleEnglish -> onViewAllRelations(id, title, titleEnglish) },
+            onViewAllRecommendations = { id, title, titleEnglish -> onViewAllRecommendations(id, title, titleEnglish) },
             onNoExtension = {
                 showAnimeDialog = false
                 onNoExtension()

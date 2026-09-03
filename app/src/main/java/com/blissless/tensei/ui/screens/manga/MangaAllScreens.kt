@@ -65,6 +65,8 @@ import com.blissless.tensei.viewmodel.fetchMangaAllRelations
 fun MangaAllCharactersScreen(
     mangaId: Int,
     mangaTitle: String,
+    mangaTitleEnglish: String? = null,
+    preferEnglishTitles: Boolean = true,
     viewModel: MainViewModel,
     onDismiss: () -> Unit,
     onNavigateBack: () -> Unit = onDismiss,
@@ -75,6 +77,7 @@ fun MangaAllCharactersScreen(
 
     val statusBarsPadding = WindowInsets.statusBars.asPaddingValues()
     val navigationBarsPadding = WindowInsets.navigationBars.asPaddingValues()
+    val displayTitle = if (preferEnglishTitles && !mangaTitleEnglish.isNullOrBlank()) mangaTitleEnglish else mangaTitle
 
     LaunchedEffect(mangaId) {
         isLoading = true
@@ -126,7 +129,7 @@ fun MangaAllCharactersScreen(
                             color = MaterialTheme.colorScheme.onBackground,
                         )
                         Text(
-                            text = mangaTitle,
+                            text = displayTitle,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
@@ -204,6 +207,8 @@ fun MangaAllCharactersScreen(
 fun MangaAllStaffScreen(
     mangaId: Int,
     mangaTitle: String,
+    mangaTitleEnglish: String? = null,
+    preferEnglishTitles: Boolean = true,
     viewModel: MainViewModel,
     onDismiss: () -> Unit,
     onNavigateBack: () -> Unit = onDismiss,
@@ -214,6 +219,7 @@ fun MangaAllStaffScreen(
 
     val statusBarsPadding = WindowInsets.statusBars.asPaddingValues()
     val navigationBarsPadding = WindowInsets.navigationBars.asPaddingValues()
+    val displayTitle = if (preferEnglishTitles && !mangaTitleEnglish.isNullOrBlank()) mangaTitleEnglish else mangaTitle
 
     LaunchedEffect(mangaId) {
         isLoading = true
@@ -265,7 +271,7 @@ fun MangaAllStaffScreen(
                             color = MaterialTheme.colorScheme.onBackground,
                         )
                         Text(
-                            text = mangaTitle,
+                            text = displayTitle,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
@@ -354,6 +360,8 @@ fun MangaAllStaffScreen(
 fun MangaAllRelationsScreen(
     mangaId: Int,
     mangaTitle: String,
+    mangaTitleEnglish: String? = null,
+    preferEnglishTitles: Boolean = true,
     viewModel: MainViewModel,
     onDismiss: () -> Unit,
     onNavigateBack: () -> Unit = onDismiss,
@@ -364,6 +372,7 @@ fun MangaAllRelationsScreen(
 
     val statusBarsPadding = WindowInsets.statusBars.asPaddingValues()
     val navigationBarsPadding = WindowInsets.navigationBars.asPaddingValues()
+    val displayTitle = if (preferEnglishTitles && !mangaTitleEnglish.isNullOrBlank()) mangaTitleEnglish else mangaTitle
 
     LaunchedEffect(mangaId) {
         isLoading = true
@@ -415,7 +424,7 @@ fun MangaAllRelationsScreen(
                             color = MaterialTheme.colorScheme.onBackground,
                         )
                         Text(
-                            text = mangaTitle,
+                            text = displayTitle,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
@@ -500,8 +509,10 @@ fun MangaAllRelationsScreen(
                                     }
                                 }
                                 Spacer(modifier = Modifier.height(6.dp))
+                                val relationDisplayTitle =
+                                    if (preferEnglishTitles) relation.title else relation.titleRomaji ?: relation.title
                                 Text(
-                                    text = relation.title,
+                                    text = relationDisplayTitle,
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Medium,
                                     maxLines = 2,
@@ -536,6 +547,8 @@ fun MangaAllRelationsScreen(
 fun MangaAllRecommendationsScreen(
     mangaId: Int,
     mangaTitle: String,
+    mangaTitleEnglish: String? = null,
+    preferEnglishTitles: Boolean = true,
     viewModel: MainViewModel,
     onDismiss: () -> Unit,
     onNavigateBack: () -> Unit = onDismiss,
@@ -546,6 +559,7 @@ fun MangaAllRecommendationsScreen(
 
     val statusBarsPadding = WindowInsets.statusBars.asPaddingValues()
     val navigationBarsPadding = WindowInsets.navigationBars.asPaddingValues()
+    val displayTitle = if (preferEnglishTitles && !mangaTitleEnglish.isNullOrBlank()) mangaTitleEnglish else mangaTitle
 
     LaunchedEffect(mangaId) {
         isLoading = true
@@ -597,7 +611,7 @@ fun MangaAllRecommendationsScreen(
                             color = MaterialTheme.colorScheme.onBackground,
                         )
                         Text(
-                            text = mangaTitle,
+                            text = displayTitle,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
@@ -670,8 +684,10 @@ fun MangaAllRecommendationsScreen(
                                     }
                                 }
                                 Spacer(modifier = Modifier.height(6.dp))
+                                val recDisplayTitle =
+                                    if (preferEnglishTitles) rec.titleEnglish ?: rec.title else rec.title
                                 Text(
-                                    text = rec.title,
+                                    text = recDisplayTitle,
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Medium,
                                     maxLines = 2,

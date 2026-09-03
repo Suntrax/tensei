@@ -57,6 +57,8 @@ import com.blissless.tensei.data.models.StaffData
 fun AllCastScreen(
     animeId: Int,
     animeTitle: String,
+    animeTitleEnglish: String? = null,
+    preferEnglishTitles: Boolean = true,
     viewModel: MainViewModel,
     onDismiss: () -> Unit,
     onNavigateBack: () -> Unit = onDismiss,
@@ -67,6 +69,7 @@ fun AllCastScreen(
 
     val statusBarsPadding = WindowInsets.statusBars.asPaddingValues()
     val navigationBarsPadding = WindowInsets.navigationBars.asPaddingValues()
+    val displayTitle = if (preferEnglishTitles && !animeTitleEnglish.isNullOrBlank()) animeTitleEnglish else animeTitle
 
     LaunchedEffect(animeId) {
         isLoading = true
@@ -118,7 +121,7 @@ fun AllCastScreen(
                             color = MaterialTheme.colorScheme.onBackground,
                         )
                         Text(
-                            text = animeTitle,
+                            text = displayTitle,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
@@ -196,6 +199,8 @@ fun AllCastScreen(
 fun AllStaffScreen(
     animeId: Int,
     animeTitle: String,
+    animeTitleEnglish: String? = null,
+    preferEnglishTitles: Boolean = true,
     viewModel: MainViewModel,
     onDismiss: () -> Unit,
     onNavigateBack: () -> Unit = onDismiss,
@@ -206,6 +211,7 @@ fun AllStaffScreen(
 
     val statusBarsPadding = WindowInsets.statusBars.asPaddingValues()
     val navigationBarsPadding = WindowInsets.navigationBars.asPaddingValues()
+    val displayTitle = if (preferEnglishTitles && !animeTitleEnglish.isNullOrBlank()) animeTitleEnglish else animeTitle
 
     LaunchedEffect(animeId) {
         isLoading = true
@@ -257,7 +263,7 @@ fun AllStaffScreen(
                             color = MaterialTheme.colorScheme.onBackground,
                         )
                         Text(
-                            text = animeTitle,
+                            text = displayTitle,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,

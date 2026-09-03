@@ -423,6 +423,7 @@ suspend fun AnimeRepository.fetchAnimeRelationsList(animeId: Int): List<AnimeRel
                         AnimeRelation(
                             id = node.id,
                             title = node.title?.english ?: node.title?.romaji ?: "Unknown",
+                            titleRomaji = node.title?.romaji,
                             cover = node.coverImage?.extraLarge ?: "",
                             episodes = node.episodes,
                             averageScore = node.averageScore,
@@ -448,6 +449,7 @@ suspend fun AnimeRepository.fetchAnimeRecommendationsList(animeId: Int): List<An
                         AnimeRelation(
                             id = rec.id,
                             title = rec.title?.english ?: rec.title?.romaji ?: "Unknown",
+                            titleRomaji = rec.title?.romaji,
                             cover = rec.coverImage?.extraLarge ?: "",
                             episodes = rec.episodes,
                             averageScore = rec.averageScore,

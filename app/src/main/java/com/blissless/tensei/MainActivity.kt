@@ -1690,6 +1690,7 @@ fun MainScreen(
                 overlayState = OverlayState.AllCastDialog(
                     animeId = exploreDialog.anime.id,
                     animeTitle = exploreDialog.anime.title,
+                    animeTitleEnglish = exploreDialog.anime.titleEnglish,
                     previousStates = exploreDialog.previousStates + exploreDialog
                 )
             },
@@ -1697,20 +1698,23 @@ fun MainScreen(
                 overlayState = OverlayState.AllStaffDialog(
                     animeId = exploreDialog.anime.id,
                     animeTitle = exploreDialog.anime.title,
+                    animeTitleEnglish = exploreDialog.anime.titleEnglish,
                     previousStates = exploreDialog.previousStates + exploreDialog
                 )
             },
-            onViewAllRelations = { animeId, title ->
+            onViewAllRelations = { animeId, title, titleEnglish ->
                 overlayState = OverlayState.AllRelationsDialog(
                     animeId = animeId,
                     animeTitle = title,
+                    animeTitleEnglish = titleEnglish,
                     previousStates = exploreDialog.previousStates + exploreDialog
                 )
             },
-            onViewAllRecommendations = { animeId, title ->
+            onViewAllRecommendations = { animeId, title, titleEnglish ->
                 overlayState = OverlayState.AllRecommendationsDialog(
                     animeId = animeId,
                     animeTitle = title,
+                    animeTitleEnglish = titleEnglish,
                     previousStates = exploreDialog.previousStates + exploreDialog
                 )
             },
@@ -1873,10 +1877,10 @@ fun MainScreen(
                     animeId = selectedAnimeState!!.id
                 )
             },
-            onViewAllCast = { overlayState = OverlayState.AllCastDialog(animeId = selectedAnimeState!!.id, animeTitle = selectedAnimeState!!.title) },
-            onViewAllStaff = { overlayState = OverlayState.AllStaffDialog(animeId = selectedAnimeState!!.id, animeTitle = selectedAnimeState!!.title) },
-            onViewAllRelations = { animeId, title -> overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = title) },
-            onViewAllRecommendations = { animeId, title -> overlayState = OverlayState.AllRecommendationsDialog(animeId = animeId, animeTitle = title) },
+            onViewAllCast = { overlayState = OverlayState.AllCastDialog(animeId = selectedAnimeState!!.id, animeTitle = selectedAnimeState!!.title, animeTitleEnglish = selectedAnimeState!!.titleEnglish) },
+            onViewAllStaff = { overlayState = OverlayState.AllStaffDialog(animeId = selectedAnimeState!!.id, animeTitle = selectedAnimeState!!.title, animeTitleEnglish = selectedAnimeState!!.titleEnglish) },
+            onViewAllRelations = { animeId, title, titleEnglish -> overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = title, animeTitleEnglish = titleEnglish) },
+            onViewAllRecommendations = { animeId, title, titleEnglish -> overlayState = OverlayState.AllRecommendationsDialog(animeId = animeId, animeTitle = title, animeTitleEnglish = titleEnglish) },
             isLoggedIn = isLoggedIn,
             onUpdateLocalStatus = { status ->
                 val currentEntry = localAnimeStatus[selectedAnimeState!!.id]
@@ -1988,16 +1992,16 @@ fun MainScreen(
                 )
             },
             onViewAllCharacters = {
-                mangaOverlay = MangaOverlay.AllCharacters(manga.id, manga.title)
+                mangaOverlay = MangaOverlay.AllCharacters(manga.id, manga.title, manga.titleEnglish)
             },
             onViewAllStaff = {
-                mangaOverlay = MangaOverlay.AllStaff(manga.id, manga.title)
+                mangaOverlay = MangaOverlay.AllStaff(manga.id, manga.title, manga.titleEnglish)
             },
             onViewAllRelations = {
-                mangaOverlay = MangaOverlay.AllRelations(manga.id, manga.title)
+                mangaOverlay = MangaOverlay.AllRelations(manga.id, manga.title, manga.titleEnglish)
             },
             onViewAllRecommendations = {
-                mangaOverlay = MangaOverlay.AllRecommendations(manga.id, manga.title)
+                mangaOverlay = MangaOverlay.AllRecommendations(manga.id, manga.title, manga.titleEnglish)
             },
             navigateToMangaDetail = { mangaId ->
                 // Navigate to another manga's detail — push a fresh manga onto the stack
@@ -2151,6 +2155,8 @@ fun MainScreen(
         is MangaOverlay.AllCharacters -> MangaAllCharactersScreen(
             mangaId = mangaOv.mangaId,
             mangaTitle = mangaOv.mangaTitle,
+            mangaTitleEnglish = mangaOv.mangaTitleEnglish,
+            preferEnglishTitles = preferEnglishTitles,
             viewModel = viewModel,
             onDismiss = { mangaOverlay = MangaOverlay.None },
             onNavigateBack = { mangaOverlay = MangaOverlay.None },
@@ -2165,6 +2171,8 @@ fun MainScreen(
         is MangaOverlay.AllStaff -> MangaAllStaffScreen(
             mangaId = mangaOv.mangaId,
             mangaTitle = mangaOv.mangaTitle,
+            mangaTitleEnglish = mangaOv.mangaTitleEnglish,
+            preferEnglishTitles = preferEnglishTitles,
             viewModel = viewModel,
             onDismiss = { mangaOverlay = MangaOverlay.None },
             onNavigateBack = { mangaOverlay = MangaOverlay.None },
@@ -2179,12 +2187,14 @@ fun MainScreen(
         is MangaOverlay.AllRelations -> MangaAllRelationsScreen(
             mangaId = mangaOv.mangaId,
             mangaTitle = mangaOv.mangaTitle,
+            mangaTitleEnglish = mangaOv.mangaTitleEnglish,
+            preferEnglishTitles = preferEnglishTitles,
             viewModel = viewModel,
             onDismiss = { mangaOverlay = MangaOverlay.None },
             onNavigateBack = { mangaOverlay = MangaOverlay.None },
             onRelationClick = { relation ->
                 // Suspend the grid so it can be restored when back returns to this manga
-                mangaOverlayRestoreStack = mangaOverlayRestoreStack + MangaOverlay.AllRelations(mangaOv.mangaId, mangaOv.mangaTitle)
+                mangaOverlayRestoreStack = mangaOverlayRestoreStack + MangaOverlay.AllRelations(mangaOv.mangaId, mangaOv.mangaTitle, mangaOv.mangaTitleEnglish)
                 mangaOverlay = MangaOverlay.None
                 if (relation.format != null && relation.format !in listOf("MANGA", "NOVEL", "ONE_SHOT", "DOUJIN", "MANHWA", "MANHUA")) {
                     scope.launch {
@@ -2236,12 +2246,14 @@ fun MainScreen(
         is MangaOverlay.AllRecommendations -> MangaAllRecommendationsScreen(
             mangaId = mangaOv.mangaId,
             mangaTitle = mangaOv.mangaTitle,
+            mangaTitleEnglish = mangaOv.mangaTitleEnglish,
+            preferEnglishTitles = preferEnglishTitles,
             viewModel = viewModel,
             onDismiss = { mangaOverlay = MangaOverlay.None },
             onNavigateBack = { mangaOverlay = MangaOverlay.None },
             onRecommendationClick = { rec ->
                 // Suspend the grid so it can be restored when back returns to this manga
-                mangaOverlayRestoreStack = mangaOverlayRestoreStack + MangaOverlay.AllRecommendations(mangaOv.mangaId, mangaOv.mangaTitle)
+                mangaOverlayRestoreStack = mangaOverlayRestoreStack + MangaOverlay.AllRecommendations(mangaOv.mangaId, mangaOv.mangaTitle, mangaOv.mangaTitleEnglish)
                 mangaOverlay = MangaOverlay.None
                 openMangaDetail(rec)
                 mangaAutoShowChapters = false
@@ -2388,6 +2400,8 @@ fun MainScreen(
         AllCastScreen(
             animeId = allCastDialog.animeId,
             animeTitle = allCastDialog.animeTitle,
+            animeTitleEnglish = allCastDialog.animeTitleEnglish,
+            preferEnglishTitles = preferEnglishTitles,
             viewModel = viewModel,
             onDismiss = {
                 overlayState = OverlayState.None
@@ -2409,6 +2423,8 @@ fun MainScreen(
         AllStaffScreen(
             animeId = allStaffDialog.animeId,
             animeTitle = allStaffDialog.animeTitle,
+            animeTitleEnglish = allStaffDialog.animeTitleEnglish,
+            preferEnglishTitles = preferEnglishTitles,
             viewModel = viewModel,
             onDismiss = {
                 overlayState = OverlayState.None
@@ -2430,6 +2446,8 @@ fun MainScreen(
         AllRelationsScreen(
             animeId = allRelationsDialog.animeId,
             animeTitle = allRelationsDialog.animeTitle,
+            animeTitleEnglish = allRelationsDialog.animeTitleEnglish,
+            preferEnglishTitles = preferEnglishTitles,
             viewModel = viewModel,
             onDismiss = {
                 overlayState = OverlayState.None
@@ -2486,6 +2504,8 @@ fun MainScreen(
         AllRecommendationsScreen(
             animeId = allRecommendationsDialog.animeId,
             animeTitle = allRecommendationsDialog.animeTitle,
+            animeTitleEnglish = allRecommendationsDialog.animeTitleEnglish,
+            preferEnglishTitles = preferEnglishTitles,
             viewModel = viewModel,
             onDismiss = {
                 overlayState = OverlayState.None
@@ -2848,17 +2868,17 @@ fun MainScreen(
                             onStaffClick = { staffId ->
                                 overlayState = OverlayState.StaffDialog(staffId = staffId, animeId = 0)
                             },
-                            onViewAllCast = { animeId, animeTitle ->
-                                overlayState = OverlayState.AllCastDialog(animeId = animeId, animeTitle = animeTitle)
+                            onViewAllCast = { animeId, animeTitle, animeTitleEnglish ->
+                                overlayState = OverlayState.AllCastDialog(animeId = animeId, animeTitle = animeTitle, animeTitleEnglish = animeTitleEnglish)
                             },
-                            onViewAllStaff = { animeId, animeTitle ->
-                                overlayState = OverlayState.AllStaffDialog(animeId = animeId, animeTitle = animeTitle)
+                            onViewAllStaff = { animeId, animeTitle, animeTitleEnglish ->
+                                overlayState = OverlayState.AllStaffDialog(animeId = animeId, animeTitle = animeTitle, animeTitleEnglish = animeTitleEnglish)
                             },
-                            onViewAllRelations = { animeId, animeTitle ->
-                                overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = animeTitle)
+                            onViewAllRelations = { animeId, animeTitle, animeTitleEnglish ->
+                                overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = animeTitle, animeTitleEnglish = animeTitleEnglish)
                             },
-                            onViewAllRecommendations = { animeId, animeTitle ->
-                                overlayState = OverlayState.AllRecommendationsDialog(animeId = animeId, animeTitle = animeTitle)
+                            onViewAllRecommendations = { animeId, animeTitle, animeTitleEnglish ->
+                                overlayState = OverlayState.AllRecommendationsDialog(animeId = animeId, animeTitle = animeTitle, animeTitleEnglish = animeTitleEnglish)
                             },
                             onNoExtension = {
                                 showSettings = true
@@ -2889,17 +2909,17 @@ fun MainScreen(
                             onStaffClick = { staffId ->
                                 overlayState = OverlayState.StaffDialog(staffId = staffId, animeId = 0)
                             },
-                            onViewAllCast = { animeId, animeTitle ->
-                                overlayState = OverlayState.AllCastDialog(animeId = animeId, animeTitle = animeTitle)
+                            onViewAllCast = { animeId, animeTitle, animeTitleEnglish ->
+                                overlayState = OverlayState.AllCastDialog(animeId = animeId, animeTitle = animeTitle, animeTitleEnglish = animeTitleEnglish)
                             },
-                            onViewAllStaff = { animeId, animeTitle ->
-                                overlayState = OverlayState.AllStaffDialog(animeId = animeId, animeTitle = animeTitle)
+                            onViewAllStaff = { animeId, animeTitle, animeTitleEnglish ->
+                                overlayState = OverlayState.AllStaffDialog(animeId = animeId, animeTitle = animeTitle, animeTitleEnglish = animeTitleEnglish)
                             },
-                            onViewAllRelations = { animeId, animeTitle ->
-                                overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = animeTitle)
+                            onViewAllRelations = { animeId, animeTitle, animeTitleEnglish ->
+                                overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = animeTitle, animeTitleEnglish = animeTitleEnglish)
                             },
-                            onViewAllRecommendations = { animeId, animeTitle ->
-                                overlayState = OverlayState.AllRecommendationsDialog(animeId = animeId, animeTitle = animeTitle)
+                            onViewAllRecommendations = { animeId, animeTitle, animeTitleEnglish ->
+                                overlayState = OverlayState.AllRecommendationsDialog(animeId = animeId, animeTitle = animeTitle, animeTitleEnglish = animeTitleEnglish)
                             },
                             onSearchClick = { showSearchScreen = true },
                             onNoExtension = {
@@ -2997,17 +3017,17 @@ fun MainScreen(
                             onStaffClick = { staffId ->
                                 overlayState = OverlayState.StaffDialog(staffId = staffId, animeId = 0)
                             },
-                            onViewAllCast = { animeId, animeTitle ->
-                                overlayState = OverlayState.AllCastDialog(animeId = animeId, animeTitle = animeTitle)
+                            onViewAllCast = { animeId, animeTitle, animeTitleEnglish ->
+                                overlayState = OverlayState.AllCastDialog(animeId = animeId, animeTitle = animeTitle, animeTitleEnglish = animeTitleEnglish)
                             },
-                            onViewAllStaff = { animeId, animeTitle ->
-                                overlayState = OverlayState.AllStaffDialog(animeId = animeId, animeTitle = animeTitle)
+                            onViewAllStaff = { animeId, animeTitle, animeTitleEnglish ->
+                                overlayState = OverlayState.AllStaffDialog(animeId = animeId, animeTitle = animeTitle, animeTitleEnglish = animeTitleEnglish)
                             },
-                            onViewAllRelations = { animeId, animeTitle ->
-                                overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = animeTitle)
+                            onViewAllRelations = { animeId, animeTitle, animeTitleEnglish ->
+                                overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = animeTitle, animeTitleEnglish = animeTitleEnglish)
                             },
-                            onViewAllRecommendations = { animeId, animeTitle ->
-                                overlayState = OverlayState.AllRecommendationsDialog(animeId = animeId, animeTitle = animeTitle)
+                            onViewAllRecommendations = { animeId, animeTitle, animeTitleEnglish ->
+                                overlayState = OverlayState.AllRecommendationsDialog(animeId = animeId, animeTitle = animeTitle, animeTitleEnglish = animeTitleEnglish)
                             },
                             onNavigateToSearch = { showSearchScreen = true },
                             onProfileClick = { showUserProfilePage = true },
@@ -3072,17 +3092,17 @@ fun MainScreen(
                             onStaffClick = { staffId ->
                                 overlayState = OverlayState.StaffDialog(staffId = staffId, animeId = 0)
                             },
-                            onViewAllCast = { animeId, animeTitle ->
-                                overlayState = OverlayState.AllCastDialog(animeId = animeId, animeTitle = animeTitle)
+                            onViewAllCast = { animeId, animeTitle, animeTitleEnglish ->
+                                overlayState = OverlayState.AllCastDialog(animeId = animeId, animeTitle = animeTitle, animeTitleEnglish = animeTitleEnglish)
                             },
-                            onViewAllStaff = { animeId, animeTitle ->
-                                overlayState = OverlayState.AllStaffDialog(animeId = animeId, animeTitle = animeTitle)
+                            onViewAllStaff = { animeId, animeTitle, animeTitleEnglish ->
+                                overlayState = OverlayState.AllStaffDialog(animeId = animeId, animeTitle = animeTitle, animeTitleEnglish = animeTitleEnglish)
                             },
-                            onViewAllRelations = { animeId, animeTitle ->
-                                overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = animeTitle)
+                            onViewAllRelations = { animeId, animeTitle, animeTitleEnglish ->
+                                overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = animeTitle, animeTitleEnglish = animeTitleEnglish)
                             },
-                            onViewAllRecommendations = { animeId, animeTitle ->
-                                overlayState = OverlayState.AllRecommendationsDialog(animeId = animeId, animeTitle = animeTitle)
+                            onViewAllRecommendations = { animeId, animeTitle, animeTitleEnglish ->
+                                overlayState = OverlayState.AllRecommendationsDialog(animeId = animeId, animeTitle = animeTitle, animeTitleEnglish = animeTitleEnglish)
                             },
                             onNoExtension = {
                                 showSettings = true
@@ -3131,17 +3151,17 @@ fun MainScreen(
                         onStaffClick = { staffId ->
                                 overlayState = OverlayState.StaffDialog(staffId = staffId, animeId = 0)
                             },
-                            onViewAllCast = { animeId, animeTitle ->
-                                overlayState = OverlayState.AllCastDialog(animeId = animeId, animeTitle = animeTitle)
+                            onViewAllCast = { animeId, animeTitle, animeTitleEnglish ->
+                                overlayState = OverlayState.AllCastDialog(animeId = animeId, animeTitle = animeTitle, animeTitleEnglish = animeTitleEnglish)
                             },
-                            onViewAllStaff = { animeId, animeTitle ->
-                                overlayState = OverlayState.AllStaffDialog(animeId = animeId, animeTitle = animeTitle)
+                            onViewAllStaff = { animeId, animeTitle, animeTitleEnglish ->
+                                overlayState = OverlayState.AllStaffDialog(animeId = animeId, animeTitle = animeTitle, animeTitleEnglish = animeTitleEnglish)
                             },
-                            onViewAllRelations = { animeId, animeTitle ->
-                                overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = animeTitle)
+                            onViewAllRelations = { animeId, animeTitle, animeTitleEnglish ->
+                                overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = animeTitle, animeTitleEnglish = animeTitleEnglish)
                             },
-                            onViewAllRecommendations = { animeId, animeTitle ->
-                                overlayState = OverlayState.AllRecommendationsDialog(animeId = animeId, animeTitle = animeTitle)
+                            onViewAllRecommendations = { animeId, animeTitle, animeTitleEnglish ->
+                                overlayState = OverlayState.AllRecommendationsDialog(animeId = animeId, animeTitle = animeTitle, animeTitleEnglish = animeTitleEnglish)
                             },
                             onNoExtension = {
                                 showSettings = true

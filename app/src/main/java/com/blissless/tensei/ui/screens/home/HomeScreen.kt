@@ -148,10 +148,10 @@ fun HomeScreen(
     onShowDetailedAnimeFromAniList: (Int) -> Unit = {},
     onCharacterClick: (Int) -> Unit = {},
     onStaffClick: (Int) -> Unit = {},
-    onViewAllCast: (Int, String) -> Unit = { _, _ -> },
-    onViewAllStaff: (Int, String) -> Unit = { _, _ -> },
-    onViewAllRelations: (Int, String) -> Unit = { _, _ -> },
-    onViewAllRecommendations: (Int, String) -> Unit = { _, _ -> },
+    onViewAllCast: (Int, String, String?) -> Unit = { _, _, _ -> },
+    onViewAllStaff: (Int, String, String?) -> Unit = { _, _, _ -> },
+    onViewAllRelations: (Int, String, String?) -> Unit = { _, _, _ -> },
+    onViewAllRecommendations: (Int, String, String?) -> Unit = { _, _, _ -> },
     onOverlayOpenChange: (Boolean) -> Unit = {},
     onNavigateToSettings: (() -> Unit)? = null,
     onNoExtension: () -> Unit = {},
@@ -1292,13 +1292,13 @@ fun HomeScreen(
             },
             onCharacterClick = onCharacterClick,
             onStaffClick = onStaffClick,
-            onViewAllCast = { onViewAllCast(selectedAnime!!.id, selectedAnime!!.title) },
-            onViewAllStaff = { onViewAllStaff(selectedAnime!!.id, selectedAnime!!.title) },
-            onViewAllRelations = { animeId, title ->
-                onViewAllRelations(animeId, title)
+            onViewAllCast = { onViewAllCast(selectedAnime!!.id, selectedAnime!!.title, selectedAnime!!.titleEnglish) },
+            onViewAllStaff = { onViewAllStaff(selectedAnime!!.id, selectedAnime!!.title, selectedAnime!!.titleEnglish) },
+            onViewAllRelations = { animeId, title, titleEnglish ->
+                onViewAllRelations(animeId, title, titleEnglish)
             },
-            onViewAllRecommendations = { animeId, title ->
-                onViewAllRecommendations(animeId, title)
+            onViewAllRecommendations = { animeId, title, titleEnglish ->
+                onViewAllRecommendations(animeId, title, titleEnglish)
             }
         )
     }

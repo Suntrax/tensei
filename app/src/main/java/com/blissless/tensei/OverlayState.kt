@@ -33,24 +33,28 @@ sealed class OverlayState {
     data class AllCastDialog(
         val animeId: Int,
         val animeTitle: String,
+        val animeTitleEnglish: String? = null,
         override val previousStates: List<OverlayState> = emptyList()
     ) : OverlayState()
 
     data class AllStaffDialog(
         val animeId: Int,
         val animeTitle: String,
+        val animeTitleEnglish: String? = null,
         override val previousStates: List<OverlayState> = emptyList()
     ) : OverlayState()
 
     data class AllRelationsDialog(
         val animeId: Int,
         val animeTitle: String,
+        val animeTitleEnglish: String? = null,
         override val previousStates: List<OverlayState> = emptyList()
     ) : OverlayState()
 
     data class AllRecommendationsDialog(
         val animeId: Int,
         val animeTitle: String,
+        val animeTitleEnglish: String? = null,
         override val previousStates: List<OverlayState> = emptyList()
     ) : OverlayState()
 
@@ -73,8 +77,8 @@ sealed class MangaOverlay {
     data object None : MangaOverlay() {
         override val mangaId: Int get() = 0
     }
-    data class AllCharacters(override val mangaId: Int, val mangaTitle: String) : MangaOverlay()
-    data class AllStaff(override val mangaId: Int, val mangaTitle: String) : MangaOverlay()
-    data class AllRelations(override val mangaId: Int, val mangaTitle: String) : MangaOverlay()
-    data class AllRecommendations(override val mangaId: Int, val mangaTitle: String) : MangaOverlay()
+    data class AllCharacters(override val mangaId: Int, val mangaTitle: String, val mangaTitleEnglish: String? = null) : MangaOverlay()
+    data class AllStaff(override val mangaId: Int, val mangaTitle: String, val mangaTitleEnglish: String? = null) : MangaOverlay()
+    data class AllRelations(override val mangaId: Int, val mangaTitle: String, val mangaTitleEnglish: String? = null) : MangaOverlay()
+    data class AllRecommendations(override val mangaId: Int, val mangaTitle: String, val mangaTitleEnglish: String? = null) : MangaOverlay()
 }

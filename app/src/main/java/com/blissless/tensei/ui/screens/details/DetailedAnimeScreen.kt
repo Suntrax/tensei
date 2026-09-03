@@ -171,8 +171,8 @@ fun DetailedAnimeScreen(
     onStaffClick: (Int) -> Unit = {},
     onViewAllCast: () -> Unit = {},
     onViewAllStaff: () -> Unit = {},
-    onViewAllRelations: (Int, String) -> Unit = { _, _ -> },
-    onViewAllRecommendations: (Int, String) -> Unit = { _, _ -> },
+    onViewAllRelations: (Int, String, String?) -> Unit = { _, _, _ -> },
+    onViewAllRecommendations: (Int, String, String?) -> Unit = { _, _, _ -> },
     preferEnglishTitles: Boolean = true,
     onNavigateToSettings: (() -> Unit)? = null,
     onNoExtension: () -> Unit = {},
@@ -1170,7 +1170,7 @@ fun DetailedAnimeScreen(
                                     Spacer(modifier = Modifier.weight(1f))
                                     if (filteredRelations.isNotEmpty()) {
                                         TextButton(onClick = { 
-                                            onViewAllRelations(displayData.id, displayData.title) 
+                                            onViewAllRelations(displayData.id, displayData.title, displayData.titleEnglish) 
                                         }) {
                                             Text("View All", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
                                         }
@@ -1368,7 +1368,7 @@ fun DetailedAnimeScreen(
                                         Text("You might also enjoy", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), letterSpacing = 0.5.sp)
                                     }
                                     Spacer(modifier = Modifier.weight(1f))
-                                    TextButton(onClick = { onViewAllRecommendations(displayData.id, displayData.title) }) {
+                                    TextButton(onClick = { onViewAllRecommendations(displayData.id, displayData.title, displayData.titleEnglish) }) {
                                         Text("View All", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
                                     }
                                 }
