@@ -184,8 +184,6 @@ fun ScheduleScreen(
     val orderedDays = remember(currentDayOfWeek) { getDaysFromCurrentDay(currentDayOfWeek) }
     var viewMode by remember { mutableIntStateOf(0) }
     var isRefreshing by remember { mutableStateOf(false) }
-    val listStateAllUpcoming = rememberLazyListState()
-    val listStateByDay = rememberLazyListState()
     var visibleDayByScroll by remember { mutableIntStateOf(currentDayOfWeek) }
     var isProgrammaticScroll by remember { mutableStateOf(false) }
     var isInputLocked by remember { mutableStateOf(false) }
@@ -306,6 +304,19 @@ fun ScheduleScreen(
         items
     }
 
+    val initialScrollIndexAll = remember(allUpcomingTimelineItems, currentTime) {
+        val currentHour = (currentTime / 3600).toInt()
+        val idx = firstUpcomingHourIndex(allUpcomingTimelineItems, Calendar.getInstance().get(Calendar.DAY_OF_WEEK) - 1, currentHour)
+        if (idx >= 0) idx else 0
+    }
+    val initialScrollIndexByDay = remember(byDayTimelineItems, currentTime) {
+        val currentHour = (currentTime / 3600).toInt()
+        val idx = firstUpcomingHourIndex(byDayTimelineItems, -1, currentHour)
+        if (idx >= 0) idx else 0
+    }
+    val listStateAllUpcoming = rememberLazyListState(initialFirstVisibleItemIndex = initialScrollIndexAll)
+    val listStateByDay = rememberLazyListState(initialFirstVisibleItemIndex = initialScrollIndexByDay)
+
     val dayToItemIndexMapAll = remember(allUpcomingTimelineItems) {
         val map = mutableMapOf<Int, Int>()
         allUpcomingTimelineItems.forEachIndexed { i, item -> if (item is TimelineItem.DayHeader) map[item.dayIndex] = i }
@@ -327,6 +338,8 @@ fun ScheduleScreen(
         if (isProgrammaticScroll) { delay(550.milliseconds); isProgrammaticScroll = false; isInputLocked = false }
     }
 
+    var hasScrolledToCurrentTime by remember { mutableStateOf(false) }
+
     LaunchedEffect(isVisible) {
         if (isVisible) {
             val today = Calendar.getInstance().get(Calendar.DAY_OF_WEEK) - 1
@@ -334,8 +347,19 @@ fun ScheduleScreen(
             val currentHour = (System.currentTimeMillis() / 1000L / 3600).toInt()
             val targetAll = firstUpcomingHourIndex(allUpcomingTimelineItems, today, currentHour)
             val targetByDay = firstUpcomingHourIndex(byDayTimelineItems, -1, currentHour)
-            if (targetAll >= 0) listStateAllUpcoming.scrollToItem(targetAll, scrollOffset = -100)
-            if (targetByDay >= 0) listStateByDay.scrollToItem(targetByDay, scrollOffset = -100)
+            if (targetAll >= 0) { listStateAllUpcoming.scrollToItem(targetAll, scrollOffset = -100); hasScrolledToCurrentTime = true }
+            if (targetByDay >= 0) { listStateByDay.scrollToItem(targetByDay, scrollOffset = -100); hasScrolledToCurrentTime = true }
+        }
+    }
+
+    LaunchedEffect(allUpcomingTimelineItems, byDayTimelineItems, isVisible) {
+        if (isVisible && !hasScrolledToCurrentTime && allUpcomingTimelineItems.isNotEmpty()) {
+            val today = Calendar.getInstance().get(Calendar.DAY_OF_WEEK) - 1
+            val currentHour = (System.currentTimeMillis() / 1000L / 3600).toInt()
+            val targetAll = firstUpcomingHourIndex(allUpcomingTimelineItems, today, currentHour)
+            val targetByDay = firstUpcomingHourIndex(byDayTimelineItems, -1, currentHour)
+            if (targetAll >= 0) { listStateAllUpcoming.scrollToItem(targetAll, scrollOffset = -100); hasScrolledToCurrentTime = true }
+            if (targetByDay >= 0) { listStateByDay.scrollToItem(targetByDay, scrollOffset = -100); hasScrolledToCurrentTime = true }
         }
     }
 
