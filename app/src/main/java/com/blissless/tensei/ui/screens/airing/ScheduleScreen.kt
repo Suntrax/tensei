@@ -20,8 +20,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -29,7 +28,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
@@ -40,6 +38,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SignalWifiOff
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -57,6 +56,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -69,6 +69,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -82,6 +83,7 @@ import com.blissless.tensei.data.models.AnimeMedia
 import com.blissless.tensei.data.models.ExploreAnime
 import com.blissless.tensei.data.models.isAdultContent
 import com.blissless.tensei.data.models.toDetailedAnimeData
+import com.blissless.tensei.ui.components.appIconDrawable
 import com.blissless.tensei.ui.components.rememberCinematicAnimation
 import com.blissless.tensei.ui.screens.details.DetailedAnimeScreen
 import com.blissless.tensei.ui.theme.StatusColors
@@ -158,7 +160,8 @@ fun ScheduleScreen(
     onViewAllRelations: (Int, String, String?) -> Unit = { _, _, _ -> },
     onViewAllRecommendations: (Int, String, String?) -> Unit = { _, _, _ -> },
     onNoExtension: () -> Unit = {},
-    onAnimeDetailMangaClick: (MangaMedia) -> Unit = {}
+    onAnimeDetailMangaClick: (MangaMedia) -> Unit = {},
+    onSearchClick: () -> Unit = {}
 ) {
     val airingList by viewModel.airingAnimeList.collectAsState()
     val scheduleByDay by viewModel.airingSchedule.collectAsState()
@@ -166,6 +169,7 @@ fun ScheduleScreen(
     val localAnimeStatus by viewModel.localAnimeStatus.collectAsState()
     val apiError by viewModel.apiError.collectAsState()
     val isOffline by viewModel.isOffline.collectAsState()
+    val appIcon by viewModel.appIcon.collectAsState()
 
     LaunchedEffect(airingList, scheduleByDay, isLoading) {
         val scheduleHasData = scheduleByDay.values.any { it.isNotEmpty() }
@@ -343,7 +347,7 @@ fun ScheduleScreen(
     val bg = MaterialTheme.colorScheme.background
     val onBg = MaterialTheme.colorScheme.onBackground
 
-    Column(modifier = Modifier.fillMaxSize().background(bg).windowInsetsPadding(WindowInsets.statusBars)) {
+    Column(modifier = Modifier.fillMaxSize().background(bg)) {
         if (apiError != null || isOffline) {
             Surface(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
@@ -373,20 +377,34 @@ fun ScheduleScreen(
         }
 
         Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 4.dp),
+            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 36.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .width(3.dp)
-                    .height(24.dp)
-                    .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp))
+            AsyncImage(
+                model = appIconDrawable(appIcon),
+                contentDescription = null,
+                modifier = Modifier.size(40.dp).clip(CircleShape)
             )
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text("Airing Schedule", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                 Text(if (viewMode == 0) "$todayPastCount aired · $totalUpcomingThisWeek upcoming" else if (selectedDayPastCount > 0) "$selectedDayPastCount aired · $selectedDayFutureCount upcoming" else "$selectedDayFutureCount upcoming",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Surface(
+                onClick = onSearchClick,
+                shape = CircleShape,
+                color = Color.White.copy(alpha = 0.12f),
+                modifier = Modifier.size(40.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "Search",
+                        tint = Color.White,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
             }
         }
 
@@ -708,30 +726,34 @@ private fun HourHeaderItem(timeString: String) {
         else if (isMonochrome) MaterialTheme.colorScheme.onSurface
         else MaterialTheme.colorScheme.secondary
 
+    var rowHeightPx by remember { mutableFloatStateOf(0f) }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .drawBehind {
                 val x = stripeX.toPx()
                 val sw = stripeWidth.toPx()
-                val dotTop = 16.dp.toPx()
-                val dotBottom = 30.dp.toPx()
                 val gap = 6.dp.toPx()
+                val halfDot = (dotSize / 2).toPx()
+                val contentTop = 10.dp.toPx()
+                val dotCenter = contentTop + rowHeightPx / 2f
+                val dotTop = dotCenter - halfDot
+                val dotBottom = dotCenter + halfDot
                 drawLine(stripeColor, Offset(x, 0f), Offset(x, dotTop - gap), sw)
                 drawLine(stripeColor, Offset(x, dotBottom + gap), Offset(x, size.height), sw)
             }
             .padding(top = 10.dp, bottom = 6.dp)
     ) {
-        Box(
-            modifier = Modifier
-                .padding(start = stripeX - dotSize / 2, top = 6.dp)
-                .size(dotSize)
-                .background(dotColor, CircleShape)
-        )
         Row(
-            modifier = Modifier.padding(start = 40.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .onSizeChanged { rowHeightPx = it.height.toFloat() },
             verticalAlignment = Alignment.CenterVertically
         ) {
+            Spacer(Modifier.width(stripeX - dotSize / 2))
+            Box(Modifier.size(dotSize).background(dotColor, CircleShape))
+            Spacer(Modifier.width(12.dp))
             Icon(
                 Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = null,

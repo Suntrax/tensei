@@ -955,6 +955,10 @@ fun DetailedMangaScreen(
                                         Text("View All", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
                                     }
                                 }
+                                HorizontalDivider(
+                                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f),
+                                    modifier = Modifier.padding(top = 8.dp)
+                                )
                                 Spacer(modifier = Modifier.height(12.dp))
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                     itemsIndexed(items = relations, key = { _, r -> r.id }) { _, relation ->
@@ -1042,6 +1046,10 @@ fun DetailedMangaScreen(
                                         Text("View All", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
                                     }
                                 }
+                                HorizontalDivider(
+                                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f),
+                                    modifier = Modifier.padding(top = 8.dp)
+                                )
                                 Spacer(modifier = Modifier.height(12.dp))
 
                                 val recListState = rememberLazyListState()
@@ -1190,6 +1198,10 @@ fun DetailedMangaScreen(
                                         Text("View All", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
                                     }
                                 }
+                                HorizontalDivider(
+                                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f),
+                                    modifier = Modifier.padding(top = 8.dp)
+                                )
                                 Spacer(modifier = Modifier.height(12.dp))
                                 val charListState = rememberLazyListState()
                                 val isCharScrolling by remember {
@@ -1305,6 +1317,10 @@ fun DetailedMangaScreen(
                                         Text("View All", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
                                     }
                                 }
+                                HorizontalDivider(
+                                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f),
+                                    modifier = Modifier.padding(top = 8.dp)
+                                )
                                 Spacer(modifier = Modifier.height(12.dp))
                                 val staffListState = rememberLazyListState()
                                 val isStaffScrolling by remember {
@@ -1427,6 +1443,10 @@ fun DetailedMangaScreen(
                                         Text("Community performance", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), letterSpacing = 0.5.sp)
                                     }
                                 }
+                                HorizontalDivider(
+                                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f),
+                                    modifier = Modifier.padding(top = 8.dp)
+                                )
                                 Spacer(modifier = Modifier.height(12.dp))
                                 rankings.forEachIndexed { index, ranking ->
                                     val rankingTypeLabel = when (ranking.type) {
@@ -1638,6 +1658,10 @@ private fun MangaInfoCard(
                     Text("Overview & details", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), letterSpacing = 0.5.sp)
                 }
             }
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f),
+                modifier = Modifier.padding(top = 8.dp)
+            )
             Spacer(modifier = Modifier.height(18.dp))
 
             // Hero stats: Popularity / Score / Favorites

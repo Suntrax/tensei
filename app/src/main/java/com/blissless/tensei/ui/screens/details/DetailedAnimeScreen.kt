@@ -1176,6 +1176,10 @@ fun DetailedAnimeScreen(
                                         }
                                     }
                                 }
+                                HorizontalDivider(
+                                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f),
+                                    modifier = Modifier.padding(top = 8.dp)
+                                )
                                 Spacer(modifier = Modifier.height(12.dp))
 
                                 val relationListState = rememberLazyListState()
@@ -1372,6 +1376,10 @@ fun DetailedAnimeScreen(
                                         Text("View All", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
                                     }
                                 }
+                                HorizontalDivider(
+                                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f),
+                                    modifier = Modifier.padding(top = 8.dp)
+                                )
                                 Spacer(modifier = Modifier.height(12.dp))
 
                                 val recListState = rememberLazyListState()
@@ -1561,6 +1569,10 @@ fun DetailedAnimeScreen(
                                         }
                                     }
                                 }
+                                HorizontalDivider(
+                                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f),
+                                    modifier = Modifier.padding(top = 8.dp)
+                                )
                                 Spacer(modifier = Modifier.height(12.dp))
 
                                 val castListState = rememberLazyListState()
@@ -1725,6 +1737,10 @@ fun DetailedAnimeScreen(
                                         }
                                     }
                                 }
+                                HorizontalDivider(
+                                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f),
+                                    modifier = Modifier.padding(top = 8.dp)
+                                )
                                 Spacer(modifier = Modifier.height(12.dp))
 
                                 val staffListState = rememberLazyListState()

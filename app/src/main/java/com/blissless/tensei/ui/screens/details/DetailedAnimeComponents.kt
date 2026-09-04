@@ -30,6 +30,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
@@ -303,6 +304,10 @@ internal fun TrailerCard(
                     )
                 }
             }
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f),
+                modifier = Modifier.padding(top = 8.dp)
+            )
             Spacer(modifier = Modifier.height(12.dp))
             Box(
                 modifier = Modifier
@@ -439,6 +444,11 @@ internal fun InfoCard(
                     )
                 }
             }
+
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f),
+                modifier = Modifier.padding(top = 8.dp)
+            )
 
             Spacer(modifier = Modifier.height(18.dp))
 
@@ -646,6 +656,10 @@ internal fun GenresCard(
                     )
                 }
             }
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f),
+                modifier = Modifier.padding(top = 8.dp)
+            )
             Spacer(modifier = Modifier.height(12.dp))
             androidx.compose.foundation.layout.FlowRow(
                 horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
@@ -728,6 +742,10 @@ internal fun TagsCard(
                     )
                 }
             }
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f),
+                modifier = Modifier.padding(top = 8.dp)
+            )
             Spacer(modifier = Modifier.height(12.dp))
             val nonSpoilerTags = tags.filter { !it.isMediaSpoiler }
             val displayedTags = if (showAllTags) nonSpoilerTags else nonSpoilerTags.take(2)
@@ -835,6 +853,10 @@ internal fun SynopsisCard(
                     )
                 }
             }
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f),
+                modifier = Modifier.padding(top = 8.dp)
+            )
             Spacer(modifier = Modifier.height(12.dp))
             val cleanDescription = description.replace("<br>", "\n").replace("<br/>", "\n")
                 .replace("<b>", "").replace("</b>", "").replace("<i>", "").replace("</i>", "")

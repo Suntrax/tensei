@@ -2884,7 +2884,8 @@ fun MainScreen(
                                 showSettings = true
                                 pendingSettingsGroup = if (extUiState.extensions.isEmpty()) "extensions" else "stream"
                             },
-                            onAnimeDetailMangaClick = openMangaDetail
+                            onAnimeDetailMangaClick = openMangaDetail,
+                            onSearchClick = { showSearchScreen = true }
                         )
                         1 -> AnimeScreen(
                             viewModel = viewModel,
