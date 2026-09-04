@@ -799,14 +799,14 @@ private fun TimelineAnimeItem(
             .padding(end = 12.dp, top = 8.dp, bottom = 8.dp)
     ) {
         Surface(
-            modifier = Modifier.padding(start = 38.dp).graphicsLayer { scaleX = cardScale; scaleY = cardScale; alpha = cardAlpha; translationY = cardTranslationY },
+            modifier = Modifier.padding(start = 38.dp, bottom = 4.dp).height(112.dp).graphicsLayer { scaleX = cardScale; scaleY = cardScale; alpha = cardAlpha; translationY = cardTranslationY },
             shape = RoundedCornerShape(14.dp),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 1.dp,
             shadowElevation = 1.dp,
             onClick = onClick
         ) {
-            Box(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
+            Box(Modifier.fillMaxWidth().padding(bottom = 5.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(start = 10.dp, top = 10.dp, end = 10.dp),
                     verticalAlignment = Alignment.Top
@@ -867,7 +867,7 @@ private fun TimelineAnimeItem(
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = if (isPast) MaterialTheme.colorScheme.primary.copy(alpha = 0.4f) else MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.align(Alignment.BottomEnd).padding(end = 18.dp, bottom = 12.dp)
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(end = 18.dp, bottom = 8.dp)
                 )
             }
         }

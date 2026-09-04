@@ -32,6 +32,8 @@ import java.io.File
 import java.util.concurrent.TimeUnit
 import kotlin.time.Duration.Companion.milliseconds
 import androidx.core.content.edit
+import android.graphics.BitmapFactory
+import com.blissless.tensei.R
 import com.blissless.tensei.util.ErrorHandler
 
 data class ExtensionsUiState(
@@ -421,7 +423,8 @@ class ExtensionsViewModel(application: Application) : AndroidViewModel(applicati
             )
         }
         val notification = NotificationCompat.Builder(ctx, "extension_updates")
-            .setSmallIcon(android.R.drawable.stat_sys_download_done)
+            .setSmallIcon(R.drawable.ic_notification_small)
+            .setLargeIcon(BitmapFactory.decodeResource(ctx.resources, R.drawable.ic_notification_large))
             .setContentTitle("Extension Updates Available")
             .setContentText(extensionNames.joinToString(", "))
             .setStyle(NotificationCompat.BigTextStyle().bigText(extensionNames.joinToString("\n")))
@@ -447,7 +450,8 @@ class ExtensionsViewModel(application: Application) : AndroidViewModel(applicati
             )
         }
         val notification = NotificationCompat.Builder(ctx, "extension_updates")
-            .setSmallIcon(android.R.drawable.stat_sys_download_done)
+            .setSmallIcon(R.drawable.ic_notification_small)
+            .setLargeIcon(BitmapFactory.decodeResource(ctx.resources, R.drawable.ic_notification_large))
             .setContentTitle("Extensions Updated")
             .setContentText(extensionNames.joinToString(", "))
             .setStyle(NotificationCompat.BigTextStyle().bigText(extensionNames.joinToString("\n")))

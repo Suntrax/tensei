@@ -24,6 +24,8 @@ import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
+import android.graphics.BitmapFactory
+import com.blissless.tensei.R
 import com.blissless.tensei.util.ErrorHandler
 
 data class UpdateUiState(
@@ -83,7 +85,8 @@ class UpdateViewModel(application: Application) : AndroidViewModel(application) 
             return
         }
         val notification = NotificationCompat.Builder(ctx, "update_downloads")
-            .setSmallIcon(android.R.drawable.stat_sys_download)
+                        .setSmallIcon(R.drawable.ic_notification_small)
+            .setLargeIcon(BitmapFactory.decodeResource(ctx.resources, R.drawable.ic_notification_large))
             .setContentTitle("Downloading update")
             .setContentText("$progress%")
             .setProgress(100, progress, false)

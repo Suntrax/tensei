@@ -18,6 +18,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import android.graphics.BitmapFactory
+import com.blissless.tensei.R
 
 /** State of the one-time cross-provider copy prompt offered on first simultaneous login. */
 data class CrossProviderCopyPrompt(
@@ -72,7 +74,8 @@ private fun showSyncProgressNotification(context: Context, text: String, process
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val indeterminate = total <= 0
         val notification = NotificationCompat.Builder(context, SYNC_NOTIFICATION_CHANNEL)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+                        .setSmallIcon(R.drawable.ic_notification_small)
+            .setLargeIcon(BitmapFactory.decodeResource(context.resources, R.drawable.ic_notification_large))
             .setContentTitle("Syncing across providers")
             .setContentText(if (indeterminate) text else "$text  ($processed / $total)")
             .setProgress(if (indeterminate) 100 else total, if (indeterminate) 0 else processed, indeterminate)
@@ -92,7 +95,8 @@ private fun showSyncCompleteNotification(context: Context, text: String) {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.cancel(SYNC_NOTIFICATION_ID)
         val notification = NotificationCompat.Builder(context, SYNC_NOTIFICATION_CHANNEL)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+                        .setSmallIcon(R.drawable.ic_notification_small)
+            .setLargeIcon(BitmapFactory.decodeResource(context.resources, R.drawable.ic_notification_large))
             .setContentTitle("Sync complete")
             .setContentText(text)
             .setAutoCancel(true)
