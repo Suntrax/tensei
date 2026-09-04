@@ -36,7 +36,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
 /**
- * Bottom pill-style navigation bar with five tabs (Schedule, Anime, Home, Manga, Search).
+ * Bottom pill-style navigation bar with four tabs (Schedule, Home, Anime, Manga).
  *
  * Extracted from MainActivity.kt's MainScreen composable to reduce file size.
  * The selected tab animates to a wider pill with a label; the others collapse
@@ -91,8 +91,8 @@ fun BottomNavigationBar(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    val items = listOf("Schedule", "Anime", "Home", "Manga", "Search")
-                    val icons = listOf(Icons.Default.CalendarMonth, Icons.Default.Movie, Icons.Default.Home, Icons.Default.MenuBook, Icons.Default.Search)
+                    val items = listOf("Schedule", "Home", "Anime", "Manga")
+                    val icons = listOf(Icons.Default.CalendarMonth, Icons.Default.Home, Icons.Default.Movie, Icons.Default.MenuBook)
 
                     items.forEachIndexed { index, item ->
                         val isSelected = index == selectedIndex

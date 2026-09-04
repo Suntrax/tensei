@@ -678,7 +678,6 @@ fun MainScreen(
     val startupScreen by viewModel.startupScreen.collectAsState()
     val currentPageState = remember { mutableIntStateOf(startupScreen) }
     var currentPage by currentPageState
-    var pageBeforeSearch by remember { mutableIntStateOf(0) }
 
     var preloadedPages by remember { mutableStateOf(setOf(1)) }
 
@@ -2887,7 +2886,7 @@ fun MainScreen(
                             onAnimeDetailMangaClick = openMangaDetail,
                             onSearchClick = { showSearchScreen = true }
                         )
-                        1 -> AnimeScreen(
+                        2 -> AnimeScreen(
                             viewModel = viewModel,
                             isLoggedIn = isLoggedIn,
                             isOled = isOled,
@@ -2969,7 +2968,7 @@ fun MainScreen(
                                 pendingSettingsGroup = "reader"
                             }
                         )
-                        2 -> HomeScreen(
+                        1 -> HomeScreen(
                             viewModel = viewModel,
                             isLoggedIn = isLoggedIn,
                             isOled = isOled,
@@ -3072,62 +3071,10 @@ fun MainScreen(
                             playbackDurations = playbackDurations,
                             startedAt = startedAt
                         )
-                        4 -> SearchScreen(
-                            viewModel = viewModel,
-                            isOled = isOled,
-                            isLoggedIn = isLoggedIn,
-                            preferEnglishTitles = preferEnglishTitles,
-                            hideAdultContent = hideAdultContent,
-                            currentlyWatching = currentlyWatching,
-                            planningToWatch = planningToWatch,
-                            completed = completed,
-                            onHold = onHold,
-                            dropped = dropped,
-                            localAnimeStatus = viewModel.localAnimeStatus.collectAsState().value,
-                            favoriteIds = if (viewModel.loginProvider.collectAsState().value == LoginProvider.MAL) malFavorites.map { it.id }.toSet() else aniListFavoriteIds,
-                            onClose = { currentPage = pageBeforeSearch },
-                            onPlayEpisode = onPlayEpisode,
-                            onCharacterClick = { characterId ->
-                                overlayState = OverlayState.CharacterDialog(characterId = characterId, animeId = 0)
-                            },
-                            onStaffClick = { staffId ->
-                                overlayState = OverlayState.StaffDialog(staffId = staffId, animeId = 0)
-                            },
-                            onViewAllCast = { animeId, animeTitle, animeTitleEnglish ->
-                                overlayState = OverlayState.AllCastDialog(animeId = animeId, animeTitle = animeTitle, animeTitleEnglish = animeTitleEnglish)
-                            },
-                            onViewAllStaff = { animeId, animeTitle, animeTitleEnglish ->
-                                overlayState = OverlayState.AllStaffDialog(animeId = animeId, animeTitle = animeTitle, animeTitleEnglish = animeTitleEnglish)
-                            },
-                            onViewAllRelations = { animeId, animeTitle, animeTitleEnglish ->
-                                overlayState = OverlayState.AllRelationsDialog(animeId = animeId, animeTitle = animeTitle, animeTitleEnglish = animeTitleEnglish)
-                            },
-                            onViewAllRecommendations = { animeId, animeTitle, animeTitleEnglish ->
-                                overlayState = OverlayState.AllRecommendationsDialog(animeId = animeId, animeTitle = animeTitle, animeTitleEnglish = animeTitleEnglish)
-                            },
-                            onNoExtension = {
-                                showSettings = true
-                                pendingSettingsGroup = if (extUiState.extensions.isEmpty()) "extensions" else "stream"
-                            },
-                            onMangaClick = { manga ->
-                                android.util.Log.d("MangaNav", "SEARCH TAB onMangaClick: id=${manga.id} title='${manga.title.romaji ?: manga.title.english}' -> DETAIL")
-                                openMangaDetail(
-                                    com.blissless.tensei.data.models.MangaMedia(
-                                        id = manga.id,
-                                        title = manga.title.romaji ?: manga.title.english ?: "Unknown",
-                                        titleEnglish = manga.title.english,
-                                        cover = manga.coverImage?.extraLarge ?: manga.coverImage?.large ?: "",
-                                        totalChapters = manga.chapters ?: 0,
-                                        averageScore = manga.averageScore
-                                    )
-                                )
-                            },
-                            onAnimeDetailMangaClick = openMangaDetail
-                        )
                     }
 
                 AnimatedVisibility(
-                    visible = showSearchScreen && currentPage != 4,
+                    visible = showSearchScreen,
                     enter = fadeIn(animationSpec = tween(300)),
                     exit = fadeOut(animationSpec = tween(250))
                 ) {
@@ -3311,9 +3258,8 @@ fun MainScreen(
                     disableMaterialColors = disableMaterialColors,
                     hideNavbar = hideNavbar,
                     isLoadingStream = isLoadingStream,
-                    showSearchScreen = showSearchScreen || showUserProfilePage || currentPage == 4,
+                    showSearchScreen = showSearchScreen || showUserProfilePage,
                     onSelect = {
-                        if (it == 4 && currentPage != 4) pageBeforeSearch = currentPage
                         currentPage = it
                     },
                     scope = scope,
